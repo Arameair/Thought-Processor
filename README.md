@@ -2,7 +2,7 @@
 ## A story-driven prototype of the Arameair companion ecosystem
 
 > **This branch is a readable experience prototype, not a software prototype.**  
-> No executable, mock application, UI implementation or live integration is created here. Every screen and event described is a **proposed future experience**, not a current product capability.
+> No executable, mock application, UI implementation or live integration is created here. Every screen and event described is a **proposed future experience**, not a current product capability. **Fictional storytelling is not live telemetry:** no account, connection, permission, metric, thought or AI output in this narrative has been verified as an operating result.
 
 **The question this project explores:** What does it actually *feel like* to own a companion, open Identity, launch Thought Processor, and watch the first authentic observation become part of a developing thought?
 
@@ -30,11 +30,12 @@ This prototype intentionally shows the awkward moments too: installing a feature
 - **[The cast and promises](story/CAST-AND-PROMISES.md)** explains each component in plain language, including **publisher feature access** versus **Identity runtime grants**.
 - **[Storyboard of the actual user-facing screens](story/SCREEN-STORYBOARD.md)** shows what the next UI designer could draw, step by step.
 - **[From story to blueprints](story/BLUEPRINT-SEEDS.md)** identifies concrete behavior, contracts, unknowns and testable acceptance criteria *without trying to solve them all in code*.
+- **[Trust and evidence: no invented live data](story/TRUST-AND-EVIDENCE.md)** establishes the rule every later working UI must follow.
 - **[Owner and independent reviewer questions](story/REVIEW-QUESTIONS.md)** is where feedback, including Grok's, should challenge the story.
 
 ### Four permanent boundaries
 
-1. **GitHub makes the customer's source their own.** Normal first-opening setup requires connecting the customer's GitHub account and creating or selecting their own **real starter software repository**, not just a settings repository. Credit, origin, license and updates must be handled openly. Before GitHub is connected, setup/repair is available but the product isn't presented as fully operational.
+1. **GitHub makes the customer's source their own.** Normal first-opening setup requires connecting the customer's GitHub account and creating or selecting their own **real starter software repository**, not just a settings repository. Credit and origin must be retained. The exact starter contents, licensing, copying method and future-update policy are **not decided yet**; do not imply a technical method is already selected. Before GitHub is connected, setup/repair is available but the product isn't presented as fully operational.
 2. **Publisher access controls delivery of protected features**, not the customer's local identity authority or arbitrary ability to erase already-delivered code.
 3. **Identity decides** who/what exists and which local operation is authorized. **Thought Engine enforces** the operation grant. **Thought Processor connects, tests and explains** the real system.
 4. **Processes are independent.** Processor asks an approved local launcher to *ensure the Engine is available*. Closing a browser tab does not destroy an Engine or its thoughts.
