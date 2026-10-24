@@ -8,7 +8,7 @@
 
 ### Ownership and first use
 - When you open Identity the first time, does the required GitHub connection feel justified and well explained?
-- Does a **customer-owned copy of starter source** meet your vision? Which parts belong in that copy versus protected publisher feature distribution?
+- Does a **customer-owned copy of real starter source** meet your vision? Which parts belong in that copy versus protected publisher feature distribution? **The exact contents, license, repository-creation method and future update mechanism remain OPEN; do not demand a premature answer.**
 - Should creating a companion/entity be part of the initial repository creation or a separate step once the repo exists?
 
 ### Startup and product boundaries
@@ -19,7 +19,7 @@
 
 ### Trust and thought experience
 - Is the one-source, one-entity grant request understandable? Are we asking the owner to approve too many things?
-- Would the first demonstration feel meaningful with **one real observation and an authentic receipt**, even before Chat-Jimmy is available, or must it include an actual Spark/Trace result?
+- Would the first demonstration feel meaningful with **one real observation and an authentic receipt**, even before any AI worker is actually available, or must it include an actual Spark/Trace result?
 - Does **no Thought formed yet** feel informative enough, or should the interface explain thresholds and how Traces accumulate?
 
 ### Faults and coming back
@@ -33,6 +33,7 @@
 Please identify **the first scene where a real user would be confused or misled**, then propose a simpler alternative. Critique the power split among Identity, Processor, launcher and Engine. Call out any hidden security assumption or dependency that makes the story impossible on Windows, WSL or Debian.
 
 Review should distinguish:
+- **A fictional scene that helps people discuss the design** versus **a fabricated data value falsely displayed by a live application**. The latter is prohibited. Challenge any storyboard element without a verifiable underlying source.
 - Story flow/UX that could be improved.
 - Technical contract that cannot safely work as proposed.
 - Publisher-access claims that are unenforceable after source delivery.
@@ -51,7 +52,8 @@ Review should distinguish:
 | Identity → Processor → Engine as first demonstration path | **Owner direction** |
 | "Ensure Engine Available" instead of unconditional Start | **Proposed design** |
 | One session launcher shared by Identity and Processor | **Proposed design** |
-| Cross-service grant protocol, repository bootstrap/update mechanism | **Open** |
+| Cross-service grant protocol, starter contents/license, repository bootstrap/update mechanism | **Open; do not assume a preferred method** |
+| No fabricated live data, status, or model outcomes; unknown means unknown | **Owner direction** |
 | Specific screens, wording and UI hierarchy | **Story concepts only** |
 | Executable implementation | **Not created** |
 
