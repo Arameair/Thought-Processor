@@ -10,7 +10,7 @@ She doesn't want to rent a fictional personality from a developer. She wants to 
 
 She installs and opens **Identity** for the first time.
 
-The welcome screen does **not** announce that all engines are green. It does not ask her to launch Chat-Jimmy or pretend to know her companion's name.
+The welcome screen does **not** claim that services are connected, permissions have been granted, or any processing has occurred. It reports only facts the software can genuinely verify, and otherwise says **Not connected**, **Not checked** or **Unknown**.
 
 > **Welcome. Let's establish your version.**
 >
@@ -41,6 +41,6 @@ This is intentionally different from an earlier local-only Identity story: the c
 - Recovery preserves the original IDs and avoids creating a second version.
 - Missing GitHub is an understandable step, not an error that erases local data.
 
-**Blueprint seed:** First-opening state machine, setup/recovery screen, and explicit "do not create anything yet" boundary.
+**Blueprint question:** How can the opening screen show only verified account/setup state, allow recovery, and avoid creating anything before explicit consent? See [Trust and evidence](TRUST-AND-EVIDENCE.md).
 
 [Continue: It becomes hers →](01-IT-BECOMES-HERS.md)
