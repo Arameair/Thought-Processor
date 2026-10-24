@@ -1,79 +1,56 @@
-# Thought Processor
+# The First Spark
+## A story-driven prototype of the Arameair companion ecosystem
 
-**The control point for the optional Thought Processing feature.**
+> **This branch is a readable experience prototype, not a software prototype.**  
+> No executable, mock application, UI implementation or live integration is created here. Every screen and event described is a **proposed future experience**, not a current product capability.
 
-Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
+**The question this project explores:** What does it actually *feel like* to own a companion, open Identity, launch Thought Processor, and watch the first authentic observation become part of a developing thought?
 
-> **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
+Rather than start with API specifications and wiring diagrams, we're following **Maya**, a fictional first-time user, through one ordinary afternoon. She wants a companion that can accompany her through a game, notice recurring experiences, and eventually become more useful without taking control away from her. She is not a demonstration of a running app; she is a way to test whether our design makes sense to a human.
 
-## The product boundary
+This prototype intentionally shows the awkward moments too: installing a feature, failing an authorization check, losing a model connection, coming back tomorrow, and receiving an update. We will turn those events into blueprints **after** the story makes sense.
 
-- **Identity** owns identity records, feature entitlements, grants and whether Thought Processing is enabled for a particular identity.
-- **Source features** (TASS, ScreenBridge, logs, Discord, etc.) keep working independently. When permitted and individually connected, their logs/observations can be *fed into* Thought Processing. Disabling Thought Processing must not shut down the source application.
-- **Thought Engine** owns the actual observation queue, Sparks, Traces, Thoughts, processing rules and their persistent history. Model answers are inputs, not an unchecked authority to rewrite history.
-- **Thought Processor (this project)** is the **real control point**: connect/disconnect allowed feeds, inspect service readiness, manage processing policy and queue operations, observe decisions/evidence, select a suitable worker, see logs and metrics. Every control must perform a real operation and report its actual outcome.
-- **AI workers** are interchangeable. Chat-Jimmy is the current candidate fast worker, *not* a permanent dependency, product identity, or place where thought history is stored.
+### Begin here
 
-**Feature-based product principle:** Thought Processing is a separable, optional capability. Installing a source feature does not imply Thought Processing access. Enabling Thought Processing does not automatically authorize every possible log source. A customer may buy/use one feature without the others.
+**[▶ Start the story — The door opens](story/00-START-HERE.md)**
 
-## First mental model
+| Chapter | What Maya experiences | The design question |
+| --- | --- | --- |
+| [00 · The door opens](story/00-START-HERE.md) | A companion she can own, not a login to someone else's machine | What does this product promise? |
+| [01 · It becomes hers](story/01-IT-BECOMES-HERS.md) | GitHub account, genuine user-owned starter repository, credit to its creator | What does a customer actually own? |
+| [02 · The control room](story/02-THE-CONTROL-ROOM.md) | Identity opens the exact Thought Processor chosen for this installation | How does one app hand control to another? |
+| [03 · The engine wakes](story/03-THE-ENGINE-WAKES.md) | Processor finds or starts the correct Engine without duplicates | Who ensures a service is available? |
+| [04 · A real permission](story/04-A-REAL-PERMISSION.md) | A small feature asks permission, and the Engine proves it can check | How do we distinguish running from allowed? |
+| [05 · Something becomes a thought](story/05-A-THOUGHT-BEGINS.md) | One small event, real evidence, perhaps a Spark/Trace/Thought | What does intelligence look like when it's *not* faked? |
+| [06 · The system says no](story/06-WHEN-IT-GOES-WRONG.md) | Revocation, missing worker, broken connections and recovery | Is the failure experience understandable? |
+| [07 · Maya comes back](story/07-THE-NEXT-DAY.md) | Reopen without rebuilding identity; own data, updates, optional features | What remains stable as the system evolves? |
 
-```text
-Identity: TASS
-   └── Thought Processing grant: enabled / disabled
-             |
-Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
-             |
-             v
-      Thought Engine  <---->  Replaceable worker interface
-      observations              (Chat-Jimmy today)
-      Sparks / Traces
-      persistent Thoughts
-             ^
-             | operational status, controls, read-only views
-             v
-      Thought Processor
-      CONTROL POINT: feeds, readiness, queues, policy, workers, diagnostics
-```
+### When you've finished reading
 
-Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
+- **[The cast and promises](story/CAST-AND-PROMISES.md)** explains each component in plain language, including **publisher feature access** versus **Identity runtime grants**.
+- **[Storyboard of the actual user-facing screens](story/SCREEN-STORYBOARD.md)** shows what the next UI designer could draw, step by step.
+- **[From story to blueprints](story/BLUEPRINT-SEEDS.md)** identifies concrete behavior, contracts, unknowns and testable acceptance criteria *without trying to solve them all in code*.
+- **[Owner and independent reviewer questions](story/REVIEW-QUESTIONS.md)** is where feedback, including Grok's, should challenge the story.
 
-## Start here
+### Four permanent boundaries
 
-| Document | What it answers |
-|---|---|
-| [Current state and branch ledger](docs/STATUS.md) | What exists on Stable, Alpha and experiments, and what is *actually verified*? |
-| [Vision and boundaries](docs/VISION.md) | What is the feature we intend to sell, and what doesn't belong here? |
-| [Architecture and data ownership](docs/ARCHITECTURE.md) | What talks to what; who owns which records and permissions? |
-| [Control surface and evidence](docs/CONTROL_POINT.md) | What must the operator see and control? |
-| [Interfaces and contracts](docs/INTERFACES.md) | What a feed, engine and replaceable worker need to exchange |
-| [Branch and promotion workflow](docs/WORKFLOW.md) | How experiments become Alpha, Stable and eventually Main |
-| [Roadmap and gates](docs/ROADMAP.md) | What to prove next and in what order |
-| [Decision log](docs/DECISIONS.md) | Decisions made, and questions still open |
+1. **GitHub makes the customer's source their own.** Normal first-opening setup requires connecting the customer's GitHub account and creating or selecting their own **real starter software repository**, not just a settings repository. Credit, origin, license and updates must be handled openly. Before GitHub is connected, setup/repair is available but the product isn't presented as fully operational.
+2. **Publisher access controls delivery of protected features**, not the customer's local identity authority or arbitrary ability to erase already-delivered code.
+3. **Identity decides** who/what exists and which local operation is authorized. **Thought Engine enforces** the operation grant. **Thought Processor connects, tests and explains** the real system.
+4. **Processes are independent.** Processor asks an approved local launcher to *ensure the Engine is available*. Closing a browser tab does not destroy an Engine or its thoughts.
 
-For every iteration: update the **status ledger**, use an issue for the goal, and link the experimental branch, exact commit, tests, limitations and owner decision. Do not quietly overwrite previous evidence.
+The future companion can eventually make observations from games, screen activity, Discord and other feature sources. **In this story we deliberately use only a tiny authenticated demo observation source.** No real game data, Memory, dynamic coding, autonomous coding or publisher billing platform is needed to understand the first experience.
 
-## Branch policy
+### Status and provenance
 
-| Branch | Meaning | Promotion |
-|---|---|---|
-| `main` | Public-facing release lane *when approved*; the repository may still be private | Owner approval only |
-| `stable` | Latest owner-accepted **reproducible snapshot** | Owner approval only; never automatic |
-| `alpha` | Owner-tested integration candidate; may change as approved | Owner approval only |
-| `experiment/<topic>-YYYYMMDD` | Isolated hypothesis/prototype; **always branch from current Alpha** | Validate, compare and ask owner; no auto-merge |
+| Item | Status |
+| --- | --- |
+| This story | **Design fiction / reviewable narrative** |
+| Actual Thought Processor application | **Not built on this branch** |
+| Thought Engine Identity grant experiment | **Engine-side experiment, no verified live Identity integration yet** |
+| Automatic process management | **Proposed, not implemented here** |
+| Alpha / Stable / Main | **Unchanged by this story** |
 
-**Empty-repo bootstrap exception:** The first documentation commit must initialize `main`; `stable` and `alpha` can then be created at that *same documentation-only commit*. This does **not** count as a runnable release. From that point, **every experiment starts from `alpha`**. Experiments may cherry-pick or explicitly port code from other repos/branches, with provenance documented, but never silently replace Alpha.
+**Repository arrangement:** This is a self-contained *story edition* on a separate branch of `Arameair/Thought-Processor` because the connected GitHub tool can write to an existing repository but cannot create a new one. The `story/` directory and this branch README are designed to be moved into a dedicated `First-Spark-Storybook` repository later without needing the application source.
 
-## Related active experiments (not yet integrated into this repository)
-
-- [Thought-engine — model-assisted Spark/Trace/Thought experiment](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) — separate experimental service; currently Chat-Jimmy-specific. Do not treat live website reasoning as verified on the owner's machine without tests.
-- [Thought — deterministic Spark/Trace/Thought experiment](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) — different implementation; avoid two concurrent authoritative thought stores.
-- [Thought-Controller — live engine dashboard experiment](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) — existing prototype; source for control UI requirements, **not** an automatic migration.
-- [Identity](https://github.com/Arameair/identity) — future owner of real feature grants.
-- [chat-jimmy](https://github.com/Arameair/chat-jimmy/tree/experiment/fast-clean-worker-20261023) — current independent candidate worker.
-
-**Nothing has been merged, renamed, deployed or promoted by writing these notes.**
-
-## Owner acceptance rule
-
-Do not call a behavior working based on source code, screenshots, HTTP 200 on the UI, fake fixtures, or a green unit test alone. Demonstrate it with the actual running independent components; distinguish **process running**, **connected**, **authorized**, **data received**, **worker ready**, **processed**, and **persisted**. If any stage fails, say where and expose enough diagnostics to reproduce it.
+**Human-directed project built with AI collaboration.** This story is design work, not a claim that any model vendor endorses or verifies the system. Actual software licensing, the publisher access contract and exact blueprint designs remain owner decisions.
