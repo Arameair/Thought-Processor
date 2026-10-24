@@ -4,6 +4,14 @@
 
 Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
 
+## AI collaboration and authorship
+
+**This project is being developed through collaboration between its human owner and AI assistants.** The owner sets the goals, requirements, priorities and acceptance decisions. AI assistants have helped develop design ideas, architecture proposals and repository documentation, and may assist with future implementation, testing and review.
+
+**AI-assisted content is not independently verified solely because it has been committed.** Designs and generated outputs can contain errors; functionality must be evaluated through actual builds, tests and observed behavior. No AI-assisted proposal is automatically an approved product decision or working feature.
+
+See [AI collaboration and verification](docs/AI_COLLABORATION.md) for how this involvement is disclosed and reviewed.
+
 > **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
 
 ## The product boundary
