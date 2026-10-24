@@ -2,7 +2,7 @@
 
 [← Story home](../README.md) · [First scene](00-START-HERE.md) · [Blueprint seeds](BLUEPRINT-SEEDS.md)
 
-These are **story panels for a designer**, not screenshots, not executable HTML, and not claims that any page already exists. Each screen has one dominant task and one honest outcome.
+These are **story panels for a designer**, not screenshots, not executable HTML, and not claims that any page already exists. **Every status, account, identity, count, receipt and version in the future product must come from an actual authoritative source or explicitly remain Unknown/Unavailable.** See [Trust and evidence](TRUST-AND-EVIDENCE.md). Each screen has one dominant task and one honest outcome.
 
 ## Screen A — Before account connection
 
@@ -14,9 +14,9 @@ These are **story panels for a designer**, not screenshots, not executable HTML,
 
 ## Screen B — This version belongs to you
 
-**Visible:** Verified GitHub account, proposed private/public choice (no default committed in design), actual starter contents, original project link, attribution/license, unique destination repository name and access requested. Primary **Create my version**; **Choose an existing version** for returning users.
+**Visible:** Actual GitHub account (only once verified), proposed repository destination and visibility choice, **verified starter contents and licensing only after those open decisions have been settled**, true origin and attribution, and explicit requested access. Before this, show **Starter contents/license: Not decided** and keep creation disabled rather than guessing. Primary **Create my version**; **Choose an existing version** for returning users.
 
-**After action:** GitHub verifies the created/selected repository and source release identity. On failure the flow is still in setup, with no false success or duplicate creation on retry.
+**After action:** Only after a lawful, approved distribution method exists should GitHub verify the created/selected repository and actual source lineage. On failure the flow remains in setup; never invent a successful creation or duplicate a repository on retry.
 
 **User emotion:** Ownership.
 
@@ -60,7 +60,7 @@ Selected Engine: Thought Engine
 
 ## Screen F — Try something tiny
 
-**Visible:** One example observation and **Send one**. An expanding evidence timeline:
+**Visible:** One **user-entered** test observation and **Send one**. It is identified as manually submitted test content, **not a game sensor reading**. The evidence timeline draws from authenticated service receipts, not scripted milestones:
 
 ```text
 [S authenticated] -> [Identity checked] -> [Engine accepted/denied]
@@ -92,7 +92,8 @@ Selected Engine: Thought Engine
 - **Different status axes** for installed / running / authenticated / authorized / processing / worker ready.
 - **Requested → accepted/refused → observed effect** for every action.
 - **Only one expanded real service preview** at once; clear Copy Context, Logs and Metrics.
-- **Never substitute a pre-written story card for a live outcome.** Fixtures and examples are explicitly labeled.
+- **Never substitute a pre-written story card for a live outcome.** If a fact is unverified, show the appropriate Unknown/Unavailable/Not Tested state. Fixtures belong in isolated automated tests, not normal user-facing cards.
+- **No fabricated statuses, performance numbers, timestamps, service IDs, source events, worker outputs, or successful grants.** Every rendered fact should have an inspectable source and last-check time. See [Trust and evidence](TRUST-AND-EVIDENCE.md).
 
 ## Ten-minute owner rehearsal (can be performed as a spoken walkthrough, before code)
 
