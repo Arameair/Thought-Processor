@@ -74,10 +74,19 @@ func (a *App) hostOK(r *http.Request) bool {
 	return false
 }
 
+// managedByController: Project-controller shows each app in a preview pane
+// (an iframe on another localhost port). Allow exactly that, nothing else.
+var managedByController = os.Getenv("PC_MANAGED_BY_CONTROLLER") == "1"
+
 func secureHeaders(w http.ResponseWriter) {
 	h := w.Header()
-	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-	h.Set("X-Frame-Options", "DENY")
+	frame := "'none'"
+	if managedByController {
+		frame = "http://127.0.0.1:* http://localhost:*"
+	} else {
+		h.Set("X-Frame-Options", "DENY")
+	}
+	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors "+frame+"; base-uri 'none'; form-action 'none'")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cache-Control", "no-store")

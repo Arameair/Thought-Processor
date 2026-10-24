@@ -1,0 +1,8 @@
+{
+  "setup": "mkdir -p \"$PC_DATA\" && cd processor && go build -o \"$PC_DATA/thought-processor\" .",
+  "run": "exec \"$PC_DATA/thought-processor\" -data \"$PC_DATA/profile\"",
+  "windows": {
+    "setup": "(if not exist \"%PC_DATA%\" mkdir \"%PC_DATA%\") && cd processor && go build -o \"%PC_DATA%\\thought-processor.exe\" .",
+    "run": "\"%PC_DATA%\\thought-processor.exe\" -data \"%PC_DATA%\\profile\""
+  }
+}

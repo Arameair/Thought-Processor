@@ -69,12 +69,21 @@ type Config struct {
 
 func main() {
 	dataFlag := flag.String("data", "", "profile folder (default: $THOUGHT_PROCESSOR_DATA, then ~/.thought-processor/default)")
-	port := flag.Int("port", 7860, "loopback port to listen on (0 = any free port)")
+	defPort := 7860
+	if v := os.Getenv("PORT"); v != "" { // set by Project-controller
+		if n, err := strconv.Atoi(v); err == nil {
+			defPort = n
+		}
+	}
+	port := flag.Int("port", defPort, "loopback port to listen on (0 = any free port; default $PORT, then 7860)")
 	flag.Parse()
 
 	dir := *dataFlag
 	if dir == "" {
 		dir = os.Getenv("THOUGHT_PROCESSOR_DATA")
+	}
+	if dir == "" && os.Getenv("PC_DATA") != "" { // Project-controller's per-branch data folder
+		dir = filepath.Join(os.Getenv("PC_DATA"), "profile")
 	}
 	if dir == "" {
 		home, err := os.UserHomeDir()
