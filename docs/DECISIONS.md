@@ -2,6 +2,12 @@
 
 This log separates **owner direction**, **proposals**, and **confirmed implementation**. Avoid marking design assumptions as owner approval.
 
+## Endorsed working distinction — 24 October 2026
+
+> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
+
+**Owner status: endorsed as a working architectural theory to challenge; not a final protocol or code acceptance.** The [detailed, falsifiable theory](OPERATIONAL_SETUP_THEORY.md) outlines possible operational controls, configuration ownership, feature interfaces, failure modes, first integration checks and competing architectures. Specific API shapes, persistence of desired cross-feature configuration, worker routing policy, identity proof and exact UI are **proposals or OPEN decisions**. Challenge them through [architecture review issue #7](https://github.com/Arameair/Thought-Processor/issues/7). No build, runtime test or branch promotion is implied.
+
 ## Owner-selected integration and UI direction — updated 24 October 2026
 
 **New scope:** Identity is the system's durable authority for participants **including independently developed features**, their relationships and permission policies. Thought Processor combines that knowledge with live discovery to help establish permitted connections and provide developer-visible evidence; Thought Engine keeps cognition and actual worker heartbeat/API calls.
