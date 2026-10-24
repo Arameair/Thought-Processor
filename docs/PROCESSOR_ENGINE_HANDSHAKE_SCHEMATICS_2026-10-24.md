@@ -40,7 +40,7 @@ flowchart TB
     E -->|Authorize S to act for entity X| I
     E -->|Actual model request when ready| W[Optional Chat-Jimmy worker]
     E --> D[(Engine-owned thoughts, events, logs)]
-    P -->|Read bounded diagnostics| D
+    P -->|Read bounded diagnostics via Engine API| E
 ```
 
 **Important:** The Source→Engine event path remains **direct**, independent of Processor. Engine's worker calls remain its own. Processor is the operator's control point, **not** a proxy for every observation or model token. Actual diagnostic data is obtained through authenticated Engine-owned endpoints, not by allowing Processor raw filesystem access just because both run locally.
