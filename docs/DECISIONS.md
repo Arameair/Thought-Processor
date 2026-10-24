@@ -15,6 +15,10 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 
 **Not yet confirmed:** automatic selection of every connected log source vs owner picking feeds; default retention; security mechanism; canonical Thought vs Thought-engine migration; full autonomous processing policy.
 
+## Owner UI decision — 2026-10-23
+
+**SELECTED FOR FIRST EXPERIMENT: Option C — lightweight live status cards.** Only the selected application's actual original UI should open as a full preview; collapsed cards use inexpensive verified status/activity data. A collapsible side inspector provides logs, control flow, metrics and fast diagnostic copying. This must not stop independent applications or discard original logs. **Option D — adaptive retained previews** remains an option for a later measured experiment, not an approved feature now. [Detailed decision and acceptance gates](discussions/2026-10-23-option-c-lightweight-status-cards.md). No live implementation is verified by this decision.
+
 ## Architectural proposals awaiting actual testing
 
 1. Thought Processor is the **control plane**, Thought Engine the **data/processing plane**.
