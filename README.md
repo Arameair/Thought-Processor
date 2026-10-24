@@ -1,3 +1,5 @@
+> **NEW IMPLEMENTATION HANDOFF — 2026-10-24:** [Interactive first-use mini demonstration](docs/FIRST_EXPERIENCE_DEMO_2026-10-24.md) · [Tracking issue](https://github.com/Arameair/Thought-Processor/issues/9). **Planning only, not a functioning demo.** Owner wants to open Identity, explicitly launch the correctly pinned Thought Processor, and experience one real authorized observation, its outcome, and revocation. Build runnable candidates on separate experimental branches from Alpha; no automatic promotion. This note supersedes earlier **bootstrap-order recommendations for this demo only**, not independent-service/authority boundaries.
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
