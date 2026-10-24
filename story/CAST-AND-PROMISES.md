@@ -2,7 +2,7 @@
 
 [← Story home](../README.md) · [Start reading the story](00-START-HERE.md)
 
-The names are fictional and the applications are not implemented as described here. Think of these as **actors with responsibilities**, not a requirement to combine them into one executable.
+The names are fictional and the applications are not implemented as described here. **A future product must never use these examples as live account, permission, process or model data.** Think of these as **actors with responsibilities**, not a requirement to combine them into one executable.
 
 | Actor | What Maya understands | What it is responsible for | What it must not pretend to do |
 | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ The names are fictional and the applications are not implemented as described he
 | **Session launcher** | "Make the approved parts available." | Starts/attaches pinned processes, tracks ownership and safe stop/reconnection | Starts every installed feature or kills independent processes by port/name |
 | **Thought Engine** | "Notice and process what I'm allowed to notice." | Authentic observation intake, queue, Sparks/Traces/Thoughts, worker calls, its own persistence | Trusts a payload label as caller identity, overrides Identity permission |
 | **Demo source** | "Here's one sample event." | Sends a genuinely authenticated observation for one selected entity | Claims to be TASS, a game, or ScreenBridge based on string text |
-| **Chat-Jimmy worker** | "Help analyze short context quickly." | Answer actual scoped worker requests when available | Issues permissions, owns thought history, pretends its output is the whole companion |
+| **Replaceable AI worker** | "Help analyze context when a model is truly available." | Answer actual scoped worker requests when verified and authorized | Issues permissions, owns thought history, or pretends its answer is the whole companion |
 | **Memory** (future) | "Help retain and recall long-term experience." | Separate, optional durable retrieval/persistence under permission | Automatically exist because Thought Engine has temporary thought records |
 
 ## Four identities that must not be confused
