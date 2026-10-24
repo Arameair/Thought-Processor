@@ -28,7 +28,7 @@ A good control room distinguishes **accepted**, **queued**, **processed**, and *
 
 ### A thought is an earned result, not a scripted animation
 
-In this hypothetical successful branch of the story, a real fast worker notices the topic relates to a location. Engine records a lightweight **Spark** and, if the existing processing rules consider the evidence valuable enough, a **Trace**.
+In one **possible future outcome**, a genuinely connected model worker might identify the location as relevant, and the Engine might record a Spark or Trace. **Neither result is promised by the story.** Actual worker inputs, outputs and Engine decisions must be read from real event records when we build it.
 
 Maya tries another two **deliberate** examples:
 
@@ -41,17 +41,17 @@ What excites Maya isn't simply seeing a bright "Thought created" tile. It is ope
 
 > **Compass / What I noticed**
 >
-> Recent observations: **3 submitted in this illustrative story**  
-> Related theme: **Goldshire** (*possible, not guaranteed*)  
-> Thought: **May form if the actual Engine decides the evidence supports it**
+> Recent observations: **[actual number from Engine receipts, otherwise Unknown]**  
+> Related theme: **[actual detected topic, or None]**  
+> Thought: **[actual result, or No Thought formed]**
 >
 > **[View evidence] [Open Engine's own UI]**
 
-The short narrative here is a **desired experience**, not a replay of actual Chat-Jimmy results. Worker text, ratings, number of Traces and outcomes in a real build must come from the actual service, or be labeled *Test fixture* when synthesized for automated tests.
+The narrative above is **not** a replay of an operating system. Worker responses, ratings, counts and persistence claims must come from the actual service. **Do not inject fixture outputs into the user-facing experience.** If fixtures are required for isolated automated tests, keep their results separate and unmistakably identified as not live.
 
-### No Chat-Jimmy? An honest quiet screen
+### No verified worker? An honest quiet screen
 
-If the AI worker is unavailable, the Engine may still accept an authorized event for a bounded queue (subject to its actual tested persistence and limits). Processor says **Authorized and queued — waiting for a worker**. It does not produce a made-up Spark, and it doesn't call another paid API without consent.
+If no AI worker is verified as available, the Engine may be able to accept an authorized event for a bounded queue (subject to its actual tested persistence and limits). **Only if an event really was accepted and persisted** should Processor say **Authorized and queued — waiting for a worker**; otherwise it shows the truthful refusal or unknown result. It does not produce a made-up Spark, and it doesn't call another paid API without consent.
 
 That is still a successful observation **delivery** demonstration, but not a successful thinking demonstration.
 
@@ -59,6 +59,6 @@ That is still a successful observation **delivery** demonstration, but not a suc
 
 Later, TASS, a screen reader, Discord and game add-ons might independently publish authorized observations. They should all use the same Engine intake and evidence contract, with **separate source approvals** and source-owned logs. The Processor can help people connect and inspect them, but it should not become the only route that allows thoughts to occur.
 
-**Blueprint seed:** One-source demo contract, event and trace receipts, queue versus processing state, worker adapter, evidence inspector, no simulated thought creation, data ownership.
+**Blueprint question:** What exact authenticated, timestamped evidence proves *each transition* from source submission to persisted Engine result, including **no Thought formed** and **worker unavailable**? See [Trust and evidence](TRUST-AND-EVIDENCE.md).
 
 [Continue: The system says no →](06-WHEN-IT-GOES-WRONG.md)
