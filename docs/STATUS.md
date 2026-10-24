@@ -34,7 +34,7 @@
 
 | Experiment | Based on | Goal | State | Evidence / decision |
 |---|---|---|---|---|
-| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
+| [`experiment/lightweight-live-cards-option-c-20261023`](https://github.com/Arameair/Thought-Processor/tree/experiment/lightweight-live-cards-option-c-20261023) | `alpha` @ `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a` | Owner-selected Option C status-card UI, inspector diagnostics, Option D deferred | **DESIGN DOCUMENTED — NO BUILD** | [Decision](discussions/2026-10-23-option-c-lightweight-status-cards.md); measurements/tests not run; no promotion |\n| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
 
 Add rows **newest first**. Each row needs **branch link**, origin Alpha SHA, head SHA, owner-relevant difference, exact tests performed, whether run in Project Controller, failures, and explicit decision: keep / revise / reject / promoted. Do not mark **PASS** for code that has never been run.
 
