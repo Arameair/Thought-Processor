@@ -38,6 +38,10 @@ Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
 
 Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
 
+## Current design discussion — dynamic application cards (not implemented)
+
+[**Dynamic live project cards and developer experience**](docs/discussions/2026-10-23-dynamic-project-cards.md) records a Netflix/Prime Video-style catalog whose cards represent **real independently running projects**, including [Identity](https://github.com/Arameair/identity). Discover compatible services dynamically, preview the actual live UI when supported, expand into the real app alongside diagnostics, and show control-flow evidence between components. No dynamic preview, discovery protocol, or UI has been verified yet. This branch contains discussion notes only; Alpha/Stable/Main are unchanged.
+
 ## Start here
 
 | Document | What it answers |
