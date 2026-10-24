@@ -549,10 +549,10 @@ def main():
         if not page.is_closed():
             page.reload(); page.wait_for_selector("#app:not([hidden])")
             page.click("#diag summary")
-            page.wait_for_function("document.querySelectorAll('#flow li').length > 0")
+            page.wait_for_selector("#flow > li")
             shot.append(shots(page, out, "07-diagnostics-flow"))
             page.click(".tabs button[data-tab=metrics]")
-            page.wait_for_function("document.querySelectorAll('#metrics dt').length > 3")
+            page.wait_for_selector("#metrics dt:nth-of-type(4)")
             shot.append(shots(page, out, "08-diagnostics-metrics"))
             page.click("#diag summary")
 
