@@ -48,7 +48,7 @@ Thought Processor should answer these questions without proxying every worker AP
 
 | Area | Owner-selected approach |
 | --- | --- |
-| **Discovery** | Compatible app self-registration; hybrid same-OS local discovery with configured or manual remote fallback |
+| **Discovery** | Independent features request Identity registration; Processor discovers the approved catalog, reconciles live endpoints and supports hybrid same-OS/configured/manual fallback |
 | **Trust** | Identity-approved one-time pairing, credential-verified reconnection |
 | **Permissions** | Identity grants scoped access; recipient service enforces; no privilege from discovery alone |
 | **Outages** | Short-lived preapproved authorization can survive brief Identity downtime; expires safely |
