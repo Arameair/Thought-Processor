@@ -22,6 +22,16 @@
 
 The above values are illustrative **design placeholders**, not metrics or screenshots of real software. Production UI must read actual values.
 
+## First real operator test (owner-selected next integration)
+
+Before expanding this illustrative wireframe into a full application, implement the smallest **Identity + Engine authorization test through Processor**, as planned in [INTEGRATION_AUTHORIZATION_PLAN.md](INTEGRATION_AUTHORIZATION_PLAN.md) and [issue #8](https://github.com/Arameair/Thought-Processor/issues/8).
+
+The operator should see: authenticated Identity service; authenticated Engine service; selected entity and explicitly identified test source; an administrator-authenticated request to Identity to grant/revoke one operation; a deliberately submitted test observation; and actual Identity decision + Engine receipt side by side, with a shared correlation ID. **A GUI checkbox must never set an Engine-local "authorized" flag and imply Identity approval.** Controls stay unavailable until both authoritative services implement the needed endpoints. Do not impersonate TASS using a JSON source field.
+
+For this first integration, show **AUTHORITY UNAVAILABLE** on Identity outage and verify the Engine fails closed without a new model call. Recheck queued events at worker dispatch. Already-sent model data cannot be retrospectively removed after a grant is revoked.
+
+This is a **planned UI slice only**. Processor is currently documentation-only; the backend Identity↔Engine enforcement should be proven independently before treating Processor's display as end-to-end evidence.
+
 ## Required panels
 
 ### 1. Identity and feature grant
