@@ -1,87 +1,103 @@
 # Thought Processor
 
-**The control point for the optional Thought Processing feature.**
+**Discovery, connection and operational visibility for an ecosystem of independently running AI capabilities.**
 
-Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
+Thought Processor is the proposed lightweight **control point** that helps compatible applications find one another, establish permitted connections and expose what is actually happening. It is designed to work with **Identity**, the system's authority for durable participants, relationships and access—not to replace Identity or run the cognitive Thought Engine.
 
-## AI collaboration and authorship
+> **Project status — 24 October 2026:** **Documentation-only foundation. There is no runnable Thought Processor in this repository's main/Alpha/Stable release lanes.** Related Thought Engine, worker and controller prototypes live in separate repositories and are **not** a verified end-to-end integration. See [current state](docs/STATUS.md).
 
-**This project is being developed through collaboration between its human owner and AI assistants.** The owner sets the goals, requirements, priorities and acceptance decisions. AI assistants have helped develop design ideas, architecture proposals and repository documentation, and may assist with future implementation, testing and review.
+## Why this exists
 
-**AI-assisted content is not independently verified solely because it has been committed.** Designs and generated outputs can contain errors; functionality must be evaluated through actual builds, tests and observed behavior. No AI-assisted proposal is automatically an approved product decision or working feature.
+Our features are independently developed and may run on different machines, with different workers or different lifecycles. A developer needs to know:
 
-See [AI collaboration and verification](docs/AI_COLLABORATION.md) for how this involvement is disclosed and reviewed.
+- **Which compatible applications exist and which instances are running?**
+- **Which identities and permissions authorize their connections?**
+- **Where did an observation or worker request go, and where did it fail?**
+- **Which exact build was tested, and what evidence supports its status?**
 
-> **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
+Thought Processor should answer these questions without proxying every worker API request, storing another feature's entire history or taking over another application's process.
 
-## The product boundary
-
-- **Identity** owns identity records, feature entitlements, grants and whether Thought Processing is enabled for a particular identity.
-- **Source features** (TASS, ScreenBridge, logs, Discord, etc.) keep working independently. When permitted and individually connected, their logs/observations can be *fed into* Thought Processing. Disabling Thought Processing must not shut down the source application.
-- **Thought Engine** owns the actual observation queue, Sparks, Traces, Thoughts, processing rules and their persistent history. Model answers are inputs, not an unchecked authority to rewrite history.
-- **Thought Processor (this project)** is the **real control point**: connect/disconnect allowed feeds, inspect service readiness, manage processing policy and queue operations, observe decisions/evidence, select a suitable worker, see logs and metrics. Every control must perform a real operation and report its actual outcome.
-- **AI workers** are interchangeable. Chat-Jimmy is the current candidate fast worker, *not* a permanent dependency, product identity, or place where thought history is stored.
-
-**Feature-based product principle:** Thought Processing is a separable, optional capability. Installing a source feature does not imply Thought Processing access. Enabling Thought Processing does not automatically authorize every possible log source. A customer may buy/use one feature without the others.
-
-## First mental model
+## Proposed architecture
 
 ```text
-Identity: TASS
-   └── Thought Processing grant: enabled / disabled
-             |
-Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
-             |
-             v
-      Thought Engine  <---->  Replaceable worker interface
-      observations              (Chat-Jimmy today)
-      Sparks / Traces
-      persistent Thoughts
-             ^
-             | operational status, controls, read-only views
-             v
-      Thought Processor
-      CONTROL POINT: feeds, readiness, queues, policy, workers, diagnostics
+                         IDENTITY
+             durable entities + feature IDs
+                trust, grants, relationships
+                            |
+                            v
+                 THOUGHT PROCESSOR
+              discovery + connections
+             real app cards + diagnostics
+                            |
+           verified/authorized service links
+                    /                \
+           SOURCE FEATURES       THOUGHT ENGINE
+         screen · Discord        observations, thoughts,
+           game · logs           processing decisions
+                                       |
+                                       v
+                               REPLACEABLE WORKER
+                             (Chat-Jimmy candidate)
 ```
 
-Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
+**Control plane is not the data plane.** After authorized discovery, a Thought Engine may call a worker directly. The Engine owns processing and the actual AI-worker **heartbeat/API request**. Thought Processor observes through honest status and correlated traces; it should not inject itself into the hot path without measured justification.
+
+[Read the responsibility model](docs/ARCHITECTURE.md) · [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md)
+
+## Selected design direction — not yet implemented
+
+| Area | Owner-selected approach |
+| --- | --- |
+| **Discovery** | Compatible app self-registration; hybrid same-OS local discovery with configured or manual remote fallback |
+| **Trust** | Identity-approved one-time pairing, credential-verified reconnection |
+| **Permissions** | Identity grants scoped access; recipient service enforces; no privilege from discovery alone |
+| **Outages** | Short-lived preapproved authorization can survive brief Identity downtime; expires safely |
+| **Feature adoption** | New capability appears automatically; owner approves identity-specific access |
+| **Status** | Important changes pushed; occasional lightweight health checks |
+| **Diagnostics** | Logs stay with services; shared request IDs and on-demand safe collection |
+| **Versions** | Report real branch/commit/test evidence, never automatically promote |
+
+### Operator interface
+
+The intended UI is a **dynamic catalog of real running applications**, not a fixed set of static feature mocks. Collapsed cards show verified lightweight status. Only the selected card opens that application's actual UI (or a clearly labeled **Open Original UI** fallback if embedding is blocked). A collapsible side inspector offers **Logs, Flow and Metrics**, including a connection map, event timeline and copyable sanitized context.
+
+Feature installations must operate independently even when Processor is offline. **The owner's personal Project Controller is optional development tooling, never an end-user dependency.**
+
+## Research direction and independent critique
+
+Identity can be a durable coordination authority without necessarily improving AI cognition. We are investigating an **Identity–Experience hypothesis**: do stable identity/purpose information and relevant memory improve a companion beyond recent context alone?
+
+**[Read the hypothesis, controlled comparison and Grok's user-supplied critique](docs/IDENTITY_EXPERIENCE_RESEARCH.md).** These are proposals to test, not conclusions. A critique from Grok or another AI is explicitly welcome; no AI output counts as owner approval or verified runtime evidence.
+
+**[Participate in the architecture review — GitHub Issue #7](https://github.com/Arameair/Thought-Processor/issues/7).**
 
 ## Start here
 
-| Document | What it answers |
-|---|---|
-| [Current state and branch ledger](docs/STATUS.md) | What exists on Stable, Alpha and experiments, and what is *actually verified*? |
-| [Vision and boundaries](docs/VISION.md) | What is the feature we intend to sell, and what doesn't belong here? |
-| [Architecture and data ownership](docs/ARCHITECTURE.md) | What talks to what; who owns which records and permissions? |
-| [Control surface and evidence](docs/CONTROL_POINT.md) | What must the operator see and control? |
-| [Interfaces and contracts](docs/INTERFACES.md) | What a feed, engine and replaceable worker need to exchange |
-| [Branch and promotion workflow](docs/WORKFLOW.md) | How experiments become Alpha, Stable and eventually Main |
-| [Roadmap and gates](docs/ROADMAP.md) | What to prove next and in what order |
-| [Decision log](docs/DECISIONS.md) | Decisions made, and questions still open |
+| Document | Purpose |
+| --- | --- |
+| **[Identity–Experience research](docs/IDENTITY_EXPERIENCE_RESEARCH.md)** | Working theory, competing interpretation, Grok critique, falsification test |
+| [Architecture and responsibilities](docs/ARCHITECTURE.md) | Identity, Processor, Engine, Memory and worker ownership |
+| [Status and evidence](docs/STATUS.md) | Current verification, releases and experiments |
+| [Control surface](docs/CONTROL_POINT.md) | Operator actions and diagnostic proof |
+| [Interface proposals](docs/INTERFACES.md) | Observation, worker and service contracts still to define |
+| [Decision log](docs/DECISIONS.md) | Explicit owner choices versus unresolved questions |
+| [Roadmap](docs/ROADMAP.md) | First independently testable integration gates |
+| [Branch workflow](docs/WORKFLOW.md) | Alpha-first experiments and manual promotion |
+| [AI collaboration](docs/AI_COLLABORATION.md) | Authorship and independent verification policy |
 
-For every iteration: update the **status ledger**, use an issue for the goal, and link the experimental branch, exact commit, tests, limitations and owner decision. Do not quietly overwrite previous evidence.
+More detailed owner-selected discussion lives on the [six-decision experiment branch](https://github.com/Arameair/Thought-Processor/tree/experiment/six-design-decisions-20261023); that branch's notes do not constitute merged code or a tested integration.
 
-## Branch policy
+## Development policy
 
-| Branch | Meaning | Promotion |
-|---|---|---|
-| `main` | Public-facing release lane *when approved*; the repository may still be private | Owner approval only |
-| `stable` | Latest owner-accepted **reproducible snapshot** | Owner approval only; never automatic |
-| `alpha` | Owner-tested integration candidate; may change as approved | Owner approval only |
-| `experiment/<topic>-YYYYMMDD` | Isolated hypothesis/prototype; **always branch from current Alpha** | Validate, compare and ask owner; no auto-merge |
+| Branch | Meaning |
+| --- | --- |
+| `main` | Professional documentation and approved public-facing releases |
+| `alpha` | Owner-selected integration baseline |
+| `stable` | Owner-accepted verified snapshot (**currently documentation-only**) |
+| `experiment/*` | Independent candidates **based on Alpha**; no automatic merge |
 
-**Empty-repo bootstrap exception:** The first documentation commit must initialize `main`; `stable` and `alpha` can then be created at that *same documentation-only commit*. This does **not** count as a runnable release. From that point, **every experiment starts from `alpha`**. Experiments may cherry-pick or explicitly port code from other repos/branches, with provenance documented, but never silently replace Alpha.
+All claims of success require **real evidence**. Distinguish discovered, paired, authorized, enabled, reachable, request sent, worker replied and thought persisted. Report real commit SHA, build/test results, branch, runtimes, failures and rollback. Existing [Thought-engine](https://github.com/Arameair/Thought-engine), [Thought](https://github.com/Arameair/Thought), [Thought-Controller](https://github.com/Arameair/Thought-Controller) and [Chat-Jimmy](https://github.com/Arameair/chat-jimmy) remain independent experiments.
 
-## Related active experiments (not yet integrated into this repository)
+---
 
-- [Thought-engine — model-assisted Spark/Trace/Thought experiment](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) — separate experimental service; currently Chat-Jimmy-specific. Do not treat live website reasoning as verified on the owner's machine without tests.
-- [Thought — deterministic Spark/Trace/Thought experiment](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) — different implementation; avoid two concurrent authoritative thought stores.
-- [Thought-Controller — live engine dashboard experiment](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) — existing prototype; source for control UI requirements, **not** an automatic migration.
-- [Identity](https://github.com/Arameair/identity) — future owner of real feature grants.
-- [chat-jimmy](https://github.com/Arameair/chat-jimmy/tree/experiment/fast-clean-worker-20261023) — current independent candidate worker.
-
-**Nothing has been merged, renamed, deployed or promoted by writing these notes.**
-
-## Owner acceptance rule
-
-Do not call a behavior working based on source code, screenshots, HTTP 200 on the UI, fake fixtures, or a green unit test alone. Demonstrate it with the actual running independent components; distinguish **process running**, **connected**, **authorized**, **data received**, **worker ready**, **processed**, and **persisted**. If any stage fails, say where and expose enough diagnostics to reproduce it.
+**AI collaboration disclosure:** The project is human-directed and developed with AI assistants. The owner makes the final decisions. The architecture critique attributed to Grok was supplied by the owner and has not been independently code-verified. [Read the disclosure](docs/AI_COLLABORATION.md).
