@@ -23,6 +23,8 @@ Thought Processor (control point)  <── verified status / evidence / commands
 
 [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md) · [Identity–Experience research and Grok critique](IDENTITY_EXPERIENCE_RESEARCH.md) · [multi-model review issue](https://github.com/Arameair/Thought-Processor/issues/7)
 
+The current Identity design also specifies **central organization with feature-owned storage** and independent service registration **with Identity**; Processor discovers the approved service catalog and checks live instances. Neither Identity nor Processor should centralize feature data by default.
+
 The owner clarified that **every independent feature has an identity** and that **Identity is the trusted system-level knowledge/policy authority**. Processor's job is to reconcile durable Identity-owned participant/relationship records with **which authorized service instance is actually running now**. It performs dynamic discovery, authorized connection assistance, status/trace correlation and real application previews. It **must not own Identity relationships, issue grants, require Project Controller or proxy every worker API request**.
 
 The Thought Engine owns actual observation processing, Sparks/Traces/Thoughts and decisions to call replaceable AI workers directly when authorized. Memory's future role as a separate continuity/retrieval layer remains an experimental question. This refinement supplements the previous conceptual diagram below, which should be read as a **proposed flow**, not an implemented protocol.
