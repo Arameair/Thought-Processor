@@ -13,15 +13,15 @@ She sees a second question:
 > Destination: **Maya's GitHub account**  
 > New repository: **my-companion**  
 > Visibility: **Private** (illustrative selection, not a mandated default)  
-> Source: **Approved Arameair starter release**  
-> Includes: **Actual starter application files, setup materials, source-credit notice, origin and source version**  
+> Source: **Arameair starting project; approved source/version not yet selected**  
+> Includes: **Actual starter software, attribution and origin — exact contents and legal terms to be established first**  
 > Excludes: **Passwords, GitHub tokens, private user data, downloaded paid feature source**
 >
 > **[Review contents] [Create my version] [Choose existing repository]**
 
-She reads the source acknowledgement. The program started with Arameair's original project, and that origin stays visible. The specific license and distribution rights are shown honestly once chosen; attribution does not by itself substitute for a license.
+She reads the source acknowledgement. The program started with Arameair's original project, and that origin stays visible. **The exact files, redistribution license, and update method are not chosen today.** In the product we eventually build, a user must see the real approved contents and terms *before* any repository is created. Attribution does not substitute for a license.
 
-She presses **Create my version**. Only now does GitHub create a repository under her account. Identity verifies ownership, permissions, branch and the exact starting version; a green check appears only after GitHub confirms it. If creation fails, the screen reports a retryable failure without pretending a repository exists.
+**In the future version of the product, once the source contents and legal terms have been approved**, Maya presses **Create my version**. Only then would GitHub create a repository under her account. Identity would verify ownership, permissions, branch and the actual starting source. A success indicator should appear only after GitHub confirms the result. If creation fails, the screen reports a retryable failure without pretending a repository exists.
 
 This is **not** a configuration-only repository. Maya can inspect and modify the starter source she received, subject to the actual license.
 
@@ -42,15 +42,15 @@ A protected feature may live in the publisher's private repository or hosted ser
 ### Behind the screen
 
 - GitHub verifies account and repository access.
-- A reviewed bootstrap method reproduces the approved *starter software*, recording its exact source and attribution.
+- A **not-yet-selected** lawful repository-creation method reproduces the approved *starter software*, recording its exact source and attribution; until that decision is made, creation must remain a design proposal.
 - Identity associates the repository and user with durable installation and entity records, but stores secrets and runtime history outside GitHub.
 - Publisher-controlled feature access is verified through an independent authoritative mechanism, **not** issued by Identity itself.
 - No Thought Engine grant is implied by publisher access.
 
 ### The first hard question
 
-Which starting files are actually redistributed, under what license, and how are upstream improvements later offered without overwriting Maya's changes? This decision is still **open**. A controlled bootstrap from a versioned starter release is our proposed direction, not an implemented provisioner.
+**We do not have an answer yet**, and that is acceptable at the story stage. We still need to choose which real software files may be distributed, the license/permissions governing them, whether creation uses a fork, GitHub template or another approved method, and how future updates can be proposed without overwriting customer changes. **No method is selected or preferred by this chapter.** When those questions are answered, the story should be updated to reflect the actual policy and tested workflow—not guess at it.
 
-**Blueprint seed:** Account consent and repository creation transaction; starter contents/attribution, distinct publisher-access evidence, safe storage separation, update lineage.
+**Blueprint questions:** What precisely belongs in the customer's software repository? What license permits that? Which creation and update method is verifiably safe? What evidence proves account/repository ownership? Until resolved, **do not fabricate a starter version or claim an existing release**.
 
 [Continue: The control room →](02-THE-CONTROL-ROOM.md)
