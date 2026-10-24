@@ -75,6 +75,22 @@ The deepest technical questions remain how services authenticate, how Identity g
 - Every realistic-sounding event in the story is an **illustrative future scenario**, not measured evidence.
 - The owner retains architectural and release authority; AI contributions and independent critics are acknowledged.
 
+## Build and test the first prototype — Claude handoff
+
+The story is now accompanied by a **real implementation brief and pre-defined acceptance tests**. These files are instructions, **not proof that Claude or anyone has built a working UI yet**.
+
+| Build package | Use it for |
+| --- | --- |
+| **[Claude Start Prompt](docs/build/CLAUDE_START_PROMPT.md)** | One concise, copyable assignment to give Claude |
+| [Claude Implementation Brief](docs/build/CLAUDE_IMPLEMENTATION_BRIEF.md) | Scope, architecture, staged deliverables and blocked dependencies |
+| [Product Expectations](docs/build/PRODUCT_EXPECTATIONS.md) | What observable behavior counts as done, what remains partial |
+| [Test Design](docs/build/TEST_DESIGN.md) | First-run, live-data, authorization, restart, failure and security acceptance cases |
+| [Owner Trial Card](docs/build/OWNER_TRIAL_CARD.md) | Short hands-on walkthrough, traffic-light scorecard and Keep/Revise/Reject decision |
+
+**Important current constraint:** [the first-use launch plan](https://github.com/Arameair/Thought-Processor/issues/9) expects Identity to offer an **explicit Start Experience** using the pinned correct Processor candidate. The owner journey additionally requires Processor to open independently; these are **compatible entry paths**, not permission for silent autostart. The secure Identity→Engine grant API is not yet live. Claude should complete a truthful standalone workspace and real read-only Engine status **first**; report deeper authorization steps as **BLOCKED** until independently proven.
+
+**Implementation policy:** Claude creates a **new experiment from current Alpha**, not from this story branch. No app code, promotions, process takeover or new credentials were introduced by publishing this handoff.
+
 ## Review with us
 
 After reading the walkthrough, identify where the experience would be confusing, misleading, too complicated or unnecessary. Ask for a small counterexample rather than agreeing by default.
