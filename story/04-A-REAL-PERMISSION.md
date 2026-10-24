@@ -47,7 +47,7 @@ Maya doesn't need to understand cryptography to appreciate the distinction. The 
 
 ### Current reality check
 
-The Engine has an **experimental Engine-side grant-check adapter**, including a proposed signed decision format. As of this story, a matching real Identity endpoint and end-to-end verification are still missing. This chapter is **the experience we want to prove**, not something the current apps can already do. Until the real endpoint exists, the real screen must say **Authorization not available**, not fake a grant.
+The Engine has an **experimental Engine-side grant-check adapter**, including a proposed signed decision format. As of this story, a matching real Identity endpoint and end-to-end verification are still missing. This chapter is **the experience we want to prove**, not something the current apps can already do. Until the real endpoint exists, the real screen must say **Authorization not available**, never invent a grant or show a permission card as verified.
 
 **Blueprint seed:** Two independent kinds of authority, separate entity/source/service identities, owner grant approval, decision verification, revocation, action-time enforcement and evidence ID correlation.
 
