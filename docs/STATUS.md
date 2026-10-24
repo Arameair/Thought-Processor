@@ -34,7 +34,7 @@
 
 | Experiment | Based on | Goal | State | Evidence / decision |
 |---|---|---|---|---|
-| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
+| [`experiment/discovery-routing-devex-notes-20261023`](https://github.com/Arameair/Thought-Processor/tree/experiment/discovery-routing-devex-notes-20261023) | `alpha` @ `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a` | Clarify Processor discovery, Engine-owned API heartbeat, developer diagnostics; prepare UI/DevEx discussion | **DESIGN NOTES ONLY** | [Architecture discussion](discussions/2026-10-23-routing-heartbeat.md) · [UI agenda](discussions/2026-10-23-ui-devex.md); no code/build/run; owner UI decisions pending |\n| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
 
 Add rows **newest first**. Each row needs **branch link**, origin Alpha SHA, head SHA, owner-relevant difference, exact tests performed, whether run in Project Controller, failures, and explicit decision: keep / revise / reject / promoted. Do not mark **PASS** for code that has never been run.
 
