@@ -503,6 +503,7 @@ def main():
         PX = Proc("processor-as-wrong-service", [a.processor, "-data", os.path.join(work, "profile-x"), "-port", str(P_PORT + 1)], out)
         STARTED.append(PX)
         PX.wait_http(P_PORT + 1, "/api/health")
+        read_code(os.path.join(work, "profile-x"))  # register for redaction
         res2 = []
         for label, port_ in (("python http.server", uport), ("another Thought Processor", P_PORT + 1)):
             _, sx, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{port_}"})
@@ -693,6 +694,7 @@ def main():
         for k in CODES:
             sx = sx.replace(k, "<operator-code>")
         sx = re.sub(r"[0-9a-f]{64}", "<64-hex>", sx)
+        sx = re.sub(r"#code=[0-9a-f]{20,}", "#code=<operator-code>", sx)
         return sx.replace(work, "<tmp>/" + os.path.basename(work))
     for fn in os.listdir(out):
         if fn.endswith(".raw.log"):
