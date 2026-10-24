@@ -38,6 +38,10 @@ Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
 
 Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
 
+## Preferred UI direction (owner selected; not implemented)
+
+**Option C — lightweight live status cards** is the selected starting design. Each compatible running application has a dynamically discovered status card, but only the selected project loads its full original UI. A collapsible right-side inspector shows real logs, control flow, metrics and Copy Context. **Option D** (adaptive retained previews) is a later candidate to benchmark, not part of the initial design. [Read the Option C decision and open questions](docs/discussions/2026-10-23-option-c-lightweight-status-cards.md).
+
 ## Start here
 
 | Document | What it answers |
