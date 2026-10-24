@@ -194,5 +194,9 @@
     show("gone");
   });
 
+  // Opening the sign-in link in a tab that already shows this page only
+  // changes the #fragment, which does not reload — so react to it.
+  window.addEventListener("hashchange", () => { if (/code=/.test(location.hash)) { clearInterval(timer); boot(); } });
+
   boot();
 })();
