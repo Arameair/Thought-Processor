@@ -332,9 +332,9 @@ def main():
             record("A07", "BLOCKED", "L3", "Attach-only approval with Engine stopped", "No approval type exists; attach and start are both refused 501 before effect; this build has no runner so it cannot spawn.")
             record("A08", "BLOCKED", "L3", "Start approval, correct Engine stopped", f"start -> {res['start']}; no runner exists; zero Engine processes started by Processor (children of Processor={children(P.pid)})")
             record("A10", "BLOCKED", "L3", "Parallel/repeated ensure incl. Processor restart", "No ensure operation exists to repeat. Repeated refusals are idempotent (each gets its own op_id, no effect); restart covered in A13.")
-            record("A17", "PASS", "L3", "Valid start/attach but no ingest grant — observation control disabled",
+            record("A17", "BLOCKED", "L3", "Valid start/attach but no ingest grant — observation control disabled",
                    f"observe -> 501 blocked_no_ingest_grant_contract; UI control disabled; Processor has no observation-sending code path; Engine (pid {E.pid}) ran with no observation from Processor",
-                   "Precondition 'valid start/attach' cannot be met; verdict covers only: Engine may run, observation control disabled, zero observations sent by Processor")
+                   "BLOCKED because the precondition (a valid start/attach) cannot exist. Observed parts: Engine may run, observation control disabled and refused, zero observations sent by Processor")
             record("A25", "BLOCKED", "L3", "Worker unavailable", "Engine runs with no Chat-Jimmy worker configured; Processor cannot read Engine worker state without an approved attachment, so it reports nothing about the worker rather than inventing a state.")
 
             # A11 wrong service: point Identity address at the Engine port.
@@ -359,11 +359,13 @@ def main():
         st_bad, d_bad, _ = c.post("/api/candidates", {"identity": "http://192.168.1.10:7796"})
         ok = (P2.p.returncode != 0 and "already uses this port" in m2 and P3.p.returncode != 0 and "already using profile" in m3
               and alive(P.pid) and st_bad == 400 and (wrong is None or (wrong[0] == "PORT_OPEN_UNIDENTIFIED" and wrong[3] == "wrong_identity")))
-        record("A11", "PASS" if ok else "FAIL", "L3",
-               "Occupied port, second instance on same profile, wrong service at Identity address, remote target",
+        record("A11a", "PASS" if ok else "FAIL", "L3",
+               "Processor side: occupied port, second instance on same profile, wrong service at Identity address, remote target",
                f"second Processor on busy port exit={P2.p.returncode}: {m2!r}; second Processor on same profile exit={P3.p.returncode}: {m3!r}; "
                f"Identity address pointed at real Engine port -> {wrong}; remote address -> {st_bad} {d_bad.get('message')}; original Processor alive={alive(P.pid)}",
-               "Missing executable / wrong digest / protocol checks belong to a runner, which does not exist (BLOCKED part)")
+               "Covers only Processor's own checks; see A11b")
+        record("A11b", "BLOCKED", "—", "Runner side: missing executable, wrong digest/protocol, spoofed Engine at an approved endpoint",
+               "No runner and no approved manifest exist; executable/digest/protocol checks belong there. Processor never shows an authenticated badge from claimed metadata (A27-live-identity shows 'unverified').")
 
         # ---------------- A18 ----------------
         rows = []
