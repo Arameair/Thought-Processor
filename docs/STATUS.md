@@ -34,7 +34,7 @@
 
 | Experiment | Based on | Goal | State | Evidence / decision |
 |---|---|---|---|---|
-| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
+| [`experiment/dynamic-feature-cards-notes-20261023`](https://github.com/Arameair/Thought-Processor/tree/experiment/dynamic-feature-cards-notes-20261023) | `alpha` @ `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a` | Dynamic cards for live independently running projects; Identity preview; expanded UI and debugging | **DISCUSSION ONLY** | [Notes](discussions/2026-10-23-dynamic-project-cards.md); no code or live tests; owner UI decisions pending |\n| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
 
 Add rows **newest first**. Each row needs **branch link**, origin Alpha SHA, head SHA, owner-relevant difference, exact tests performed, whether run in Project Controller, failures, and explicit decision: keep / revise / reject / promoted. Do not mark **PASS** for code that has never been run.
 
