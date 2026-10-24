@@ -34,9 +34,16 @@
 
 | Experiment | Based on | Goal | State | Evidence / decision |
 |---|---|---|---|---|
-| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
+| [`experiment/processor-first-control-point-20261023`](https://github.com/Arameair/Thought-Processor/tree/experiment/processor-first-control-point-20261023) | [`alpha` @ `9fac9fa`](https://github.com/Arameair/Thought-Processor/commit/9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a) | Define first real control-point MVP before implementation | **PLANNING ONLY** | [Experiment plan](experiments/2026-10-23-first-control-point.md) · [Issue #3](https://github.com/Arameair/Thought-Processor/issues/3); initial planning commit `6f127346bacdf31836830ff94466a663d7b10fd2`; no build/run tests |
 
 Add rows **newest first**. Each row needs **branch link**, origin Alpha SHA, head SHA, owner-relevant difference, exact tests performed, whether run in Project Controller, failures, and explicit decision: keep / revise / reject / promoted. Do not mark **PASS** for code that has never been run.
+
+## Issue tracker and next decisions
+
+- [#1 Foundation tracker](https://github.com/Arameair/Thought-Processor/issues/1) — navigation, branch policy, progress and owner sign-off.
+- [#2 Canonical Thought Engine choice](https://github.com/Arameair/Thought-Processor/issues/2) — required before one authoritative Thought store is connected.
+- [#3 First real Processor control point](https://github.com/Arameair/Thought-Processor/issues/3) — run and verify an independent control UI.
+- [#4 Feed and replaceable-worker contracts](https://github.com/Arameair/Thought-Processor/issues/4) — isolate sources/features and model providers.
 
 ## External prototypes — related, not built into this repo
 
