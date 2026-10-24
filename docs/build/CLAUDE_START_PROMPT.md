@@ -1,3 +1,5 @@
+> **Story revision — 24 October 2026:** Read [the revised owner journey](../story/01_OWNER_JOURNEY.md) and [blueprint handoff](../story/03_BLUEPRINT_HANDOFF.md) first. This build document predates the accessible-feature/identity-relationship direction and is **historical, not a current executable assignment** until reconciled. In particular, any earlier optional-GitHub or unapproved attach/control allowance is superseded by the [Identity-approved build package](https://github.com/Arameair/Thought-Processor/blob/experiment/identity-approved-build-package-20261024/prototype/START_HERE.md). Creating/searching features, broad dependency installation and version comparisons are not authorized implementation scope. The owner has authorized story edits only in this pass.
+
 # Copy/paste handoff for Claude — build the Thought Processor prototype
 
 **Instructions intended to be supplied directly to Claude. All linked source material is on the story branch, not the implementation base branch.**

@@ -1,244 +1,123 @@
-# The day Thought Processor becomes useful
+# Thought Processor — a workspace for relationships between identities
+Revised 24 October 2026. Human-directed, developed in collaboration with AI.
+**Design story only. No software, service state, account, grant or test result is claimed by this narrative.**
 
-**A story-first product prototype · 24 October 2026 · Not working software**
+> Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.
 
-> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
+Processor's wider purpose is to help the operator select accessible features, establish approved relationships between identities, and understand whether those relationships work. Thinking is one use of that model, not the required purpose of every workspace.
 
-This is a **future product story** told from the owner's point of view. None of the screens, status examples or successful operations below assert that Thought Processor can perform them today. In this repository, Processor is documentation-only. The Identity trust/grant integration and Engine-side verification have **not** been built. The story is meant to reveal the right questions **before** code or UI blueprints.
+## Scene 1 — Identity hands you a working context
+You have opened Identity, verified your GitHub account and installation/repository through the approved setup, and selected the identity you want to work with. Identity opens the approved Thought Processor experience.
 
-We follow one person setting up **TASS**, but Thought Processor must also work when there is **no companion**, or when the selected thing is an independent feature or business identity. TASS is our example, **not the compulsory home screen**.
+Processor verifies that handoff rather than trusting a URL parameter. You see the actual operator/account, repository, Identity authority and selected working identity. It does not ask you to repeat setup or select the same identity again.
+If anything cannot be verified, it explains the missing evidence and provides setup/reconnect/repair. Directly opening Processor takes this same verification route; it cannot bypass Identity.
 
----
+The human operator, working entity, feature identity, installation and runtime instance are different records. TASS is an optional example of a working entity; it is not a compulsory home screen or seeded user record.
 
-## Opening scene — “What is this application for?”
+## Scene 2 — What features can this identity use?
+You arrive in the selected identity's workspace. Processor shows every feature that identity has access to, with supported actions and current evidence. It does not lead only with Thought Engine, require a companion, or hide other accessible capabilities because they are unrelated to thinking.
 
-You open Thought Processor in its own clean window for the first time.
+You can distinguish:
+- Available to add: access established, relationship not yet configured.
+- Connected: relationship configured; actual runtime/permission status shown separately.
+- Needs attention: a specific missing requirement, failure or stale check needs action.
 
-There is no fake activity graph. No simulated “Thinking…” animation. No preloaded app cards pretending to be installed.
+Those summaries do not collapse installed, running, authenticated, authorized and ready into a single state. An accessible feature may not be installed or compatible with this host. Its details explain that limitation instead of silently removing it from view.
 
-The screen introduces itself in plain language:
+An empty successful availability check offers Find features and Create a feature. A failed or unavailable check says Availability unknown and offers repair/retry; it does not pretend no features exist.
+Find features searches supported sources and checks actual access. Publisher-controlled delivery access remains separate from local Identity operation approval.
+Create a feature begins a definition/registration proposal. Whether it starts from a plain-language idea or an existing application remains open. It does not instantly generate, run or authorize software. A new identity record alone is not a working feature.
 
-> **Your connected applications, in one place.**  
-> Find the software you have, set up approved connections and see whether those connections actually work.
+## Scene 3 — Every feature has an identity
+You select a feature to learn what it provides, what it needs, who it works with and what is currently verified.
 
-Beneath that, an honest first-use state:
+Thought Engine itself has a feature identity. Its executable version, installation and currently running instance are separately identified. Restarting a process must not manufacture a new permanent feature identity.
+An AI worker and observation source each have their own identities too.
 
-> **Identity:** Not connected.  
-> **Available features:** Not verified yet.  
-> **Next action:** Find or connect Identity.
+Relationships describe roles, not ownership transfers:
+- An entity uses Thought Engine for thought processing.
+- Thought Engine uses an AI worker for inference.
+- An observation source supplies authorized observations to an Engine for an entity.
 
-There are also two routes: **Explore how this works** (a read-only explanation) and **View known local candidates** (clearly *unverified* discovery). Neither route silently enables permissions or launches another service.
+Each relationship answers Who? For what purpose? What is required? What did Identity approve? What is actually happening?
+Neither a dependency declaration nor publisher access grants permission to read the entity's data.
 
-**Why the scene matters:** The product has a purpose even without TASS. But meaningful trusted coordination needs Identity. “Empty” is not an error, and a discovered HTTP port is not an authenticated connection.
+## Scene 4 — Add a feature without guessing its requirements
+You choose Add on an accessible feature.
+Processor reads the selected feature/version's declared capabilities and requirements through a supported, verifiable description. It does not hardcode every Engine as requiring the same worker or invent a dependency from its name.
 
-**Question left open:** How much read-only discovery is appropriate before Identity is available? It must not become a trust bypass.
+The guided setup shows which requirements are satisfied, which are missing, and which are unknown.
+For each missing requirement it offers all accessible candidates that declare the relevant capability, with compatibility and limitations. It must not silently choose, install, start or authorize another feature.
+If no candidate fits, explain the missing capability and offer Find features or a proposal to create one. Preserve unfinished setup where supported; it remains a non-authoritative plan.
 
-## Scene 1 — Identity is found, but not yet trusted
+Requirements may have requirements of their own. Do not expand forever or call a circular chain ready. Unsupported declarations, contradictory requirements or cycles are explicit blockers. The minimal declaration/compatibility contract still needs design.
 
-A locally running Identity service is detected, or you provide its endpoint.
+If the selected Thought Engine declares an AI worker requirement, you choose an accessible compatible worker. If it does not, Processor must not force that requirement merely to follow this example.
 
-Instead of one reassuring green light, the view distinguishes:
+## Scene 5 — Review the complete proposed relationships
+Before applying anything, Processor presents the selected feature, its required collaborators, the purpose of each connection, affected identities, data access, intended start/attach actions and anything unresolved.
+You can revise the choices or cancel.
 
-> **Found:** A service answered at a local address.  
-> **Identity verified:** Not yet.  
-> **Administrative authorization:** Not yet.
+The useful stages are:
+1. Proposed: the combination you want.
+2. Authorized: Identity permits the exact operation.
+3. Applied: the responsible feature accepted its settings.
+4. Observed: actual evidence shows what worked.
 
-You choose **Verify Identity connection**. The system asks Identity to establish an authenticated relationship through the future approved pairing mechanism. Approval happens through Identity's authority and the legitimate administrator, not because Processor guessed a name or opened a port.
+These can disagree. Identity approval with an offline destination is not a completed connection. Partial setup must identify completed and unfinished steps; no global success toast.
+Processor keeps only non-authoritative proposals/UI state. Identity retains grants; features retain effective configuration and data. Durable plan storage remains an explicit design question.
 
-Only after successful verification can the workspace label the connection **Authenticated**. If the handshake is unsupported, you see **Discovery only — secure pairing unavailable**, not “Connected.”
+## Scene 6 — Identity approves before Engine start or attachment
+For our first bounded integration, you choose Thought Engine as one accessible feature. This is a test target, not a required default for every identity.
 
-On success, Processor can read the Identity-approved list of registered services and entities *subject to its own read permissions*.
+Processor requests Identity approval for starting or operationally attaching the selected Engine. The real runner/control boundary validates the exact actor, action and target/build under the agreed contract.
+If Identity denies, is unavailable or cannot provide verifiable approval, start/attach stays blocked. There is no engineering-mode bypass. Existing independently running services are left unchanged.
 
-**Why the scene matters:** Identity determines trust; Thought Processor makes the trustworthy result understandable. Identity does not need Processor open to preserve its registry.
+With actual approval, the runner starts exactly one selected instance or attaches to the matching existing instance. Attach permission does not imply start permission; neither implies observation ingestion or arbitrary control.
+The workspace shows real started-versus-external ownership, process state, peer trust, compatibility, readiness and check freshness separately.
 
-**Open design choice:** We have not selected keys, secure enrollment, transport, credential storage or cross-machine pairing. The scene states an experience requirement, not a chosen cryptographic implementation.
+You can inspect the genuine application's interface when supported and permitted, with Open original app when embedding is unavailable. Processor does not redraw a pretend Engine UI.
 
-## Scene 2 — What are we actually managing?
+## Scene 7 — Connect an observation source and test a real path
+To feed observations, select an accessible source with its own authenticated identity, the target Engine and the working entity.
+Request a separate scoped ingestion permission from Identity. The owning source/Engine apply their supported settings and return evidence.
+A start approval, publisher entitlement or local Engine switch cannot stand in for this permission.
 
-You arrive at the **System Overview**, not automatically inside a companion.
+A guided test identifies its actual sender and purpose. A manual test input is not live screen/game telemetry. A dedicated test source must not impersonate a production source by changing a text field.
+The source sends directly to Engine. Engine enforces authorization at intake and before queued dispatch under the agreed initial integration policy. Processor observes permitted receipts, not the production data path.
 
-The overview distinguishes two types of thing:
+Results distinguish authenticated sender, Identity decision, rejected/accepted, queued, worker invocation, processing outcome and persistence. Missing evidence stays unknown.
+One accepted observation need not form a Thought. No real grant/source/worker means the corresponding test is blocked; no fixture output substitutes for a live outcome.
 
-**Identities / workspaces** — a companion such as TASS, an organization, a person or a project.
+## Scene 8 — Find the broken relationship
+When something fails, Processor identifies the affected relationship and first failed or unknown step.
+- Revoked ingestion permission: Engine refuses new protected work under its actual enforced policy.
+- Authority unavailable: verification failed; that is different from an explicit denial.
+- Worker unavailable: runtime dependency failed; do not relabel it as permission denial.
+- Uncertain response: inspect the original operation ID; do not blindly resend.
+- Feature requirements changed: show which approved arrangement no longer satisfies the selected version.
 
-**Independent applications** — Thought Engine, a screen-observation service, Memory, communication, and other installed features. Each has its own registered identity, implementation and runtime instance.
+Details reveal Flow, Logs and Metrics with provenance and timestamps. Copy Context is bounded and allowlisted, excluding secrets and raw private content by default.
+The operator should understand what stopped, why, what still works and the next safe action without opening every log.
 
-A compact summary answers:
+## Scene 9 — Explore combinations without declaring winners
+You may later try a different accessible feature/version or collaborator. Identity approval and compatibility checks still apply.
+Availability to try is distinct from evidence of usefulness. A new version is not automatically an improvement.
 
-> **Selected workspace:** None yet.  
-> **Identity:** Verified.  
-> **Thought Engine:** Registered, current instance status not yet confirmed.  
-> **Needs attention:** One compatibility or permission check pending.
+A future comparison should preserve the exact selected versions, requirements, permissions, inputs/test conditions and observed outcomes. Compare usefulness for the chosen task, failures, latency and resource needs only where actually measured. Do not invent a universal score or compare a completed real run with a fixture as equivalent evidence.
+Keep the prior working arrangement recoverable; changing dependencies must not silently replace it. The comparison/update mechanism is future design, not a first-build mandate.
 
-You can inspect an independent feature directly. Or you select **TASS** because that's what you want to equip today.
+## Scene 10 — Close and return
+Independent approved services communicate directly and keep their own data when Processor closes.
+On return, Processor verifies the current context, re-reads service state and marks stale evidence. It does not recreate identities or automatically replace the operator's arrangement.
+Explicit Stop session-owned Engine affects only verified owned Engine processes under the defined approval/cleanup policy; attached external services remain independent. Permission loss is not an assumed kill command.
 
-The overview doesn't claim TASS is thinking merely because a Thought Engine appears in the feature catalog. **Installed**, **running**, **paired**, **permitted** and **actually contributing** are different states.
+The same experience must work for another identity with a utility feature and no Engine. No Brain offline warning appears unless that identity's chosen setup actually requires an Engine.
 
-**Why the scene matters:** The system can serve identities that never use Thought Engine or Memory. A card is a door into a meaningful operation, not the product's definition of success.
+## What this story now commits to
+The owner-supported direction is accessible features, feature identities, explicit relationships, guided requirements and Identity-approved operations.
+The final layout, feature declaration schema, publisher/search sources, Create a feature workflow, durable proposal storage and comparison design remain open.
+This revision is documentation, not build authorization or acceptance.
 
-## Scene 3 — TASS has an identity, but not a working thinking path
-
-Inside TASS's workspace, you see its durable identity and the capabilities it is allowed to use, followed by a plain operational statement:
-
-> **Thought Processing**  
-> Engine instance: Detected, compatibility check pending.  
-> Observation source: Not selected.  
-> Identity grant: Not verified.  
-> Worker: Not checked.  
-> **Next step: Inspect the Thought Processing connection.**
-
-The screen makes a distinction the owner can understand: *TASS exists independently of the thought engine*. And an Engine can run independently of TASS.
-
-You open **Thought Engine** as a feature. The Processor shows that application's **real interface** when supported, with an **Open original app** alternative when embedding isn't available. The familiar application is not replaced by a hollow imitation.
-
-A collapsed inspector remains available for **Connections**, **Flow**, **Logs** and **Metrics**. It stays quiet until you need evidence.
-
-**Why the scene matters:** The user can move between *one identity's view* and *one feature's real view* without losing selection or confusing their ownership.
-
-## Scene 4 — Connecting a source is not the same as granting access
-
-You want future ScreenBridge observations to contribute to TASS's thoughts.
-
-Thought Processor can show a **proposed connection**:
-
-> **Source:** ScreenBridge (independent application).  
-> **Destination:** Thought Engine (independent application).  
-> **Entity:** TASS.  
-> **Requested action:** Allow this source to submit observations for TASS.
-
-But Processor cannot approve the permission itself. It prepares the request, explains which data may flow, and directs the authorized administrator through Identity to approve or decline.
-
-Two facts must eventually agree:
-
-1. **Identity** says this named, authenticated source is permitted to send this operation to that Engine for TASS.
-2. **The receiving application** confirms that the corresponding subscription/configuration is actually enabled.
-
-The proposed connection stays **Not applied** until both confirmations are real. No second “permission ON” switch owned by Processor overrides Identity.
-
-You also see the privacy impact and a precise disconnect action: **Stop contributing ScreenBridge observations to Thought Engine**. That action must not kill ScreenBridge or erase TASS.
-
-**Why the scene matters:** Connecting features is a deliberate owner action with a verifiable security boundary. Thought Processor coordinates; feature owners apply their own validated configuration.
-
-**Open design choice:** Which app persists *desired connection recipes*? The authoritative grant stays in Identity and the effective processing settings stay with the operating feature. A reusable plan may be a separate non-authoritative document.
-
-## Scene 5 — Before the first test, we check the whole path
-
-TASS's workspace now says:
-
-> **Permission:** Allowed by Identity (with a specific decision/version).  
-> **Engine:** Reachable and authenticated.  
-> **Source subscription:** Reported enabled by the Engine.  
-> **Worker:** Status unknown.  
-> **Next action:** Verify worker readiness.
-
-The owner checks the AI worker through the Engine. This does **not** mean Thought Processor sends model queries itself. The Engine owns real inference calls, heartbeat scheduling, queues, context and thought records.
-
-If Chat-Jimmy is unavailable or in mock mode, the display says so. A permitted observation might wait in a bounded queue instead of being processed. Worker choice is replaceable in principle; which component selects among several real workers is still to be decided.
-
-**Why the scene matters:** An authorized connection is only permission to attempt work. It is not evidence of useful thinking.
-
-## Scene 6 — The first deliberate test
-
-You choose **Run guided test**. This is a **test**, so it uses a distinct, properly authenticated **Test Sender** identity and a narrow test grant. It must never forge `source: "tass"` or impersonate ScreenBridge through a text field.
-
-The interface tells you the target, sender, entity, exact operation and expected evidence. You approve one request:
-
-> **Test observation:** “Player entered Goldshire.”  
-> **Target:** Thought Engine.  
-> **Entity:** TASS.  
-> **Source:** Authorized Test Sender.
-
-The live timeline begins with separate receipts:
-
-- **Sender authenticated:** Confirmed or rejected with a reason.
-- **Identity decision:** Allowed, denied or authority unavailable, with its own decision ID.
-- **Engine ingestion:** Rejected, or **Accepted and queued** with an event ID.
-- **Worker invocation:** **Not yet called**, in progress, failed, uncertain or completed.
-- **Processing result:** A real Spark/Trace/Thought outcome *if the Engine actually produces one*.
-- **Persistence:** Independently verified if applicable.
-
-One observation **does not have to create a Thought**. The existing experiment uses relevance and accumulated related evidence; a queued or low-scored observation is not an end-to-end thought-creation success.
-
-A correlation ID connects what Identity reported, what the Engine accepted, and what the worker returned. If the Engine accepted the event but a worker didn't answer, the UI says **Queued, not processed**, not “Test passed.”
-
-**Why the scene matters:** A real outcome is evidence, not a pleasant animation. The user can explain exactly where the path stopped.
-
-## Scene 7 — Something breaks; the interface finds the boundary
-
-Now you run a second test after revoking the grant in Identity.
-
-Processor shows:
-
-> **Observation refused by Thought Engine.**  
-> **Reason:** Identity reported permission revoked.  
-> **New work queued:** No.  
-> **Model called:** No.  
-> **Next action:** Review authorization in Identity.
-
-You inspect the precise event in **Flow**. Identity's decision receipt and Engine's rejection receipt share the request context. No raw observation, login token or model prompt is copied into the default diagnostic bundle.
-
-You try a different failure: the AI worker goes offline. The grant is still valid, so **Permission** remains Allowed. Engine status shows **Worker unavailable**, and queued observations are reported as waiting rather than denied.
-
-And a third failure: Identity itself is unreachable. During our **first planned integration**, the Engine must fail closed on new protected operations and pause new dispatch pending valid authorization. It does not reinterpret an outage as a policy rejection. Future short-lived offline permission is a separately reviewed option, not a first-prototype claim.
-
-**Why the scene matters:** One red “Disconnected” label is not a diagnosis. The next action changes according to **which independent component knows what**.
-
-## Scene 8 — You close Thought Processor
-
-The first test has been understood, and you close the control workspace.
-
-The source and Engine still have their own lifecycles. **If authorization remains valid and the necessary services are available**, the source can send directly to the Engine, and the Engine can call a worker and persist its own thought records. Thought Processor is not a hidden message relay.
-
-You return later. Processor consults Identity and the services again. Old cached information is labeled with the last successful verification time; it cannot turn a previously healthy Engine into a fictional currently healthy one.
-
-You can find the last test by its request ID, compare then and now, and inspect any gaps in evidence.
-
-**Why the scene matters:** Independence isn't a marketing adjective. The owner should be able to prove which work continues with Processor closed and which actions cannot continue if **Identity** is unavailable under the current authorization policy.
-
-## Scene 9 — A new application appears
-
-Days later you install an independent Memory feature. It has its own identity, storage and API.
-
-If it has not registered with Identity, Processor might only see an **Unverified candidate**. After genuine approved enrollment, it appears in the catalog, describes supported capabilities and is available for per-identity permission decisions.
-
-No one edits Thought Processor source code to add a hard-coded Memory card. No permission to read TASS history is granted merely because a Memory process exists.
-
-You might later organize that feature under TASS's workspace or inspect Memory independently. Its absence must not break Identity or unrelated apps.
-
-**Why the scene matters:** A growing feature ecosystem is our product direction. Processor's catalog must be dynamic **and** its actions must remain meaningful.
-
-## Scene 10 — Someone uses the system without a companion
-
-Another installation has a business identity and one independent utility feature, with **no Thought Engine and no Memory**.
-
-Thought Processor can still show that Identity is available, the authorized utility is healthy, its configuration is current, and how to inspect its diagnostics or control its permitted operations.
-
-No “Brain offline” error appears, because thinking was never required for that workspace.
-
-**Why the scene matters:** If Processor assumes every customer is building a TASS-like companion, we have accidentally turned a modular control system into a chatbot dashboard.
-
----
-
-## Ending — why should Thought Processor exist at all?
-
-You could have opened Identity, Thought Engine and each source application separately to perform many of these actions.
-
-**Thought Processor earns its existence only if it substantially reduces that fragmentation.**
-
-In the intended experience, it does four things together: it presents a coherent view of independent components, performs permitted cross-service operational setup, tests a real path, and identifies the exact failure and next action.
-
-If an ordinary Engine UI plus Identity can give the user the same clarity, safety and control with less software, **we should revise or abandon the separate Processor concept**.
-
-That is the most important challenge to carry into blueprint review.
-
-### Continue reading
-
-- [Who does what behind the story](02_RESPONSIBILITIES_AND_STATES.md)
-- [Questions for the future blueprints](03_BLUEPRINT_HANDOFF.md)
-- [Challenge the product before building it](04_REVIEW_AND_ALTERNATIVES.md)
-
-### Provenance and status
-
-This is a **narrative prototype only** based on owner-endorsed architectural direction and AI-assisted design. Every quoted status, test result and user interface phrase above is fictional **target behavior**. No integration, UI, authorization, worker execution or data persistence has been tested by writing this story. The owner decides whether the proposal becomes a requirement.
-
-Reference designs on `main`: [Operational setup theory](https://github.com/Arameair/Thought-Processor/blob/main/docs/OPERATIONAL_SETUP_THEORY.md) · [Identity/Engine integration plan](https://github.com/Arameair/Thought-Processor/blob/main/docs/INTEGRATION_AUTHORIZATION_PLAN.md).
+Continue: [responsibilities](02_RESPONSIBILITIES_AND_STATES.md), [blueprint handoff](03_BLUEPRINT_HANDOFF.md), [critical review](04_REVIEW_AND_ALTERNATIVES.md).
+The [Identity-approved build boundary](https://github.com/Arameair/Thought-Processor/blob/experiment/identity-approved-build-package-20261024/prototype/START_HERE.md) remains mandatory.

@@ -1,3 +1,5 @@
+> **Current story direction — 24 October 2026:** [Start with the revised Thought Processor story](docs/story/01_OWNER_JOURNEY.md). Identity supplies the verified working context; Processor shows every accessible feature, guides declared requirements and explains approved relationships between identities. Thought Engine is one feature with its own identity, not a compulsory home screen. [Blueprint questions](docs/story/03_BLUEPRINT_HANDOFF.md). The build documents below are historical pending reconciliation; use the [Identity-approved boundary package](https://github.com/Arameair/Thought-Processor/blob/experiment/identity-approved-build-package-20261024/prototype/START_HERE.md) when preparing the next assignment. This revision authorizes no application code or promotion.
+
 # Thought Processor
 ### A story-first prototype of the operational control point
 

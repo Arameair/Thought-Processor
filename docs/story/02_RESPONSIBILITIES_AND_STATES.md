@@ -1,131 +1,57 @@
-# Behind the story — responsibility and evidence guide
+# Responsibilities, relationships and evidence
+Design only; revised 24 October 2026. Human-directed, AI-assisted.
 
-**Companion reference to [the owner journey](01_OWNER_JOURNEY.md). Design documentation, not an implementation or an API specification.**
-
-The walkthrough describes *what an owner experiences*. This document captures what each part of the system must actually own for the story to be truthful.
-
-## One sentence to protect throughout the design
-
-> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
-
-The phrase is owner-endorsed. The detailed interpretations below are **proposed until challenged and explicitly accepted**.
-
-A second sentence anchors Identity:
-
-> **Identity decides who is trusted and what is permitted. Independent features enforce authorization and own their own work.**
-
-## The participants aren't interchangeable
-
-| Participant | Lasting ownership | In the story, what it supplies | Should NOT do |
-| --- | --- | --- | --- |
-| **Human operator** | Intent, approval and acceptance decisions | Chooses TASS, requests a connection, authorizes one test, evaluates results | Depend on a UI that silently grants access |
-| **Identity** | Durable entities and feature identities, service registration, trusted relationships, grant records, revocation | Authentic service catalog, selected entity, permission decisions and evidence | Process observations or pretend an open port proves trust |
-| **Thought Processor** | Its own workspace state, optional saved *proposals* and test recipes | One navigable picture of the system, connection controls, guided tests, failure explanation | Be a required data-path proxy, canonical permission issuer or another thought store |
-| **Observation source** | Domain observations, service instance and data it collects | Sends authenticated source events directly to Engine under appropriate permission | Assume it is authorized merely because discovered or installed |
-| **Thought Engine** | Its configuration, inputs, queue, processing logic, worker calls, Sparks/Traces/Thoughts, processing receipts | Says what work it accepted, why it waited, what it processed, and what it persisted | Mint an Identity grant for itself or submit unverified claims as genuine source identity |
-| **AI worker** | Its own model execution, status and provider constraints | Returns real inference output or a real error/uncertain result to Engine | Set permissions or rewrite Engine history |
-| **Optional Memory** | Independently approved experience storage and retrieval | Later may provide recall if installed and granted | Be a prerequisite to registering any identity |
-
-**Important:** The selected entity **TASS** is not the same thing as a source application named TASS, an Engine instance, an Identity login or a worker. The blueprint must let us clearly represent those distinctions.
-
-## What “control” should mean operationally
-
-Processor controls setup through **authenticated requests, explicit receipts and observed state**. It does not need to own every destination setting to control the user workflow.
-
-Think of four moments, each of which may differ:
-
-| Moment | Plain-language question | Authority |
+## Participants
+| Participant | Owns | Does not imply |
 | --- | --- | --- |
-| **Proposed** | “What does the owner want connected?” | Owner action and Processor's temporary connection plan |
-| **Authorized** | “Is this exact source-to-destination operation permitted for this entity?” | Identity's authenticated decision |
-| **Applied** | “Has the owning feature accepted and persisted its configuration?” | Source and/or Engine's effective configuration |
-| **Observed** | “Did one real event pass through the intended path and produce an actual outcome?” | Source, Engine, worker and storage receipts |
+| Human operator | Intent, authorized choices, acceptance | GitHub sign-in alone grants every local operation |
+| Identity | Durable identities, trusted registration, scoped approval and revocation | A detected endpoint is trusted |
+| Thought Processor | Workspace, guided setup, non-authoritative proposals, permitted evidence | Authority to grant itself access or run inference |
+| Independent feature, including Thought Engine | Own implementation, declared capabilities/requirements, effective configuration and records | Installation permits access to another identity's data |
+| Runtime instance | Current execution and instance evidence associated with a durable feature identity | New permanent feature identity on every restart |
+| Publisher access authority | Controlled feature delivery/hosted access under actual policy | Authority over local user data or reliable erasure of delivered source |
 
-For the first version, do not design a magically atomic “Connect” action that hides four separate outcomes. The interface may be simple, but errors must reveal **which moment failed**.
+## Relationship model
+The selected identity may be an entity or a feature identity. Each accessible feature is selectable; supported actions depend on actual access, compatibility, configuration and approval. Unsupported or unknown does not become permission.
+A relationship records the participating identities and roles, intended purpose/capability, applicable entity, requirements, current Identity approval, effective owning-feature configuration and observed evidence.
+This is a conceptual model, not a selected storage schema or API.
 
-Examples:
-- If Identity allowed an operation but the Engine is offline: **Authorized; not connected to a running Engine**.
-- If Engine accepted an event but no worker is ready: **Queued; not yet processed**.
-- If source has permission but subscription is paused: **Authorized; intentionally paused**.
-- If a test receiver claims a success but cannot show its own event receipt: **Unverified result**.
+Shared feature use must retain separate applicable grants and data boundaries. No first-prototype multi-tenant security claim is implied.
+Source → Engine → worker describes functional relationships; exact deployment/instance associations remain inspectable.
 
-### Where settings remain after Processor closes
+## Requirements
+Features declare what they provide and need for the selected version/configuration. Processor guides choices among accessible candidates.
+A declaration is a claim to validate, not a new authority. Missing/unsupported descriptions mean requirements unknown, not ready.
+Required versus optional dependencies, compatibility, cycles, version changes and stale evidence need an explicit small contract before implementation.
+Selecting a collaborator does not silently authorize its dependencies.
 
-The proposal is **distributed effective configuration**:
+## Four stages
+Proposed → Authorized → Applied → Observed.
+Identity owns authorization. Each operating feature owns applied configuration and its records. Processor correlates actual results.
+No assumption of an atomic cross-service transaction. A partial result preserves completed-step evidence and a safe next action; no blanket rollback or permission revocation affecting unrelated uses.
+Where durable non-authoritative proposals live remains open.
 
-- Identity retains permission records, service registration and trust.
-- Source owns the source-side feed/data collection settings.
-- Engine owns the active subscription, worker preferences, pause/resume, budget and queue state (as supported).
-- Processor retains only UI preferences and **non-authoritative** connection recipes/test history, if the owner later approves saving them.
+## Multiple status dimensions
+Access eligibility, installed state, compatibility, process state, authenticated peer identity, scoped authorization, dependency satisfaction, observed outcome and freshness are independent.
+Available to add / Connected / Needs attention are summaries with drilldown, not replacements for those dimensions.
+Unknown availability differs from a verified empty catalog.
+Authenticated differs from a name/hash claimed by a candidate response.
+Accepted, queued, processed and persisted each require their own receipt.
+No recorded worker invocation evidence means Unknown, not zero.
 
-The exact owner of **cross-service desired configuration plans** is OPEN. This must be resolved before building a declarative reconnection feature. Do not conflate **a saved plan** with **a permission**.
+## Critical boundaries
+- Verified Identity handoff preserves operator/account/repository/working identity; direct launch offers repair/reconnect.
+- Start/operational attach requires real Identity approval enforced at the runner/control boundary.
+- Discovery metadata is narrowly read-only; no unapproved diagnostic access or control.
+- Ingestion needs separate authenticated source and scoped grant; Engine enforces it.
+- Processor does not become the required observation/inference relay.
+- Browser close is not shutdown. Explicit stop touches only verified session-owned processes under the agreed control policy.
+- Publisher delivery entitlement and Identity runtime permission stay separate.
+- No fake user-facing telemetry or feature cards. Fixtures remain isolated automated-test evidence.
+- Creating an identity is not creating software. Create a feature remains a guided proposal workflow until separately defined.
 
-## The status vocabulary must tell the truth
+## Future comparison
+Record exact versions, selected relationships, test conditions, permission scope and observed outcomes when comparing arrangements. Available to try is not proven useful. Do not assume recency, popularity or more features means better.
+Comparison tooling and update/rollback workflows remain future design.
 
-### Avoid one generic “Connected” indicator
-
-| Meaning | What would prove it | Counterexample |
-| --- | --- | --- |
-| **Discovered** | A candidate endpoint or Identity catalog record exists | A hostile or unrelated service could reuse the address |
-| **Authenticated** | Valid peer/service identity verification | A service's self-reported display name is not proof |
-| **Authorized** | Current grant decision for this entity/source/destination/action | Generic app pairing doesn't grant TASS data access |
-| **Running** | Recent authenticated instance health receipt | An approved service may be offline |
-| **Ready** | The requested operation's current preconditions pass | A running Engine may have no worker |
-| **Accepted** | Owning feature has issued an event/command receipt | “Accepted” doesn't mean “processed” |
-| **Processed** | Engine can show real processing/worker evidence | A queued event is not a thought |
-| **Persisted** | Owning feature confirms the specific result is durably saved | UI text is not a storage receipt |
-| **Stale / unknown** | Most recent evidence expired or a step couldn't be checked | Last night's green status is not current health |
-
-These are **multiple independent axes**, not a compulsory linear state machine. A source can be authorized while stopped; a worker can be ready while permission is denied.
-
-### Failure and next-action ownership
-
-| What went wrong | What user should see | Where owner is sent |
-| --- | --- | --- |
-| Identity wasn't found | No verified authority | Connect or start Identity independently |
-| An endpoint answered but wasn't authenticated | Discovered, unverified | Verify service identity / owner approval |
-| Permission was denied or revoked | Exact denied operation and Identity receipt | Review access in Identity |
-| Engine offline or incompatible | Separate runtime or protocol failure | Inspect Engine or open original app |
-| Worker missing/mock/refusing | Valid connection, worker unavailable | Check Engine's worker configuration |
-| Event queued under permission later revoked | Blocked before dispatch | Inspect permission transition and queued-event result |
-| Network timed out mid-send | Outcome uncertain; don't resend automatically | Inspect event/request ID in owning service |
-| Processor stopped | No inspection UI; independent services carry on if otherwise authorized | Reopen for current state / trace review |
-
-For the first security experiment, if Identity is unreachable: **no new protected intake and no model dispatch under an unverified decision**. Later bounded offline authorization is intentionally not included in this first story proof.
-
-## Which action happens where?
-
-| User says | Who receives the action | How Processor contributes |
-| --- | --- | --- |
-| “Show me what's installed and working” | Identity's registered catalog + each service's verified status | Reconcile and present results |
-| “May ScreenBridge send observations for TASS?” | Identity | Submit an approved request and display the grant decision |
-| “Enable this feed for TASS” | Receiving/owning feature **after** authorization | Show allowed capability, send command, verify state |
-| “Process this waiting event once” | Thought Engine | Expose supported control, get receipt, verify outcome |
-| “Use another AI worker” | Thought Engine / its chosen worker adapter **subject to grants** | Show actual choices, offer bounded configuration where supported |
-| “Why didn't TASS react?” | Source, Identity, Engine, worker and logs—each knows part | Correlate evidence, show first failed or unknown step |
-| “Open the actual application's controls” | Application itself | Display genuine UI or open it separately |
-| “Delete or recover an Identity” | Identity | Link to the authorized Identity workflow; Processor is not the authority |
-
-## Minimal capability pattern to consider later
-
-Any compatible independent feature should eventually be able to *prove what it is*, *describe supported capabilities*, *report real health/state*, *accept authorized commands with receipts* and *expose permitted bounded evidence*. A thought-specific feature may add queue, thought, event and worker capabilities.
-
-These five ideas are **behavioral expectations**, not a chosen HTTP schema or requirement for every product to implement a complex service SDK. First we should test whether an extremely small interface already provides enough value.
-
-## A scene that can invalidate the boundary
-
-Suppose you leave Processor closed for a full work session.
-
-If an authorized observation cannot reach Thought Engine—or the Engine cannot call its worker—*because Processor wasn't running*, we haven't achieved the independence promised by our architectural principle.
-
-But be precise: under the **first online Identity-check design**, stopping **Identity** can correctly prevent a new protected observation. That is a limitation of authorization policy, not evidence that Processor must be in the inference path.
-
-## Reference material for subsequent blueprints
-
-- [Narrative walkthrough](01_OWNER_JOURNEY.md)
-- [Blueprint questions and required evidence](03_BLUEPRINT_HANDOFF.md)
-- [Alternative structures to challenge](04_REVIEW_AND_ALTERNATIVES.md)
-- [Existing conceptual contracts on main](https://github.com/Arameair/Thought-Processor/blob/main/docs/INTERFACES.md)
-- [Identity's current architectural record](https://github.com/Arameair/identity/blob/main/docs/ARCHITECTURE.md)
-
-**Documentation disclosure:** This is AI-assisted proposed design based on owner direction. It contains no working protocol, authentication verification or accepted product blueprint.
+See [story](01_OWNER_JOURNEY.md) and [blueprint handoff](03_BLUEPRINT_HANDOFF.md).

@@ -10,6 +10,22 @@ The [owner journey](01_OWNER_JOURNEY.md) is a narrative hypothesis: it is delibe
 
 We need to discover whether a separate Processor genuinely improves operation of the system, or simply adds yet another service to manage.
 
+## Current direction and new challenges — 24 October 2026
+
+The owner now supports a verified Identity-selected workspace showing all accessible features, each feature having an identity, explicit relationships, and guided resolution of declared requirements. A compulsory system overview or Engine-first catalog is no longer the leading proposal. Earlier alternatives below remain useful challenges, not equal descriptions of the current opening.
+
+Challenge the revised story on these points:
+- Is a feature's requirement description reliable and small enough to avoid a universal package-manager project?
+- Can an ordinary user understand the functional relationship without managing abstract identity records?
+- Does the catalog distinguish access, compatibility, installation, authorization and observed usefulness?
+- Can setup preserve partial results without conflicting copies of authoritative configuration?
+- Are cycles, inaccessible dependencies and changed versions surfaced before applying anything?
+- Can future alternatives be compared under equivalent conditions without automatic winner claims?
+- Does selecting another identity revalidate access and grants rather than reuse the prior context?
+- Can a new utility feature fit without forcing a Thought Engine?
+
+Start/operational attach without real Identity approval is not an allowed alternative. No engineering-mode exception. See [revised handoff](03_BLUEPRINT_HANDOFF.md).
+
 ## Four credible product structures
 
 | Approach | What it would feel like | Strength | Why it may fail |
