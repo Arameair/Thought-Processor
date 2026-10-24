@@ -393,3 +393,44 @@ func TestUnwritableProfile(t *testing.T) {
 		t.Fatal("expected failure")
 	}
 }
+
+func TestFlowMetricsSelection(t *testing.T) {
+	h := start(t, "")
+	h.signIn()
+	h.post("/api/engine/attach", `{}`)
+	h.post("/api/engine/start", `{"path":"/bin/sh"}`)
+	h.do("POST", "/api/engine/stop", `{}`, map[string]string{"Origin": "http://evil.example", "Content-Type": "application/json"})
+	code, body := h.do("GET", "/api/flow", "", nil)
+	var f struct{ Traces []Trace }
+	json.Unmarshal([]byte(body), &f)
+	if code != 200 || len(f.Traces) != 2 {
+		t.Fatalf("flow: %d %d traces", code, len(f.Traces))
+	}
+	// newest first: the parameter refusal, then the blocked attach
+	if f.Traces[0].Outcome != "REFUSED" || f.Traces[1].Outcome != "BLOCKED" || f.Traces[1].Stages[1].Status != "NOT AVAILABLE" || f.Traces[1].Stages[3].Status != "NONE" {
+		t.Fatalf("flow stages wrong: %+v", f.Traces)
+	}
+	_, body = h.do("GET", "/api/metrics", "", nil)
+	var m struct {
+		Refused  map[string]int `json:"refused_operations"`
+		Rejected map[string]int `json:"rejected_requests"`
+	}
+	json.Unmarshal([]byte(body), &m)
+	if m.Refused["attach"] != 1 || m.Refused["start"] != 1 || m.Rejected["untrusted_origin"] != 1 {
+		t.Fatalf("metrics: %+v", m)
+	}
+	_, body = h.do("GET", "/api/state", "", nil)
+	var s struct{ Selection map[string]map[string]string }
+	json.Unmarshal([]byte(body), &s)
+	if s.Selection["entity"]["status"] != "NONE" || s.Selection["instance"]["status"] != "UNKNOWN" {
+		t.Fatalf("selection: %+v", s.Selection)
+	}
+	_, logs := h.do("GET", "/api/logs?kind=control", "", nil)
+	if !strings.Contains(logs, "blocked_no_identity_approval_service") || strings.Contains(logs, "guard") && strings.Contains(logs, "bad_origin") {
+		t.Fatalf("log filter: %s", logs)
+	}
+	_, ctx := h.do("GET", "/api/context", "", nil)
+	if !strings.Contains(ctx, "authorized=NOT AVAILABLE") {
+		t.Fatalf("context lacks flow: %s", ctx)
+	}
+}

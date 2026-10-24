@@ -34,7 +34,9 @@ type App struct {
 	idProbe  *ProbeResult
 	engProbe *ProbeResult
 	probing  bool
-	refusals int // protected-operation requests refused this run
+
+	metrics *Metrics
+	flow    *Flow
 
 	shutdownOnce sync.Once
 	shutdownReq  chan struct{}
@@ -42,7 +44,7 @@ type App struct {
 
 func NewApp(prof *Profile, port int, b BuildInfo, t0 time.Time) (*App, error) {
 	a := &App{prof: prof, port: port, build: b, runID: newID("run_"), started: t0.UTC(),
-		log: OpenLogbook(prof.LogPath()), sess: NewSessions(), auth: noProducer{}, shutdownReq: make(chan struct{})}
+		log: OpenLogbook(prof.LogPath()), sess: NewSessions(), auth: noProducer{}, shutdownReq: make(chan struct{}), metrics: NewMetrics(), flow: &Flow{}}
 	if prof.Previous != nil {
 		a.log.Add("lifecycle", "previous_unclean", "", fmt.Sprintf("previous run %s (pid %d) ended without a clean shutdown; nothing was started or stopped because of it", prof.Previous.RunID, prof.Previous.PID))
 	}
@@ -97,16 +99,19 @@ func (a *App) wrap(g guard, h http.HandlerFunc) http.HandlerFunc {
 		// No CORS headers are ever sent, so browsers block cross-origin reads.
 		if !a.hostOK(r) {
 			a.log.Add("guard", "bad_host", "", "request refused: untrusted Host header")
+			a.metrics.Guard("untrusted_host")
 			writeJSON(w, http.StatusMisdirectedRequest, errBody("untrusted_host", "Processor only answers to its own loopback address"))
 			return
 		}
 		if g == mutate || g == bootstrap {
 			if r.Header.Get("Origin") != "http://"+r.Host {
 				a.log.Add("guard", "bad_origin", "", "state-changing request refused: missing or foreign Origin")
+				a.metrics.Guard("untrusted_origin")
 				writeJSON(w, http.StatusForbidden, errBody("untrusted_origin", "this action must come from the Processor page itself"))
 				return
 			}
 			if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+				a.metrics.Guard("not_json")
 				writeJSON(w, http.StatusUnsupportedMediaType, errBody("json_required", "Content-Type must be application/json"))
 				return
 			}
@@ -114,11 +119,13 @@ func (a *App) wrap(g guard, h http.HandlerFunc) http.HandlerFunc {
 		if g == private || g == mutate {
 			rec, ok := a.sess.Lookup(r)
 			if !ok {
+				a.metrics.Guard("no_session")
 				writeJSON(w, http.StatusUnauthorized, errBody("no_operator_session", "sign in with this run's operator code first"))
 				return
 			}
 			if g == mutate && (len(r.Header.Get("X-TP-CSRF")) != 64 || r.Header.Get("X-TP-CSRF") != rec.csrf) {
 				a.log.Add("guard", "bad_csrf", "", "state-changing request refused: missing or wrong CSRF token")
+				a.metrics.Guard("csrf")
 				writeJSON(w, http.StatusForbidden, errBody("csrf", "missing or invalid anti-forgery token"))
 				return
 			}
@@ -188,6 +195,27 @@ func (a *App) Routes() *http.ServeMux {
 		io.WriteString(w, a.CopyContext())
 	}))
 
+	m.HandleFunc("GET /api/metrics", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, a.metrics.Snapshot(a.started, a.sess.Count()))
+	}))
+	m.HandleFunc("GET /api/flow", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"traces": a.flow.Recent(),
+			"note": "Each protected request, split into requested / authorized / executed / observed. Stages that never happened are shown as such."})
+	}))
+	m.HandleFunc("GET /api/logs", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		kind := r.URL.Query().Get("kind")
+		var b strings.Builder
+		fmt.Fprintf(&b, "Thought Processor events (run %s, build %s) — Processor's own events only\n", a.runID, shortRev(a.build.Revision))
+		for _, e := range a.log.Recent(200) {
+			if kind != "" && e.Kind != kind {
+				continue
+			}
+			fmt.Fprintf(&b, "%s %-9s %-40s %s %s\n", e.At.Format(time.RFC3339), e.Kind, e.Code, e.OpID, e.Detail)
+		}
+		io.WriteString(w, b.String())
+	}))
+
 	m.HandleFunc("POST /api/candidates", a.wrap(mutate, a.handleCandidates))
 	m.HandleFunc("POST /api/probe", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var in struct{}
@@ -227,11 +255,13 @@ func (a *App) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		a.log.Add("session", "code_rejected", "", "operator sign-in refused: wrong code")
+		a.metrics.SignIn(false)
 		writeJSON(w, 401, errBody("wrong_code", "that is not this run's operator code"))
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	a.log.Add("session", "signed_in", "", "local operator session created")
+	a.metrics.SignIn(true)
 	writeJSON(w, 200, map[string]any{"signed_in": true, "csrf": csrf})
 }
 
@@ -296,9 +326,8 @@ func (a *App) handleProtected(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct{}
 	if err := readStrict(r, &in); err != nil {
-		a.mu.Lock()
-		a.refusals++
-		a.mu.Unlock()
+		a.metrics.Refused(string(act))
+		a.flow.Add(refusedTrace(opID, act, time.Now().UTC(), true, "not asked: the request carried parameters, which this boundary never accepts"))
 		a.log.Add("control", "parameters_refused", opID, string(act)+": refused — this boundary accepts no parameters")
 		writeJSON(w, 400, map[string]any{"op_id": opID, "action": act, "status": "REFUSED", "error": "parameters_not_accepted",
 			"message": "Protected operations accept no paths, arguments, endpoints or targets.", "effects": "none"})
@@ -307,9 +336,7 @@ func (a *App) handleProtected(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	err := a.auth.Decide(ctx, act)
-	a.mu.Lock()
-	a.refusals++
-	a.mu.Unlock()
+	a.metrics.Refused(string(act))
 	code, status := "blocked_no_identity_approval_service", http.StatusNotImplemented
 	if err == ErrIngestSeparate {
 		code = "blocked_no_ingest_grant_contract"
@@ -319,6 +346,7 @@ func (a *App) handleProtected(w http.ResponseWriter, r *http.Request) {
 		msg = err.Error()
 	}
 	a.log.Add("control", code, opID, string(act)+": BLOCKED before any effect — "+msg)
+	a.flow.Add(refusedTrace(opID, act, time.Now().UTC(), false, msg))
 	writeJSON(w, status, map[string]any{
 		"op_id": opID, "action": act, "status": "BLOCKED", "error": code, "message": msg,
 		"enforcement_note": "Even with an Identity approval, the runner/Engine that executes this must validate it. This Processor build contains no process runner.",
@@ -353,6 +381,12 @@ func (a *App) Probe(ctx context.Context) {
 		go func() { defer wg.Done(); r := ProbeEngine(ctx, c.Engine); enr = &r }()
 	}
 	wg.Wait()
+	if idr != nil {
+		a.metrics.Probe("identity", idr)
+	}
+	if enr != nil {
+		a.metrics.Probe("engine", enr)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// Only store results for the address still configured.
@@ -418,8 +452,8 @@ func (a *App) State() map[string]any {
 		x := *a.engProbe
 		enp = &x
 	}
-	refusals := a.refusals
 	a.mu.Unlock()
+	refusals := a.metrics.RefusedTotal()
 
 	avail, availWhy := a.auth.Available()
 	id := identityView(c.Identity, idp, now, avail, availWhy)
@@ -458,6 +492,7 @@ func (a *App) State() map[string]any {
 		"engine":       en,
 		"operations":   ops,
 		"capabilities": a.capabilities(),
+		"selection":    selection(c, enp),
 		"next_action":  nextAction(c, idp, enp, now, candErr),
 		"log":          a.log.Recent(40),
 	}
@@ -583,6 +618,18 @@ func (a *App) CopyContext() string {
 	}
 	na := s["next_action"].(NextAction)
 	fmt.Fprintf(&w, "next action: %s\n", na.Code)
+	m := a.metrics.Snapshot(a.started, a.sess.Count())
+	fmt.Fprintf(&w, "metrics: refused=%v rejected=%v\n", m["refused_operations"], m["rejected_requests"])
+	for k, v := range m["probes"].(map[string]any) {
+		pm := v.(map[string]any)
+		fmt.Fprintf(&w, "  %s checks=%v outcomes=%v latency=%v\n", k, pm["checks"], pm["outcomes"], pm["latency_last_50"])
+	}
+	for _, tr := range a.flow.Recent() {
+		if len(tr.Stages) == 4 {
+			fmt.Fprintf(&w, "flow %s %s %s: requested=%s authorized=%s executed=%s observed=%s\n", tr.At.Format("15:04:05"), tr.OpID, tr.Action,
+				tr.Stages[0].Status, tr.Stages[1].Status, tr.Stages[2].Status, tr.Stages[3].Status)
+		}
+	}
 	fmt.Fprintf(&w, "recent events:\n")
 	for _, e := range a.log.Recent(20) {
 		fmt.Fprintf(&w, "  %s %s/%s %s\n", e.At.Format("15:04:05"), e.Kind, e.Code, e.OpID)
@@ -593,4 +640,28 @@ func (a *App) CopyContext() string {
 		out = out[:8192] + "\n[truncated at 8 KiB]\n"
 	}
 	return out
+}
+
+// selection keeps the three things the story says must never be confused:
+// the entity being served, the feature (independent app) and the running
+// instance. Each is filled only from evidence Processor actually has.
+func selection(c Candidates, enp *ProbeResult) map[string]any {
+	feature := map[string]any{"status": "NONE", "label": "No feature address set",
+		"why": "Enter a Thought Engine address to inspect it. Processor only looks at addresses you give it."}
+	instance := map[string]any{"status": "UNKNOWN", "label": "No running instance identified",
+		"why": "An instance is identified only by an approved, authenticated attachment. None exists."}
+	if c.Engine != "" {
+		feature = map[string]any{"status": "CANDIDATE", "label": "Thought Engine at " + c.Engine,
+			"why": "Address you entered. Not registered or verified by Identity."}
+		if enp != nil && enp.Port == "OPEN" {
+			instance["label"] = "Something is listening at " + c.Engine + " — not identified"
+			instance["why"] = "A port being open does not tell which program, build or instance it is."
+		}
+	}
+	return map[string]any{
+		"entity": map[string]any{"status": "NONE", "label": "No entity selected",
+			"why": "Entities (for example TASS) come from Identity. Identity's list is private and Processor has no approved, authenticated connection to read it, so none is shown."},
+		"feature":  feature,
+		"instance": instance,
+	}
 }

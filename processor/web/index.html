@@ -41,6 +41,12 @@
       <button id="next-btn" type="button" class="primary next-btn"></button>
     </section>
 
+    <section class="card selection" aria-label="What you are looking at">
+      <div class="sel"><p class="eyebrow">Entity</p><p id="sel-entity" class="sel-label"></p><p id="sel-entity-why" class="muted small"></p></div>
+      <div class="sel"><p class="eyebrow">Feature</p><p id="sel-feature" class="sel-label"></p><p id="sel-feature-why" class="muted small"></p></div>
+      <div class="sel"><p class="eyebrow">Running instance</p><p id="sel-instance" class="sel-label"></p><p id="sel-instance-why" class="muted small"></p></div>
+    </section>
+
     <details class="card about">
       <summary>How the three parts fit together</summary>
       <ul class="plain">
@@ -73,6 +79,10 @@
         <header><h3>Thought Engine</h3><span id="en-pill" class="pill"></span></header>
         <p id="en-label" class="label"></p>
         <dl id="en-facts"></dl>
+        <div class="orig">
+          <button id="en-open" type="button" disabled aria-describedby="en-open-why">Open the Engine's own page</button>
+          <p id="en-open-why" class="muted small">Not available: opening the Engine's own page needs an approved attachment. Processor will not embed, copy or rebuild the Engine's screen.</p>
+        </div>
         <form id="en-form" class="row">
           <label for="engine-addr" class="sr">Engine address</label>
           <input id="engine-addr" placeholder="127.0.0.1:PORT" autocomplete="off" spellcheck="false">
@@ -101,16 +111,43 @@
     </section>
 
     <details class="card" id="diag">
-      <summary>Diagnostics</summary>
-      <h3>What works and what doesn't</h3>
-      <table class="caps"><thead><tr><th>Capability</th><th>Status</th><th>Why</th></tr></thead><tbody id="caps"></tbody></table>
-      <h3>Recent events</h3>
-      <ol id="log" class="log"></ol>
-      <div class="row">
-        <button id="copy" type="button">Copy context</button>
-        <span id="copy-msg" class="muted small" role="status"></span>
+      <summary>Diagnostics — flow, logs, metrics</summary>
+      <div class="tabs" role="tablist">
+        <button role="tab" type="button" data-tab="flow" aria-selected="true">Flow</button>
+        <button role="tab" type="button" data-tab="logs" aria-selected="false">Logs</button>
+        <button role="tab" type="button" data-tab="metrics" aria-selected="false">Metrics</button>
+        <button role="tab" type="button" data-tab="caps" aria-selected="false">What works</button>
+        <button role="tab" type="button" data-tab="context" aria-selected="false">Copy context</button>
       </div>
-      <pre id="context" class="out" hidden></pre>
+      <div class="tab" id="tab-flow" role="tabpanel">
+        <p class="muted small">Every protected request, split into the four moments: requested → authorized by Identity → executed → observed. Stages that never happened say so.</p>
+        <ol id="flow" class="flow"></ol>
+      </div>
+      <div class="tab" id="tab-logs" role="tabpanel" hidden>
+        <div class="row wrap">
+          <label for="log-kind" class="small">Show</label>
+          <select id="log-kind"><option value="">all</option><option>lifecycle</option><option>probe</option><option>control</option><option>guard</option><option>config</option><option>session</option><option>profile</option></select>
+          <button id="copy-logs" type="button">Copy logs</button>
+          <span id="logs-msg" class="muted small" role="status"></span>
+        </div>
+        <ol id="log" class="log"></ol>
+      </div>
+      <div class="tab" id="tab-metrics" role="tabpanel" hidden>
+        <p class="muted small" id="metrics-source"></p>
+        <dl id="metrics" class="metrics"></dl>
+        <p class="small"><b>Not measured</b> (no approved access): <span id="metrics-na"></span></p>
+      </div>
+      <div class="tab" id="tab-caps" role="tabpanel" hidden>
+        <table class="caps"><thead><tr><th>Capability</th><th>Status</th><th>Why</th></tr></thead><tbody id="caps"></tbody></table>
+      </div>
+      <div class="tab" id="tab-context" role="tabpanel" hidden>
+        <p class="muted small">A short report to paste into an issue or another AI. Codes, cookies, request bodies and anything other programs said are left out.</p>
+        <div class="row">
+          <button id="copy" type="button">Copy context</button>
+          <span id="copy-msg" class="muted small" role="status"></span>
+        </div>
+        <pre id="context" class="out" hidden></pre>
+      </div>
     </details>
 
     <footer class="foot">

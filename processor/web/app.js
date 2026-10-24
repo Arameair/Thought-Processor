@@ -6,6 +6,8 @@
   let csrf = "";
   let state = null;
   let timer = null;
+  let lastLog = [];
+  let tab = "flow";
 
   function el(tag, attrs, ...kids) {
     const n = document.createElement(tag);
@@ -148,18 +150,88 @@
       const cls = c.status === "WORKING" ? "ok" : c.status === "BLOCKED" ? "warn" : "";
       caps.append(el("tr", null, el("td", null, c.label), el("td", null, el("span", { class: "pill " + cls }, c.status)), el("td", null, c.why)));
     }
-    const log = $("log"); log.replaceChildren();
-    for (const e of s.log.slice().reverse()) {
-      log.append(el("li", null, t(e.at) + " ", el("span", { class: "k" }, e.kind + "/" + e.code + " "), e.detail, e.op_id ? " · " + e.op_id : ""));
-    }
+    lastLog = s.log;
+    renderLogs();
+    const sel = s.selection;
+    for (const k of ["entity", "feature", "instance"]) { $("sel-" + k).textContent = sel[k].label; $("sel-" + k + "-why").textContent = sel[k].why; }
     $("checked").textContent = "Page updated " + t(s.self.server_time) + ". Checks repeat every 10 s while this page is open.";
   }
+
+  function renderLogs() {
+    const kind = $("log-kind").value;
+    const log = $("log"); log.replaceChildren();
+    for (const e of lastLog.slice().reverse()) {
+      if (kind && e.kind !== kind) continue;
+      log.append(el("li", null, t(e.at) + " ", el("span", { class: "k" }, e.kind + "/" + e.code + " "), e.detail, e.op_id ? " · " + e.op_id : ""));
+    }
+    if (!log.children.length) log.append(el("li", { class: "muted" }, "No events of this kind yet."));
+  }
+  $("log-kind").addEventListener("change", renderLogs);
+
+  const statusPill = { DONE: "ok", REFUSED: "bad", BLOCKED: "warn", "NOT AVAILABLE": "warn", "NOT ATTEMPTED": "", NONE: "" };
+  async function renderFlow() {
+    const r = await api("GET", "/api/flow");
+    const ol = $("flow"); ol.replaceChildren();
+    if (!r.ok) return;
+    if (!r.data.traces.length) {
+      ol.append(el("li", { class: "muted" }, "No protected requests yet. Use “Prove it: ask the server anyway” under Engine controls to create one."));
+      return;
+    }
+    for (const tr of r.data.traces) {
+      const stages = el("ol", { class: "stages" });
+      for (const st of tr.stages) {
+        stages.append(el("li", null, el("b", null, st.name), el("span", { class: "pill " + (statusPill[st.status] || "") }, st.status), " ", st.owner, el("br"), el("span", { class: "muted" }, st.detail)));
+      }
+      ol.append(el("li", null, el("div", { class: "head" }, el("b", null, tr.action), el("span", { class: "pill " + (statusPill[tr.outcome] || "") }, tr.outcome), el("span", { class: "muted" }, t(tr.at) + " · " + tr.op_id)), stages));
+    }
+  }
+
+  async function renderMetrics() {
+    const r = await api("GET", "/api/metrics");
+    if (!r.ok) return;
+    const m = r.data;
+    $("metrics-source").textContent = m.source + ".";
+    const rows = [["Uptime", m.uptime_s + " s (since " + t(m.since) + ")"],
+      ["Memory", Math.round(m.process.heap_alloc_bytes / 1024) + " KiB heap · " + m.process.goroutines + " goroutines · " + m.process.gc_cycles + " GC"],
+      ["Sign-ins", m.operator_sign_ins + " ok · " + m.operator_code_errors + " wrong code · " + m.active_sessions + " active"]];
+    for (const [k, p] of Object.entries(m.probes)) {
+      const l = p.latency_last_50;
+      rows.push([k + " checks", p.checks + " · " + Object.entries(p.outcomes).map(([o, n]) => o + " ×" + n).join(", ")]);
+      if (l.samples) rows.push([k + " check time", "min " + l.min_ms + " / median " + l.median_ms + " / max " + l.max_ms + " ms (last " + l.samples + ")"]);
+    }
+    const fmt = (o) => Object.keys(o).length ? Object.entries(o).map(([k, v]) => k + " ×" + v).join(", ") : "none";
+    rows.push(["Refused operations", fmt(m.refused_operations)]);
+    rows.push(["Rejected requests", fmt(m.rejected_requests)]);
+    facts($("metrics"), rows);
+    $("metrics-na").textContent = m.not_available.join("; ") + ".";
+  }
+
+  function showTab(name) {
+    tab = name;
+    for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
+    for (const p of document.querySelectorAll(".tab")) p.hidden = p.id !== "tab-" + name;
+    if (name === "flow") renderFlow();
+    if (name === "metrics") renderMetrics();
+  }
+  for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
+  $("diag").addEventListener("toggle", () => { if ($("diag").open) showTab(tab); });
+
+  $("copy-logs").addEventListener("click", async () => {
+    const r = await api("GET", "/api/logs" + ($("log-kind").value ? "?kind=" + encodeURIComponent($("log-kind").value) : ""));
+    if (!r.ok) { $("logs-msg").textContent = "Could not read logs."; return; }
+    try { await navigator.clipboard.writeText(r.data); $("logs-msg").textContent = "Copied " + r.data.split("\n").length + " lines."; }
+    catch { $("logs-msg").textContent = "Clipboard not available in this browser."; }
+  });
 
   async function refresh(probe) {
     const r = probe ? await api("POST", "/api/probe") : await api("GET", "/api/state");
     if (r.status === 0) { clearInterval(timer); show("gone"); return; }
     if (r.status === 401) { clearInterval(timer); show("signin"); return; }
-    if (r.ok) render(r.data);
+    if (r.ok) {
+      render(r.data);
+      if ($("diag").open && tab === "flow") renderFlow();
+      if ($("diag").open && tab === "metrics") renderMetrics();
+    }
   }
 
   async function saveAddr(kind, value, msgId) {
@@ -184,7 +256,8 @@
     const out = $("probe-out");
     out.hidden = false;
     out.textContent = "HTTP " + r.status + "\n" + JSON.stringify(r.data, null, 2);
-    refresh(false);
+    await refresh(false);
+    if ($("diag").open && tab === "flow") renderFlow();
   }
 
   $("copy").addEventListener("click", async () => {

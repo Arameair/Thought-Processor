@@ -466,6 +466,96 @@ def main():
         record("A22", "PASS" if ok else "FAIL", "L3", "Original Engine UI inaccessible / not authorized",
                f"capability engine_original_ui={caps['engine_original_ui']['status']} ({caps['engine_original_ui']['why']}); links on page={links}; no embedded or rebuilt Engine UI")
 
+        # ---------------- story TEST_DESIGN checks (DISC / SAFE / UX / FLOW) ----------------
+        keep_id = c.state()["identity"]["configured"].replace("http://", "")
+        # DISC-01 wrong/unused port
+        free = socket.socket(); free.bind(("127.0.0.1", 0)); wport = free.getsockname()[1]; free.close()
+        _, s1, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{wport}"})
+        record("DISC-01", "PASS" if s1["identity"]["state"] == "UNREACHABLE" else "FAIL", "L3", "Probe an unused local port",
+               f"127.0.0.1:{wport} -> {s1['identity']['state']} ({s1['identity']['probe']['port']}); label '{s1['identity']['label']}'")
+        # DISC-02 real unrelated programs: python http.server (200 on /), and a second real Processor (claims a product name)
+        US = Proc("unrelated-http-server", [sys.executable, "-I", "-u", "-m", "http.server", "--bind", "127.0.0.1", "0"], out, cwd=work)
+        owned.append(US)
+        uport = None
+        for _ in range(100):
+            time.sleep(0.05)
+            try:
+                txt = open(os.path.join(out, "unrelated-http-server.raw.log")).read()
+                mm = re.search(r"port (\d+)", txt)
+                if mm:
+                    uport = int(mm.group(1)); break
+            except OSError:
+                pass
+        PX = Proc("processor-as-wrong-service", [a.processor, "-data", os.path.join(work, "profile-x"), "-port", str(P_PORT + 1)], out)
+        STARTED.append(PX)
+        PX.wait_http(P_PORT + 1, "/api/health")
+        res2 = []
+        for label, port_ in (("python http.server", uport), ("another Thought Processor", P_PORT + 1)):
+            _, sx, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{port_}"})
+            pr_ = sx["identity"]["probe"]
+            res2.append((label, port_, sx["identity"]["state"], pr_["metadata"], pr_.get("http_status"), pr_.get("claimed_app"), sx["next_action"]["code"]))
+        ok = uport and all(r_[2] in ("PORT_OPEN_UNIDENTIFIED", "ANSWERED_NOT_IDENTITY") and r_[6] == "wrong_identity" for r_ in res2)
+        record("DISC-02", "PASS" if ok else "FAIL", "L3", "Real unrelated HTTP programs placed at the Identity address",
+               f"{res2} — neither shown as Identity, authenticated or authorized")
+        US.stop(); PX.stop()
+        # SAFE-03 stalled endpoint: accepts, never answers (L2-live fixture)
+        stall = socket.socket(); stall.bind(("127.0.0.1", 0)); stall.listen(8); sport = stall.getsockname()[1]
+        held = []
+        def hold():
+            stall.settimeout(10)
+            try:
+                while True:
+                    cn, _ = stall.accept(); held.append(cn)
+            except OSError:
+                pass
+        threading.Thread(target=hold, daemon=True).start()
+        timing = {}
+        def slow_save():
+            t0_ = time.monotonic(); _, sv, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{sport}"}); timing["save_ms"] = round((time.monotonic()-t0_)*1000); timing["state"] = sv["identity"]
+        th2 = threading.Thread(target=slow_save); th2.start()
+        time.sleep(0.2)
+        c2 = Client(P_PORT); c2.cookie, c2.csrf = c.cookie, c.csrf
+        t0_ = time.monotonic(); stc, _, _ = c2.req("GET", "/api/state"); concurrent_ms = round((time.monotonic()-t0_)*1000)
+        th2.join(10); stall.close()
+        for cn in held: cn.close()
+        sv = timing.get("state", {})
+        ok = stc == 200 and concurrent_ms < 500 and sv.get("probe", {}).get("metadata") == "FAILED" and timing.get("save_ms", 99999) < 3500
+        record("SAFE-03", "PASS" if ok else "FAIL", "L3 + L2-live fixture", "Identity address that accepts connections but never answers",
+               f"save+check returned in {timing.get('save_ms')} ms with state={sv.get('state')} metadata={sv.get('probe',{}).get('metadata')}; a concurrent page read answered {stc} in {concurrent_ms} ms",
+               "The stalling listener is a test fixture")
+        c.post("/api/candidates", {"identity": keep_id})
+        # SAFE-05 unusable profile location
+        badp = os.path.join(work, "not-a-folder"); open(badp, "w").write("x")
+        PB = Proc("processor-bad-profile", [a.processor, "-data", badp, "-port", str(P_PORT + 1)], out); PB.p.wait(10)
+        msg = open(os.path.join(out, "processor-bad-profile.raw.log")).read().strip().splitlines()[-1]
+        ok = PB.p.returncode != 0 and open(badp).read() == "x" and port_free(P_PORT + 1)
+        record("SAFE-05", "PASS" if ok else "FAIL", "L3", "Profile path is a file, not a folder",
+               f"exit {PB.p.returncode}: {msg!r}; file unchanged={open(badp).read() == 'x'}; no port opened={port_free(P_PORT + 1)}")
+        # UX-05 + FLOW-07 + metrics evidence
+        sel = c.state()["selection"]
+        st_f, fl, _ = c.req("GET", "/api/flow")
+        st_m, mt, _ = c.req("GET", "/api/metrics")
+        tr0 = fl["traces"][0] if fl["traces"] else None
+        ok = (sel["entity"]["status"] == "NONE" and sel["instance"]["status"] == "UNKNOWN" and sel["feature"]["status"] == "CANDIDATE"
+              and tr0 and [x["status"] for x in tr0["stages"]][1:] in (["NOT AVAILABLE", "NOT ATTEMPTED", "NONE"], ["NOT ATTEMPTED", "NOT ATTEMPTED", "NONE"]))
+        record("UX-05", "PASS" if ok else "FAIL", "L3", "Entity, feature and instance shown separately",
+               f"entity={sel['entity']['label']!r}; feature={sel['feature']['label']!r}; instance={sel['instance']['label']!r}")
+        record("FLOW-07", "PASS" if ok else "FAIL", "L3", "Missing Identity/Engine steps shown as missing, not reconstructed",
+               f"{len(fl['traces'])} traces; newest {tr0['op_id']} {tr0['action']}: " + ", ".join(f"{x['name']}={x['status']}" for x in tr0["stages"]))
+        ok = st_m == 200 and sum(mt["refused_operations"].values()) >= 8 and mt["probes"]["identity"]["checks"] >= 5
+        record("METRICS", "PASS" if ok else "FAIL", "L3", "Processor's own metrics are real counters",
+               f"refused={mt['refused_operations']}; rejected={mt['rejected_requests']}; identity checks={mt['probes']['identity']['checks']} outcomes={mt['probes']['identity']['outcomes']} latency={mt['probes']['identity']['latency_last_50']}; not measured: {mt['not_available']}")
+        # Diagnostics screenshots
+        if not page.is_closed():
+            page.reload(); page.wait_for_selector("#app:not([hidden])")
+            page.click("#diag summary")
+            page.wait_for_function("document.querySelectorAll('#flow li').length > 0")
+            shot.append(shots(page, out, "07-diagnostics-flow"))
+            page.click(".tabs button[data-tab=metrics]")
+            page.wait_for_function("document.querySelectorAll('#metrics dt').length > 3")
+            shot.append(shots(page, out, "08-diagnostics-metrics"))
+            page.click("#diag summary")
+
         # ---------------- A21 ----------------
         if E:
             before = c.state(probe=True)["engine"]
@@ -524,6 +614,8 @@ def main():
         survivors = dict(identity=alive(I.pid) if I else None, engine=alive(E2.pid) if a.engine else None)
         leftover = sorted(set(named("thought-process")) - set(baseline["thought-process"]))
         run_json_left = os.path.exists(os.path.join(prof, "runtime", "run.json"))
+        if I:
+            I.stop()
         P, ms2 = start_processor(a.processor, prof, out, name="processor-restart")
         code2 = read_code(prof)
         c.cookie = old_cookie
@@ -532,7 +624,11 @@ def main():
         page.wait_for_selector("#signin:not([hidden])")
         c.cookie = ""
         c.sign_in(code2)
+        pre = c.state()["identity"]
         s = c.state(probe=True)
+        record("UX-02", "PASS" if pre["state"] == "NOT_CHECKED" and s["identity"]["state"] == "UNREACHABLE" else "FAIL", "L3",
+               "Remembered Identity address is gone after a restart",
+               f"before first check: {pre['state']} ('{pre['label']}'); after check: {s['identity']['state']} — never shown as live from the saved record")
         ok = (fresh_browser_signed_out and reopen_signed_in and st == 202 and rc == 0 and not leftover and not run_json_left
               and all(v in (True, None) for v in survivors.values()) and st_old == 401 and s["self"]["run_id"] != old_run
               and s["identity"]["configured"] == f"http://127.0.0.1:{I_PORT}" and s["self"]["previous_unclean_run"] is None and code2 != code)
