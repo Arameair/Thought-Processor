@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thought Processor</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <h1>Thought Processor</h1>
+      <p class="tag">Sets up and diagnoses thinking. It does not think, and it does not grant permission.</p>
+    </div>
+  </div>
+  <div id="runline" class="runline" aria-live="polite"></div>
+</header>
+
+<main>
+  <!-- Signed-out view: shows nothing private -->
+  <section id="signin" class="card signin" hidden>
+    <h2>Sign in to this Processor</h2>
+    <p>Each time Processor starts it prints a one-time link in the window that started it. Open that link, or paste the code here.</p>
+    <p class="muted small">The code is also saved in the profile at <code>runtime/operator-code</code>. It only unlocks this Processor's own diagnostic pages — it is not an Identity approval.</p>
+    <form id="signin-form" class="row">
+      <label for="code" class="sr">Operator code</label>
+      <input id="code" autocomplete="off" spellcheck="false" placeholder="operator code">
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+    <p id="signin-msg" class="msg" role="status"></p>
+  </section>
+
+  <div id="app" hidden>
+    <section id="next" class="card next" aria-labelledby="next-title">
+      <p class="eyebrow">Next step</p>
+      <h2 id="next-title"></h2>
+      <p id="next-detail"></p>
+      <button id="next-btn" type="button" class="primary next-btn"></button>
+    </section>
+
+    <section class="card selection" aria-label="What you are looking at">
+      <div class="sel"><p class="eyebrow">Entity</p><p id="sel-entity" class="sel-label"></p><p id="sel-entity-why" class="muted small"></p></div>
+      <div class="sel"><p class="eyebrow">Feature</p><p id="sel-feature" class="sel-label"></p><p id="sel-feature-why" class="muted small"></p></div>
+      <div class="sel"><p class="eyebrow">Running instance</p><p id="sel-instance" class="sel-label"></p><p id="sel-instance-why" class="muted small"></p></div>
+    </section>
+
+    <details class="card about">
+      <summary>How the three parts fit together</summary>
+      <ul class="plain">
+        <li><b>Identity</b> decides who is trusted and what is permitted.</li>
+        <li><b>Thought Processor</b> (this page) helps you set things up and see what is really happening.</li>
+        <li><b>Thought Engine</b> does the actual thinking.</li>
+      </ul>
+      <p class="muted small">Starting or attaching an Engine needs Identity's approval, and the part that does the starting must check that approval itself. Running is not the same as permission to receive observations — that is a second, separate approval.</p>
+    </details>
+
+    <div class="grid">
+      <section class="card dep" id="card-self">
+        <header><h3>This Processor</h3><span class="pill ok">Running</span></header>
+        <dl id="self"></dl>
+      </section>
+
+      <section class="card dep" id="card-identity">
+        <header><h3>Identity</h3><span id="id-pill" class="pill"></span></header>
+        <p id="id-label" class="label"></p>
+        <dl id="id-facts"></dl>
+        <form id="id-form" class="row">
+          <label for="identity-addr" class="sr">Identity address</label>
+          <input id="identity-addr" placeholder="127.0.0.1:PORT" autocomplete="off" spellcheck="false">
+          <button type="submit">Save</button>
+        </form>
+        <p id="id-msg" class="msg" role="status"></p>
+      </section>
+
+      <section class="card dep" id="card-engine">
+        <header><h3>Thought Engine</h3><span id="en-pill" class="pill"></span></header>
+        <p id="en-label" class="label"></p>
+        <dl id="en-facts"></dl>
+        <div class="orig">
+          <button id="en-open" type="button" disabled aria-describedby="en-open-why">Open the Engine's own page</button>
+          <p id="en-open-why" class="muted small">Not available: opening the Engine's own page needs an approved attachment. Processor will not embed, copy or rebuild the Engine's screen.</p>
+        </div>
+        <form id="en-form" class="row">
+          <label for="engine-addr" class="sr">Engine address</label>
+          <input id="engine-addr" placeholder="127.0.0.1:PORT" autocomplete="off" spellcheck="false">
+          <button type="submit">Save</button>
+        </form>
+        <p id="en-msg" class="msg" role="status"></p>
+      </section>
+    </div>
+
+    <div class="toolbar">
+      <button id="recheck" type="button">Re-check now</button>
+      <span id="checked" class="muted small"></span>
+    </div>
+
+    <section class="card" id="deps" aria-labelledby="ops-title">
+      <h2 id="ops-title">Engine controls</h2>
+      <p class="muted">These stay off until Identity can approve them and the Engine side can verify that approval. Processor shows why instead of pretending.</p>
+      <ul id="ops" class="ops"></ul>
+      <details class="inner">
+        <summary>Prove it: ask the server anyway</summary>
+        <p class="muted small">The buttons above are off in the page, but the page is not the lock. These send the real request so you can see the server refuse it with no effect.</p>
+        <div class="row wrap" id="probe-ops"></div>
+        <pre id="probe-out" class="out" hidden></pre>
+      </details>
+      <p class="small"><a id="deps-link" href="https://github.com/Arameair/Thought-Processor/blob/experiment/processor-first-prototype-20261024/docs/contracts/IDENTITY_ENGINE_LIFECYCLE_APPROVAL_REQUEST.md" rel="noopener noreferrer" target="_blank">What Identity and the Engine must add (dependency request)</a></p>
+    </section>
+
+    <details class="card" id="diag">
+      <summary>Diagnostics — flow, logs, metrics</summary>
+      <div class="tabs" role="tablist">
+        <button role="tab" type="button" data-tab="flow" aria-selected="true">Flow</button>
+        <button role="tab" type="button" data-tab="logs" aria-selected="false">Logs</button>
+        <button role="tab" type="button" data-tab="metrics" aria-selected="false">Metrics</button>
+        <button role="tab" type="button" data-tab="caps" aria-selected="false">What works</button>
+        <button role="tab" type="button" data-tab="context" aria-selected="false">Copy context</button>
+      </div>
+      <div class="tab" id="tab-flow" role="tabpanel">
+        <p class="muted small">Every protected request, split into the four moments: requested → authorized by Identity → executed → observed. Stages that never happened say so.</p>
+        <ol id="flow" class="flow"></ol>
+      </div>
+      <div class="tab" id="tab-logs" role="tabpanel" hidden>
+        <div class="row wrap">
+          <label for="log-kind" class="small">Show</label>
+          <select id="log-kind"><option value="">all</option><option>lifecycle</option><option>probe</option><option>control</option><option>guard</option><option>config</option><option>session</option><option>profile</option></select>
+          <button id="copy-logs" type="button">Copy logs</button>
+          <span id="logs-msg" class="muted small" role="status"></span>
+        </div>
+        <ol id="log" class="log"></ol>
+      </div>
+      <div class="tab" id="tab-metrics" role="tabpanel" hidden>
+        <p class="muted small" id="metrics-source"></p>
+        <dl id="metrics" class="metrics"></dl>
+        <p class="small"><b>Not measured</b> (no approved access): <span id="metrics-na"></span></p>
+      </div>
+      <div class="tab" id="tab-caps" role="tabpanel" hidden>
+        <table class="caps"><thead><tr><th>Capability</th><th>Status</th><th>Why</th></tr></thead><tbody id="caps"></tbody></table>
+      </div>
+      <div class="tab" id="tab-context" role="tabpanel" hidden>
+        <p class="muted small">A short report to paste into an issue or another AI. Codes, cookies, request bodies and anything other programs said are left out.</p>
+        <div class="row">
+          <button id="copy" type="button">Copy context</button>
+          <span id="copy-msg" class="muted small" role="status"></span>
+        </div>
+        <pre id="context" class="out" hidden></pre>
+      </div>
+    </details>
+
+    <footer class="foot">
+      <button id="stop" type="button" class="quiet">Stop Processor</button>
+      <span class="muted small">Stops only this Processor. Identity, any Engine and your files are left alone.</span>
+    </footer>
+  </div>
+
+  <section id="gone" class="card" hidden>
+    <h2 id="gone-title">Processor is not answering</h2>
+    <p id="gone-detail">It may have been stopped. Start it again from its terminal; it will print a new sign-in link.</p>
+  </section>
+</main>
+</body>
+</html>

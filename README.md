@@ -1,79 +1,43 @@
-# Thought Processor
+# Thought Processor — Project Controller launch trial
 
-**The control point for the optional Thought Processing feature.**
+> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
 
-Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
+**Status:** Experimental diagnostic shell — operational setup/metrics/flow only. Identity-authorized start/attach/stop, private Engine status and observation ingestion are **BLOCKED**, not simulated. No branch promotion authorized.
 
-> **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
+## Run this experiment in Project Controller
 
-## The product boundary
+**Branch:** `experiment/processor-controller-launch-fix-20261024`
 
-- **Identity** owns identity records, feature entitlements, grants and whether Thought Processing is enabled for a particular identity.
-- **Source features** (TASS, ScreenBridge, logs, Discord, etc.) keep working independently. When permitted and individually connected, their logs/observations can be *fed into* Thought Processing. Disabling Thought Processing must not shut down the source application.
-- **Thought Engine** owns the actual observation queue, Sparks, Traces, Thoughts, processing rules and their persistent history. Model answers are inputs, not an unchecked authority to rewrite history.
-- **Thought Processor (this project)** is the **real control point**: connect/disconnect allowed feeds, inspect service readiness, manage processing policy and queue operations, observe decisions/evidence, select a suitable worker, see logs and metrics. Every control must perform a real operation and report its actual outcome.
-- **AI workers** are interchangeable. Chat-Jimmy is the current candidate fast worker, *not* a permanent dependency, product identity, or place where thought history is stored.
+Open this branch in your existing Project Controller. The **repository-root `marquee.json`** provides its setup/run plan for Linux/WSL and Windows. Check and approve the actual commands displayed by Controller. If this project has old manually configured Setup/Run commands, clear the overrides first: they take precedence over `marquee.json`.
 
-**Feature-based product principle:** Thought Processing is a separable, optional capability. Installing a source feature does not imply Thought Processing access. Enabling Thought Processing does not automatically authorize every possible log source. A customer may buy/use one feature without the others.
+Controller builds Go from `processor/` and uses its assigned `PORT` and per-branch `PC_DATA`. **Use Open ↗ / New Tab**, not embedded iframe: this application intentionally sets `frame-ancestors 'none'` and `X-Frame-Options: DENY`.
 
-## First mental model
+### Sign in securely while running under Controller
 
-```text
-Identity: TASS
-   └── Thought Processing grant: enabled / disabled
-             |
-Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
-             |
-             v
-      Thought Engine  <---->  Replaceable worker interface
-      observations              (Chat-Jimmy today)
-      Sparks / Traces
-      persistent Thoughts
-             ^
-             | operational status, controls, read-only views
-             v
-      Thought Processor
-      CONTROL POINT: feeds, readiness, queues, policy, workers, diagnostics
+The **one-time local Processor sign-in code is not printed to Controller logs** in managed mode. This avoids accidental exposure through Copy Logs/Copy Context. Opening the new tab shows a sign-in form. Retrieve the code from the local file path shown in Processor's startup log: `<profile>/runtime/operator-code` (read it **locally**; never paste it into GitHub/ChatGPT or share the raw file). On Linux/WSL, from your own terminal:
+
+```sh
+cat '<exact-profile-path-shown-in-Processor-log>/runtime/operator-code'
 ```
 
-Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
+Paste the code **only into the local Processor sign-in page**. It changes every time Processor restarts. This explicit file handoff is a temporary usability trade-off until an approved Controller↔Processor secure session handoff exists.
 
-## Start here
+### What to test
 
-| Document | What it answers |
-|---|---|
-| [Current state and branch ledger](docs/STATUS.md) | What exists on Stable, Alpha and experiments, and what is *actually verified*? |
-| [Vision and boundaries](docs/VISION.md) | What is the feature we intend to sell, and what doesn't belong here? |
-| [Architecture and data ownership](docs/ARCHITECTURE.md) | What talks to what; who owns which records and permissions? |
-| [Control surface and evidence](docs/CONTROL_POINT.md) | What must the operator see and control? |
-| [Interfaces and contracts](docs/INTERFACES.md) | What a feed, engine and replaceable worker need to exchange |
-| [Branch and promotion workflow](docs/WORKFLOW.md) | How experiments become Alpha, Stable and eventually Main |
-| [Roadmap and gates](docs/ROADMAP.md) | What to prove next and in what order |
-| [Decision log](docs/DECISIONS.md) | Decisions made, and questions still open |
+1. Controller **Play** → verify approved plan uses `processor/`, assigned unique port/profile, and reports the actual Git SHA.
+2. **Open ↗** → login using the protected local code file (not captured stdout).
+3. Empty first-use state: no fake connected Identity/Engine; one next action.
+4. Enter an unavailable Identity port; it must say **Unreachable**, not connected.
+5. Optional real Identity endpoint → **Found, unverified**; Engine endpoint → **Port open, unidentified**.
+6. **Flow / Logs / Metrics / Copy Context** show only real Processor activity. Protected start/attach/stop/observe must remain **BLOCKED** (HTTP 501).
+7. Stop Processor in Controller; preexisting Identity/Engine keep running. Restart; verify no duplicate processes, isolated profile and changed operator code. **Do not share raw secret codes.**
 
-For every iteration: update the **status ledger**, use an issue for the goal, and link the experimental branch, exact commit, tests, limitations and owner decision. Do not quietly overwrite previous evidence.
+### What is *not* proven
 
-## Branch policy
+This branch **does not** add Identity authority or trust, authenticated Engine status, real thinking, model calls, secure Engine lifecycle management, dynamic feature catalog or completed guided observation test. It is for the **first owner operational-shell trial** only.
 
-| Branch | Meaning | Promotion |
-|---|---|---|
-| `main` | Public-facing release lane *when approved*; the repository may still be private | Owner approval only |
-| `stable` | Latest owner-accepted **reproducible snapshot** | Owner approval only; never automatic |
-| `alpha` | Owner-tested integration candidate; may change as approved | Owner approval only |
-| `experiment/<topic>-YYYYMMDD` | Isolated hypothesis/prototype; **always branch from current Alpha** | Validate, compare and ask owner; no auto-merge |
+### Source provenance and branch policy
 
-**Empty-repo bootstrap exception:** The first documentation commit must initialize `main`; `stable` and `alpha` can then be created at that *same documentation-only commit*. This does **not** count as a runnable release. From that point, **every experiment starts from `alpha`**. Experiments may cherry-pick or explicitly port code from other repos/branches, with provenance documented, but never silently replace Alpha.
+This implementation is **copied as Git objects** from the reported cloud-tested `experiment/processor-first-prototype-20261024` tested application SHA `db2a46c5bf930239f286bf412872c67953946d8b` (later candidate head `378cdf10947c6ddbd7bf3ac3b613f728fd4fd733` contains evidence/doc/test-script changes). This is a **new experiment with parent `alpha` at `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a`**, not an unapproved Alpha merge. Changes relative to reported tested program: the Controller manifest, secure managed-start output, and additional startup tests. **This new branch has not been run in the owner's Controller yet.**
 
-## Related active experiments (not yet integrated into this repository)
-
-- [Thought-engine — model-assisted Spark/Trace/Thought experiment](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) — separate experimental service; currently Chat-Jimmy-specific. Do not treat live website reasoning as verified on the owner's machine without tests.
-- [Thought — deterministic Spark/Trace/Thought experiment](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) — different implementation; avoid two concurrent authoritative thought stores.
-- [Thought-Controller — live engine dashboard experiment](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) — existing prototype; source for control UI requirements, **not** an automatic migration.
-- [Identity](https://github.com/Arameair/identity) — future owner of real feature grants.
-- [chat-jimmy](https://github.com/Arameair/chat-jimmy/tree/experiment/fast-clean-worker-20261023) — current independent candidate worker.
-
-**Nothing has been merged, renamed, deployed or promoted by writing these notes.**
-
-## Owner acceptance rule
-
-Do not call a behavior working based on source code, screenshots, HTTP 200 on the UI, fake fixtures, or a green unit test alone. Demonstrate it with the actual running independent components; distinguish **process running**, **connected**, **authorized**, **data received**, **worker ready**, **processed**, and **persisted**. If any stage fails, say where and expose enough diagnostics to reproduce it.
+Owner-approved release lanes remain separate. No automatic promotion.
