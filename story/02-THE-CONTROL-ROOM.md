@@ -23,7 +23,7 @@ Maya clicks. The next screen says *exactly what will run*:
 > Thought Processor — **selected approved build**  
 > Thought Engine — **selected approved build**  
 > Demo Observation Source — **one local test-only sender**  
-> Chat-Jimmy — **optional; availability must be verified**
+> AI worker — **optional; provider and availability must be verified**
 >
 > No automatic startup of other features.  
 > Existing applications will not be stopped or replaced.
@@ -59,6 +59,6 @@ Processor does not own the canonical GitHub identity, publisher access or local 
 
 Suppose Thought Processor is not installed. Maya sees **Processor build missing** and a specific approved candidate to select or install. Identity does not silently launch old Thought Controller just because it exists on the machine.
 
-**Blueprint seed:** Start Experience consent, pinned manifest, session launcher ownership, Processor handshake, one workspace with evidence rather than fake sample data.
+**Blueprint questions:** What does the user explicitly authorize when starting an experience? Which approved build is used, who owns the processes, and what proves the Processor–Engine handshake? **The live workspace must show actual data from the responsible services; unknown or unavailable facts stay unknown.** See [Trust and evidence](TRUST-AND-EVIDENCE.md).
 
 [Continue: The engine wakes →](03-THE-ENGINE-WAKES.md)
