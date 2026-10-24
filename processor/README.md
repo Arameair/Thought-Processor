@@ -1,13 +1,13 @@
 # Thought Processor — diagnostic shell (experiment)
 
-A small, independently runnable Processor. It tells you the truth about itself, looks (read-only) at the Identity and Thought Engine addresses you give it, and **refuses** to start, attach to, stop or send observations to an Engine, because Identity cannot approve those yet. See the [dependency request](../docs/contracts/IDENTITY_ENGINE_LIFECYCLE_APPROVAL_REQUEST.md) and the [experiment report](../docs/experiments/PROCESSOR_DIAGNOSTIC_SHELL_2026-10-24.md).
+A small, independently runnable Processor. It tells you the truth about itself, looks (read-only) at the Identity and Thought Engine addresses you give it, and **refuses** to start, attach to, stop or send observations to an Engine, because Identity cannot approve those yet. See the [dependency request](../docs/contracts/IDENTITY_ENGINE_LIFECYCLE_APPROVAL_REQUEST.md) and the [experiment report](../docs/experiments/PROCESSOR_FIRST_PROTOTYPE_2026-10-24.md).
 
 It has **no process runner** — it cannot start or kill anything except itself.
 
 ## Run (tested on Linux x86-64, Go 1.24)
 
 ```bash
-git clone -b experiment/processor-diagnostic-shell-20261024 https://github.com/Arameair/Thought-Processor
+git clone -b experiment/processor-first-prototype-20261024 https://github.com/Arameair/Thought-Processor
 cd Thought-Processor/processor
 go build -o thought-processor .          # build from the checkout so the commit is embedded
 ./thought-processor -data ~/tp-trial -port 7860
