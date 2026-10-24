@@ -34,7 +34,7 @@
 
 | Experiment | Based on | Goal | State | Evidence / decision |
 |---|---|---|---|---|
-| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
+| [`experiment/six-design-decisions-20261023`](https://github.com/Arameair/Thought-Processor/tree/experiment/six-design-decisions-20261023) | `alpha` @ `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a` | Record owner's six decisions and UI direction; enumerate open feature connection contract | **DESIGN ONLY** | [Decisions](discussions/2026-10-23-six-design-decisions.md), [contract questions](discussions/2026-10-23-feature-connection-contract.md); no code/build/real tests, no promotion |\n| `experiment/processor-first-control-point-20261023` | `alpha` documentation baseline | Define first real control-point MVP before implementation | **Planning only** | See its branch notes and linked issue; no build tests |
 
 Add rows **newest first**. Each row needs **branch link**, origin Alpha SHA, head SHA, owner-relevant difference, exact tests performed, whether run in Project Controller, failures, and explicit decision: keep / revise / reject / promoted. Do not mark **PASS** for code that has never been run.
 
