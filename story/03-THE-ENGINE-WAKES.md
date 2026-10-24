@@ -48,6 +48,6 @@ The launcher remembers **owned vs attached**, so Stop Demo cannot accidentally t
 
 Should the Engine continue running after **Stop Experience**, or only after *closing Processor*? Our proposed first-demo answer is: it survives closing the UI or temporarily losing Processor, but an explicit **Stop Demo** ends only the processes this session itself started. Independent engines keep running.
 
-**Blueprint seed:** `ensure_running` intent; lifecycle adapter, actual process ownership, identity/build verification, startup state machine, reconnection and safe stop.
+**Blueprint questions:** How does Processor request a real Engine without duplicates, prove it has the right authenticated instance/build, and reconnect without killing an independent process? **Process state must come from actual launcher/OS evidence.** See [Trust and evidence](TRUST-AND-EVIDENCE.md).
 
 [Continue: A real permission →](04-A-REAL-PERMISSION.md)
