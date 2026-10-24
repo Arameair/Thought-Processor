@@ -1,63 +1,59 @@
-# Interfaces — proposed boundaries (not yet implemented)
+# Draft service contracts — not yet implemented here
 
-**All examples in this file are design proposals. No API, authentication scheme or status contract is claimed to exist in Thought-Processor yet.**
+**These are possible shapes for independent components, not existing endpoints or agreed protocols.** Processor must discover compatible services through validated metadata, not merely scan open ports or GitHub repository names.
 
-## Identity → feature authority
+## 1. Application discovery and card state
 
-Questions Processor and Engine must be able to answer:
-- Which immutable identity does this action apply to?
-- Is `thought.processing` installed, granted and enabled for that identity?
-- Which sources are individually authorized for this feature?
-- Who changed a grant, and when? Can the engine verify it **at action time**?
-- What is the effective revocation behavior when Identity is unreachable?
+A possible *read-only* advertisement needs:
+- a stable runtime **instance ID** and service **kind** (e.g. identity, thought-engine, worker);
+- protocol/schema version and supported capabilities;
+- endpoint and current state plus **checked-at** timestamp;
+- observed branch, full build SHA, PID and run ID **when the service can report them**;
+- optional safe original UI endpoint, whether embedding is supported, diagnostics endpoint;
+- explicit authorization and control capabilities, kept separate from discovery.
 
-Proposed default: deny new privileged processing when a grant cannot be verified, preserve existing history, make outage/revocation visible. Define offline grace rules explicitly before deployment.
+A selected card may display the original UI under allowed browser/session policies. **No inference of authorization** from an app responding on localhost. Unrecognized or incompatible versions should be labeled as such.
 
-## Feed → Thought Engine
+## 2. Source feature → Thought Engine
 
-Possible normalized event shape (draft):
+**Example event envelope (proposal only):**
 
 ```json
 {
   "schema": "thought.observation.v1-DRAFT",
-  "identity_id": "<immutable identity UUID>",
+  "identity_id": "<immutable identity identifier>",
   "source_id": "tass-wow-addon",
-  "event_id": "<stable deduplication ID>",
+  "event_id": "<deduplication identifier>",
   "observed_at": "<RFC3339 timestamp>",
   "content_type": "text/plain",
-  "text": "Player entered Goldshire",
-  "context": { "session_id": "<optional>" }
+  "text": "Player entered Goldshire"
 }
 ```
 
-Before an event is admitted: authorization, source/identity binding, length limits, deduplication, queue capacity, provenance and retention policy. Acknowledgement must mean **persisted/queued** vs **processed**, not conflate them. Avoid copying high-volume source logs indiscriminately; support bounded batching, drop/lag counters and policy-based filtering.
+A receipt must distinguish **accepted/queued** from **actually processed/persisted as Thought**. Per-feed permission, identity isolation, bounded input/queue, dedup, observed vs received timestamps, retention and backpressure are prerequisites for general log ingestion.
 
-## Thought Engine → worker
+## 3. Processor-assisted discovery → Engine → worker
 
-This is a **capability interface**, not a Chat-Jimmy hardcoded interface. Initial capabilities could include:
-- `score_relevance`: bounded observation → score + reason + topic suggestions
-- `match_topic`: observation plus known topic IDs → existing or proposed topic
-- `form_question`: linked evidence → candidate open question
-- `develop_thought`: thought plus evidence and notes → proposed next note and state
-- `summarize_context`: bounded text/logs → useful extraction
+1. Engine requests a compatible **capability**, not a hard-coded provider brand.
+2. Processor's connection/discovery mechanism returns an approved, verified endpoint and capability/version information (exact handshake and authority are **OPEN**).
+3. **Engine calls the worker directly** with its chosen schedule/policy. The API call is the Engine's **heartbeat** in the current design discussion.
+4. Engine records request ID, selected worker/provider, mode, prompt/evidence references, time sent, actual worker reply/status, validation result and durable consequences.
+5. Processor presents **Engine-reported** telemetry/trace; it does not claim to intercept traffic that bypassed it.
 
-Each call needs a request ID, identity-specific context boundary, operation/capability, approved provider/adapter, maximum input/output, timeout, expected output schema, and status: success / busy / blocked / unavailable / timeout / uncertain / unreadable. Responses include raw text, structured validated result (if any), actual model/mode, elapsed timings and cost/usage when available.
+Status dimensions should distinguish **not configured, not running, incompatible, unauthorized, ready, busy, blocked, failed, uncertain**. A timeout after submit may mean the worker was contacted; do **not automatically duplicate the request**.
 
-**Routing policy (proposal):** Thought Engine requests the capability. A replaceable worker registry selects an approved provider. Workers cannot directly grant features, create identities, delete repository data or rewrite Thought history. Preserve evidence and provenance so models can be swapped without loss.
+## 4. Processor → authoritative service controls
 
-Chat-Jimmy already has its own separate heartbeat and one-request API. The adapter may translate that API into this contract but must not leak Chat-Jimmy-specific assumptions into all future engines.
+Read: service readiness, verified identity/capabilities, discovered links, logs/metrics and Engine evidence.
 
-## Processor → Engine
+Write (where authorized): select a service/feed, approve/revoke a **connection** within granted scopes, request an Engine-supported processing action, or pause the Thought Processing subscription. Must return a request ID, accepted/refused result, owning component, and observable effect. Processor cannot change an Identity grant on its own or silently start/stop an independent service.
 
-Distinct operations are needed for:
-1. **Read:** actual health, protocol/build/identity, queue and worker state, feed subscriptions, current Thoughts, traces, events and provenance, metrics, diagnostics.
-2. **Commands:** select authorized feed, pause/resume feature processing, process one, safely retry an eligible event, update allowed policy/worker choices, change a Thought state via Engine validation.
-3. **Receipts:** each control action returns operation ID, authoritative result, error if refused, changed state and timestamp. UI verifies observable impact. Do not trust an HTTP 200 from the dashboard as evidence that an engine-side operation succeeded.
+## 5. Security, privacy and performance
 
-## Security
+Local HTTP and same-origin checks are **not** authentication. Design genuine service authorization and grant revocation before presenting cross-process security as real. Logs may contain sensitive content; default Copy Context to redacted metadata. Processor should keep only bounded diagnostic indexes if approved, **not its own copy of the Engine's Thought database**. Use lightweight status streams/polling for cards, only one active original UI preview.
 
-Local-only HTTP and Origin checks reduce exposure but are not authentication. No source is authorized just because it responds on a port. A real cross-process identity and grant model needs authenticated calls, replay protection, scoped permissions and secure token handling. Never put secrets in Copy Context.
+## 6. Version and provenance
 
-## Versioning and fallback
+Each experimental adapter must pin the **actual API/schema version it implements** and record cross-repo SHAs. If a component is too old or lacks a capability, report **INCOMPATIBLE**, not pretend to support it. Record whether response data was real, rule-derived, or fixture-tested.
 
-Protocols must advertise schema/capabilities. Unknown versions result in **INCOMPATIBLE** with a clear reason. Missing worker becomes a bounded pending queue or an explicit refusal, never invented model output. A changed source/build needs explicit visibility, not silent reassociation.
+See [Architecture](ARCHITECTURE.md), [Decisions](DECISIONS.md) and [Control point](CONTROL_POINT.md).

@@ -1,44 +1,42 @@
-# Vision — a real feature control point
+# Project direction
 
-**Status:** Design notes, not working software. Read [STATUS](STATUS.md) before treating a capability as implemented.
+**Status: owner direction synthesized into documentation; no executable in this repository.**  
+**Purpose:** a clear product narrative, not a specification of already-running software.
 
-## Customer promise
+## Why this exists
 
-Thought Processing is an **optional, independently enabled feature** that helps an identity develop evidence-backed thoughts from logs and observations **the owner explicitly chooses to share with it**.
+The larger companion vision is a system whose usefulness grows by adding and improving **independent features**. Thought Processing is one optional feature: an identity may have access to it, and permitted sources may supply logs or observations that help develop sustained, evidence-backed thoughts. A customer should not need every feature to use any one feature.
 
-Thought Processor is the place the owner operates that feature. Not just a pretty viewer:
-- discover and connect a compatible Thought Engine;
-- see exactly which identities have the feature, and why;
-- select and pause **only this feature's consumption** of individual permitted feeds;
-- configure processing policies, budgets, queue behavior and available worker capabilities;
-- request a single processing step, pause/resume processing, and inspect why something happened;
-- see real health, provenance, evidence, worker response, error, timing and persistence results.
+**Thought Processor is the control point**, not another thinker. It makes the relationship between applications understandable and operable: which real programs are running, which connections exist, what an engine requested, what a worker returned, and what actually changed.
 
-## The feature is the product
+This fits the longer-term [companion/dynamic-coding vision](https://github.com/Arameair/Comp-idea/blob/main/docs/DYNAMIC_CODING_VISION.md), but **Thought Processor is not the dynamic-coding/update system** and is not authorized to rewrite or deploy other features.
 
-Capabilities should have explicit contracts, independently understandable status, and separate entitlement/lifecycle. An installation can run ScreenBridge, Discord or other source features without Thought Processing. Turning Thought Processing off must not stop those features, erase their information, delete a repository, or silently remove saved thoughts.
+## What the experience should feel like
 
-**Feature states must not be collapsed:** Not installed; installed but disabled; enabled but no feeds; feeds connected but no worker; running and ready; degraded; paused; failed. Show what is actually happening.
+An owner opens a calm workspace of lightweight **live application cards**. The Identity application, Thought Engine, and available workers may appear as separately verified running instances. The owner can inspect a connection or expand one real application without needing to rebuild it in Processor.
 
-## The separation
+For Thought Processing: the owner enables the feature through Identity, approves a source feed, and sees the Engine receive events. The Engine handles processing and persistence. The Processor explains the chain and the failure point: **source → observation → Engine decision → worker API call → response → saved evidence**. If a stage is not measured or not authorized, show that instead of inventing a green state.
 
-| Owner | Responsible for | Explicitly NOT responsible for |
-|---|---|---|
-| Identity | Real identities; ownership, entitlements, feature permission grants and revocations | Doing the thinking |
-| Log-producing features | Producing their own logs/observations and authorizing use of a specific feed | Creating or owning Thought records |
-| Thought Engine | Ingesting permitted observations, queueing, Spark/Trace/Thought decisions, persistence, model routing within its feature | GitHub login, running unrelated services, managing all feature entitlements |
-| Thought Processor | **Control plane** and observation UI for Thought Processing | Maintaining a second private thought database; claiming simulated actions are real |
-| Worker adapter | Specific model/provider readiness, one request/result, metrics and failure classification | Deciding product entitlements or permanently owning thoughts |
+## Non-negotiable boundaries
 
-The boundary is intentionally small at first: **one local engine, one local worker, one identity, one log feed**. Prove the path end-to-end before multiplying providers and identities.
+| Principle | Implication |
+|---|---|
+| Features stay independent | Disconnecting Thought Processing does not stop Discord, TASS, ScreenBridge or their independent logging |
+| Identity owns authority | Processor cannot create effective grants merely by changing a toggle |
+| Engine owns cognitive state | No shadow Thought store or duplicate Spark/Trace histories in Processor |
+| Models are interchangeable | Chat-Jimmy is today's fast-worker prototype; future replacements shouldn't require migrating Thoughts |
+| Operator controls are real | Every Connect, Pause or Process action needs a real service acknowledgment and observable outcome |
+| No simulated live state | Fixtures belong in explicitly labeled tests, never hidden in customer-facing status |
+| Owner controls promotion | Experiments start from Alpha; Stable and Main do not move without explicit approval |
 
-## Owner experience
+## Intended scope, not every app's router
 
-An owner enables Thought Processing in Identity for TASS, visits Thought Processor, sees that grant and a verified engine connection, chooses one or more permitted log feeds, and observes the pipeline:
-`source line → accepted observation → queued → model/rule decision → Spark → Trace → Thought → saved`.
+The Processor assists **service discovery, connections and observability** across compatible companion components. The Engine receives and routes **thought-related observations** and owns its reasoning/worker-call decisions. Ordinary operations such as GitHub login or running Discord do not have to pass through the Thought Engine.
 
-For every hop show **why**, not just a green LED. The owner can disable processing without deleting the source application's logs or Thought history.
+Discovery does not necessarily proxy traffic. After the Processor helps select a compatible worker, the Engine may call that worker directly; Processor follows honest telemetry. That distinction keeps the system fast and independently testable.
 
-## Truthfulness
+## Deliberately outside the first prototype
 
-Do not represent a port answering HTTP 200 as proof that the engine works; do not label fixtures as real-model results; do not mark a grant as active solely because a toggle's visual state changed. A control is successful only when the authoritative service acknowledges and persistence or runtime change is verified. 
+A complete feature marketplace or billing service; remote/unauthenticated administration; universal process lifecycle management; automatic ingestion of every log; a second Thought Engine; automated code changes; replacing all existing UIs; and high-volume live thumbnails of every app.
+
+The first value to prove is **an accurate, useful control point for two or three real independently running services**, not a large decorative dashboard.

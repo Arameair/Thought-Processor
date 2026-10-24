@@ -1,38 +1,37 @@
-# Roadmap — prove one real feature end-to-end
+# Roadmap — smallest credible control point first
 
-Each gate is independent, should leave existing applications usable, and has an explicit **pass condition**. The dates below are not release promises.
+**Planning only.** Phases are **test gates**, not dates, release promises, or automatic implementation authorization.
 
-| Gate | Aim | Pass criteria | Current state |
+| Stage | Objective | Evidence that proves it | State |
 |---|---|---|---|
-| 0 | Documentation and branch lanes | README, architecture, STATUS, workflow, decision log; Alpha/Stable docs baseline | In progress / docs only |
-| 1 | Real Processor status/control view | Processor starts alone in Project Controller; discovers compatible Engine; shows actual PID, SHA, port, state; no simulated success | Not implemented |
-| 2 | One log source into one thought engine | Owner selects TASS identity + one authorized source; observation id persists; queue, Spark/Trace/Thought visible; feed pause leaves source running | Not implemented |
-| 3 | Feature authority | Identity grant OFF blocks, ON allows, revocation stops future processing and keeps history; authorized feed selection; no cross-identity data | Not implemented |
-| 4 | Replaceable intelligence | Engine asks for *capability*, not "Chat-Jimmy"; adapter health, one call, metrics, error classification, no duplicate uncertain sends; provider swap without data migration | Not implemented |
-| 5 | Operations / fault recovery | Thought Processor can pause/resume, process one, inspect/retry eligible jobs, show evidence pipeline and diagnostics; survives restart | Not implemented |
-| 6 | Owner-approved Alpha, Stable and release | Owner Project Controller tests with exact SHA and logs, then manual promotion only | Not implemented |
+| **0 — Direction** | Clear roles, owner-selected Option C cards, branch/provenance policy | Owner reviews consolidated docs; open choices recorded | **Under review** |
+| **1 — One real card** | Processor starts independently and discovers **one actual Identity runtime instance** | Correct service ID, protocol, branch/SHA, port and status; Select opens original UI or honest fallback; Stop changes card state without stopping Processor | Not built |
+| **2 — Dynamic cards + diagnostics** | Discover a second compatible running application without hard-coded tile; one selected real UI plus inspector | Accurate readiness, switch performance, real logs/metrics, Copy Context; no hidden full previews | Not built |
+| **3 — Connected flow** | Verify a real Engine + current fast worker; Processor-assisted discovery, **direct Engine API heartbeat** and trace view | Engine request ID, model call, measured response, persisted Thought/evidence, truthful failure ownership | Not built |
+| **4 — Feature/feed authorization** | Identity grants and individually permitted log feeds, without changing source-app lifecycle | Denied/allowed identities, source pause with source still running, logs/event IDs and queue receipts | Not built |
+| **5 — Replaceability and resilience** | Model/provider swap, worker downtime, queue/retry policy, multi-identity isolation and restart | No data loss, bounded load, no unsafe duplicate requests, provenance survives Stop/Play | Not built |
+| **6 — Owner release** | Reproducible approved candidate and rollback | Project Controller manual tests, owner-selected exact commit, explicit Alpha then Stable then Main decisions | Not built |
 
-## Thin first vertical slice
+### Recommended next small experiment
 
-Before integrating many source features or cloud models, implement **only**:
+**Start with one real Identity card.** This isolates the most distinctive new idea—the Processor's live application catalog—without first needing to solve the whole Identity-to-Engine grant protocol or rewrite either Thought implementation.
 
-- One running compatible Thought Engine discovered and verified.
-- One explicitly selected identity (TASS), with grant clearly labeled as real or provisional.
-- One permitted source feed delivering real logs.
-- One model worker, currently Chat-Jimmy, through an adapter boundary (no permanent hardcoding).
-- One controlled processing request; show original log, queue receipt, model decision, persisted Trace/Thought and latency.
-- Stop/Play and failure handling with no data mix-ups.
+The first experiment should prove: **discovery → verified status → one original UI → stop/restart detection → redacted diagnostics**, with measured overhead. A second service is the next test, not eight imaginary cards.
 
-If Identity-grant integration is not ready, show **AUTHORITY NOT CONNECTED** and do **not claim production permission enforcement**. Tests can use isolated fixtures, but they cannot be the live customer-facing state.
+Separately, keep discussing the canonical Thought Engine choice. Avoid silently wiring both independent Thought stores into one identity.
 
-## Questions to settle before implementation
+### Quality gates for every phase
 
-1. Which Thought Engine is **canonical**? `Thought` and `Thought-engine` are separate prototypes. Do not migrate data or declare one an approved successor without a decision and evidence.
-2. How does Identity issue/verifiably revoke a grant across processes, and how do local applications authenticate?
-3. Are source subscriptions configured separately for each identity, or inherited from allowed source features? Do not automatically select all sources.
-4. How much raw log input should be stored/retained, batched or prefiltered, and where does consent apply?
-5. What happens to queued events when the feature/worker is disabled? Set explicit retention/budget rules.
-6. What is a strong enough real-model benefit to justify model calls compared with deterministic filtering?
-7. When does the operator need to approve a worker-generated action versus merely view an interpretation?
+- **Independence:** Processor never silently starts or stops other applications.
+- **Proof:** statuses refer to actual running processes, not repository URLs or demo JSON.
+- **Traceability:** request/correlation ID, build/source, latency, error owner and durable record when applicable.
+- **Resource cost:** run health checks efficiently; no live browsers hidden in collapsed cards.
+- **Permissions:** discovery never implies authorization, and feature disconnect never disables independent sources.
+- **Model neutrality:** current Chat-Jimmy work proves only one adapter, not a permanent dependency.
+- **Rollback:** exact branch/SHA, data preservation and owner-approved promotions.
 
-**Current recommendation:** resolve canonical Thought ownership and permissions before building a broad manager, but a read-only local discovery/status view can be tested earlier without assuming authorization.
+### Decisions that may change the sequence
+
+See [DECISIONS](DECISIONS.md): canonical Engine; registration/discovery mechanism; authentication and permission flow; per-source subscriptions; Processor-offline behavior; retention; embedding; worker adapter capabilities. Record actual owner decisions before treating a proposed protocol as required.
+
+**Not in the initial scope:** full feature marketplace/billing; automated code changes; remote cross-device control; every app rendered simultaneously; Thought Processor authoring its own thought history.

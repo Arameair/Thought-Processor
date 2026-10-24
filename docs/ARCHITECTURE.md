@@ -1,54 +1,69 @@
-# Architecture — control plane separate from evidence
+# Architecture and ownership
 
-**Design target, not an implemented protocol.** Existing repositories implement different experiments. These notes do not assume they already interoperate.
+**Design target, not an implemented integration.** Existing repositories are separate prototypes. Their interfaces and data formats are not automatically compatible.
+
+## Component map
 
 ```text
-   Identity ──(feature grant, identity ID, revocation)─────┐
-                                                         v
-Log sources (independent features) ──approved feed──> Thought Engine
-  TASS / game / screen / Discord / app logs             | queue
-                                                         | Spark/Trace/Thought
-                                                         | persistent evidence
-                                                         | worker requests
-                                                         v
-                                                   Worker interface
-                                                (Chat-Jimmy for now)
-                                                         ^
-                                                         |
-Thought Processor (control point)  <── verified status / evidence / commands ──> Engine
-    discovery | grants | feeds | queue | worker | history | logs | metrics
+                                         Identity
+                                identity ID + feature grant
+                                           |
+Independent features                      v
+TASS logs / screen / Discord ── approved feed ──> Thought Engine
+                                                  queue, Spark/Trace/Thought,
+                                                  policy, timing and persistence
+                                                      |           ^
+             discovery + approved connection           |           |
+Thought Processor ─────────────────────────────────────┘           |
+  dynamic verified cards / diagnostics / flow                       |
+  finds and validates worker services                              |
+             |                                                      |
+             └── worker endpoint selection ───> replaceable worker ┘
+                                                 (Chat-Jimmy today)
 ```
 
-## Control plane
+**Model calls can be direct from Engine to worker.** The Processor is not required to forward every model request. For observability, Engine or worker telemetry must expose request IDs, statuses and measured timings. A disconnected Processor must not be described as if it captured traffic.
 
-Thought Processor reads real state and sends explicit commands to the **authoritative component**. It must not invent local copies of remote grants or thought records as if they are the originals.
+### Who owns what?
 
-- **Identity** authenticates the actor and decides whether that identity may use the feature. A UI toggle in Processor cannot grant an unauthorized identity access.
-- **Engine** verifies identity and feed permission on every ingestion or processing operation (not only on start). Persistence and per-identity isolation live with the engine.
-- **Sources** expose or push information only through an explicitly approved feed. Thought Processor can disconnect its own subscription; it does not power off the source.
-- **Worker** answers bounded prompts. The engine validates structure and evidence before acting; the model's suggested state transitions do not become authority.
+| Component | Authority | Not its job |
+|---|---|---|
+| **Project Controller** | Repository branch build, Play/Stop, run logs and side-by-side developer testing | Managing Thought grants, cognitive records or the Processor's catalog |
+| **Identity** | Identity records, entitlements, permission grants, revocation and linked feature authorization | Thinking, model heartbeat timing or Processor cards |
+| **Source features** | Their own activity, source logs and independent operation | Maintaining Thought records or controlling other applications |
+| **Thought Engine** | Opted-in observation queue; importance/topic decisions; heartbeat/model requests; Sparks, Traces, Thoughts and durable history | Discovering every unrelated application or deciding customer entitlements |
+| **Thought Processor** | Control plane for discovery, connection setup, verified status, interactive *supported* operations, cross-service diagnostics and app cards | Duplicating records, generating thoughts, automatically starting/stopping other processes or choosing the Engine's think cycle |
+| **Worker adapter/provider** | Ready/capable state, bounded request/result, failures, timing | Identity grants, thought persistence or irreversible actions |
 
-## Data plane
+### Two directions of flow
 
-An observation should retain a stable event ID, source ID, owner identity ID, observed timestamp, ingest timestamp, content/reference and optionally sequence/watermark. **Exact schema is a proposal**, see [INTERFACES](INTERFACES.md). Preserve original provenance with every derived Trace and Thought so the owner can inspect why it exists.
+**Information flow:** approved log source → Engine ingestion and queue → Spark / Trace / Thought. Identity gates feature usage and source authorization. Sources need not know how the Engine thinks.
 
-A log is not necessarily a Thought. The engine may buffer/deduplicate/filter first, and ask a worker only when interpretation is useful. Unavailable workers should not cause fake conclusions or automatic silent retries on uncertain sends.
+**Control/visibility flow:** Processor discovers and validates compatible running apps, helps configure approved connections and displays authentic status. Engine owns the **actual decision to make a worker call**. Processor can request only operations that Engine supports and authorizes.
 
-## Connection discovery
+A heartbeat in this project means an **actual worker API request by the Engine**. It does not mean a cosmetic UI pulse or a timer owned by Processor.
 
-A local port scan is **discovery only**. Confirm service identity, protocol version, installation identity and required capabilities; show whether the instance is external and who owns its lifecycle. Identity and Thought Processor must not kill, rebuild or take over an independently running Engine or worker merely because a port is open.
+## Discovery is not permission
 
-No hard-coded worker address assumptions. Discovery can start with explicitly configured loopback ports or local registration files. Network authentication and secure identity-to-engine grants must be designed before multi-user or remote exposure. Loopback-only does not authenticate local callers.
+Port availability and GitHub branch name are clues, **not proof** of service identity or authorization. A compatible service should expose protocol version, service kind, instance ID, capabilities and verified address; build/branch/SHA only when observed. Authentication, access scopes and revocation are still unresolved.
 
-## Isolation and lifecycle
+A card represents an **application runtime instance**, not a per-identity avatar. A stopped service may remain visible as clearly stopped if previously registered; no cached image labeled live. If preview embedding is prohibited, offer the original application UI separately without bypassing browser restrictions.
 
-- Many identities can eventually use the **same engine process**, but their subscriptions, queues, histories, grants, budgets, and model context remain logically separated.
-- Grant OFF: new processing refused; already saved history kept; decide explicit policy for retained vs discarded inbound events.
-- Feed OFF: stop consuming **that feed only** for Thought Processing.
-- Worker OFF: buffer bounded observations or use explicitly approved deterministic policies; do not mislabel a rule as model reasoning.
-- Engine unavailable: Processor can report, retry *readiness checks*, and offer a user action; no covert process startup or duplicate process takeover.
-- A change in build SHA, installation ID or engine instance is a potentially consequential *source change*; surface it, don't quietly trust it.
+## Multiple prototypes — one authority at a time
 
-## Migration question
+- [Thought](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) is a deterministic prototype with synthetic events and TEST permissions.
+- [Thought-engine](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) is a separate prototype using model-assisted observations and a Chat-Jimmy-specific worker interface; its live model behavior on the owner's system has not been verified here.
+- [Thought-Controller](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) is an earlier dashboard prototype, **not automatically renamed, ported or merged** into Processor.
 
-`Arameair/Thought` and `Arameair/Thought-engine` currently represent distinct approaches and storage models. **Do not point one identity at both as independent authorities.** Decide canonical implementation and a traceable migration process after live evidence. Nothing in this documentation declares one already selected.
+**Do not direct one identity's writes at two competing stores.** Choose and document a canonical Engine and migration plan with owner approval before integrating cognitive state.
+
+## Failure and lifecycle rules
+
+- No Engine: Processor reports **NOT CONNECTED**, not stale data as live.
+- No authorized feed: the Engine must not ingest that source's data.
+- No worker: show unavailable/pending or explicit rule-based behavior; never fabricated model answers.
+- Busy, blocked, timeout or uncertain: show actual result, queue state and safe retry policy; don't resubmit uncertain calls automatically.
+- Processor Stop: independently running sources, Engine and worker remain running.
+- Identity grant OFF: stop *feature* processing according to an explicit policy, preserving existing history; do not stop source applications.
+
+Interfaces and trust contracts remain **drafts** in [INTERFACES](INTERFACES.md).
