@@ -10,6 +10,18 @@ Rather than start with API specifications and wiring diagrams, we're following *
 
 This prototype intentionally shows the awkward moments too: installing a feature, failing an authorization check, losing a model connection, coming back tomorrow, and receiving an update. We will turn those events into blueprints **after** the story makes sense.
 
+### Ready for Claude to build the first real prototype?
+
+The narrative is still a **story**, but there is now a separate, test-driven builder package:
+
+- **[▶ Start Claude here — copy/paste assignment](prototype/START_CLAUDE_HERE.md)**
+- [Detailed staged build instructions (Gates 0–3 first)](prototype/CLAUDE_BUILD_BRIEF.md)
+- [Acceptance tests and failure scenarios](prototype/ACCEPTANCE_TEST_MATRIX.md)
+- [Expectations, risks and stop/go criteria](prototype/EXPECTATIONS_AND_GATES.md)
+- [Blank report template — no prefilled test successes](prototype/TEST_RUN_REPORT_TEMPLATE.md)
+
+**Critical:** Claude builds on its own NEW branch from `alpha`; this story branch remains a reference. The first milestone is a real Processor–Engine start/attach/status/stop experience. The unimplemented real Identity grant endpoint and undecided GitHub source licensing/bootstrap remain explicit blockers, **not successes that may be simulated**.
+
 ### Begin here
 
 **[▶ Start the story — The door opens](story/00-START-HERE.md)**
