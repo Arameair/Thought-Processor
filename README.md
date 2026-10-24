@@ -38,6 +38,12 @@ Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
 
 Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
 
+## Current owner-selected design direction (documentation only)
+
+The [six architecture and UI decisions](docs/discussions/2026-10-23-six-design-decisions.md) summarize self-registration with a manual fallback; Identity-controlled authorization with short-lived offline grants; distributed logs and shared tracing; one-time feature approval; on-demand connection map + event timeline; and version comparison without integrated deployment.
+
+The UI direction is lightweight Netflix-style status cards, **one original live UI preview at a time**, and a collapsible Logs / Flow / Metrics inspector. The shared application [connection contract remains open for design](docs/discussions/2026-10-23-feature-connection-contract.md). **Project Controller is optional personal development tooling, not a product dependency.** These are owner-selected intentions, not running integrations.
+
 ## Start here
 
 | Document | What it answers |
