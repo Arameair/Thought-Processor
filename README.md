@@ -1,3 +1,5 @@
+> **DESIGN REVIEW — Processor ↔ Engine startup schematic (2026-10-24):** [Read the full handshake and lifecycle proposal](docs/PROCESSOR_ENGINE_HANDSHAKE_SCHEMATICS_2026-10-24.md). This is a *notes-only* experiment from Alpha, not a functioning Processor. It proposes: Identity completes GitHub-backed setup and explicitly opens Processor; Processor requests **Ensure Engine Available** from one bounded session launcher; Engine authenticates, reports truthful health and independently enforces Identity grants. Read the startup sequence, contracts, ownership/failure cases and small demonstration acceptance tests before implementation.
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
