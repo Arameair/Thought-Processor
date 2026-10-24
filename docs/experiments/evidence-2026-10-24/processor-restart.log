@@ -1,0 +1,6 @@
+Thought Processor 0.1.0-experiment (37255d91f7c7)
+  profile : <tmp>/tp-live-x_0mtv7t/profile-a
+  run     : run_94c04760476a05ea   pid 5008   started in 9 ms
+  open    : http://127.0.0.1:7860/#code=<operator-code>
+            (the code is also in <tmp>/tp-live-x_0mtv7t/profile-a/runtime/operator-code; it changes every run)
+  stop    : Ctrl+C here, or Stop Processor in the page

@@ -1,0 +1,7 @@
+Thought Processor 0.1.0-experiment (37255d91f7c7)
+  profile : <tmp>/tp-live-x_0mtv7t/profile-cycle-2
+  run     : run_15799a02feea2dde   pid 5038   started in 3 ms
+  open    : http://127.0.0.1:7860/#code=<operator-code>
+            (the code is also in <tmp>/tp-live-x_0mtv7t/profile-cycle-2/runtime/operator-code; it changes every run)
+  stop    : Ctrl+C here, or Stop Processor in the page
+Thought Processor stopped cleanly (1 ms). Nothing else was stopped.

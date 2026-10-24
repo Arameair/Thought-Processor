@@ -1,0 +1,3 @@
+03:47:59  [test-profile-1] profile    opened profile with NO installation yet (first-run welcome)
+03:47:59  [test-profile-1] start      Identity identity-first-admin-v0.1 on http://127.0.0.1:7796/ (pid 4930) · branch unknown (unknown, detached checkout) · commit 4686c94f7bdb84ebb8abf70e7409c87580dc461e · data <tmp>/tp-live-x_0mtv7t/identity-data (-data flag) · profile test-profile-1
+03:48:33  [test-profile-1] stop       Identity stopped cleanly (signal terminated); all saves were already on disk; it never started any process, so none are left behind

@@ -1,0 +1,37 @@
+Thought Processor diagnostic context (sanitized)
+generated: 2026-10-24T08:48:01Z
+product: thought-processor 0.1.0-experiment  protocol: thought-processor.diagnostic/0-experimental
+build: revision=37255d91f7c7318f3210e34542faaeaa3092422b modified=false vcs_time=2026-10-24T08:47:52Z go=go1.24.7 linux/amd64
+run: run_2c6e763001b53b57 pid=4895 port=7860 started=2026-10-24T08:47:58Z startup_ms=5
+profile: <tmp>/tp-live-x_0mtv7t/profile-a
+identity: address="http://127.0.0.1:7796" state=CLAIMS_IDENTITY_UNVERIFIED freshness=CURRENT
+  last check 2026-10-24T08:48:01Z  0 ms  port=OPEN metadata=RESPONDED http=200 claims_identity=true
+thought engine: address="http://127.0.0.1:7798" state=PORT_OPEN_UNIDENTIFIED freshness=CURRENT
+  last check 2026-10-24T08:48:01Z  0 ms  port=OPEN metadata=NOT_REQUESTED http=none claims_identity=false
+operation start: BLOCKED
+operation attach: BLOCKED
+operation stop: BLOCKED
+operation observe: BLOCKED
+next action: blocked_contract
+recent events:
+  08:47:59 control/blocked_no_identity_approval_service op_e1f76da63c01efa4
+  08:47:59 control/blocked_no_identity_approval_service op_dedbee315fb69c72
+  08:47:59 config/addresses_saved 
+  08:47:59 probe/identity_open_no_public_metadata 
+  08:47:59 config/addresses_saved 
+  08:47:59 probe/identity_open_responded 
+  08:47:59 config/address_refused 
+  08:47:59 guard/bad_origin 
+  08:47:59 guard/bad_origin 
+  08:47:59 guard/bad_origin 
+  08:47:59 guard/bad_host 
+  08:47:59 guard/bad_csrf 
+  08:47:59 guard/bad_csrf 
+  08:47:59 control/parameters_refused op_8dd8a59110bd54a9
+  08:47:59 config/address_refused 
+  08:47:59 config/address_refused 
+  08:47:59 config/addresses_saved 
+  08:47:59 probe/engine_open 
+  08:48:01 config/addresses_saved 
+  08:48:01 probe/engine_open 
+omitted by design: operator code, session cookies, CSRF tokens, request bodies, environment variables, text returned by other programs (claims), log detail text
