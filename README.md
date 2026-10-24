@@ -42,6 +42,12 @@ Thought Processor should answer these questions without proxying every worker AP
 
 **Control plane is not the data plane.** After authorized discovery, a Thought Engine may call a worker directly. The Engine owns processing and the actual AI-worker **heartbeat/API request**. Thought Processor observes through honest status and correlated traces; it should not inject itself into the hot path without measured justification.
 
+### Working architecture theory — open to challenge
+
+> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
+
+The owner endorsed this **high-level distinction**, not every implementation detail. [Read the detailed, falsifiable architecture theory](docs/OPERATIONAL_SETUP_THEORY.md): authoritative configuration ownership, verified commands and receipts, desired-versus-observed state, direct Engine execution, a minimal service contract, explicit failure cases and comparisons against simpler alternatives. **Research/design only—not a working integration or approved wire protocol.**
+
 [Read the responsibility model](docs/ARCHITECTURE.md) · [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md)
 
 ## Selected design direction — not yet implemented
