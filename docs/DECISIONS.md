@@ -15,6 +15,21 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 
 **Not yet confirmed:** automatic selection of every connected log source vs owner picking feeds; default retention; security mechanism; canonical Thought vs Thought-engine migration; full autonomous processing policy.
 
+## Owner decisions confirmed in later discussion — 2026-10-23
+
+[Read the six-decision record](discussions/2026-10-23-six-design-decisions.md) and [open connection-contract options](discussions/2026-10-23-feature-connection-contract.md).
+
+1. **Discovery:** compatible applications self-register; manual connection is available as fallback. No dependency on the owner's Project Controller.
+2. **Connection security:** discover automatically; Identity authorizes sensitive operations; each service enforces permission. Existing authorized connections may survive Identity outages for a **short bounded lifetime** (a proposed 5–15-minute range for testing, no exact TTL adopted); expired grants must not be extended offline.
+3. **Logs:** original apps maintain distributed logs; shared request IDs and bounded, on-demand diagnostic collection provide cross-service tracing.
+4. **Enablement:** feature appears after discovery; identity-scoped permissions require one-time owner approval; expanded access is separately approved.
+5. **Flow visualization:** clickable connection map **and** event timeline on demand in collapsible inspector; never fill missing trace spans with guesses.
+6. **Versions:** show Alpha/Stable/experiments with exact runtime/commit evidence and test comparisons; Processor must not become a build/promote tool.
+
+**Previously selected UI:** Netflix-like dynamic project cards; **rendering Option C** (lightweight status cards, only selected app's original UI active); collapsible right-side Logs/Flow/Metrics, Copy Context/Logs; **rendering Option D** deferred until measured. The Identity card is the real running `Arameair/identity` application, not a decorative entity profile. Engine owns the model API heartbeat; workers remain replaceable.
+
+**These are owner selections of design direction, not implemented behavior, deployment approval, or passing tests.** Exact discovery protocol, grant format, retention and authorized preview mechanism are still open.
+
 ## Architectural proposals awaiting actual testing
 
 1. Thought Processor is the **control plane**, Thought Engine the **data/processing plane**.
