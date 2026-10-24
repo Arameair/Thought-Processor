@@ -2,6 +2,16 @@
 
 This log separates **owner direction**, **proposals**, and **confirmed implementation**. Avoid marking design assumptions as owner approval.
 
+## Owner-selected integration and UI direction — updated 24 October 2026
+
+**New scope:** Identity is the system's durable authority for participants **including independently developed features**, their relationships and permission policies. Thought Processor combines that knowledge with live discovery to help establish permitted connections and provide developer-visible evidence; Thought Engine keeps cognition and actual worker heartbeat/API calls.
+
+**Selected behavior** (all still unimplemented here): a small shared connection core plus optional capabilities; automatic same-OS discovery with configured/manual remote fallback; one-time pairing through Identity; entity/scoped feature approvals; short bounded offline authorization; push-on-change plus occasional health checks; distributed logs and shared request traces; application cards with a single original UI preview; on-demand Flow map/timeline; verified version/test comparisons. Do not interpret connection discovery as authentication or feature approval.
+
+**Open design questions:** hierarchical vs independent feature relationships, stable vs evolving Identity purpose, precise registry and pairing protocols, grant expiry and revocation scheme, canonical Engine and Memory boundaries, worker selection authority. [Research note and owner-supplied Grok critique](IDENTITY_EXPERIENCE_RESEARCH.md) · [issue for independent review](https://github.com/Arameair/Thought-Processor/issues/7).
+
+**No evidence of code, tests or promotions** follows from recording these owner decisions. AI feedback is reviewed critically, not treated as implemented fact.
+
 ## Owner direction established in discussion — 2026-10-23
 
 | Area | Direction | Consequence |
