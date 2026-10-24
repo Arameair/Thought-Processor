@@ -85,3 +85,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .log li { padding: 3px 0; border-bottom: 1px dashed var(--line); }
 .log .k { color: var(--muted); }
 .foot { display: flex; gap: 12px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+
+.next-btn { margin-top: 12px; }
+a { color: var(--accent); }

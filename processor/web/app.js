@@ -128,6 +128,10 @@
     const n = s.next_action;
     $("next-title").textContent = n.title;
     $("next-detail").textContent = n.detail;
+    const nb = $("next-btn");
+    nb.textContent = { set_identity: "Enter Identity address", fix_profile: "Enter Identity address", wrong_identity: "Change Identity address",
+      recheck: "Check now", start_identity: "Re-check after starting Identity", blocked_contract: "Read what Identity must add" }[n.code] || "Re-check now";
+    nb.dataset.code = n.code;
 
     const ops = $("ops"); ops.replaceChildren();
     const probeOps = $("probe-ops"); probeOps.replaceChildren();
@@ -168,6 +172,12 @@
   $("id-form").addEventListener("submit", (e) => { e.preventDefault(); saveAddr("identity", $("identity-addr").value, "id-msg"); });
   $("en-form").addEventListener("submit", (e) => { e.preventDefault(); saveAddr("engine", $("engine-addr").value, "en-msg"); });
   $("recheck").addEventListener("click", () => refresh(true));
+  $("next-btn").addEventListener("click", () => {
+    const code = $("next-btn").dataset.code;
+    if (code === "blocked_contract") { window.open($("deps-link").href, "_blank", "noopener,noreferrer"); return; }
+    if (code === "recheck" || code === "start_identity") { refresh(true); return; }
+    $("identity-addr").focus(); $("identity-addr").select();
+  });
 
   async function askServer(action) {
     const r = await api("POST", "/api/engine/" + action);

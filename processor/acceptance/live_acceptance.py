@@ -35,6 +35,7 @@ def record(tid, verdict, layer, action, observed, limitation=""):
 
 def port_free(p):
     s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # ignore TIME_WAIT, like Go's listener
     try:
         s.bind(("127.0.0.1", p))
         return True
@@ -237,6 +238,23 @@ def main():
                f"pid {P.pid} port {P_PORT} ready in {ms} ms; run {s['self']['run_id']}; build {s['self']['build']['revision']} modified={s['self']['build']['modified']}; "
                f"/api/state without session -> {st}; identity={s['identity']['state']} engine={s['engine']['state']} next={s['next_action']['code']}; "
                f"ops enabled={[o['enabled'] for o in s['operations']]}; children of Processor={kids}; identity/engine processes={others}; code removed from URL={'#code' not in url_after}; screenshots 01,02")
+
+        # ---------------- UX: one next action + narrow screen ----------------
+        btn = page.text_content("#next-btn")
+        page.click("#next-btn")
+        focused = page.evaluate("document.activeElement && document.activeElement.id")
+        mob = browser.new_context(viewport={"width": 390, "height": 844})
+        mp = mob.new_page()
+        mp.goto(f"http://127.0.0.1:{P_PORT}/#code={code}")
+        mp.wait_for_selector("#app:not([hidden])")
+        mp.wait_for_function("document.getElementById('next-title').textContent.length > 0")
+        overflow = mp.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+        shot.append(shots(mp, out, "02b-first-screen-phone-width"))
+        mob.close()
+        ok = btn == "Enter Identity address" and focused == "identity-addr" and overflow <= 0
+        record("UX-01/06", "PASS" if ok else "FAIL", "L3", "One useful next action on first screen; 390 px wide phone viewport",
+               f"Next button '{btn}' moves focus to #{focused}; horizontal overflow at 390 px = {overflow}px; screenshots 02, 02b",
+               "Owner usability (can a non-technical person follow it) is NOT tested here; that is the owner trial")
 
         # ---------------- A27 / A02 Identity absent ----------------
         st, d, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{I_PORT}"})
