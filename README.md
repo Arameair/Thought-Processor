@@ -63,6 +63,16 @@ The intended UI is a **dynamic catalog of real running applications**, not a fix
 
 Feature installations must operate independently even when Processor is offline. **The owner's personal Project Controller is optional development tooling, never an end-user dependency.**
 
+## First planned integration: real Identity grants, observed in Processor
+
+**Owner-selected workflow:** Thought Processor should be the **single operator/testing hub** for the first Identity↔Thought Engine grant integration, while leaving the services independent. **Identity decides; Thought Engine enforces; Thought Processor connects, tests, and explains.**
+
+Start by specifying and testing an actual Identity-owned allow/deny grant, authenticated source and Engine identities, immediate denial after revocation, and fail-closed behavior when Identity is unreachable. Then add a narrow Processor test view that shows real Identity decision IDs and Engine intake receipts. Do **not** treat a local on/off flag or open port as verified permission.
+
+[Detailed integration plan](docs/INTEGRATION_AUTHORIZATION_PLAN.md) · [Tracking issue #8](https://github.com/Arameair/Thought-Processor/issues/8) · [Canonical Engine question #2](https://github.com/Arameair/Thought-Processor/issues/2).
+
+**Status:** Plan only; no working Processor, registered grant protocol or secure end-to-end demonstration yet.
+
 ## Research direction and independent critique
 
 Identity can be a durable coordination authority without necessarily improving AI cognition. We are investigating an **Identity–Experience hypothesis**: do stable identity/purpose information and relevant memory improve a companion beyond recent context alone?
