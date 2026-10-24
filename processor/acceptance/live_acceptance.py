@@ -179,6 +179,20 @@ def shots(page, outdir, name):
     return os.path.basename(path)
 
 
+def wait_text(page, selector, pred, timeout=15):
+    """Poll from Python: the page's CSP (correctly) forbids Playwright's eval-based waits."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            txt = page.text_content(selector) or ""
+            if pred(txt):
+                return txt
+        except Exception:
+            pass
+        time.sleep(0.05)
+    raise TimeoutError(f"{selector} never matched")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--processor", required=True)
@@ -222,7 +236,7 @@ def main():
         shot.append(shots(page, out, "01-signed-out"))
         page.goto(f"http://127.0.0.1:{P_PORT}/#code={code}")
         page.wait_for_selector("#app:not([hidden])")
-        page.wait_for_function("document.getElementById('next-title').textContent.length > 0")
+        wait_text(page, "#next-title", lambda x: len(x) > 0)
         url_after = page.url
         shot.append(shots(page, out, "02-first-screen-empty-profile"))
         c.sign_in(code)
@@ -247,7 +261,7 @@ def main():
         mp = mob.new_page()
         mp.goto(f"http://127.0.0.1:{P_PORT}/#code={code}")
         mp.wait_for_selector("#app:not([hidden])")
-        mp.wait_for_function("document.getElementById('next-title').textContent.length > 0")
+        wait_text(mp, "#next-title", lambda x: len(x) > 0)
         overflow = mp.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
         shot.append(shots(mp, out, "02b-first-screen-phone-width"))
         mob.close()
@@ -264,7 +278,7 @@ def main():
             st2, d2, _ = c.post(f"/api/engine/{act}")
             api_results[act] = (st2, d2.get("status"), d2.get("error"), d2.get("op_id"))
         page.reload()
-        page.wait_for_function("document.getElementById('id-pill').textContent.length > 0")
+        wait_text(page, "#id-pill", lambda x: len(x) > 0)
         disabled = page.eval_on_selector_all("#ops button", "bs => bs.map(b => b.disabled)")
         page.click("#deps details.inner summary")
         page.click("text=Ask server: start")
@@ -300,7 +314,7 @@ def main():
                    f"state={s['identity']['state']}; next={s['next_action']['code']}; start -> {st3} {d3['error']}; Identity still alive={alive(I.pid)}",
                    "Identity has no decision endpoint, so Processor cannot ask it anything; only public health metadata was read")
             page.reload()
-            page.wait_for_function("document.getElementById('id-pill').textContent.includes('unverified')")
+            wait_text(page, "#id-pill", lambda x: "unverified" in x)
             shot.append(shots(page, out, "04-identity-found-unverified"))
             for tid, what in (("A03", "Real Identity explicitly denies"), ("A04", "Identity times out / malformed / unverifiable decision"),
                               ("A05", "Decision targets wrong actor/install/service/action/manifest"), ("A06", "Expired/revoked/replayed decision")):
@@ -342,7 +356,7 @@ def main():
             wrong = (s["identity"]["state"], s["identity"]["probe"]["metadata"], s["identity"]["probe"].get("http_status"), s["next_action"]["code"])
             st, s, _ = c.post("/api/candidates", {"identity": f"127.0.0.1:{I_PORT}"})
             page.reload()
-            page.wait_for_function("document.getElementById('en-pill').textContent.length > 0")
+            wait_text(page, "#en-pill", lambda x: len(x) > 0)
             shot.append(shots(page, out, "05-identity-and-engine-candidates"))
         else:
             wrong = None
