@@ -1,0 +1,50 @@
+Thought Processor diagnostic context (sanitized)
+generated: 2026-10-24T09:06:53Z
+product: thought-processor 0.1.0-experiment  protocol: thought-processor.diagnostic/0-experimental
+build: revision=db2a46c5bf930239f286bf412872c67953946d8b modified=false vcs_time=2026-10-24T09:06:44Z go=go1.24.7 linux/amd64
+run: run_80529921bd4754b8 pid=1911 port=7860 started=2026-10-24T09:06:50Z startup_ms=3
+profile: <tmp>/tp-live-kptgbfpp/profile-a
+identity: address="http://127.0.0.1:7796" state=CLAIMS_IDENTITY_UNVERIFIED freshness=CURRENT
+  last check 2026-10-24T09:06:53Z  0 ms  port=OPEN metadata=RESPONDED http=200 claims_identity=true
+thought engine: address="http://127.0.0.1:7798" state=PORT_OPEN_UNIDENTIFIED freshness=CURRENT
+  last check 2026-10-24T09:06:53Z  0 ms  port=OPEN metadata=NOT_REQUESTED http=none claims_identity=false
+operation start: BLOCKED
+operation attach: BLOCKED
+operation stop: BLOCKED
+operation observe: BLOCKED
+next action: blocked_contract
+metrics: refused=map[attach:2 observe:1 start:5 stop:2] rejected=map[csrf:2 no_session:6 untrusted_host:1 untrusted_origin:3]
+  identity checks=10 outcomes=map[CLOSED:2 OPEN/NO_PUBLIC_METADATA:1 OPEN/RESPONDED:7] latency=map[max_ms:1 median_ms:0 min_ms:0 samples:10]
+  engine checks=6 outcomes=map[OPEN:6] latency=map[max_ms:0 median_ms:0 min_ms:0 samples:6]
+flow 09:06:52 op_72e7edf6171a11d3 start: requested=DONE authorized=NOT ATTEMPTED executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_bc0f1b6af2ebfc24 stop: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_ace138674a8c7a40 start: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_c39453585753d3d4 attach: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_0a981f75a8cdbc23 start: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_8db23b310a2fe67b start: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_2bb54704306d8dae observe: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_a3f77ff10edaba13 stop: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_e844fa0c4308306b attach: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+flow 09:06:51 op_5d68d7f061a6e4cf start: requested=DONE authorized=NOT AVAILABLE executed=NOT ATTEMPTED observed=NONE
+recent events:
+  09:06:51 control/blocked_no_identity_approval_service op_ace138674a8c7a40
+  09:06:51 control/blocked_no_identity_approval_service op_bc0f1b6af2ebfc24
+  09:06:51 config/addresses_saved 
+  09:06:51 probe/identity_open_no_public_metadata 
+  09:06:51 config/addresses_saved 
+  09:06:51 probe/identity_open_responded 
+  09:06:52 config/address_refused 
+  09:06:52 guard/bad_origin 
+  09:06:52 guard/bad_origin 
+  09:06:52 guard/bad_origin 
+  09:06:52 guard/bad_host 
+  09:06:52 guard/bad_csrf 
+  09:06:52 guard/bad_csrf 
+  09:06:52 control/parameters_refused op_72e7edf6171a11d3
+  09:06:52 config/address_refused 
+  09:06:52 config/address_refused 
+  09:06:52 config/addresses_saved 
+  09:06:52 probe/engine_open 
+  09:06:53 config/addresses_saved 
+  09:06:53 probe/engine_open 
+omitted by design: operator code, session cookies, CSRF tokens, request bodies, environment variables, text returned by other programs (claims), log detail text
