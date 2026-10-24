@@ -25,6 +25,16 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 
 **Not yet confirmed:** automatic selection of every connected log source vs owner picking feeds; default retention; security mechanism; canonical Thought vs Thought-engine migration; full autonomous processing policy.
 
+## Owner-selected authorization integration workflow — 2026-10-24
+
+**Selected:** Thought Processor should be the **integration and testing hub** for connecting Identity and a Thought Engine, with a single operator-facing view of the real grant decision and Engine's actual event outcome. The independent apps can still communicate directly without Processor.
+
+**Boundary:** **Identity decides; Thought Engine enforces; Thought Processor connects, tests, and explains.** Processor is a control/observability surface, **not** a second permission authority or the required data plane. Read [integration plan](INTEGRATION_AUTHORIZATION_PLAN.md) and [issue #8](https://github.com/Arameair/Thought-Processor/issues/8).
+
+**Not selected / still open:** canonical Engine target, real local actor-authentication method, grant API fields, precise in-flight revocation behavior, first test sender identity and exact request correlation contract. The current first security experiment should fail closed if Identity is unreachable, **without offline cached allows**. Short-lived offline continuity from prior discussions is a later test choice, not an implemented promise.
+
+**No functionality implemented by documenting this agreement.** Every cross-service operation must remain enforced by the receiving Engine when Processor is closed.
+
 ## Architectural proposals awaiting actual testing
 
 1. Thought Processor is the **control plane**, Thought Engine the **data/processing plane**.
