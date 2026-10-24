@@ -53,7 +53,7 @@ When a port is occupied by something else, Processor reports **Wrong or unknown 
 
 ### A model connection fails
 
-Chat-Jimmy can be unavailable while Engine remains usable for diagnostics. An already-authorized event might wait in the queue. Processor shows that actual status and preserves retry safety instead of silently sending it to a different worker or inventing a response.
+The selected model worker can be unavailable while Engine remains usable for diagnostics. An already-authorized event might wait in the queue. Processor shows that actual status and preserves retry safety instead of silently sending it to a different worker or inventing a response.
 
 ### Publisher access changes
 
