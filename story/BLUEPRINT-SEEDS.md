@@ -2,14 +2,14 @@
 
 [← Story home](../README.md) · [Screen storyboard](SCREEN-STORYBOARD.md) · [Review questions](REVIEW-QUESTIONS.md)
 
-This is the **translation ledger**. It deliberately does not freeze the final protocols, installation technology, or visual design. The story tells us **what must happen**; the eventual blueprint tells us **how to implement and verify it**.
+This is the **translation ledger**. It deliberately does not freeze the final protocols, installation technology, or visual design. **No runtime panel or demo counts as credible if it fabricates or guesses data.** See [Trust and evidence](TRUST-AND-EVIDENCE.md). The story tells us **what must happen**; the eventual blueprint tells us **how to implement and verify it**.
 
 ## Scene → blueprint inventory
 
 | Story moment | Blueprint we will need | Unambiguous behavior to preserve |
 | --- | --- | --- |
 | [00 · The door opens](00-START-HERE.md) | GitHub-gated first-run/setup/recovery states | Before account verification, repair/setup allowed but full product never incorrectly shown READY |
-| [01 · It becomes hers](01-IT-BECOMES-HERS.md) | User repository bootstrap/update and publisher access boundaries | Own real starter source, attribution, explicit consent, no token or runtime-data copy |
+| [01 · It becomes hers](01-IT-BECOMES-HERS.md) | **Open research:** source scope, legal redistribution, repository creation and update options; publisher access boundary | Real starter source (not just settings), attributed origin, explicit approval; do not assume a chosen creation method |
 | [02 · The control room](02-THE-CONTROL-ROOM.md) | Identity→Processor Start Experience/session manifest | Exact pinned product/build, bounded launch, no Thought-Controller substitution or unapproved autostart |
 | [03 · The engine wakes](03-THE-ENGINE-WAKES.md) | Processor→launcher `ensure_running`; launcher→Engine health/identity | Attach if correct instance runs; otherwise start once; accurate ownership and compatibility |
 | [04 · A real permission](04-A-REAL-PERMISSION.md) | Identity grant/registration + Engine caller authentication | Issuer different from enforcer, authenticated sender, scoped grant, action-time check |
@@ -34,7 +34,7 @@ This is the **translation ledger**. It deliberately does not freeze the final pr
 USER
   |
   v
-GITHUB ACCOUNT + CUSTOMER-OWNED STARTER REPO   <-- versioned Arameair origin
+GITHUB ACCOUNT + CUSTOMER-OWNED STARTER REPO   <-- verifiable Arameair origin; bootstrap method OPEN
   |
   v
 IDENTITY (who, where, local permission) <----- publisher feature access evidence
@@ -58,7 +58,7 @@ SINGLE SESSION LAUNCHER ----------> THOUGHT PROCESSOR
 
 ## Five major blueprint decisions the story cannot answer by itself
 
-1. **Bootstrap and license:** Exactly which starter source files are delivered, under what redistribution license, and whether a controlled copy, fork or template best preserves usable updates and credit.
+1. **Bootstrap and license: UNDECIDED.** Exactly which real starter files can be redistributed, the applicable license, and whether fork, template or another reviewed method best preserves ownership, updates and origin. **Do not imply a selected mechanism or a published starter release.**
 2. **Publisher control:** How feature access is issued/verified and what withdrawal actually affects: new downloads, hosted use, future updates or an expressly licensed local term. Copied code cannot be assumed retractable.
 3. **Lifecycle component placement:** The *first demo* prefers a small session launcher created after Identity's explicit consent and callable by Processor. Should its process outlive Processor backend? How will later Windows/WSL/VM service control work?
 4. **Trust and grant contract:** How the genuine Engine/source/Identity authenticate, how grants are signed or checked, what exact expiry/revocation and queued-work behavior is acceptable, and how secret keys are protected.
@@ -76,7 +76,7 @@ SINGLE SESSION LAUNCHER ----------> THOUGHT PROCESSOR
 | D. Experience | One event produces real evidence and, if the worker is ready, an actual result | Source ID, event receipt, worker request ID, persisted result, truthful missing outcome |
 | E. Resilience | Close/reopen, kill one service, stop demo, propose update | Process ownership, durable IDs/history, no orphan/kill of unrelated apps, rollback |
 
-Until Stage C is real, do **not** call the integration an Identity-authorized live experience. A fixture can demonstrate UI flow only if labeled visibly.
+Until Stage C is real, do **not** call the integration an Identity-authorized live experience. **Do not render fixture results in the normal UI.** Fixtures, if required for technical testing, remain isolated, labeled **NOT LIVE**, and never feed production status, demonstrations or KPIs.
 
 ## One proposed first blueprint to draft
 
@@ -84,7 +84,7 @@ Until Stage C is real, do **not** call the integration an Identity-authorized li
 
 Define `ensure_running` with a bounded approved candidate manifest; whether an existing process is session-owned or independent; what proves product, version, service identity and protocol; how a missing port, failure, crash and restart are surfaced; and what survives closing the browser or Processor backend. Build Stage B **before** an expansive multi-feature control UI.
 
-Tie all acceptance evidence to branch/commit SHA, actual executable digest, source of status data, timestamps, sanitized logs, explicit pass/fail and owner decision.
+Tie all acceptance evidence to branch/commit SHA, actual executable digest, **authoritative source of every displayed value**, timestamp, freshness, sanitized log/decision receipts, explicit pass/fail or unknown, and owner decision. If the source cannot be checked, expose that limitation rather than substituting a plausible value.
 
 ## Completion definition for this *storybook* (not software)
 
