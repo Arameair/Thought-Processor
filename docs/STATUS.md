@@ -8,9 +8,9 @@
 
 | Lane | What belongs there | Current evidence | Operator verdict |
 |---|---|---|---|
-| [Main](../tree/main) | Release-facing documentation and only **owner-approved public** releases | Documentation initialization; no binary/runtime | ⚪ Docs only |
-| [Stable](../tree/stable) | Last **owner-accepted, verified** snapshot, with exact commit + rollback plan | Initial documentation baseline only | ⚪ **Not** a functional stable release |
-| [Alpha](../tree/alpha) | Active owner-selected working integration candidate | Initial documentation baseline only | ⚪ **No** owner-tested program yet |
+| [Main](https://github.com/Arameair/Thought-Processor/tree/main) | Release-facing documentation and only **owner-approved public** releases | Documentation initialization; no binary/runtime | ⚪ Docs only |
+| [Stable](https://github.com/Arameair/Thought-Processor/tree/stable) | Last **owner-accepted, verified** snapshot, with exact commit + rollback plan | Initial documentation baseline only | ⚪ **Not** a functional stable release |
+| [Alpha](https://github.com/Arameair/Thought-Processor/tree/alpha) | Active owner-selected working integration candidate | Initial documentation baseline only | ⚪ **No** owner-tested program yet |
 | [Experiments](https://github.com/Arameair/Thought-Processor/branches) | Isolated tests and competing solutions, each started from Alpha | See experiment ledger below | ⚪ None functionally validated |
 
 **Important:** The stable/alpha branch links are created as part of the documentation bootstrap. If a link is temporarily missing during setup, no program or promotion has taken place.
