@@ -511,7 +511,7 @@ func nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr stri
 	case candErr != "":
 		return NextAction{"fix_profile", "Fix the saved addresses", "The profile's candidates.json could not be used and was left unchanged. Re-enter the Identity address below to replace it.", "identity-addr"}
 	case c.Identity == "":
-		return NextAction{"set_identity", "Tell Processor where Identity runs", "Identity is the authority that would approve starting or attaching a Thought Engine. Enter the address of your local Identity app (for example 127.0.0.1:7777). Processor only looks; it never starts Identity.", "identity-addr"}
+		return NextAction{"set_identity", "Tell Processor where Identity runs", "Identity is the authority that would approve starting or attaching a Thought Engine. Enter the address your local Identity app shows when it starts (127.0.0.1:PORT). Processor only looks; it never starts Identity.", "identity-addr"}
 	case idp == nil || freshness(idp, now) == "STALE":
 		return NextAction{"recheck", "Check Identity now", "The last check is missing or too old to trust.", "recheck"}
 	case idp.Port != "OPEN":
@@ -570,8 +570,12 @@ func (a *App) CopyContext() string {
 		d := s[key].(DepView)
 		fmt.Fprintf(&w, "%s: address=%q state=%s freshness=%s\n", strings.ToLower(d.Name), d.Configured, d.State, d.Freshness)
 		if d.Probe != nil {
-			fmt.Fprintf(&w, "  last check %s  %d ms  port=%s metadata=%s http=%d claims_identity=%v\n",
-				d.Probe.CheckedAt.Format(time.RFC3339), d.Probe.ElapsedMS, d.Probe.Port, d.Probe.Metadata, d.Probe.HTTPStatus, d.Probe.ClaimMatches)
+			httpS := "none"
+			if d.Probe.HTTPStatus != 0 {
+				httpS = fmt.Sprint(d.Probe.HTTPStatus)
+			}
+			fmt.Fprintf(&w, "  last check %s  %d ms  port=%s metadata=%s http=%s claims_identity=%v\n",
+				d.Probe.CheckedAt.Format(time.RFC3339), d.Probe.ElapsedMS, d.Probe.Port, d.Probe.Metadata, httpS, d.Probe.ClaimMatches)
 		}
 	}
 	for _, op := range s["operations"].([]Operation) {
