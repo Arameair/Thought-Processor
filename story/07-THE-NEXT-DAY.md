@@ -26,20 +26,20 @@ Her previous Traces remain Engine-owned. The companion's future long-term **Memo
 
 ### An update arrives without taking her work away
 
-One day, the publisher ships an updated approved starter or feature version.
+If the publisher later distributes a verified update under a policy the owner has approved, Maya may be offered a change to review. **This source-distribution and update mechanism has not been chosen yet**, so nothing in this story proves it exists.
 
 Maya sees:
 
 > **An upstream update is available**
 >
-> Your current starting version: **vA**  
-> Available proposed version: **vB**  
+> Your current starting version: **[verified installed source version]**  
+> Available proposed version: **[verified publisher release, if any]**  
 > Source: **Original Arameair project**  
 > Your local changes: **Will be compared, not silently overwritten**
 >
 > **[Review change] [Propose update in my repository] [Later]**
 
-A controlled update could create a branch and pull request in Maya's repository for review. It must not silently force-push her edited source, rewrite credit, delete runtime logs, or treat publisher access to future features as implied local authorization. These exact update mechanics and software licensing are **still to be decided**.
+A future update mechanism **might** use a branch and pull request in Maya's repository for review, but fork, template and other options have not been chosen. It must not silently force-push her edited source, rewrite credit, delete runtime logs, or treat publisher access to future features as implied local authorization. These exact update mechanics and software licensing are **still to be decided**.
 
 She can keep using the features and data allowed by their actual terms, not by invented developer rules. The publisher can enforce access to new protected downloads and hosted services; already-delivered local code is not reliably revocable just by an editable toggle.
 
@@ -57,6 +57,6 @@ Identity is the foundation. Processor makes the machinery understandable. Engine
 
 That is the promise we should decide whether we want to build.
 
-**Blueprint seed:** Returning-installation restore, repository/update lineage, independent durable data, auth/entitlement revalidation, feature expansion and owner-approved evolution.
+**Blueprint questions:** What verified source record persists after restart? How can any future update be offered without inventing a release or overwriting customer changes? Which operations should continue when GitHub verification is unavailable?
 
 [Back to story home](../README.md)
