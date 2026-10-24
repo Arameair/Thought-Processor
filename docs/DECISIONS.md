@@ -15,6 +15,28 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 
 **Not yet confirmed:** automatic selection of every connected log source vs owner picking feeds; default retention; security mechanism; canonical Thought vs Thought-engine migration; full autonomous processing policy.
 
+## Discussion clarification — 2026-10-23 (documentation branch; no implementation)
+
+The owner clarified the design as follows:
+
+- **Processor = simple control point and discovery/router surface.** It helps the Thought Engine find compatible workers/services and provides enough observable information for a developer watching from the controller to debug the connected system.
+- **Engine = thinking authority.** It determines when, why and how to make requests, what input/context to use, and how thoughts evolve. It owns the processing queue and thought history.
+- **Heartbeat = actual fast-worker API call**, not a separate Processor-owned scheduled tick.
+- **Engine may call worker directly** after discovery/connection through Processor, so Processor is not automatically a proxy for model API traffic. Developer visibility must still be preserved through actual Engine status/traces.
+- **Chat-Jimmy is a replaceable first candidate**, not product identity or mandatory implementation.
+- **UI and developer experience are next for discussion**, not ready for implementation or owner acceptance.
+
+Recorded in [routing/heartbeat discussion](discussions/2026-10-23-routing-heartbeat.md) and [UI/DevEx agenda](discussions/2026-10-23-ui-devex.md).
+
+### Additional open decisions
+
+| ID | Question | Why it matters | Status |
+| --- | --- | --- | --- |
+| D-08 | Should Processor be available for service discovery only at first connection, or required for every reconnect? | Failure isolation vs central control | OPEN |
+| D-09 | Can the operator change workers during a running Engine session? | Live switching and in-flight request safety | OPEN |
+| D-10 | What persistent trace/reporting contract gives Processor visibility into direct worker calls? | Trustworthy debugging without proxy bottleneck | OPEN |
+| D-11 | Which UI experience comes first: status overview, live trace, or split view? | Developer efficiency and interface scope | OPEN |
+
 ## Architectural proposals awaiting actual testing
 
 1. Thought Processor is the **control plane**, Thought Engine the **data/processing plane**.
