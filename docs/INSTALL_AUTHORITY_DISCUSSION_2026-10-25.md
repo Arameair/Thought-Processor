@@ -3,6 +3,7 @@
 **Status:** DISCUSSION NOTES ONLY. No code changed; nothing here is decided.
 **Date:** 2026-10-25 · **Branch:** `experiment/install-authority-discussion-20261025` (from `alpha` @ `9fac9fa`)
 **Owner direction (2026-10-25):** build Thought Processor first; its job is to make sure it has **authority to install the Thought Engine** before it does so.
+**See also:** [Design ideas and approaches to look at](DESIGN_IDEAS_TO_LOOK_AT_2026-10-25.md) (Part A covers the patterns behind each option here).
 **Builds on:** the detailed requirements in [Identity → Engine lifecycle approval](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-controller-launch-fix-20261024/docs/contracts/IDENTITY_ENGINE_LIFECYCLE_APPROVAL_REQUEST.md) (start / attach / stop / ingest) and the running Identity Prototype B (`Arameair/identity`, `experiment/identity-home-claude-20261025`).
 
 ---

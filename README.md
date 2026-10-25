@@ -1,4 +1,7 @@
-> **Discussion notes (2026-10-25, branch `experiment/install-authority-discussion-20261025`):** [Authority to install the Thought Engine — options and a strawman prototype](docs/INSTALL_AUTHORITY_DISCUSSION_2026-10-25.md). Nothing decided; no code changed.
+> **Discussion notes (2026-10-25, branch `experiment/install-authority-discussion-20261025`; nothing decided, no code changed):**
+> 1. [Authority to install the Thought Engine](docs/INSTALL_AUTHORITY_DISCUSSION_2026-10-25.md) — the five questions, options, a strawman prototype and a decision sheet (**start here**)
+> 2. [Design ideas and approaches to look at](docs/DESIGN_IDEAS_TO_LOOK_AT_2026-10-25.md) — established patterns for safe installs, signed decisions, pairing, and thought loops, with what to borrow and a reading order
+> 3. [The actual thought process](docs/THOUGHT_PROCESS_DISCUSSION_2026-10-25.md) — for the step after Processor
 
 # Thought Processor
 
