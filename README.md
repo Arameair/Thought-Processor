@@ -1,3 +1,5 @@
+> **Discussion notes (2026-10-25, branch `experiment/install-authority-discussion-20261025`):** [Authority to install the Thought Engine — options and a strawman prototype](docs/INSTALL_AUTHORITY_DISCUSSION_2026-10-25.md). Nothing decided; no code changed.
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
