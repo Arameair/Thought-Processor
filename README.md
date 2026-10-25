@@ -1,3 +1,9 @@
+> **Branch `alpha-candidate-20261025`** — the working Processor diagnostic shell (code unchanged from `experiment/processor-controller-launch-fix-20261024` @ `0ba8bd5`, which ran for real on 2026-10-25), plus the 2026-10-25 discussion notes. The owner decides whether it becomes `alpha`.
+>
+> **Run it with Identity:** Processor on port **7860**, Identity (`Arameair/identity`, branch `alpha-candidate-20261025`) on port **7790**. Step-by-step for people and AI operators: [Identity's AGENTS.md](https://github.com/Arameair/identity/blob/alpha-candidate-20261025/AGENTS.md).
+>
+> **Discussion notes (nothing decided, no code):** [Authority to install the Thought Engine](docs/INSTALL_AUTHORITY_DISCUSSION_2026-10-25.md) (start here) · [Design ideas and approaches to look at](docs/DESIGN_IDEAS_TO_LOOK_AT_2026-10-25.md) · [The actual thought process](docs/THOUGHT_PROCESS_DISCUSSION_2026-10-25.md)
+
 # Thought Processor — Project Controller launch trial
 
 > **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
