@@ -41,6 +41,21 @@
       <button id="next-btn" type="button" class="primary next-btn"></button>
     </section>
 
+    <section class="card install" id="install" aria-labelledby="inst-title">
+      <header class="inst-head"><h2 id="inst-title">Thought Engine</h2><span id="inst-pill" class="pill"></span></header>
+      <p id="inst-status" class="label"></p>
+      <p id="inst-next" class="small"></p>
+      <form id="pair-form" class="row" hidden>
+        <label for="pair-code" class="sr">Pairing code from Identity</label>
+        <input id="pair-code" placeholder="code from Identity, e.g. ABCD-EFGH" autocomplete="off" spellcheck="false" maxlength="9">
+        <button type="submit" class="primary">Pair with Identity</button>
+      </form>
+      <div class="bar-wrap" id="inst-progress" hidden><div class="bar" id="inst-bar"></div></div>
+      <dl id="inst-facts"></dl>
+      <div class="row wrap" id="inst-actions"></div>
+      <p id="inst-msg" class="msg" role="status"></p>
+    </section>
+
     <section class="card selection" aria-label="What you are looking at">
       <div class="sel"><p class="eyebrow">Entity</p><p id="sel-entity" class="sel-label"></p><p id="sel-entity-why" class="muted small"></p></div>
       <div class="sel"><p class="eyebrow">Feature</p><p id="sel-feature" class="sel-label"></p><p id="sel-feature-why" class="muted small"></p></div>
@@ -97,9 +112,9 @@
       <span id="checked" class="muted small"></span>
     </div>
 
-    <section class="card" id="deps" aria-labelledby="ops-title">
-      <h2 id="ops-title">Engine controls</h2>
-      <p class="muted">These stay off until Identity can approve them and the Engine side can verify that approval. Processor shows why instead of pretending.</p>
+    <details class="card" id="deps">
+      <summary id="ops-title">Next: running the Engine (not available yet)</summary>
+      <p class="muted">Installing works today (above). Starting, attaching to, stopping and feeding a running Engine stay off until Identity can approve each of them and the Engine side can verify that approval.</p>
       <ul id="ops" class="ops"></ul>
       <details class="inner">
         <summary>Prove it: ask the server anyway</summary>
@@ -108,7 +123,7 @@
         <pre id="probe-out" class="out" hidden></pre>
       </details>
       <p class="small"><a id="deps-link" href="https://github.com/Arameair/Thought-Processor/blob/experiment/processor-first-prototype-20261024/docs/contracts/IDENTITY_ENGINE_LIFECYCLE_APPROVAL_REQUEST.md" rel="noopener noreferrer" target="_blank">What Identity and the Engine must add (dependency request)</a></p>
-    </section>
+    </details>
 
     <details class="card" id="diag">
       <summary>Diagnostics — flow, logs, metrics</summary>

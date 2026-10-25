@@ -71,11 +71,11 @@
   // ---------- rendering ----------
   const pillClass = {
     NOT_CONFIGURED: "", NOT_CHECKED: "", STALE: "warn", UNREACHABLE: "bad",
-    PORT_OPEN_UNIDENTIFIED: "warn", CLAIMS_IDENTITY_UNVERIFIED: "info", ANSWERED_NOT_IDENTITY: "bad", NO_PUBLIC_METADATA: "warn",
+    PORT_OPEN_UNIDENTIFIED: "warn", CLAIMS_IDENTITY_UNVERIFIED: "info", ANSWERED_NOT_IDENTITY: "bad", NO_PUBLIC_METADATA: "warn", PAIRED: "ok",
   };
   const pillText = {
     NOT_CONFIGURED: "Not set", NOT_CHECKED: "Not checked", STALE: "Stale", UNREACHABLE: "Unreachable",
-    PORT_OPEN_UNIDENTIFIED: "Unidentified", CLAIMS_IDENTITY_UNVERIFIED: "Found · unverified", ANSWERED_NOT_IDENTITY: "Wrong program",
+    PORT_OPEN_UNIDENTIFIED: "Unidentified", CLAIMS_IDENTITY_UNVERIFIED: "Found · not paired", ANSWERED_NOT_IDENTITY: "Wrong program", PAIRED: "Paired",
   };
 
   function facts(dl, rows) {
@@ -125,6 +125,7 @@
       me.log_error ? ["Log", me.log_error] : null,
     ].filter(Boolean));
     renderDep("id", s.identity);
+    renderInstall(s);
     renderDep("en", s.engine);
 
     const n = s.next_action;
@@ -132,7 +133,8 @@
     $("next-detail").textContent = n.detail;
     const nb = $("next-btn");
     nb.textContent = { set_identity: "Enter Identity address", fix_profile: "Enter Identity address", wrong_identity: "Change Identity address",
-      recheck: "Check now", start_identity: "Re-check after starting Identity", blocked_contract: "Read what Identity must add" }[n.code] || "Re-check now";
+      recheck: "Check now", start_identity: "Re-check after starting Identity", pair_identity: "Enter pairing code",
+      check_access: "Check access", install_engine: "Install Thought Engine", not_allowed: "Check again", installed: "Verify files" }[n.code] || "Re-check now";
     nb.dataset.code = n.code;
 
     const ops = $("ops"); ops.replaceChildren();
@@ -156,6 +158,95 @@
     for (const k of ["entity", "feature", "instance"]) { $("sel-" + k).textContent = sel[k].label; $("sel-" + k + "-why").textContent = sel[k].why; }
     $("checked").textContent = "Page updated " + t(s.self.server_time) + ". Checks repeat every 10 s while this page is open.";
   }
+
+  const fmtBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+  let instTimer = null;
+  function renderInstall(s) {
+    const iv = s.install, pr = s.pairing, idState = s.identity.state;
+    const pill = $("inst-pill"), status = $("inst-status"), next = $("inst-next"), acts = $("inst-actions");
+    const paired = pr.paired && idState === "PAIRED";
+    let pillText = "Not installed", pillCls = "", statusText = "", nextText = "";
+    acts.replaceChildren();
+    const btn = (label, path, cls) => { const b = el("button", { type: "button", class: cls || "" }, label); b.addEventListener("click", () => instAct(path)); acts.append(b); return b; };
+    $("pair-form").hidden = true;
+    if (!s.identity.configured) {
+      statusText = "Tell Processor where Identity runs (Identity card below), then pair.";
+    } else if (!(idState === "CLAIMS_IDENTITY_UNVERIFIED" || idState === "PAIRED")) {
+      statusText = "Identity isn't answering at " + s.identity.configured.replace("http://", "") + ".";
+      nextText = "Start Identity, then press Re-check now.";
+    } else if (!paired) {
+      statusText = "Identity found. Pair once so Processor can ask it whether you may install Thought Engine.";
+      nextText = "In Identity: Manage → Thought Processor → Pair Thought Processor. Type the code it shows here.";
+      $("pair-form").hidden = false;
+    }
+    if (paired) {
+      const a = iv.access, p = iv.problem;
+      if (iv.busy) {
+        pillText = iv.phase === "DOWNLOADING" ? "Downloading" : iv.phase === "VERIFYING" ? "Verifying" : "Checking"; pillCls = "info";
+        statusText = { CHECKING: "Asking Identity…", DOWNLOADING: "Downloading through Identity…", VERIFYING: "Checking the SHA-256 checksum…" }[iv.phase] || iv.phase;
+      } else if (iv.installed) {
+        pillText = iv.verify === "FILES_CHANGED" ? "Files changed" : "Installed"; pillCls = iv.verify === "FILES_CHANGED" ? "bad" : "ok";
+        statusText = iv.verify === "FILES_CHANGED" ? "The installed Thought Engine files no longer match what was installed." : "Thought Engine " + iv.installed.tag + " is installed.";
+        nextText = iv.verify === "FILES_CHANGED" ? "Reinstall it." : "Starting it from Processor comes next; for now run it yourself from the folder below.";
+        btn("Verify files", "/api/te/verify"); btn("Check for a newer version", "/api/te/check", "quiet"); btn("Reinstall", "/api/te/install", "quiet"); btn("Uninstall", "/api/te/uninstall", "quiet");
+      } else if (a && a.allowed) {
+        pillText = "Allowed"; pillCls = "ok";
+        statusText = "You're allowed to install Thought Engine — " + a.reason;
+        nextText = iv.release ? "Latest version " + iv.release.tag + " (" + fmtBytes(iv.release.size) + ")." : "";
+        btn("Install Thought Engine", "/api/te/install", "primary"); btn("Check again", "/api/te/check", "quiet");
+      } else if (a) {
+        pillText = a.state === "NOT_ALLOWED" ? "Not allowed" : a.state === "CHECK_FAILED" ? "Couldn't check" : "Sign in needed"; pillCls = "warn";
+        statusText = a.reason; nextText = a.next_step;
+        btn("Check again", "/api/te/check", "primary");
+      } else {
+        statusText = "Paired with Identity " + (pr.identity_system_id || "") + ". Not checked yet.";
+        btn("Check access", "/api/te/check", "primary");
+      }
+      if (p && !iv.busy) {
+        const m = $("inst-msg");
+        m.className = "msg " + (p.code === "ALREADY_INSTALLED" ? "" : "err");
+        m.textContent = p.message + (p.next_step ? " " + p.next_step : "");
+        if (!a || !iv.installed) { statusText = statusText || p.message; nextText = nextText || p.next_step; }
+      }
+      const un = el("button", { type: "button", class: "quiet" }, "Unpair");
+      un.addEventListener("click", () => { if (confirm("Unpair from Identity? Also unpair it in Identity to revoke the token there.")) instAct("/api/identity/unpair"); });
+      acts.append(un);
+    }
+    pill.textContent = pillText; pill.className = "pill " + pillCls;
+    status.textContent = statusText; next.textContent = nextText ? "What to do: " + nextText : "";
+    const prog = $("inst-progress");
+    prog.hidden = !(iv.busy && iv.phase === "DOWNLOADING" && iv.size);
+    if (!prog.hidden) $("inst-bar").style.width = Math.min(100, Math.round(100 * iv.got / iv.size)) + "%";
+    const rows = [];
+    if (paired) rows.push(["Identity", (pr.identity_system_id || "?") + " · paired " + t(pr.paired_at)]);
+    if (iv.access) rows.push(["Decision", iv.access.state + " · rule " + iv.access.rule + " · " + (iv.access.account ? iv.access.account.login : "no account") + " · " + iv.access.decision_id + " · " + ago(iv.access.checked_at)]);
+    if (iv.release && !iv.installed) rows.push(["Release", iv.release.tag + " · " + iv.release.asset + " · sha256 " + iv.release.sha256.slice(0, 16) + "…"]);
+    if (iv.installed) {
+      rows.push(["Version", iv.installed.tag + " · " + iv.installed.asset + " · " + fmtBytes(iv.installed.size)]);
+      rows.push(["SHA-256", iv.installed.sha256]);
+      rows.push(["Folder", iv.installed.path]);
+      rows.push(["Installed", t(iv.installed.installed_at) + " · by " + iv.installed.account + " · decision " + iv.installed.decision_id]);
+    }
+    rows.push(["This computer", iv.platform]);
+    facts($("inst-facts"), rows);
+    if (iv.busy && !instTimer) instTimer = setInterval(() => refresh(false), 700);
+    if (!iv.busy && instTimer) { clearInterval(instTimer); instTimer = null; }
+  }
+
+  async function instAct(path) {
+    $("inst-msg").textContent = "";
+    const r = await api("POST", path);
+    if (r.ok) render(r.data);
+    else { $("inst-msg").className = "msg err"; $("inst-msg").textContent = (r.data && (r.data.message + (r.data.next_step ? " " + r.data.next_step : ""))) || ("HTTP " + r.status); }
+  }
+
+  $("pair-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await api("POST", "/api/identity/pair", { code: $("pair-code").value.trim() });
+    const m = $("inst-msg");
+    if (r.ok) { $("pair-code").value = ""; m.className = "msg"; m.textContent = "Paired with Identity."; render(r.data); }
+    else { m.className = "msg err"; m.textContent = (r.data && (r.data.message + (r.data.next_step ? " " + r.data.next_step : ""))) || "Pairing failed."; }
+  });
 
   function renderLogs() {
     const kind = $("log-kind").value;
@@ -246,7 +337,10 @@
   $("recheck").addEventListener("click", () => refresh(true));
   $("next-btn").addEventListener("click", () => {
     const code = $("next-btn").dataset.code;
-    if (code === "blocked_contract") { window.open($("deps-link").href, "_blank", "noopener,noreferrer"); return; }
+    if (code === "pair_identity") { $("pair-code").focus(); return; }
+    if (code === "check_access" || code === "not_allowed") { instAct("/api/te/check"); return; }
+    if (code === "install_engine") { instAct("/api/te/install"); return; }
+    if (code === "installed") { instAct("/api/te/verify"); return; }
     if (code === "recheck" || code === "start_identity") { refresh(true); return; }
     $("identity-addr").focus(); $("identity-addr").select();
   });

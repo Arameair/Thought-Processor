@@ -106,3 +106,9 @@ select { font: inherit; font-size: .9rem; padding: 6px 8px; border-radius: 8px; 
 .stages li { background: var(--bg); border-radius: 8px; padding: 6px 8px; font-size: .78rem; }
 .stages b { display: block; font-size: .8rem; }
 .metrics { grid-template-columns: max-content minmax(0, 1fr); }
+
+.install .inst-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.install .inst-head h2 { margin: 0; }
+.bar-wrap { height: 8px; background: rgba(127,127,127,.2); border-radius: 6px; overflow: hidden; margin: 10px 0; }
+.bar { height: 100%; width: 0; background: currentColor; opacity: .6; transition: width .3s; }
+#deps > summary { font-weight: 600; cursor: pointer; }

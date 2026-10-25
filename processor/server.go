@@ -38,6 +38,11 @@ type App struct {
 	metrics *Metrics
 	flow    *Flow
 
+	procID  string
+	pairing *Pairing // nil = not paired
+	pairErr string
+	inst    *Installer
+
 	shutdownOnce sync.Once
 	shutdownReq  chan struct{}
 }
@@ -54,6 +59,16 @@ func NewApp(prof *Profile, port int, b BuildInfo, t0 time.Time) (*App, error) {
 		a.log.Add("profile", "candidates_unreadable", "", "saved addresses could not be used; file left unchanged")
 	}
 	a.cands = c
+	if a.procID, err = prof.ProcessorID(); err != nil {
+		return nil, fmt.Errorf("instance id: %w", err)
+	}
+	if pr, err := prof.LoadPairing(); err != nil {
+		a.pairErr = err.Error()
+		a.log.Add("pairing", "pairing_unreadable", "", "saved Identity pairing could not be used; file left unchanged")
+	} else {
+		a.pairing = pr
+	}
+	a.inst = NewInstaller(prof.Dir)
 	if err := prof.WriteCode(a.sess.Code()); err != nil {
 		return nil, fmt.Errorf("can't write operator code to profile: %w", err)
 	}
@@ -227,6 +242,7 @@ func (a *App) Routes() *http.ServeMux {
 		writeJSON(w, 200, a.State())
 	}))
 	m.HandleFunc("POST /api/engine/{action}", a.wrap(mutate, a.handleProtected))
+	a.installRoutes(m)
 	m.HandleFunc("POST /api/shutdown", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var in struct{}
 		if err := readStrict(r, &in); err != nil {
@@ -457,6 +473,13 @@ func (a *App) State() map[string]any {
 
 	avail, availWhy := a.auth.Available()
 	id := identityView(c.Identity, idp, now, avail, availWhy)
+	a.mu.Lock()
+	pr := a.pairing
+	a.mu.Unlock()
+	if pr != nil && "http://"+strings.TrimPrefix(c.Identity, "http://") == pr.IdentityAddress && id.State == "CLAIMS_IDENTITY_UNVERIFIED" {
+		id.State, id.Label = "PAIRED", "Paired — Identity's answers are checked with the pairing key"
+		id.Approval = "Install access: asked per request; lifecycle (start/attach/stop): not available yet"
+	}
 	en := engineView(c.Engine, enp, now)
 
 	ops := []Operation{}
@@ -493,7 +516,9 @@ func (a *App) State() map[string]any {
 		"operations":   ops,
 		"capabilities": a.capabilities(),
 		"selection":    selection(c, enp),
-		"next_action":  nextAction(c, idp, enp, now, candErr),
+		"next_action":  a.nextAction(c, idp, enp, now, candErr),
+		"install":      a.inst.View(),
+		"pairing":      a.pairingView(),
 		"log":          a.log.Recent(40),
 	}
 }
@@ -541,7 +566,7 @@ func engineView(addr string, p *ProbeResult, now time.Time) DepView {
 	return v
 }
 
-func nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr string) NextAction {
+func (a *App) nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr string) NextAction {
 	switch {
 	case candErr != "":
 		return NextAction{"fix_profile", "Fix the saved addresses", "The profile's candidates.json could not be used and was left unchanged. Re-enter the Identity address below to replace it.", "identity-addr"}
@@ -553,8 +578,22 @@ func nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr stri
 		return NextAction{"start_identity", "Start Identity yourself, then re-check", "Nothing answers at " + c.Identity + ". Processor will not start Identity for you. Start it the way you normally do, or correct the address.", "recheck"}
 	case !(idp.Metadata == "RESPONDED" && idp.ClaimMatches):
 		return NextAction{"wrong_identity", "Check the Identity address", "Something is listening at " + c.Identity + " but it does not identify itself as Identity. It may be a different program or an Identity build without public health metadata.", "identity-addr"}
+	}
+	a.mu.Lock()
+	pr := a.pairing
+	a.mu.Unlock()
+	iv := a.inst.View()
+	switch {
+	case pr == nil || pr.IdentityAddress != c.Identity:
+		return NextAction{"pair_identity", "Pair with Identity", "Identity answers at " + c.Identity + ". Pair once so Processor can ask it whether you may install Thought Engine: in Identity open Manage → Thought Processor → Pair Thought Processor, then type the code below.", "pair-code"}
+	case iv.Installed != nil:
+		return NextAction{"installed", "Thought Engine " + iv.Installed.Tag + " is installed", "Installed under Identity decision " + iv.Installed.DecisionID + ". Starting it from Processor comes next; for now start it yourself.", "install"}
+	case iv.Access == nil:
+		return NextAction{"check_access", "Check whether you may install Thought Engine", "Processor asks Identity, which answers from your GitHub sign-in.", "install"}
+	case iv.Access.Allowed:
+		return NextAction{"install_engine", "You're allowed to install Thought Engine", iv.Access.Reason, "install"}
 	default:
-		return NextAction{"blocked_contract", "Engine control is blocked — waiting on Identity", "Identity answers (unverified), but it has no service that can approve starting, attaching or stopping a Thought Engine. Read the dependency request to see exactly what Identity and the Engine must add. Until then Processor can only diagnose.", "deps"}
+		return NextAction{"not_allowed", "Not allowed to install Thought Engine yet", iv.Access.Reason + " " + iv.Access.NextStep, "install"}
 	}
 }
 
@@ -568,7 +607,8 @@ func (a *App) capabilities() []Capability {
 		{"identity_probe", "Look at an explicitly entered Identity address", "WORKING", "TCP check + public GET /api/health; result labeled unverified"},
 		{"engine_probe", "Look at an explicitly entered Engine address", "WORKING", "TCP check only; Engine status is private until attached"},
 		{"copy_context", "Copy a sanitized diagnostic summary", "WORKING", "allowlisted fields; no codes, cookies, bodies or remote claims"},
-		{"identity_authentication", "Prove the Identity candidate is genuine", "UNAVAILABLE", "Identity exposes no peer-authentication mechanism"},
+		{"identity_authentication", "Prove answers come from the paired Identity", "WORKING", "one-time pairing code → token kept in the profile; every answer carries an HMAC proof keyed by it"},
+		{"engine_install", "Install Thought Engine if Identity allows it", "WORKING", "rule repo-visibility-v0 decided by Identity; download via Identity; SHA-256 checked before install"},
 		{"lifecycle_approval", "Ask Identity to approve start / attach / stop", "BLOCKED", why},
 		{"runner", "Start or stop an approved Engine executable", "BLOCKED", "no shared bounded runner exists; this build deliberately contains none"},
 		{"engine_attach", "Read Engine status/queue/worker after approval", "BLOCKED", "requires lifecycle approval + Engine-side validation (neither exists)"},
@@ -634,7 +674,33 @@ func (a *App) CopyContext() string {
 	for _, e := range a.log.Recent(20) {
 		fmt.Fprintf(&w, "  %s %s/%s %s\n", e.At.Format("15:04:05"), e.Kind, e.Code, e.OpID)
 	}
-	fmt.Fprintf(&w, "omitted by design: operator code, session cookies, CSRF tokens, request bodies, environment variables, text returned by other programs (claims), log detail text\n")
+	iv := a.inst.View()
+	a.mu.Lock()
+	pr := a.pairing
+	a.mu.Unlock()
+	if pr != nil {
+		fmt.Fprintf(&w, "pairing: paired with %s (identity %s, since %s)\n", pr.IdentityAddress, pr.IdentitySystemID, pr.PairedAt.Format(time.RFC3339))
+	} else {
+		fmt.Fprintf(&w, "pairing: not paired\n")
+	}
+	fmt.Fprintf(&w, "install: phase=%s platform=%s verify=%s\n", iv.Phase, iv.Platform, iv.Verify)
+	if iv.Access != nil {
+		login := "-"
+		if iv.Access.Account != nil {
+			login = iv.Access.Account.Login
+		}
+		fmt.Fprintf(&w, "  access: %s rule=%s account=%s decision=%s checked=%s\n", iv.Access.State, iv.Access.Rule, login, iv.Access.DecisionID, iv.Access.CheckedAt.Format(time.RFC3339))
+	}
+	if iv.Release != nil {
+		fmt.Fprintf(&w, "  release: %s %s size=%d sha256=%s\n", iv.Release.Tag, iv.Release.Asset, iv.Release.Size, iv.Release.SHA256)
+	}
+	if iv.Installed != nil {
+		fmt.Fprintf(&w, "  installed: %s %s sha256=%s at %s decision=%s\n", iv.Installed.Tag, iv.Installed.Asset, iv.Installed.SHA256, iv.Installed.InstalledAt.Format(time.RFC3339), iv.Installed.DecisionID)
+	}
+	if iv.Problem != nil {
+		fmt.Fprintf(&w, "  problem: %s\n", iv.Problem.Code)
+	}
+	fmt.Fprintf(&w, "omitted by design: pairing token, operator code, session cookies, CSRF tokens, request bodies, environment variables, text returned by other programs (claims), log detail text\n")
 	out := w.String()
 	if len(out) > 8192 {
 		out = out[:8192] + "\n[truncated at 8 KiB]\n"
