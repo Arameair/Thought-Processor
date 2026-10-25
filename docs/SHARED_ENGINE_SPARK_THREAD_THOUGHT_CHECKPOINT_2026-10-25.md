@@ -1,3 +1,5 @@
+> **DESIGN RECONCILIATION — later owner decisions (2026-10-25):** Read [Owner Design Alignment](OWNER_DESIGN_ALIGNMENT_2026-10-25.md) first. It supersedes conflicting **proposals** below: newly created identities begin without optional features or approved data sources; an installed feature can be reused by multiple identities but access to each source starts empty and requires explicit Identity-profile authorization; source features prepare common-format Sparks from selected information, Engine/worker relate Sparks into **Threads** then identity-owned Thoughts; Attention/Decay are optional processing features and never rewrite Spark evidence. Existing Engine `Spark → Trace → Thought` describes the old prototype, not adopted Thread semantics. This document remains useful historical research; unresolved first-launch UI, protocols and Memory details remain OPEN. No code/build/promotion authorized.
+
 # Design checkpoint — shared features, Sparks, Threads and identity-owned Thoughts
 
 **2026-10-25 · Owner + ChatGPT discussion · DESIGN ONLY**
