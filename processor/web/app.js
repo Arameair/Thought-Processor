@@ -60,6 +60,7 @@
     else { show("signin"); $("code").focus(); return; }
     show("app");
     await refresh(true);
+    loadLink();
     timer = setInterval(() => refresh(true), 10000);
   }
 
@@ -72,10 +73,12 @@
   const pillClass = {
     NOT_CONFIGURED: "", NOT_CHECKED: "", STALE: "warn", UNREACHABLE: "bad",
     PORT_OPEN_UNIDENTIFIED: "warn", CLAIMS_IDENTITY_UNVERIFIED: "info", ANSWERED_NOT_IDENTITY: "bad", NO_PUBLIC_METADATA: "warn",
+    CLAIMS_ENGINE: "info", ANSWERED_NOT_ENGINE: "bad",
   };
   const pillText = {
     NOT_CONFIGURED: "Not set", NOT_CHECKED: "Not checked", STALE: "Stale", UNREACHABLE: "Unreachable",
     PORT_OPEN_UNIDENTIFIED: "Unidentified", CLAIMS_IDENTITY_UNVERIFIED: "Found · unverified", ANSWERED_NOT_IDENTITY: "Wrong program",
+    CLAIMS_ENGINE: "Running", ANSWERED_NOT_ENGINE: "Wrong program", NO_PUBLIC_METADATA: "No contract",
   };
 
   function facts(dl, rows) {
@@ -93,7 +96,7 @@
       const p = d.probe;
       rows.push(["Checked", t(p.checked_at) + " (" + ago(p.checked_at) + ", " + p.elapsed_ms + " ms)"]);
       rows.push(["Port", p.port]);
-      if (prefix === "id") {
+      {
         rows.push(["Metadata", p.metadata + (p.http_status ? " · HTTP " + p.http_status : "")]);
         if (p.claimed_app || p.claimed_version) {
           const dd = el("span", null, el("span", { class: "claim" }, (p.claimed_app || "?") + " " + (p.claimed_version || "")), el("span", { class: "unv" }, "UNVERIFIED CLAIM"));
@@ -131,8 +134,10 @@
     $("next-title").textContent = n.title;
     $("next-detail").textContent = n.detail;
     const nb = $("next-btn");
-    nb.textContent = { set_identity: "Enter Identity address", fix_profile: "Enter Identity address", wrong_identity: "Change Identity address",
-      recheck: "Check now", start_identity: "Re-check after starting Identity", blocked_contract: "Read what Identity must add" }[n.code] || "Re-check now";
+    nb.textContent = { set_engine: "Enter Engine address", fix_profile: "Enter Engine address", wrong_engine: "Change Engine address",
+      recheck: "Check now", start_engine: "Re-check after starting the Engine", attach_engine: "Type the attach code",
+      create_identity: "Create an identity", turn_on: "Switch Thought Processing on", start_worker: "Re-check after starting Chat-Jimmy",
+      observe: "Type an observation" }[n.code] || "Re-check now";
     nb.dataset.code = n.code;
 
     const ops = $("ops"); ops.replaceChildren();
@@ -246,9 +251,119 @@
   $("recheck").addEventListener("click", () => refresh(true));
   $("next-btn").addEventListener("click", () => {
     const code = $("next-btn").dataset.code;
-    if (code === "blocked_contract") { window.open($("deps-link").href, "_blank", "noopener,noreferrer"); return; }
-    if (code === "recheck" || code === "start_identity") { refresh(true); return; }
-    $("identity-addr").focus(); $("identity-addr").select();
+    if (code === "recheck" || code === "start_engine" || code === "start_worker") { refresh(true); return; }
+    if (code === "turn_on") { $("proc-toggle").click(); return; }
+    const f = $(state && state.next_action.focus) || $("engine-addr");
+    if (code === "set_engine" && !f.value) f.value = "127.0.0.1:7798";
+    f.focus(); if (f.select) f.select();
+  });
+
+  // ---------- Thought Engine link ----------
+  let link = null, linkTimer = null;
+  const obsPill = { waiting_for_ai: "warn", queued: "info", processing: "info", done: "ok", failed: "bad", denied: "bad" };
+  const obsWord = { waiting_for_ai: "Waiting for AI", queued: "Queued", processing: "Processing", done: "Done", failed: "Failed", denied: "Not processed" };
+  const linkPill = { ATTACHED: ["ok", "Attached"], NOT_ATTACHED: ["info", "Not attached"], ENGINE_NOT_RUNNING: ["bad", "Not running"],
+    NOT_THOUGHT_ENGINE: ["bad", "Wrong program"], ATTACHMENT_REFUSED: ["bad", "Key refused"], ATTACHED_OTHER_ADDRESS: ["warn", "Other address"], NO_ENGINE_ADDRESS: ["", "Not set"] };
+
+  async function loadLink() {
+    const r = await api("GET", "/api/link");
+    if (r.status === 401) { show("signin"); return; }
+    if (r.ok) renderLink(r.data);
+  }
+
+  function renderLink(v) {
+    link = v;
+    const [cls, word] = linkPill[v.state] || ["", v.state];
+    $("link-pill").className = "pill " + cls; $("link-pill").textContent = word;
+    $("link-label").textContent = v.label;
+    $("link-detail").textContent = v.detail;
+    $("link-problem").hidden = !v.problem; $("link-problem").textContent = v.problem || "";
+    const canAttach = ["NOT_ATTACHED", "ATTACHMENT_REFUSED", "ATTACHED_OTHER_ADDRESS"].includes(v.state);
+    $("attach-form").hidden = !canAttach;
+    const att = v.state === "ATTACHED";
+    $("attached").hidden = !att;
+    const st = v.engine_status || {};
+    const fixture = !!(st.engine && st.engine.test_fixture_worker) || !!(st.worker && st.worker.test_fixture);
+    $("fixture-banner").hidden = !(att && fixture);
+    if (!att) { schedule(v); return; }
+    const w = st.worker || {}, eng = st.engine || {};
+    facts($("link-facts"), [
+      ["Engine", (eng.version || "?") + " · " + (eng.branch || "?") + " @ " + (eng.commit || "?") + " · pid " + (eng.pid || "?")],
+      ["AI worker", el("span", null, el("span", { class: "pill " + (w.state === "READY" ? (w.test_fixture ? "warn" : "ok") : "warn") }, w.label || w.state || "?"), " ", w.detail || "")],
+      ["Waiting", String(st.waiting ?? 0) + " observation(s) saved, waiting for the AI worker"],
+      ["Engine loop", st.loop || "—"],
+      ["Attachment", v.attachment_id + " since " + t(v.attached_at)],
+    ]);
+    $("link-open").href = v.open_url || "#";
+    const sel = $("id-select"); const prev = v.entity_id || "";
+    sel.replaceChildren(el("option", { value: "" }, (st.identities || []).length ? "— choose —" : "— none yet —"));
+    for (const id of st.identities || []) {
+      const o = el("option", { value: id.entity_id }, id.display_name + (id.thought_processing ? " · on" : " · off"));
+      if (id.entity_id === prev) o.selected = true;
+      sel.append(o);
+    }
+    const act = v.activity;
+    const on = !!(act && act.identity && act.identity.thought_processing);
+    const tg = $("proc-toggle");
+    tg.hidden = !act; tg.textContent = on ? "Thought Processing: ON — switch off" : "Thought Processing: OFF — switch on";
+    tg.className = on ? "" : "primary"; tg.dataset.on = on ? "1" : "";
+    $("obs-send").disabled = !(act && on);
+    $("obs-text").disabled = !(act && on);
+    $("obs-text").title = act ? (on ? "" : "Switch Thought Processing on first") : "Choose or create an identity first";
+    const tl = $("thoughts"); tl.replaceChildren();
+    for (const th of (act && act.thoughts) || []) {
+      tl.append(el("li", null, el("span", { class: "q" }, th.question),
+        th.test_fixture ? el("span", { class: "pill warn" }, "TEST FIXTURE") : null, " ",
+        el("span", { class: "muted small" }, "topic " + th.topic + " · " + th.state + " · " + th.trace_count + " trace(s) · question by " + th.question_by + " · " + t(th.created_at))));
+    }
+    if (!tl.children.length) tl.append(el("li", { class: "muted" }, act ? "No Thought yet. " + (st.rule ? "Rule: " + st.rule : "") : "Choose an identity to see its Thoughts."));
+    const ol = $("obs-list"); ol.replaceChildren();
+    for (const o of (act && act.observations) || []) {
+      ol.append(el("li", null, el("span", { class: "pill " + (obsPill[o.state] || "") }, obsWord[o.state] || o.state), " ",
+        el("span", { class: "txt" }, o.text), el("span", { class: "st" }, t(o.received_at) + " · " + o.state_text)));
+    }
+    if (!ol.children.length) ol.append(el("li", { class: "muted" }, "Nothing sent yet."));
+    $("link-rule").textContent = st.rule ? "Engine rule: " + st.rule : "";
+    schedule(v);
+  }
+
+  // Poll quickly while something is in flight, slowly otherwise.
+  function schedule(v) {
+    clearTimeout(linkTimer);
+    const busy = v.state === "ATTACHED" && v.activity && (v.activity.observations || []).some((o) => ["waiting_for_ai", "queued", "processing"].includes(o.state));
+    const a = document.activeElement;
+    linkTimer = setTimeout(() => { if (!document.hidden && !(a && a.id === "attach-code" && a.value)) loadLink(); else schedule(v); }, busy ? 1000 : 3000);
+  }
+
+  async function linkAction(path, body, msgId) {
+    const r = await api("POST", path, body);
+    const m = $(msgId);
+    if (!r.ok) { m.className = "msg err"; m.textContent = (r.data && r.data.message) || ("HTTP " + r.status); return null; }
+    m.className = "msg"; m.textContent = "";
+    renderLink(r.data.link || r.data);
+    refresh(false);
+    return r.data;
+  }
+  $("attach-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = $("attach-code").value.trim();
+    if (!code) return;
+    $("attach-code").value = ""; // never keep the code on screen
+    if (await linkAction("/api/link/attach", { code }, "attach-msg")) $("attach-msg").textContent = "Attached. The Engine now knows this Processor's key; the code is used up.";
+  });
+  $("link-detach").addEventListener("click", async () => {
+    if (!confirm("Detach from this Thought Engine? Its data stays; you'd need a new attach code.")) return;
+    linkAction("/api/link/detach", {}, "attach-msg");
+  });
+  $("id-select").addEventListener("change", () => { if ($("id-select").value) linkAction("/api/link/select", { entity_id: $("id-select").value }, "obs-msg"); });
+  $("id-create").addEventListener("click", () => linkAction("/api/link/identity", { display_name: $("id-name").value }, "obs-msg"));
+  $("proc-toggle").addEventListener("click", () => linkAction("/api/link/processing", { enabled: !$("proc-toggle").dataset.on }, "obs-msg"));
+  $("obs-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = $("obs-text").value.trim();
+    if (!text) return;
+    const d = await linkAction("/api/link/observe", { text }, "obs-msg");
+    if (d) { $("obs-text").value = ""; $("obs-msg").textContent = "Sent — the Engine saved it. " + ((d.observation && d.observation.state_text) || ""); $("obs-text").focus(); }
   });
 
   async function askServer(action) {

@@ -106,3 +106,19 @@ select { font: inherit; font-size: .9rem; padding: 6px 8px; border-radius: 8px; 
 .stages li { background: var(--bg); border-radius: 8px; padding: 6px 8px; font-size: .78rem; }
 .stages b { display: block; font-size: .8rem; }
 .metrics { grid-template-columns: max-content minmax(0, 1fr); }
+
+[hidden] { display: none !important; }
+.link { border-left: 4px solid var(--accent); }
+.fixture { margin: 6px 0 10px; padding: 8px 12px; border-radius: 8px; font-size: .9rem; color: #fff;
+  background: repeating-linear-gradient(45deg, #8a5a00, #8a5a00 12px, #6d4700 12px, #6d4700 24px); }
+.btnlike { display: inline-block; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-decoration: none; font-size: .9rem; }
+.btnlike:hover { border-color: var(--accent); }
+.idrow { margin: 10px 0; align-items: center; }
+#obs-text { flex: 1; min-width: 220px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 8px; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.thoughts, .obslist { list-style: none; padding: 0; margin: 6px 0 0; }
+.thoughts li, .obslist li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: .88rem; }
+.thoughts .q { font-weight: 650; font-size: .98rem; display: block; margin-bottom: 2px; }
+.obslist .txt { font-weight: 600; }
+.obslist .st { display: block; color: var(--muted); font-size: .8rem; margin-top: 2px; }

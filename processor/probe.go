@@ -22,9 +22,9 @@ import (
 //
 // Identity: some Identity experiments expose GET /api/health returning only
 // {"app","version"}; that is public metadata, so it may be read.
-// Thought Engine: its only read endpoint (/api/status) returns entity cards,
-// activity log and grant state — NOT public metadata — so before approval
-// Processor checks only whether the TCP port accepts connections.
+// Thought Engine: GET /api/health is its public self-description (app,
+// version, protocol; nothing private), so it may be read. Its private status
+// is read only through an owner-approved attachment (enginelink.go).
 
 const (
 	tcpTimeout    = 800 * time.Millisecond
@@ -88,6 +88,7 @@ type ProbeResult struct {
 	// UNVERIFIED label; never included in Copy Context.
 	ClaimedApp     string `json:"claimed_app,omitempty"`
 	ClaimedVersion string `json:"claimed_version,omitempty"`
+	ClaimedProto   string `json:"claimed_protocol,omitempty"`
 	ClaimMatches   bool   `json:"claim_matches"`
 	Note           string `json:"note"`
 }
@@ -176,9 +177,43 @@ func ProbeEngine(ctx context.Context, target string) ProbeResult {
 	t0 := time.Now()
 	r := ProbeResult{Target: target, CheckedAt: t0.UTC(), Metadata: "NOT_REQUESTED"}
 	r.Port, r.Note = probeTCP(ctx, target)
+	if r.Port != "OPEN" {
+		r.ElapsedMS = time.Since(t0).Milliseconds()
+		return r
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target+"/api/health", nil)
+	req.Header.Set("Accept", "application/json")
+	resp, err := probeClient.Do(req)
 	r.ElapsedMS = time.Since(t0).Milliseconds()
-	if r.Port == "OPEN" {
-		r.Note = "something is listening. Processor did NOT read it: the Engine's status endpoint contains private entity and log data, which needs an approved attachment first."
+	if err != nil {
+		r.Metadata, r.Note = "FAILED", "port open but the public health request failed or timed out"
+		return r
+	}
+	defer resp.Body.Close()
+	r.HTTPStatus = resp.StatusCode
+	if resp.StatusCode != http.StatusOK {
+		r.Metadata = "NO_PUBLIC_METADATA"
+		r.Note = fmt.Sprintf("port open; GET /api/health answered %d. An Engine build without the Processor contract (e.g. experiment/thought-engine-v1-20261023) looks like this: use experiment/engine-processor-loop-20261026.", resp.StatusCode)
+		return r
+	}
+	var m map[string]any
+	if err := json.NewDecoder(io.LimitReader(resp.Body, healthMaxBody)).Decode(&m); err != nil {
+		r.Metadata, r.Note = "UNREADABLE", "port open; /api/health did not return a small JSON object"
+		return r
+	}
+	app, _ := m["app"].(string)
+	ver, _ := m["version"].(string)
+	proto, _ := m["protocol"].(string)
+	r.ClaimedApp, r.ClaimedVersion, r.ClaimedProto = sanitizeClaim(app), sanitizeClaim(ver), sanitizeClaim(strings.ReplaceAll(proto, "/", "."))
+	r.Metadata = "RESPONDED"
+	r.ClaimMatches = r.ClaimedApp == "thought-engine" && strings.HasPrefix(proto, engineProtocolPrefix)
+	switch {
+	case r.ClaimMatches:
+		r.Note = "it says it is Thought Engine with the Processor contract. A self-description, not proof; the attachment is what Processor relies on."
+	case r.ClaimedApp == "thought-engine":
+		r.Note = "it says it is Thought Engine, but not with the Processor contract this Processor speaks"
+	default:
+		r.Note = "it answered, but does not say it is Thought Engine — check the port"
 	}
 	return r
 }

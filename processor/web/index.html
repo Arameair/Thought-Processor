@@ -41,6 +41,46 @@
       <button id="next-btn" type="button" class="primary next-btn"></button>
     </section>
 
+    <section class="card link" id="link" aria-labelledby="link-title">
+      <header><h2 id="link-title">Thought Engine — attach and send observations</h2><span id="link-pill" class="pill"></span></header>
+      <div id="fixture-banner" class="fixture" hidden><b>TEST FIXTURE.</b> The Engine's AI worker is a rule-made stand-in — not Chat-Jimmy, not AI. Everything it produces is labelled TEST FIXTURE.</div>
+      <p id="link-label" class="label"></p>
+      <p id="link-detail" class="muted small"></p>
+      <p id="link-problem" class="msg err" role="status" hidden></p>
+      <form id="attach-form" class="row" hidden>
+        <label for="attach-code" class="sr">Engine attach code</label>
+        <input id="attach-code" autocomplete="off" spellcheck="false" placeholder="attach code, e.g. ABCD-EFGH" maxlength="12">
+        <button type="submit" class="primary">Attach</button>
+      </form>
+      <p id="attach-msg" class="msg" role="status"></p>
+      <div id="attached" hidden>
+        <dl id="link-facts"></dl>
+        <div class="row wrap">
+          <a id="link-open" class="btnlike" href="#" target="_blank" rel="noopener noreferrer">Open the Engine's own page</a>
+          <button id="link-detach" type="button" class="quiet">Detach</button>
+        </div>
+        <div class="row wrap idrow">
+          <label for="id-select" class="small">Identity</label>
+          <select id="id-select"></select>
+          <span class="muted small">or</span>
+          <input id="id-name" placeholder="new identity name" value="TASS" maxlength="80">
+          <button id="id-create" type="button">Create on the Engine</button>
+          <button id="proc-toggle" type="button"></button>
+        </div>
+        <form id="obs-form" class="row">
+          <label for="obs-text" class="sr">Observation</label>
+          <input id="obs-text" maxlength="1000" placeholder="Player entered Goldshire" autocomplete="off">
+          <button type="submit" class="primary" id="obs-send">Send observation</button>
+        </form>
+        <p id="obs-msg" class="msg" role="status"></p>
+        <div class="cols">
+          <div><h3>Thoughts</h3><ol id="thoughts" class="thoughts"></ol></div>
+          <div><h3>Observations <span class="muted small">(newest first)</span></h3><ol id="obs-list" class="obslist"></ol></div>
+        </div>
+        <p class="muted small" id="link-rule"></p>
+      </div>
+    </section>
+
     <section class="card selection" aria-label="What you are looking at">
       <div class="sel"><p class="eyebrow">Entity</p><p id="sel-entity" class="sel-label"></p><p id="sel-entity-why" class="muted small"></p></div>
       <div class="sel"><p class="eyebrow">Feature</p><p id="sel-feature" class="sel-label"></p><p id="sel-feature-why" class="muted small"></p></div>
@@ -54,7 +94,7 @@
         <li><b>Thought Processor</b> (this page) helps you set things up and see what is really happening.</li>
         <li><b>Thought Engine</b> does the actual thinking.</li>
       </ul>
-      <p class="muted small">Starting or attaching an Engine needs Identity's approval, and the part that does the starting must check that approval itself. Running is not the same as permission to receive observations — that is a second, separate approval.</p>
+      <p class="muted small">You start the Engine yourself. Processor attaches only with the Engine's one-time attach code, which only you can see, and the Engine checks Processor's key on every request. Sending observations also needs that identity's Thought Processing switched on, and the Engine enforces that. This attachment is local and interim. It is not yet an Identity grant.</p>
     </details>
 
     <div class="grid">
@@ -80,12 +120,11 @@
         <p id="en-label" class="label"></p>
         <dl id="en-facts"></dl>
         <div class="orig">
-          <button id="en-open" type="button" disabled aria-describedby="en-open-why">Open the Engine's own page</button>
-          <p id="en-open-why" class="muted small">Not available: opening the Engine's own page needs an approved attachment. Processor will not embed, copy or rebuild the Engine's screen.</p>
+          <p id="en-open-why" class="muted small">Once attached, “Open the Engine's own page” appears in the card above. Processor does not embed, copy or rebuild the Engine's screen.</p>
         </div>
         <form id="en-form" class="row">
           <label for="engine-addr" class="sr">Engine address</label>
-          <input id="engine-addr" placeholder="127.0.0.1:PORT" autocomplete="off" spellcheck="false">
+          <input id="engine-addr" placeholder="127.0.0.1:7798" autocomplete="off" spellcheck="false">
           <button type="submit">Save</button>
         </form>
         <p id="en-msg" class="msg" role="status"></p>
@@ -99,7 +138,7 @@
 
     <section class="card" id="deps" aria-labelledby="ops-title">
       <h2 id="ops-title">Engine controls</h2>
-      <p class="muted">These stay off until Identity can approve them and the Engine side can verify that approval. Processor shows why instead of pretending.</p>
+      <p class="muted">Attach and Send work through the card at the top. Start and Stop stay off: this build has no runner, and Identity has no approval service yet. Processor shows why instead of pretending.</p>
       <ul id="ops" class="ops"></ul>
       <details class="inner">
         <summary>Prove it: ask the server anyway</summary>

@@ -4,6 +4,17 @@
 >
 > **Discussion notes (nothing decided, no code):** [Authority to install the Thought Engine](docs/INSTALL_AUTHORITY_DISCUSSION_2026-10-25.md) (start here) · [Design ideas and approaches to look at](docs/DESIGN_IDEAS_TO_LOOK_AT_2026-10-25.md) · [The actual thought process](docs/THOUGHT_PROCESS_DISCUSSION_2026-10-25.md)
 
+> **Branch `alpha-candidate-20261026` — candidate for alpha.** Thought Processor now **attaches to a running Thought Engine** and **sends observations**:
+> - The owner types the Engine's one-time attach code.
+> - The Engine stores only a hash of Processor's key and checks it on every request.
+> - Processor then follows each observation through honest states (waiting for AI / queued / processing / done / failed) to Thoughts, and the attachment survives restarts.
+>
+> Start/stop stay blocked (no runner). Identity grants are separate, still-open work.
+>
+> **Run it:** [AGENTS.md](AGENTS.md) (Windows, step by step: Chat-Jimmy 7791 → Thought Engine 7798 → Processor 7860). Engine side and contract: `Arameair/Thought-engine` branch `experiment/engine-processor-loop-20261026`, `docs/PROCESSOR_CONTRACT.md`.
+>
+> Built on `alpha-candidate-20261025` (the shell that ran for real on 2026-10-25). The notes below describe that shell's earlier trial.
+
 # Thought Processor — Project Controller launch trial
 
 > **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**

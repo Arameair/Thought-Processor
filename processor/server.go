@@ -27,6 +27,7 @@ type App struct {
 	log       *Logbook
 	sess      *Sessions
 	auth      Authority
+	link      *EngineLink
 
 	mu       sync.Mutex
 	cands    Candidates
@@ -34,6 +35,7 @@ type App struct {
 	idProbe  *ProbeResult
 	engProbe *ProbeResult
 	probing  bool
+	lastLink *LinkView
 
 	metrics *Metrics
 	flow    *Flow
@@ -44,7 +46,7 @@ type App struct {
 
 func NewApp(prof *Profile, port int, b BuildInfo, t0 time.Time) (*App, error) {
 	a := &App{prof: prof, port: port, build: b, runID: newID("run_"), started: t0.UTC(),
-		log: OpenLogbook(prof.LogPath()), sess: NewSessions(), auth: noProducer{}, shutdownReq: make(chan struct{}), metrics: NewMetrics(), flow: &Flow{}}
+		log: OpenLogbook(prof.LogPath()), sess: NewSessions(), auth: noProducer{}, shutdownReq: make(chan struct{}), metrics: NewMetrics(), flow: &Flow{}, link: OpenEngineLink(prof.Dir)}
 	if prof.Previous != nil {
 		a.log.Add("lifecycle", "previous_unclean", "", fmt.Sprintf("previous run %s (pid %d) ended without a clean shutdown; nothing was started or stopped because of it", prof.Previous.RunID, prof.Previous.PID))
 	}
@@ -224,9 +226,11 @@ func (a *App) Routes() *http.ServeMux {
 			return
 		}
 		a.Probe(r.Context())
+		a.LinkView(r.Context())
 		writeJSON(w, 200, a.State())
 	}))
 	m.HandleFunc("POST /api/engine/{action}", a.wrap(mutate, a.handleProtected))
+	a.linkRoutes(m)
 	m.HandleFunc("POST /api/shutdown", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var in struct{}
 		if err := readStrict(r, &in); err != nil {
@@ -324,6 +328,13 @@ func (a *App) handleProtected(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"op_id": opID, "status": "REFUSED", "error": "unknown_action", "effects": "none"})
 		return
 	}
+	if act == ActAttach || act == ActObserve {
+		a.log.Add("control", "moved_to_engine_card", opID, string(act)+": this parameterless boundary no longer handles it; use the Engine card (attach code)")
+		writeJSON(w, http.StatusConflict, map[string]any{"op_id": opID, "action": act, "status": "USE_ENGINE_CARD", "error": "moved",
+			"message": "Attach and Send observation work through the Thought Engine card: the owner types the Engine's one-time attach code, and the Engine checks Processor's key on every request.",
+			"effects": "none"})
+		return
+	}
 	var in struct{}
 	if err := readStrict(r, &in); err != nil {
 		a.metrics.Refused(string(act))
@@ -397,8 +408,8 @@ func (a *App) Probe(ctx context.Context) {
 		a.idProbe = idr
 	}
 	if enr != nil && enr.Target == a.cands.Engine {
-		if a.engProbe == nil || a.engProbe.Port != enr.Port {
-			a.log.Add("probe", "engine_"+strings.ToLower(enr.Port), "", "Engine candidate "+enr.Target+": port "+enr.Port+" (contents not read)")
+		if a.engProbe == nil || a.engProbe.Port != enr.Port || a.engProbe.Metadata != enr.Metadata {
+			a.log.Add("probe", "engine_"+strings.ToLower(enr.Port+"_"+enr.Metadata), "", "Engine candidate "+enr.Target+": port "+enr.Port+", public health "+enr.Metadata)
 		}
 		a.engProbe = enr
 	}
@@ -457,18 +468,17 @@ func (a *App) State() map[string]any {
 
 	avail, availWhy := a.auth.Available()
 	id := identityView(c.Identity, idp, now, avail, availWhy)
-	en := engineView(c.Engine, enp, now)
+	en := engineView(c.Engine, enp, now, a.link.snapshot())
 
-	ops := []Operation{}
-	for _, act := range []ProtectedAction{ActStart, ActAttach, ActStop, ActObserve} {
-		reason := "Blocked: Identity has no start/attach/stop approval service, and no runner validates one. Nothing can be started or attached."
-		switch act {
-		case ActStop:
-			reason = "Blocked: this session started no Engine (it cannot start one), and no stop approval/control policy exists."
-		case ActObserve:
-			reason = "Blocked: sending observations is a separate Identity grant enforced by the Engine. No authenticated source or grant is set up here."
-		}
-		ops = append(ops, Operation{Action: act, Label: protectedActions[act], Enabled: false, Status: "BLOCKED", Reason: reason})
+	rec := a.link.snapshot()
+	lv := a.lastLinkView()
+	ops := []Operation{
+		{Action: ActStart, Label: protectedActions[ActStart], Status: "BLOCKED",
+			Reason: "Blocked: this build has no process runner and Identity has no start approval service. Start the Engine yourself (one command, see the runbook)."},
+		attachOp(rec, lv),
+		{Action: ActStop, Label: protectedActions[ActStop], Status: "BLOCKED",
+			Reason: "Blocked: this Processor started no Engine (it cannot start one). Stop the Engine in its own window with Ctrl+C."},
+		observeOp(rec, lv),
 	}
 
 	var prev any
@@ -492,8 +502,8 @@ func (a *App) State() map[string]any {
 		"engine":       en,
 		"operations":   ops,
 		"capabilities": a.capabilities(),
-		"selection":    selection(c, enp),
-		"next_action":  nextAction(c, idp, enp, now, candErr),
+		"selection":    selection(c, enp, a.lastLinkView()),
+		"next_action":  nextAction(c, idp, enp, now, candErr, a.link.snapshot(), a.lastLinkView()),
 		"log":          a.log.Recent(40),
 	}
 }
@@ -522,40 +532,92 @@ func identityView(addr string, p *ProbeResult, now time.Time, avail bool, availW
 	return v
 }
 
-func engineView(addr string, p *ProbeResult, now time.Time) DepView {
+func engineView(addr string, p *ProbeResult, now time.Time, rec linkRecord) DepView {
 	v := DepView{Name: "Thought Engine", Configured: addr, Probe: p, Freshness: freshness(p, now),
-		Approval: "NOT ATTACHED — attaching requires an Identity approval that cannot be obtained yet",
-		Explain:  "Thought Engine does the actual thinking. Processor may only look at it after an approved attachment."}
+		Approval: "NOT ATTACHED — type the Engine's one-time attach code in the card below",
+		Explain:  "Thought Engine does the actual thinking. Processor reads its public health; everything else only through an owner-approved attachment."}
+	if rec.Token != "" && rec.Engine == addr {
+		v.Approval = "ATTACHED (" + rec.AttachmentID + ") — owner-approved with the Engine's one-time code; the Engine checks the key on every request. Not an Identity grant."
+	}
 	switch {
 	case addr == "":
-		v.State, v.Label = "NOT_CONFIGURED", "No Engine address set (optional for now)"
+		v.State, v.Label = "NOT_CONFIGURED", "No Engine address set"
 	case p == nil:
 		v.State, v.Label = "NOT_CHECKED", "Not checked yet"
 	case v.Freshness == "STALE":
 		v.State, v.Label = "STALE", "Last check is too old to trust — re-check"
 	case p.Port != "OPEN":
-		v.State, v.Label = "UNREACHABLE", "Not reachable ("+strings.ToLower(p.Port)+")"
+		v.State, v.Label = "UNREACHABLE", "Not running ("+strings.ToLower(p.Port)+")"
+	case p.Metadata == "RESPONDED" && p.ClaimMatches:
+		v.State, v.Label = "CLAIMS_ENGINE", "Running — says it is Thought Engine"
+	case p.Metadata == "RESPONDED":
+		v.State, v.Label = "ANSWERED_NOT_ENGINE", "Something answered, but not a Thought Engine with the Processor contract"
+	case p.Metadata == "NO_PUBLIC_METADATA":
+		v.State, v.Label = "NO_PUBLIC_METADATA", "Port open; no Processor contract (older Engine build?)"
 	default:
-		v.State, v.Label = "PORT_OPEN_UNIDENTIFIED", "Port open — not identified, not attached"
+		v.State, v.Label = "PORT_OPEN_UNIDENTIFIED", "Port open — not identified"
 	}
 	return v
 }
 
-func nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr string) NextAction {
+func nextAction(c Candidates, idp, enp *ProbeResult, now time.Time, candErr string, rec linkRecord, lv *LinkView) NextAction {
+	attached := rec.Token != "" && rec.Engine == c.Engine && c.Engine != ""
 	switch {
 	case candErr != "":
-		return NextAction{"fix_profile", "Fix the saved addresses", "The profile's candidates.json could not be used and was left unchanged. Re-enter the Identity address below to replace it.", "identity-addr"}
-	case c.Identity == "":
-		return NextAction{"set_identity", "Tell Processor where Identity runs", "Identity is the authority that would approve starting or attaching a Thought Engine. Enter the address your local Identity app shows when it starts (127.0.0.1:PORT). Processor only looks; it never starts Identity.", "identity-addr"}
-	case idp == nil || freshness(idp, now) == "STALE":
-		return NextAction{"recheck", "Check Identity now", "The last check is missing or too old to trust.", "recheck"}
-	case idp.Port != "OPEN":
-		return NextAction{"start_identity", "Start Identity yourself, then re-check", "Nothing answers at " + c.Identity + ". Processor will not start Identity for you. Start it the way you normally do, or correct the address.", "recheck"}
-	case !(idp.Metadata == "RESPONDED" && idp.ClaimMatches):
-		return NextAction{"wrong_identity", "Check the Identity address", "Something is listening at " + c.Identity + " but it does not identify itself as Identity. It may be a different program or an Identity build without public health metadata.", "identity-addr"}
+		return NextAction{"fix_profile", "Fix the saved addresses", "The profile's candidates.json could not be used and was left unchanged. Re-enter the Engine address below to replace it.", "engine-addr"}
+	case c.Engine == "":
+		return NextAction{"set_engine", "Tell Processor where the Thought Engine runs", "Start the Thought Engine (one command, see the runbook), then enter its address — normally 127.0.0.1:7798. Processor only looks; it never starts programs.", "engine-addr"}
+	case enp == nil || freshness(enp, now) == "STALE":
+		return NextAction{"recheck", "Check the Engine now", "The last check is missing or too old to trust.", "recheck"}
+	case enp.Port != "OPEN":
+		return NextAction{"start_engine", "Start the Thought Engine, then re-check", "Nothing answers at " + c.Engine + ". Start it in its own window (see the runbook); Processor will not start it for you.", "recheck"}
+	case !enp.ClaimMatches && !attached:
+		return NextAction{"wrong_engine", "Check the Engine address or build", enp.Note, "engine-addr"}
+	case !attached || (lv != nil && lv.State == "ATTACHMENT_REFUSED"):
+		return NextAction{"attach_engine", "Attach to the Thought Engine", "Type the attach code the Engine shows (its window prints a line starting “attach :”, or press “Make an attach code” on the Engine's page).", "attach-code"}
+	case rec.EntityID == "":
+		return NextAction{"create_identity", "Create or choose an identity", "Observations belong to an identity (for example TASS). Create one on the Engine from here; Thought Processing starts off.", "id-name"}
+	case lv != nil && lv.Activity != nil && !activityProcessing(lv.Activity):
+		return NextAction{"turn_on", "Switch Thought Processing on", "The Engine refuses observations for an identity until Thought Processing is on.", "proc-toggle"}
+	case lv != nil && lv.Status != nil && workerState(lv.Status) != "READY":
+		return NextAction{"start_worker", "Start Chat-Jimmy (observations will wait)", "The Engine's AI worker is not ready, so observations are saved and wait. Start Chat-Jimmy live (see the runbook); nothing is made up meanwhile.", "obs-text"}
 	default:
-		return NextAction{"blocked_contract", "Engine control is blocked — waiting on Identity", "Identity answers (unverified), but it has no service that can approve starting, attaching or stopping a Thought Engine. Read the dependency request to see exactly what Identity and the Engine must add. Until then Processor can only diagnose.", "deps"}
+		return NextAction{"observe", "Send an observation", "Type something that happened (for example “Player entered Goldshire”) and press Send. Watch it go Spark → Trace → Thought below.", "obs-text"}
 	}
+}
+
+func activityProcessing(act map[string]any) bool {
+	id, _ := act["identity"].(map[string]any)
+	on, _ := id["thought_processing"].(bool)
+	return on
+}
+
+func workerState(st map[string]any) string {
+	w, _ := st["worker"].(map[string]any)
+	s, _ := w["state"].(string)
+	return s
+}
+
+func attachOp(rec linkRecord, lv *LinkView) Operation {
+	op := Operation{Action: ActAttach, Label: protectedActions[ActAttach]}
+	switch {
+	case rec.Token != "" && lv != nil && lv.State == "ATTACHED":
+		op.Enabled, op.Status, op.Reason = true, "DONE", "Attached ("+rec.AttachmentID+") with the Engine's one-time code. Detach any time here or on the Engine's page."
+	case rec.Token != "":
+		op.Enabled, op.Status, op.Reason = true, "ATTACHED · CHECK", "A key is saved; the Engine's answer decides whether it still works (see the Thought Engine card)."
+	default:
+		op.Enabled, op.Status, op.Reason = true, "AVAILABLE", "Needs the owner's one-time attach code from the Engine. Use the Thought Engine card."
+	}
+	return op
+}
+
+func observeOp(rec linkRecord, lv *LinkView) Operation {
+	op := Operation{Action: ActObserve, Label: protectedActions[ActObserve], Status: "NOT YET",
+		Reason: "Needs: attached → identity chosen → Thought Processing on. The Engine enforces each of these, not this page."}
+	if rec.Token != "" && rec.EntityID != "" && lv != nil && lv.Activity != nil && activityProcessing(lv.Activity) {
+		op.Enabled, op.Status, op.Reason = true, "AVAILABLE", "Attached, identity chosen, Thought Processing on. If the AI worker isn't ready, observations wait (saved) and the card says so."
+	}
+	return op
 }
 
 func (a *App) capabilities() []Capability {
@@ -566,14 +628,14 @@ func (a *App) capabilities() []Capability {
 		{"operator_session", "Local operator sign-in (per-run code)", "WORKING", "not an Identity approval; gates Processor's own pages only"},
 		{"request_guards", "Host, Origin, CSRF and JSON checks on actions", "WORKING", "no CORS; GET never changes anything"},
 		{"identity_probe", "Look at an explicitly entered Identity address", "WORKING", "TCP check + public GET /api/health; result labeled unverified"},
-		{"engine_probe", "Look at an explicitly entered Engine address", "WORKING", "TCP check only; Engine status is private until attached"},
+		{"engine_probe", "Look at an explicitly entered Engine address", "WORKING", "TCP check + the Engine's public GET /api/health; nothing private"},
 		{"copy_context", "Copy a sanitized diagnostic summary", "WORKING", "allowlisted fields; no codes, cookies, bodies or remote claims"},
 		{"identity_authentication", "Prove the Identity candidate is genuine", "UNAVAILABLE", "Identity exposes no peer-authentication mechanism"},
-		{"lifecycle_approval", "Ask Identity to approve start / attach / stop", "BLOCKED", why},
-		{"runner", "Start or stop an approved Engine executable", "BLOCKED", "no shared bounded runner exists; this build deliberately contains none"},
-		{"engine_attach", "Read Engine status/queue/worker after approval", "BLOCKED", "requires lifecycle approval + Engine-side validation (neither exists)"},
-		{"engine_original_ui", "Open the Engine's own page", "BLOCKED", "only after an approved attachment"},
-		{"observation_ingest", "Send a test observation", "BLOCKED", "separate Identity grant contract enforced by the Engine; no authenticated source here"},
+		{"lifecycle_approval", "Ask Identity to approve start / stop", "BLOCKED", why},
+		{"runner", "Start or stop an Engine executable", "BLOCKED", "no runner exists; this build deliberately contains none — start the Engine with one command (runbook)"},
+		{"engine_attach", "Attach to a running Engine and read its status, worker and activity", "WORKING", "owner types the Engine's one-time attach code; Engine stores only a hash of Processor's key and checks it on every request (interim; not an Identity grant)"},
+		{"engine_original_ui", "Open the Engine's own page", "WORKING", "a plain link to the Engine's own page, offered once attached"},
+		{"observation_ingest", "Send an observation and follow it Spark → Trace → Thought", "WORKING", "Engine-enforced: attachment key + the identity's Thought Processing switch; waits honestly when the AI worker isn't ready"},
 		{"github_licensing", "GitHub bootstrap, licensing, updates, publisher entitlements", "UNAVAILABLE", "undecided by the owner; intentionally not implemented"},
 	}
 }
@@ -613,6 +675,28 @@ func (a *App) CopyContext() string {
 				d.Probe.CheckedAt.Format(time.RFC3339), d.Probe.ElapsedMS, d.Probe.Port, d.Probe.Metadata, httpS, d.Probe.ClaimMatches)
 		}
 	}
+	if lv := a.lastLinkView(); lv != nil {
+		fmt.Fprintf(&w, "engine link: state=%s attachment=%s identity_chosen=%v\n", lv.State, lv.AttachmentID, lv.EntityID != "")
+		if lv.Status != nil {
+			eng, _ := lv.Status["engine"].(map[string]any)
+			wk, _ := lv.Status["worker"].(map[string]any)
+			fmt.Fprintf(&w, "  engine version=%v commit=%v test_fixture_worker=%v waiting=%v\n", eng["version"], eng["commit"], eng["test_fixture_worker"], lv.Status["waiting"])
+			fmt.Fprintf(&w, "  worker state=%v test_fixture=%v\n", wk["state"], wk["test_fixture"])
+		}
+		if lv.Activity != nil {
+			counts, _ := lv.Activity["counts"].(map[string]any)
+			states := map[string]int{}
+			obs, _ := lv.Activity["observations"].([]any)
+			for _, o := range obs {
+				if m, ok := o.(map[string]any); ok {
+					st, _ := m["state"].(string)
+					states[sanitizeClaim(st)]++
+				}
+			}
+			ths, _ := lv.Activity["thoughts"].([]any)
+			fmt.Fprintf(&w, "  identity: thought_processing=%v observations(recent)=%v traces=%v thoughts=%d\n", activityProcessing(lv.Activity), states, counts["traces"], len(ths))
+		}
+	}
 	for _, op := range s["operations"].([]Operation) {
 		fmt.Fprintf(&w, "operation %s: %s\n", op.Action, op.Status)
 	}
@@ -634,7 +718,7 @@ func (a *App) CopyContext() string {
 	for _, e := range a.log.Recent(20) {
 		fmt.Fprintf(&w, "  %s %s/%s %s\n", e.At.Format("15:04:05"), e.Kind, e.Code, e.OpID)
 	}
-	fmt.Fprintf(&w, "omitted by design: operator code, session cookies, CSRF tokens, request bodies, environment variables, text returned by other programs (claims), log detail text\n")
+	fmt.Fprintf(&w, "omitted by design: operator code, session cookies, CSRF tokens, the Engine attach code and key, observation text, Thought questions, identity names, request bodies, environment variables, text returned by other programs (claims), log detail text\n")
 	out := w.String()
 	if len(out) > 8192 {
 		out = out[:8192] + "\n[truncated at 8 KiB]\n"
@@ -645,23 +729,38 @@ func (a *App) CopyContext() string {
 // selection keeps the three things the story says must never be confused:
 // the entity being served, the feature (independent app) and the running
 // instance. Each is filled only from evidence Processor actually has.
-func selection(c Candidates, enp *ProbeResult) map[string]any {
-	feature := map[string]any{"status": "NONE", "label": "No feature address set",
-		"why": "Enter a Thought Engine address to inspect it. Processor only looks at addresses you give it."}
+func selection(c Candidates, enp *ProbeResult, lv *LinkView) map[string]any {
+	feature := map[string]any{"status": "NONE", "label": "No Engine address set",
+		"why": "Enter the Thought Engine's address. Processor only looks at addresses you give it."}
 	instance := map[string]any{"status": "UNKNOWN", "label": "No running instance identified",
-		"why": "An instance is identified only by an approved, authenticated attachment. None exists."}
+		"why": "An instance is identified by an owner-approved attachment. None yet."}
+	entity := map[string]any{"status": "NONE", "label": "No identity chosen",
+		"why": "Identities (for example TASS) live on the attached Engine. Attach first, then create or choose one."}
 	if c.Engine != "" {
 		feature = map[string]any{"status": "CANDIDATE", "label": "Thought Engine at " + c.Engine,
 			"why": "Address you entered. Not registered or verified by Identity."}
 		if enp != nil && enp.Port == "OPEN" {
-			instance["label"] = "Something is listening at " + c.Engine + " — not identified"
-			instance["why"] = "A port being open does not tell which program, build or instance it is."
+			instance["label"] = "Something is listening at " + c.Engine + " — not attached"
+			instance["why"] = "Its public health is only a self-description."
 		}
 	}
-	return map[string]any{
-		"entity": map[string]any{"status": "NONE", "label": "No entity selected",
-			"why": "Entities (for example TASS) come from Identity. Identity's list is private and Processor has no approved, authenticated connection to read it, so none is shown."},
-		"feature":  feature,
-		"instance": instance,
+	if lv != nil && lv.State == "ATTACHED" {
+		eng, _ := lv.Status["engine"].(map[string]any)
+		inst, _ := eng["installation_id"].(string)
+		instance = map[string]any{"status": "ATTACHED", "label": "Engine installation " + shortID(inst) + " (attachment " + lv.AttachmentID + ")",
+			"why": "The Engine accepted this Processor's key just now."}
+		if lv.Activity != nil {
+			id, _ := lv.Activity["identity"].(map[string]any)
+			name, _ := id["display_name"].(string)
+			entity = map[string]any{"status": "CHOSEN", "label": name, "why": "An identity on the attached Engine. Its name comes from the Engine."}
+		}
 	}
+	return map[string]any{"entity": entity, "feature": feature, "instance": instance}
+}
+
+func shortID(s string) string {
+	if len(s) > 8 {
+		return s[:8]
+	}
+	return s
 }

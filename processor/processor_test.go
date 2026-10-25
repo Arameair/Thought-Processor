@@ -126,12 +126,13 @@ func TestEmptyProfileShell(t *testing.T) {
 		Self             map[string]any
 	}
 	json.Unmarshal([]byte(body), &s)
-	if s.Identity.State != "NOT_CONFIGURED" || s.Engine.State != "NOT_CONFIGURED" || s.Next.Code != "set_identity" {
+	if s.Identity.State != "NOT_CONFIGURED" || s.Engine.State != "NOT_CONFIGURED" || s.Next.Code != "set_engine" {
 		t.Fatalf("unexpected empty state: %+v %+v %+v", s.Identity.State, s.Engine.State, s.Next)
 	}
 	for _, op := range s.Ops {
-		if op.Enabled || op.Status != "BLOCKED" {
-			t.Fatalf("operation %s not blocked", op.Action)
+		want := map[ProtectedAction]string{ActStart: "BLOCKED", ActStop: "BLOCKED", ActAttach: "AVAILABLE", ActObserve: "NOT YET"}[op.Action]
+		if op.Status != want || (op.Action != ActAttach && op.Enabled) {
+			t.Fatalf("operation %s: %s (enabled %v), want %s", op.Action, op.Status, op.Enabled, want)
 		}
 	}
 	if owned := s.Self["owned_processes"].([]any); len(owned) != 0 {
@@ -142,7 +143,14 @@ func TestEmptyProfileShell(t *testing.T) {
 func TestProtectedOperationsRefusedServerSide(t *testing.T) {
 	h := start(t, "")
 	h.signIn()
-	for _, a := range []string{"start", "attach", "stop", "observe"} {
+	// attach/observe moved to the Engine card (attach code); the old
+	// parameterless boundary answers "use the Engine card" with no effect.
+	for _, a := range []string{"attach", "observe"} {
+		if code, body := h.post("/api/engine/"+a, `{}`); code != 409 || !strings.Contains(body, "USE_ENGINE_CARD") {
+			t.Fatalf("%s: %d %s", a, code, body)
+		}
+	}
+	for _, a := range []string{"start", "stop"} {
 		code, body := h.post("/api/engine/"+a, `{}`)
 		if code != 501 || !strings.Contains(body, `"BLOCKED"`) || !strings.Contains(body, "effects") {
 			t.Fatalf("%s: %d %s", a, code, body)
@@ -316,10 +324,10 @@ func TestFreshnessAndDisappearance(t *testing.T) {
 	if r.Port != "OPEN" {
 		t.Fatalf("open: %+v", r)
 	}
-	if v := engineView(target, &r, time.Now()); v.State != "PORT_OPEN_UNIDENTIFIED" {
+	if v := engineView(target, &r, time.Now(), linkRecord{}); v.State != "PORT_OPEN_UNIDENTIFIED" {
 		t.Fatalf("state %s", v.State)
 	}
-	if v := engineView(target, &r, time.Now().Add(staleAfter+time.Second)); v.State != "STALE" {
+	if v := engineView(target, &r, time.Now().Add(staleAfter+time.Second), linkRecord{}); v.State != "STALE" {
 		t.Fatalf("old result must be STALE, got %s", v.State)
 	}
 	ln.Close()
@@ -397,7 +405,7 @@ func TestUnwritableProfile(t *testing.T) {
 func TestFlowMetricsSelection(t *testing.T) {
 	h := start(t, "")
 	h.signIn()
-	h.post("/api/engine/attach", `{}`)
+	h.post("/api/engine/stop", `{}`)
 	h.post("/api/engine/start", `{"path":"/bin/sh"}`)
 	h.do("POST", "/api/engine/stop", `{}`, map[string]string{"Origin": "http://evil.example", "Content-Type": "application/json"})
 	code, body := h.do("GET", "/api/flow", "", nil)
@@ -406,7 +414,7 @@ func TestFlowMetricsSelection(t *testing.T) {
 	if code != 200 || len(f.Traces) != 2 {
 		t.Fatalf("flow: %d %d traces", code, len(f.Traces))
 	}
-	// newest first: the parameter refusal, then the blocked attach
+	// newest first: the parameter refusal, then the blocked stop
 	if f.Traces[0].Outcome != "REFUSED" || f.Traces[1].Outcome != "BLOCKED" || f.Traces[1].Stages[1].Status != "NOT AVAILABLE" || f.Traces[1].Stages[3].Status != "NONE" {
 		t.Fatalf("flow stages wrong: %+v", f.Traces)
 	}
@@ -416,7 +424,7 @@ func TestFlowMetricsSelection(t *testing.T) {
 		Rejected map[string]int `json:"rejected_requests"`
 	}
 	json.Unmarshal([]byte(body), &m)
-	if m.Refused["attach"] != 1 || m.Refused["start"] != 1 || m.Rejected["untrusted_origin"] != 1 {
+	if m.Refused["stop"] != 1 || m.Refused["start"] != 1 || m.Rejected["untrusted_origin"] != 1 {
 		t.Fatalf("metrics: %+v", m)
 	}
 	_, body = h.do("GET", "/api/state", "", nil)

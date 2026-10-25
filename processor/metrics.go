@@ -17,7 +17,11 @@ type Metrics struct {
 	refusals  map[string]int         // refused protected operations by action
 	signIns   int
 	signFails int
+	observed  int
 }
+
+// Observation counts observations the Engine accepted from this Processor.
+func (m *Metrics) Observation() { m.mu.Lock(); m.observed++; m.mu.Unlock() }
 
 type probeStats struct {
 	Checks     int            `json:"checks"`
@@ -119,7 +123,8 @@ func (m *Metrics) Snapshot(started time.Time, sessions int) map[string]any {
 		"operator_sign_ins":    m.signIns,
 		"operator_code_errors": m.signFails,
 		"active_sessions":      sessions,
-		"not_available": []string{"Engine queue/worker/throughput (needs approved attachment)",
+		"observations_sent":    m.observed,
+		"not_available": []string{"Engine-side throughput history (the Engine's own page and diagnostics show it)",
 			"Identity decisions (no decision service exists)", "worker/model calls (Processor never makes any)"},
 	}
 }
