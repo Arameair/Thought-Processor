@@ -478,6 +478,11 @@ func (a *App) State() map[string]any {
 	a.mu.Unlock()
 	if pr != nil && "http://"+strings.TrimPrefix(c.Identity, "http://") == pr.IdentityAddress && id.State == "CLAIMS_IDENTITY_UNVERIFIED" {
 		id.State, id.Label = "PAIRED", "Paired — Identity's answers are checked with the pairing key"
+		if id.Probe != nil {
+			pp := *id.Probe
+			pp.Note = "this is the Identity this Processor paired with: its answers carry a proof made with the pairing key, which Processor checks"
+			id.Probe = &pp
+		}
 		id.Approval = "Install access: asked per request; lifecycle (start/attach/stop): not available yet"
 	}
 	en := engineView(c.Engine, enp, now)

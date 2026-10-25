@@ -192,7 +192,7 @@
       } else if (a && a.allowed) {
         pillText = "Allowed"; pillCls = "ok";
         statusText = "You're allowed to install Thought Engine — " + a.reason;
-        nextText = iv.release ? "Latest version " + iv.release.tag + " (" + fmtBytes(iv.release.size) + ")." : "";
+        nextText = "press Install Thought Engine" + (iv.release ? " — latest version " + iv.release.tag + " (" + fmtBytes(iv.release.size) + "). Nothing is started." : ".");
         btn("Install Thought Engine", "/api/te/install", "primary"); btn("Check again", "/api/te/check", "quiet");
       } else if (a) {
         pillText = a.state === "NOT_ALLOWED" ? "Not allowed" : a.state === "CHECK_FAILED" ? "Couldn't check" : "Sign in needed"; pillCls = "warn";
