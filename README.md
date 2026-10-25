@@ -11,6 +11,8 @@
 >
 > Start/stop stay blocked (no runner). Identity grants are separate, still-open work.
 >
+> **Design discussion (start here for what to build next):** [Toward a serious Processor prototype](docs/SERIOUS_PROTOTYPE_DESIGN_NOTES_2026-10-25.md). It covers what Processor should be, the process topology, one trust pattern, named states, sources, the worker, UI, sessions, testing, three build paths and a decision sheet.
+>
 > **Run it:** [AGENTS.md](AGENTS.md) (Windows, step by step: Chat-Jimmy 7791 → Thought Engine 7798 → Processor 7860). Engine side and contract: `Arameair/Thought-engine` branch `experiment/engine-processor-loop-20261026`, `docs/PROCESSOR_CONTRACT.md`.
 >
 > Built on `alpha-candidate-20261025` (the shell that ran for real on 2026-10-25). The notes below describe that shell's earlier trial.
