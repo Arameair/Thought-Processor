@@ -188,6 +188,11 @@
         pillText = iv.verify === "FILES_CHANGED" ? "Files changed" : "Installed"; pillCls = iv.verify === "FILES_CHANGED" ? "bad" : "ok";
         statusText = iv.verify === "FILES_CHANGED" ? "The installed Thought Engine files no longer match what was installed." : "Thought Engine " + iv.installed.tag + " is installed.";
         nextText = iv.verify === "FILES_CHANGED" ? "Reinstall it." : "Starting it from Processor comes next; for now run it yourself from the folder below.";
+        if (a && !a.allowed) {
+          pillText = "Installed · access now " + (a.state === "NOT_ALLOWED" ? "denied" : "unknown"); pillCls = "warn";
+          statusText = "Thought Engine " + iv.installed.tag + " is installed, but Identity's latest answer is " + a.state + ": " + a.reason;
+          nextText = a.next_step + " The installed copy is kept (what should happen to it is an owner decision); reinstalling or updating needs access.";
+        }
         btn("Verify files", "/api/te/verify"); btn("Check for a newer version", "/api/te/check", "quiet"); btn("Reinstall", "/api/te/install", "quiet"); btn("Uninstall", "/api/te/uninstall", "quiet");
       } else if (a && a.allowed) {
         pillText = "Allowed"; pillCls = "ok";
