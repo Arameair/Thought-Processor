@@ -83,7 +83,7 @@
         firstStateRead=true;lastIdentitySystem=system;
         const preferred=localStorage.getItem(storedKey(system));
         if(preferred&&ids.some(x=>x.id===preferred) && preferred!==identityId) {
-          identityId=preferred;currentStep="feature";render();
+          identityId=preferred;currentStep="feature";state.features=[];state.installations={};state.selected_identity=preferred;render();
           queueMicrotask(refresh);return;
         }
       }
@@ -331,6 +331,8 @@
     const chosen=$("profile-picker").value;
     if(!chosen)return;
     identityId=chosen;
+    // Clear prior identity-scoped facts before the next authenticated read.
+    state.features=[];state.installations={};state.selected_identity=chosen;
     const sid=state.identity_status?.identity_system_id||"";
     if(sid)localStorage.setItem(storedKey(sid),identityId);
     navigate("feature");refresh();
@@ -348,7 +350,7 @@
     const created=await command("/api/p0/identity/create",{Name:name,Kind:kind});
     if(!created)return;
     const id=created.id||created.identity?.id;
-    if(id){identityId=id;const sid=state.identity_status?.identity_system_id||"";
+    if(id){identityId=id;state.features=[];state.installations={};state.selected_identity=id;const sid=state.identity_status?.identity_system_id||"";
       if(sid)localStorage.setItem(storedKey(sid),id)}
     $("profile-form").dataset.open="0";$("profile-name").value="";
     currentStep="feature";notice("Identity created. No information sources are authorized.");await refresh();
