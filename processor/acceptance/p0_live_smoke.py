@@ -34,6 +34,12 @@ class Child:
                 m=re.search(pattern,line)
                 if m:return m.group(1)
         return None
+    def capture_last(self, pattern):
+        with self.lock:
+            for line in reversed(self.lines):
+                m=re.search(pattern,line)
+                if m:return m.group(1)
+        return None
     def stop(self):
         if self.proc.poll() is not None:return
         self.proc.terminate()
@@ -103,15 +109,16 @@ def main():
             print("PASS P0 starts independently and fails closed with Identity off")
             identity=Child(identity_bin,["-port",str(iport),"-data",str(tmp/"identity-profile")],IDENTITY)
             await_condition("Identity health",lambda:request(ib,"/api/health")[0]==200)
-            st,data=request(pb,"/api/p0/address",{"address":ib},csrf,opener)
-            assert st==200,(st,data)
             st,data=request(pb,"/api/p0/state",opener=opener)
             assert st==200 and data["connection"]=="DISCOVERED_UNVERIFIED",data
-            print("PASS untrusted discovery stays unverified")
+            print("PASS automatic locator discovery stays unverified before pairing")
             st,data=request(pb,"/api/p0/pair/request",{},csrf,opener)
             assert st==202,(st,data)
             one_time=await_condition("Identity console pairing code",
                 lambda:identity.capture(r"\b([A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4})\b"))
+            st,bad=request(pb,"/api/p0/pair",{"code":"AAAA-AAAA"},csrf,opener)
+            assert st in (400,403,409),(st,bad)
+            print("PASS invalid code refused before valid pairing")
             st,data=request(pb,"/api/p0/pair",{"code":one_time},csrf,opener)
             assert st==200 and data["connection"]=="VERIFIED",(st,data)
             st,data=request(pb,"/api/p0/state",opener=opener)
@@ -139,6 +146,40 @@ def main():
             assert data["connection"]=="VERIFIED" and data["identity_status"]["identity_system_id"]==system_id,data
             assert data["selected_identity"]==ent_id,data
             print("PASS Processor restart reconnects to same verified Identity and profile")
+            # Identity-first order with a second clean Processor profile. Its
+            # discovery and approval must be independent of the first Processor.
+            second=None
+            try:
+                second_port=free_port()
+                second_base="http://127.0.0.1:"+str(second_port)
+                second=Child(processor_bin,["-port",str(second_port),"-data",str(tmp/"processor-profile-2")],PROC)
+                await_condition("Identity-first Processor health",lambda:request(second_base,"/api/health")[0]==200)
+                second_code=await_condition("second operator code",lambda:second.capture(r"#code=([0-9a-f]{16,})"))
+                opener2=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                st,data=request(second_base,"/api/session",{"code":second_code},opener=opener2)
+                assert st==200,(st,data)
+                csrf2=data["csrf"]
+                st,data=request(second_base,"/api/p0/state",opener=opener2)
+                assert st==200 and data["connection"]=="DISCOVERED_UNVERIFIED",data
+                time.sleep(3.2) # Identity pairs at most once every 3 seconds.
+                st,data=request(second_base,"/api/p0/pair/request",{},csrf2,opener2)
+                assert st==202,(st,data)
+                second_pair_code=await_condition("second pairing code",lambda:identity.capture_last(r"\b([A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4})\b"))
+                st,data=request(second_base,"/api/p0/pair",{"code":second_pair_code},csrf2,opener2)
+                assert st==200 and data["connection"]=="VERIFIED",(st,data)
+                st,data=request(second_base,"/api/p0/state?identity_id="+ent_id,opener=opener2)
+                assert data["connection"]=="VERIFIED" and data["selected_identity"]==ent_id,data
+                assert data["identity_status"]["identity_system_id"]==system_id
+                print("PASS Identity-first startup: second clean Processor discovers and securely pairs")
+                st,data=request(second_base,"/api/p0/unpair",{},csrf2,opener2)
+                assert st==200,(st,data)
+                st,data=request(second_base,"/api/p0/state",opener=opener2)
+                assert data["connection"]=="DISCOVERED_UNVERIFIED",data
+                print("PASS independent pairing revocation and new approval requirement")
+            finally:
+                if second:second.stop()
+            assert identity.proc.poll() is None,"stopping Processor unexpectedly stopped external Identity"
+            print("PASS external Identity remains running after Processor stop")
             identity.stop()
             # A killed authority may leave stale locators, but cannot authorize.
             st,data=request(pb,"/api/p0/state",opener=opener)
