@@ -1,3 +1,13 @@
+> **GPT-6 DESIGN PROPOSAL — OCTOBER 26, 2026 — NOT APPROVED OR IMPLEMENTED**
+>
+> This branch contains the independent **[First Connection Workspace prototype design](docs/GPT6_FIRST_CONNECTION_WORKSPACE_PROTOTYPE_DESIGN_2026-10-26.md)**, prepared against the [Processor ↔ Identity handoff](https://github.com/Arameair/Thought-Processor/blob/docs/identity-processor-handoff-20261026/docs/PROCESSOR_IDENTITY_CONNECTION_HANDOFF_2026-10-26.md) and Identity candidate API v1.
+>
+> **Proposed first test:** Start Processor and Identity independently → pair once → select/create a real Identity-owned profile → inspect accurate, zero-grant feature availability → optionally install one genuine, approved Thought Engine release as a separately verified gate.
+>
+> **No application code was added. No tests were executed on this branch. No grants, merges, releases, or changes to `alpha`, `stable`, or `main`.** The historical README below predates the October 26 decision that Processor is the *system-wide* human interface, not only the Engine's control page. The new design document and owner decisions supersede that historical product framing for purposes of this proposal.
+
+---
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
