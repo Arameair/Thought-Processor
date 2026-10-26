@@ -1,0 +1,5 @@
+ok  	github.com/Arameair/Thought-Processor/processor/internal/app	1.084s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/featpkg	1.089s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/idclient	1.038s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/install	1.043s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/supervisor	17.605s

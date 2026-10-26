@@ -1,0 +1,19 @@
+Grok findings check (BEFORE (reviewed P1 baseline)) — identity 7cc5d9d / processor e78d638
+
+FAIL [M1] self-labelled 'fixture' with new code is NOT offered as installable  — offered as installable
+FAIL [M1] Processor refuses to start installing it  — 200 
+FAIL [M1] Identity itself refuses an install request for an artifact digest it has not pinned (even if a program claims fixture trust)  — 202 
+PASS [BASE] the real reviewed fixture still installs  — ins_7eac48e435c1f0c33326
+FAIL [M3] approval page shows the requester's verified paired label
+FAIL [M3] approval page warns that the requester is not the primary Thought Processor
+FAIL [M3] a grant requested without an expiry gets a finite default expiry  — None
+FAIL [M3] 'until revoked' is refused unless the Admin deliberately confirms it on the page  — decide 200 commit 201
+FAIL [M2] unrelated paired program D can NOT revoke program C's grant  — HTTP 200
+FAIL [M2] C's grant is still ACTIVE after D's attempt
+PASS [BASE] C's own valid request is allowed by the feature  — 200
+FAIL [L1] a ticket spent during an Identity outage is reported as such (still refused), not as a malicious replay  — 503 AUTHORITY_UNAVAILABLE / 409 TICKET_REPLAYED
+FAIL [L5] a dropped fault-injection file is ignored unless Processor runs in explicit test mode  — 0 connection broke: RemoteDisconnected
+FAIL [L3] feature observation file is private (no group/other access)  — 0o644
+PASS [L3] feature ticket ledger is private  — 0o600
+
+secure behaviour observed: 3 of 15

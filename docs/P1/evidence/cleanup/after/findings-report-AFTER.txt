@@ -1,0 +1,19 @@
+Grok findings check (run) — identity 64940b6 / processor 49bed22
+
+PASS [M1] self-labelled 'fixture' with new code is NOT offered as installable  — UNTRUSTED_EXECUTION_BLOCKED: this exact package content (artifact 348d
+PASS [M1] Processor refuses to start installing it  — 409 UNTRUSTED_EXECUTION_BLOCKED: this exact package content (art
+PASS [M1] Identity itself refuses an install request for an artifact digest it has not pinned (even if a program claims fixture trust)  — 403 UNTRUSTED_EXECUTION_BLOCKED: ARTIFACT_NOT_PINNED — Identity has no pin
+PASS [BASE] the real reviewed fixture still installs  — ins_7a7d2fa6011c6eb6dbfa
+PASS [M3] approval page shows the requester's verified paired label
+PASS [M3] approval page warns that the requester is not the primary Thought Processor
+PASS [M3] a grant requested without an expiry gets a finite default expiry  — 2026-10-26T19:48:51Z
+PASS [M3] 'until revoked' is refused unless the Admin deliberately confirms it on the page  — decide 400 commit 403
+PASS [M2] unrelated paired program D can NOT revoke program C's grant  — HTTP 403
+PASS [M2] C's grant is still ACTIVE after D's attempt
+PASS [BASE] C's own valid request is allowed by the feature  — 200
+PASS [L1] a ticket spent during an Identity outage is reported as such (still refused), not as a malicious replay  — 503 AUTHORITY_UNAVAILABLE / 409 TICKET_SPENT_DURING_OUTAGE
+PASS [L5] a dropped fault-injection file is ignored unless Processor runs in explicit test mode  — 200 COMPLETED
+PASS [L3] feature observation file is private (no group/other access)  — 0o600
+PASS [L3] feature ticket ledger is private  — 0o600
+
+secure behaviour observed: 15 of 15
