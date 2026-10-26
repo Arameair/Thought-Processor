@@ -1,3 +1,5 @@
+> **Design workshop — October 26, 2026.** This experimental branch contains **notes only**, not a new runnable Processor or owner-approved Alpha. The previous diagnostic shell was a technical trial used alongside Identity; the next goal is a small **system-wide human/admin workspace** to test with the owner. **Start with the [Foundation experience design](docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) and [design discussion issue #15](https://github.com/Arameair/Thought-Processor/issues/15).** Earlier README material below is preserved for context but reflects the October 23–24 Engine-centered control-point scope. Main/Alpha/Stable remain unchanged, with runnable candidates on separate experiment/candidate branches.
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
