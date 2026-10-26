@@ -64,6 +64,7 @@ func TestP0GenericInstallerFixture(t *testing.T){
  filename:=feature+"-"+arch
  if runtime.GOOS=="windows"{filename+=".exe"}
  digestShouldMatch:=true
+ shortDownload:=false
  srv:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   switch r.URL.Path {
   case "/api/v1/status":
@@ -75,7 +76,7 @@ func TestP0GenericInstallerFixture(t *testing.T){
    if !digestShouldMatch{h=strings.Repeat("0",64)}
    fixtureSigned(w,r,"idn_fixture",200,map[string]any{"tag":"v1","asset":filename,"sha256":h,"size":len(asset),"decision_id":"d1"})
   case "/api/v1/features/"+feature+"/release/download":
-   w.Header().Set("X-Release-Tag","v1");w.Header().Set("X-Asset-Name",filename);w.Write(asset)
+   w.Header().Set("X-Release-Tag","v1");w.Header().Set("X-Asset-Name",filename);if shortDownload { w.Write(asset[:len(asset)/2]) } else { w.Write(asset) }
   default: http.NotFound(w,r)
   }
  }))
@@ -96,6 +97,21 @@ func TestP0GenericInstallerFixture(t *testing.T){
  b,e:=os.ReadFile(filepath.Join(tmp,"features",feature,"v1",filename))
  if e!=nil||string(b)!=string(asset){t.Fatalf("installed wrong bytes: %v",e)}
 
+ // A forged or damaged digest fails closed and retains the installed v1.
+ digestShouldMatch=false
+ if e:=ins.Start(context.Background(),p,srv.URL,feature,"v1");e!=nil{t.Fatal(e)}
+ until:=time.Now().Add(5*time.Second)
+ for ins.View(feature)["busy"]==true&&time.Now().Before(until){time.Sleep(10*time.Millisecond)}
+ if ins.View(feature)["phase"]!="FAILED"{t.Fatal("bad checksum did not fail")}
+ if status,e:=ins.Verify(feature);e!=nil||status!="VERIFIED"{t.Fatalf("bad checksum replaced good version: %s %v",status,e)}
+ // A truncated HTTP body likewise cannot become the selected installation.
+ digestShouldMatch=true;shortDownload=true
+ if e:=ins.Start(context.Background(),p,srv.URL,feature,"v1");e!=nil{t.Fatal(e)}
+ until=time.Now().Add(5*time.Second)
+ for ins.View(feature)["busy"]==true&&time.Now().Before(until){time.Sleep(10*time.Millisecond)}
+ if ins.View(feature)["phase"]!="FAILED"{t.Fatal("partial download did not fail")}
+ if status,e:=ins.Verify(feature);e!=nil||status!="VERIFIED"{t.Fatalf("partial download replaced good version: %s %v",status,e)}
+ shortDownload=false
  // Pinned tag protects against a release change.
  if e:=ins.Start(context.Background(),p,srv.URL,feature,"v2");e!=nil{t.Fatal(e)}
  for ins.View(feature)["busy"]==true&&time.Now().Before(time.Now().Add(3*time.Second)){time.Sleep(10*time.Millisecond)}
