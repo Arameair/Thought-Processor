@@ -25,8 +25,10 @@ var p0Key = regexp.MustCompile(`^[a-z][a-z0-9-]{1,63}$`)
 var p0File = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 var p0Digest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 const p0MaxBytes int64 = 200 << 20
+const P0FeatureContractVersion = "feature-install/1-alpha"
 
 type P0Receipt struct {
+ Contract string `json:"contract"`
  Feature string `json:"feature"`
  Tag string `json:"tag"`
  Asset string `json:"asset"`
@@ -95,7 +97,7 @@ func (i *P0InstallManager) release(ctx context.Context, pr Pairing, base, featur
 func (i *P0InstallManager) Preview(ctx context.Context,pr Pairing,base,feature string)(map[string]any,error){
  m,e:=i.release(ctx,pr,base,feature);if e!=nil{return nil,e}
  for _,k:=range []string{"tag","asset","sha256","size"}{if _,ok:=m[k];!ok{return nil,p0Fail("BAD_RELEASE",502,"release metadata missing "+k)}}
- return map[string]any{"feature":feature,"release":m,"meaning":"Approval permits download/install only. No feature run, registration or source access. Publisher signing is not available in this candidate."},nil
+ return map[string]any{"contract":P0FeatureContractVersion,"feature":feature,"release":m,"meaning":"Approval permits download/install only. No feature run, registration or source access. Publisher signing is not available in this candidate."},nil
 }
 func (i *P0InstallManager) Start(ctx context.Context,pr Pairing,base,feature,approvedTag string) error {
  if !p0Key.MatchString(feature)||!p0File.MatchString(approvedTag){return p0Fail("BAD_REQUEST",400,"invalid feature or tag")}
@@ -151,7 +153,7 @@ func (i *P0InstallManager) install(ctx context.Context,pr Pairing,base,feature,a
   if e=os.Rename(stage,dest);e!=nil{return e}
  } else{return e}
  decID,_:=ri["decision_id"].(string)
- rec:=P0Receipt{Feature:feature,Tag:tag,Asset:asset,Size:size,SHA256:sum,DecisionID:decID,IdentitySystemID:pr.IdentitySystemID,InstalledAt:time.Now().UTC(),PublisherAuthenticity:"NOT_INDEPENDENTLY_SIGNED"}
+ rec:=P0Receipt{Contract:P0FeatureContractVersion,Feature:feature,Tag:tag,Asset:asset,Size:size,SHA256:sum,DecisionID:decID,IdentitySystemID:pr.IdentitySystemID,InstalledAt:time.Now().UTC(),PublisherAuthenticity:"NOT_INDEPENDENTLY_SIGNED"}
  if e=writeJSONAtomic(filepath.Join(versionDir,"install.json"),rec);e!=nil{return e}
  if e=writeJSONAtomic(filepath.Join(root,"current.json"),rec);e!=nil{return e}
  return nil
