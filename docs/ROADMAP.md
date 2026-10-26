@@ -1,3 +1,7 @@
+> **Historical roadmap clarification (2026-10-26):** This roadmap was written for proving the early Identity-to-Engine authorization and thinking pipeline, not for designing Processor's **first usable system-wide operator workspace**. The new immediate UX design discussion is [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15) and [Design readiness](DESIGN_READINESS_2026-10-26.md). Security enforcement remains mandatory before any real permission-management claim; newer priorities do not mean this older research has been completed.
+
+---
+
 # Roadmap — prove one real feature end-to-end
 
 Each gate is independent, should leave existing applications usable, and has an explicit **pass condition**. The dates below are not release promises.
