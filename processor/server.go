@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/app.js web/app.css web/workspace.html web/workspace.js web/workspace.css
+//go:embed web/index.html web/app.js web/app.css web/workspace.html web/workspace.js web/workspace.css web/welcome.html web/welcome.js web/welcome.css
 var webFS embed.FS
 
 type App struct {
@@ -190,7 +190,10 @@ func (a *App) Routes() *http.ServeMux {
 			w.Write(b)
 		}
 	}
-	m.HandleFunc("GET /{$}", a.wrap(public, static("workspace.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /{$}", a.wrap(public, static("welcome.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /welcome.js", a.wrap(public, static("welcome.js", "text/javascript; charset=utf-8")))
+	m.HandleFunc("GET /welcome.css", a.wrap(public, static("welcome.css", "text/css; charset=utf-8")))
+	m.HandleFunc("GET /previous-onboarding", a.wrap(public, static("workspace.html", "text/html; charset=utf-8")))
 	m.HandleFunc("GET /diagnostics", a.wrap(public, static("index.html", "text/html; charset=utf-8")))
 	m.HandleFunc("GET /workspace.js", a.wrap(public, static("workspace.js", "text/javascript; charset=utf-8")))
 	m.HandleFunc("GET /workspace.css", a.wrap(public, static("workspace.css", "text/css; charset=utf-8")))
