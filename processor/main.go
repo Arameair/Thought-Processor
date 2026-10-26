@@ -73,9 +73,15 @@ func main() {
 	data := flag.String("data", defaultData(), "profile folder for this Processor")
 	noBrowser := flag.Bool("no-browser", false, "don't open the browser; just print the private link")
 	version := flag.Bool("version", false, "print version and exit")
-	var trusted multiFlag
+	defURL := flag.String("identity-default-url", "", "well-known Identity address to probe before pairing (default http://127.0.0.1:7790; \"-\" = don't probe). Same as TP_IDENTITY_DEFAULT_URL")
+	var trusted, pins multiFlag
+	flag.Var(&pins, "trust-feature-artifact", "pin the exact artifact SHA-256 of a local test feature you reviewed (repeatable). Built-in: the P1 test fixture. The manifest's own trust_class never grants trust")
+	testFaults := flag.Bool("test-feature-faults", false, "TEST ONLY: let the trusted test fixture honour its TEST-ONLY fault-injection file (crash/slow after an ALLOW). Never use outside tests")
 	flag.Var(&trusted, "trust-feature-dir", "a folder of LOCAL feature packages you trust (repeatable). Only TRUSTED_LOCAL_TEST_FIXTURE packages from such folders can be installed; nothing else can run")
 	flag.Parse()
+	if *defURL != "" {
+		os.Setenv("TP_IDENTITY_DEFAULT_URL", *defURL)
+	}
 	b := build()
 	if *version {
 		fmt.Println("thought-processor", appVersion, b.Branch, "commit", b.Revision)
@@ -90,6 +96,13 @@ func main() {
 	defer prof.Close()
 	a := app.New(prof, b)
 	a.TrustFeatureDirs(trusted)
+	if err := a.TrustArtifacts(pins); err != nil {
+		fmt.Fprintln(os.Stderr, "Thought Processor could not start:", err)
+		os.Exit(2)
+	}
+	if *testFaults {
+		a.EnableTestFaults()
+	}
 	a.Port = *port
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -103,6 +116,12 @@ func main() {
 		fmt.Printf("  run     : pid %d   port %d (this computer only)   processor %s\n", os.Getpid(), a.Port, prof.Self.ProcessorID)
 		fmt.Println("  open    : " + link)
 		fmt.Println("            (private link — don't share it; it changes every start)")
+		if *testFaults {
+			fmt.Println("  TEST MODE: -test-feature-faults is on (test fixture fault injection allowed). Not for normal use.")
+		}
+		for _, p := range pins {
+			fmt.Println("  pinned  : artifact " + p + "  (operator pin)")
+		}
 		for _, d := range trusted {
 			fmt.Println("  trusted : " + d + "  (local feature packages you chose to trust)")
 		}

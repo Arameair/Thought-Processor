@@ -96,6 +96,9 @@
     if (c.state === "AUTHORITY_UNAVAILABLE" && paired) {
       ban.className = "banner"; ban.hidden = false;
       ban.textContent = "AUTHORITY UNAVAILABLE — Identity can't be reached. Nothing that needs Identity's permission can happen (features refuse protected work too). Running features keep their standalone health. Processor reconnects by itself.";
+    } else if (s.test_feature_faults) {
+      ban.className = "banner"; ban.hidden = false;
+      ban.textContent = "TEST MODE — started with -test-feature-faults: test features may obey their fault-injection file (crash/delay after an allowed request). Never use this for normal running.";
     } else ban.hidden = true;
     renderChips(s);
     if (showHome) renderHome(s); else renderConnect(s);
@@ -249,11 +252,11 @@
 
   function renderLibrary(s, d) {
     const lib = s.library || [];
-    let h = `<div class="dhead"><div class="typed">LIBRARY</div><h1>Add a feature</h1><p class="muted">Feature packages from local folders you trusted when starting Processor. In P1 only <strong>TRUSTED_LOCAL_TEST_FIXTURE</strong> packages can be installed. Third-party executables stay <strong>BLOCKED</strong> until release provenance and OS sandboxing are verified. Invitations are not built yet.</p></div>`;
+    let h = `<div class="dhead"><div class="typed">LIBRARY</div><h1>Add a feature</h1><p class="muted">Feature packages from local folders you trusted when starting Processor. In P1 only the exact, pinned reviewed test fixture (or an artifact you pinned with <code>-trust-feature-artifact</code>) can be installed — what a package says about itself never counts. Third-party executables stay <strong>BLOCKED</strong> until release provenance and OS sandboxing are verified. Invitations are not built yet.</p></div>`;
     h += lib.map((x) => `<div class="libcard ${x.blocked ? "blocked" : ""}">
       <div class="lc-h"><div><h3>${esc(x.name || x.dir)}</h3><div class="muted small">${esc(x.description || x.error || "")}</div></div>
       ${x.blocked ? badge(x.blocked === "INVALID_PACKAGE" ? "INVALID" : "BLOCKED", "bad", x.blocked) : `<button class="btn primary" data-review="${esc(x.feature_id)}">Install…</button>`}</div>
-      <div class="badges">${x.version ? badge("v" + x.version) : ""}${x.trust_class ? badge(x.trust_class, x.trust_class === "TRUSTED_LOCAL_TEST_FIXTURE" ? "info" : "bad") : ""}${x.api ? badge(x.api) : ""}${(x.installed_as || []).length ? badge("installed ×" + x.installed_as.length, "ok") : ""}</div>
+      <div class="badges">${x.version ? badge("v" + x.version) : ""}${x.trust_basis ? badge("pinned artifact", "info", x.trust_basis) : x.trust_class ? badge("claims " + x.trust_class + " — not pinned", "bad", "A package's own label can't grant trust") : ""}${x.api ? badge(x.api) : ""}${(x.installed_as || []).length ? badge("installed ×" + x.installed_as.length, "ok") : ""}</div>
       ${x.blocked ? `<p class="small error">${esc(x.blocked)}${x.error ? " — " + esc(x.error) : ""}</p>` : ""}
       <details class="small"><summary>Package details</summary>${kv([["Folder", esc(x.dir)], ["Publisher", esc(x.publisher_claim || "") + " " + badge("claim only — not verified", "warn")], ["Source", esc(x.source_repo || "")],
         ["Artifact SHA-256", mono(x.artifact_sha256 || "")], ["Runs", mono((x.command || []).join(" "))], ["Needs", esc((x.requires || []).join(", "))],
@@ -280,14 +283,14 @@
     set($("#fx-head"), `<div class="dhead"><div class="typed feature">FEATURE INSTALLATION IDENTITY</div><h1>${esc(r.name)}</h1>
       <div class="badges">${badge("Identity: " + idState, idState === "INSTALLED" ? "ok" : gone ? "" : "warn")}${gone ? "" : badge("Process: " + rt.state, stateDot[rt.state] === "ok" ? "ok" : stateDot[rt.state] === "bad" ? "bad" : "")}
       ${rt.state === "RUNNING" ? badge(rt.health && rt.health.ready ? "Health: READY" : "Health: not ready", rt.health && rt.health.ready ? "ok" : "warn") : ""}
-      ${iv ? badge(active + " active grant" + (active === 1 ? "" : "s"), active ? "info" : "") : gone ? "" : badge("grants: can't confirm", "warn")}${badge("0 information sources")}${badge(r.trust_class, "info", "Trusted because you trusted its local folder; publisher not verified")}
+      ${iv ? badge(active + " active grant" + (active === 1 ? "" : "s"), active ? "info" : "") : gone ? "" : badge("grants: can't confirm", "warn")}${badge("0 information sources")}${badge("pinned artifact", "info", (r.trust_basis || "artifact pin") + " — publisher not verified")}
       ${v.files && v.files !== "OK" && !gone ? badge(v.files, "bad") : ""}</div>
       ${rt.state === "NEEDS_ATTENTION" ? `<div class="problem"><strong>Needs attention.</strong> ${esc(rt.note || "")}</div>` : ""}
       ${rt.state === "FAILED_TO_START" ? `<div class="problem"><strong>Did not start.</strong> ${esc(rt.note || "")}</div>` : ""}</div>`);
     // Overview
     set($("#pane-overview"), kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
       ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
-      ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
+      ["Trusted because", esc(r.trust_basis || "artifact pin (recorded before the cleanup)")], ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
       ["Installed", esc(new Date(r.installed_at).toLocaleString())], iv && ["Administered by", mono(iv.installation.administered_by) + " (Admin approval " + mono(short(iv.installation.approval_id, 14)) + ")"],
       ["Files", gone ? "removed" : v.files === "OK" ? badge("verified against the approved SHA-256", "ok") : badge(v.files, "bad")], ["Data folder", esc(v.data_dir) + (gone && r.data_kept ? " (kept)" : "")],
       ["Capabilities declared", (r.capabilities || []).map((c) => mono(c.id) + " " + badge(c.data_class)).join(" ")],
@@ -296,13 +299,17 @@
         <label class="small"><input type="checkbox" id="keep-data" checked> keep this installation's data folder</label> <button class="btn danger small" data-uninstall="${esc(ins)}">Uninstall…</button></div>`));
     // Connections
     const grants = (iv && iv.grants) || [];
+    const me = "processor:" + s.processor.processor_id;
     set($("#fx-grants"), `<h3>Connections (grants from Identity)</h3>` + (grants.length ? `<table class="tbl"><tr><th>Requester</th><th>Subject</th><th>Capability</th><th>Expires</th><th>Status</th><th></th></tr>${grants.map((g) => {
       const G = g.grant; const ent = (s.identities || []).find((e) => e.id === G.subject_identity_id);
-      return `<tr><td>${mono(G.requester === "processor:" + s.processor.processor_id ? "this Processor" : G.requester)}</td><td>${esc(ent ? ent.name : G.subject_identity_id)}</td><td>${mono(G.capability)}</td>
-        <td class="small">${G.expires_at ? esc(new Date(G.expires_at).toLocaleString()) : "until revoked"}</td><td>${badge(g.status, g.status === "ACTIVE" ? "ok" : "")}</td>
-        <td>${g.status === "ACTIVE" && !gone ? `<button class="btn ghost small" data-revoke="${esc(G.grant_id)}">Revoke</button>` : ""}</td></tr>`;
+      const mine = G.requester === me || G.requested_by === me;
+      const ended = G.revoked_at ? `<div class="small muted">revoked by ${esc(G.revoked_by === me ? "this Processor" : G.revoked_by || "?")} · ${esc(new Date(G.revoked_at).toLocaleString())}</div>` : "";
+      return `<tr><td>${mono(G.requester === me ? "this Processor" : G.requester)}</td><td>${esc(ent ? ent.name : G.subject_identity_id)}</td><td>${mono(G.capability)}</td>
+        <td class="small">${G.expires_at ? esc(new Date(G.expires_at).toLocaleString()) : G.until_revoked ? "never — until revoked (Admin confirmed)" : "never (granted before expiry defaults)"}</td><td>${badge(g.status, g.status === "ACTIVE" ? "ok" : "")}${ended}</td>
+        <td>${g.status === "ACTIVE" && !gone ? (mine ? `<button class="btn ghost small" data-revoke="${esc(G.grant_id)}">Revoke</button>`
+          : `<button class="btn ghost small" data-adminrevoke="${esc(G.grant_id)}" title="This grant belongs to another program; only the Admin can end it from here">Ask the Admin to revoke…</button>`) : ""}</td></tr>`;
     }).join("")}</table>` : !iv ? `<p class="warn">AUTHORITY UNAVAILABLE — Identity can't confirm this installation's grants right now, so no protected work can happen.</p>` : `<p class="muted">No grants. This installation can't do any protected work for anyone.</p>`)
-      + (v.pending || []).map((p) => `<div class="pending"><span class="dot warn"></span> ${esc(p.kind === "grant_capability" ? "Connection request" : "Uninstall request")} ${mono(p.approval_id)} waiting for the Admin <button class="btn ghost small" data-watch="${esc(p.approval_id)}">Open approval</button></div>`).join(""));
+      + (v.pending || []).map((p) => `<div class="pending"><span class="dot warn"></span> ${esc(({ grant_capability: "Connection request", uninstall_feature: "Uninstall request", revoke_grant: "Admin revocation request" })[p.kind] || p.kind)} ${mono(p.approval_id)} waiting for the Admin <button class="btn ghost small" data-watch="${esc(p.approval_id)}">Open approval</button></div>`).join(""));
     const ents = s.identities || [], caps = r.capabilities || [];
     const formKey = ins + "|" + ents.map((e) => e.id).join(",") + "|" + caps.map((c) => c.id).join(",") + "|" + gone;
     const gf = $("#fx-grant-form");
@@ -312,14 +319,14 @@
       const copts = caps.map((c) => `<option value="${esc(c.id)}">${esc(c.id)}</option>`).join("");
       gf.innerHTML = gone ? "" : `<form class="frm" id="grant-form"><h3>Request a connection</h3>
         <div class="frow"><label>Requester<input value="This Thought Processor" disabled></label><label>For identity<select id="gf-sub" required>${opts}</select></label>
-        <label>Capability<select id="gf-cap">${copts}</select></label><label>Expires<select id="gf-exp"><option value="600">in 10 minutes</option><option value="3600">in 1 hour</option><option value="86400">in 1 day</option><option value="0">never (until revoked)</option></select></label></div>
+        <label>Capability<select id="gf-cap">${copts}</select></label><label>Expires<select id="gf-exp"><option value="600">in 10 minutes</option><option value="3600" selected>in 1 hour (default)</option><option value="86400">in 1 day</option><option value="forever">never — until revoked (the Admin must confirm this in Identity)</option></select></label></div>
         <p class="small muted">Information sources: <strong>none</strong>. The Admin approves this exact request in Identity.</p><button class="btn primary" type="submit" ${opts ? "" : "disabled"}>Ask the Admin…</button>${opts ? "" : ` <span class="small muted">Add an identity first.</span>`}</form>`;
       $("#fx-action").innerHTML = gone ? "" : `<form class="frm" id="action-form"><h3>Try the protected capability</h3>
         <p class="small muted">Processor first asks Identity for a one-request ticket. No grant → nothing starts. With a grant, an on-demand feature is started, checks the ticket and asks Identity live before doing anything.</p>
         <div class="frow"><label>For identity<select id="af-sub">${opts}</select></label><label>Capability<select id="af-cap">${copts}</select></label><label class="grow">Test input<input id="af-in" maxlength="1000" value="hello from P1"></label></div>
         <button class="btn" type="submit" ${opts ? "" : "disabled"}>Send synthetic request</button></form>`;
       const f1 = $("#grant-form"), f2 = $("#action-form");
-      if (f1) f1.onsubmit = async (e) => { e.preventDefault(); const j = await act(`/api/installations/${ins}/grants/request`, { subject: $("#gf-sub").value, capability: $("#gf-cap").value, expires_in_seconds: +$("#gf-exp").value }); if (j && j.approval_url) watch(j); };
+      if (f1) f1.onsubmit = async (e) => { e.preventDefault(); const j = await act(`/api/installations/${ins}/grants/request`, { subject: $("#gf-sub").value, capability: $("#gf-cap").value, ...($("#gf-exp").value === "forever" ? { until_revoked: true } : { expires_in_seconds: +$("#gf-exp").value }) }); if (j && j.approval_url) watch(j); };
       if (f2) f2.onsubmit = async (e) => { e.preventDefault(); const b = e.submitter; if (b) b.disabled = true; const j = await act(`/api/installations/${ins}/action`, { subject: $("#af-sub").value, capability: $("#af-cap").value, input: $("#af-in").value }); if (b) b.disabled = false; if (j && j.result) { lastAction[ins] = j.result; render(); } };
     }
     const la = lastAction[ins];
@@ -414,9 +421,9 @@
     if (!it) { mi.hidden = true; return; }
     mi.hidden = false;
     $("#i-title").textContent = "Install " + it.name + "?";
-    set($("#i-facts"), [["Version", it.version], ["Publisher", it.publisher_claim + " (claim only)"], ["Source", it.source_repo], ["From folder", it.dir], ["Trust", it.trust_class], ["Runs", (it.command || []).join(" ")],
+    set($("#i-facts"), [["Version", it.version], ["Publisher", it.publisher_claim + " (claim only)"], ["Source", it.source_repo], ["From folder", it.dir], ["Trusted because", it.trust_basis || "NOT PINNED"], ["Package's own label", it.trust_class + " (descriptive only)"], ["Runs", (it.command || []).join(" ")],
       ["Needs", (it.requires || []).join(", ")], ["Artifact SHA-256", it.artifact_sha256], ["Capabilities", (it.capabilities || []).map((c) => c.id + " (" + c.data_class + ")").join(", ")]].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join(""));
-    set($("#i-checks"), `<strong>Checked</strong><ul><li>every file matches the SHA-256 in its manifest; no links, no paths outside the package</li><li>the folder is one you trusted with -trust-feature-dir</li><li>trust class is TRUSTED_LOCAL_TEST_FIXTURE</li><li>files are copied and checked again before registering</li></ul>`);
+    set($("#i-checks"), `<strong>Checked</strong><ul><li>every file matches the SHA-256 in its manifest; no links, no paths outside the package</li><li>the folder is one you trusted with -trust-feature-dir</li><li>this exact artifact is pinned (${esc(it.trust_basis || "")}); the package's own trust label is not evidence</li><li>files are copied and checked again before registering</li></ul>`);
     set($("#i-not"), `<strong>Not checked</strong><ul>${(it.not_verified || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`);
     $("#i-ok").onclick = async () => { const f = reviewFor; reviewFor = ""; mi.hidden = true; const j = await act(`/api/library/${encodeURIComponent(f)}/install`, {}); if (j && j.approval_url) watch(j); };
     $("#i-cancel").onclick = () => { reviewFor = ""; mi.hidden = true; };
@@ -443,6 +450,7 @@
     else if (ds.stop) { t.disabled = true; await act(`/api/installations/${ds.stop}/stop`, {}); }
     else if (ds.selftest) { const j = await act(`/api/installations/${ds.selftest}/self-test`, {}); if (j && j.self_test) { const el = document.getElementById("selftest-" + ds.selftest); if (el) el.innerHTML = `<div class="result ok"><strong>Self-test ${esc(j.self_test.result)}</strong> <span class="muted">${esc(j.self_test.data_class)} · grants used: ${esc(j.self_test.grants_used)}</span><pre>${esc(JSON.stringify(j.self_test.output, null, 2))}</pre></div>`; } }
     else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }
+    else if (ds.adminrevoke) { const j = await act(`/api/installations/${sel.id}/grants/${ds.adminrevoke}/admin-revoke`, {}); if (j && j.approval_url) watch(j); }
     else if (ds.uninstall) { const j = await act(`/api/installations/${ds.uninstall}/uninstall`, { keep_data: !!($("#keep-data") && $("#keep-data").checked) }); if (j && j.approval_url) watch(j); }
     else if (ds.gh || (t.id === "chip-github" && state && state.github && state.github.state !== "VERIFIED")) await act("/api/github/connect", {});
     else if (t.id === "chip-admin") choose({ type: "admin", id: "admin" });

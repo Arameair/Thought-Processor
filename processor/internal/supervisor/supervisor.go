@@ -81,6 +81,7 @@ type Spec struct {
 	Command          []string
 	IdentityURL      string
 	IdentitySystemID string
+	TestMode         bool // sets TF_FIXTURE_TEST_MODE=1 (operator flag -test-feature-faults only)
 }
 
 // Policy is the per-installation runtime policy (Processor settings).
@@ -275,11 +276,15 @@ func (s *Supervisor) launch(ctx context.Context, id, by string) error {
 	cmd := exec.Command(exe, argv[1:]...)
 	cmd.Dir = spec.DataDir
 	cmd.Stdout, cmd.Stderr = logf, logf
-	cmd.Env = minimalEnv(map[string]string{
+	tf := map[string]string{
 		"TF_API": API, "TF_INSTALLATION_ID": spec.InstallationID, "TF_FEATURE_ID": spec.FeatureID, "TF_LAUNCH_ID": launchID,
 		"TF_DATA_DIR": spec.DataDir, "TF_RUNTIME_DIR": spec.RuntimeDir, "TF_LAUNCH_KEY_FILE": keyFile,
 		"TF_CREDENTIAL_FILE": spec.CredentialPath, "TF_IDENTITY_URL": spec.IdentityURL, "TF_IDENTITY_SYSTEM_ID": spec.IdentitySystemID,
-	})
+	}
+	if spec.TestMode {
+		tf["TF_FIXTURE_TEST_MODE"] = "1"
+	}
+	cmd.Env = minimalEnv(tf)
 	setProcAttrs(cmd)
 	if err := cmd.Start(); err != nil {
 		logf.Close()

@@ -2,14 +2,19 @@
 // (manifest schema thought.feature-manifest/1) and copies it into an
 // installation folder. It never executes anything.
 //
-// P1 trust rule: a package is installable only when
-//   - it is in a folder the operator explicitly trusted when starting
+// P1 trust rule (cleanup, Grok M1): a package is installable and runnable
+// only when BOTH
+//   - it sits in a folder the operator explicitly trusted when starting
 //     Processor (-trust-feature-dir), AND
-//   - its manifest says trust_class TRUSTED_LOCAL_TEST_FIXTURE.
+//   - its exact content — the artifact digest over the manifest and every
+//     file — is PINNED: either built into this build for the reviewed test
+//     fixture (BuiltinFixturePins) or pinned by the operator with
+//     -trust-feature-artifact <sha256>.
 //
-// Anything else is BLOCKED: running third-party executables needs verified
-// release provenance and OS sandboxing, which P1 does not have. A checksum
-// next to a file proves it wasn't changed, not who published it.
+// The manifest's own "trust_class" is a description only; it can never
+// grant trust. Identity applies the same pin list independently.
+// This is "trusted local fixture" — NOT a verified third-party publisher
+// and NOT OS isolation (both remain BLOCKED in P1).
 package featpkg
 
 import (
@@ -94,6 +99,38 @@ type Manifest struct {
 	Files   []File   `json:"files"`
 }
 
+// BuiltinFixturePins are the exact artifact digests of reviewed trusted
+// local test fixtures shipped with this source. Identity carries the same
+// list. TestBuiltinPinMatchesFixture fails if the fixture changes without
+// its pin being updated (scripts/refresh_fixture_manifest.py prints it).
+var BuiltinFixturePins = map[string]string{
+	"3cd5e7a60f193f21bd15e14ee1532259fe1088434164ef6af4e3a66a36d493df": "built-in pin: p1-deterministic-worker 0.1.0 (reviewed P1 test fixture)",
+}
+
+// Pins is the set of artifact digests this Processor trusts.
+type Pins struct{ m map[string]string }
+
+// NewPins combines the built-in pins with operator pins (64 hex characters each).
+func NewPins(operator []string) (Pins, error) {
+	m := map[string]string{}
+	for k, v := range BuiltinFixturePins {
+		m[k] = v
+	}
+	for _, d := range operator {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if !sha256RE.MatchString(d) {
+			return Pins{}, fmt.Errorf("-trust-feature-artifact needs a 64-character SHA-256, got %q", d)
+		}
+		if _, ok := m[d]; !ok {
+			m[d] = "operator pin (-trust-feature-artifact)"
+		}
+	}
+	return Pins{m: m}, nil
+}
+
+// Basis says why digest is trusted ("" = not pinned).
+func (p Pins) Basis(digest string) string { return p.m[digest] }
+
 // Package is a verified package on disk.
 type Package struct {
 	Dir            string   `json:"dir"`
@@ -101,6 +138,7 @@ type Package struct {
 	ManifestSHA256 string   `json:"manifest_sha256"`
 	ArtifactSHA256 string   `json:"artifact_sha256"`
 	Trusted        bool     `json:"trusted"`
+	TrustBasis     string   `json:"trust_basis,omitempty"`
 	Blocked        string   `json:"blocked,omitempty"`
 }
 
@@ -227,8 +265,9 @@ func ArtifactDigest(manifestSHA string, files []File) string {
 }
 
 // Load reads and verifies a package directory. trusted says whether the
-// operator listed this directory with -trust-feature-dir.
-func Load(dir string, trusted bool) (Package, error) {
+// operator listed this directory with -trust-feature-dir; pins decide
+// whether this exact content may be installed and run.
+func Load(dir string, trusted bool, pins Pins) (Package, error) {
 	dir = filepath.Clean(dir)
 	fi, err := os.Lstat(dir)
 	if err != nil {
@@ -264,11 +303,13 @@ func Load(dir string, trusted bool) (Package, error) {
 	}
 	p := Package{Dir: dir, Manifest: m, ManifestSHA256: sha(raw), Trusted: trusted}
 	p.ArtifactSHA256 = ArtifactDigest(p.ManifestSHA256, m.Files)
+	p.TrustBasis = pins.Basis(p.ArtifactSHA256)
 	switch {
 	case !trusted:
 		p.Blocked = "UNTRUSTED_EXECUTION_BLOCKED: this folder was not trusted by the operator (-trust-feature-dir)"
-	case m.TrustClass != TrustFixture:
-		p.Blocked = "UNTRUSTED_EXECUTION_BLOCKED: only " + TrustFixture + " packages can be installed in P1 (third-party code needs verified provenance and OS sandboxing first)"
+	case p.TrustBasis == "":
+		p.Blocked = "UNTRUSTED_EXECUTION_BLOCKED: this exact package content (artifact " + p.ArtifactSHA256[:12] + "…) is not a pinned trusted fixture. " +
+			"What a manifest says about itself (trust_class " + strings.TrimSpace(m.TrustClass) + ") cannot grant trust. Third-party code stays blocked until verified provenance and OS sandboxing exist."
 	}
 	return p, nil
 }

@@ -118,8 +118,10 @@ type Grant struct {
 	SourceScope  string     `json:"source_scope"`
 	ApprovedBy   string     `json:"approved_by_admin_id"`
 	ApprovalID   string     `json:"approval_id"`
+	RequestedBy  string     `json:"requested_by,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	UntilRevoked bool       `json:"until_revoked,omitempty"`
 	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
 	RevokedBy    string     `json:"revoked_by,omitempty"`
 	RevokeReason string     `json:"revoke_reason,omitempty"`
@@ -252,11 +254,34 @@ func (c *Client) CommitUninstall(ctx context.Context, id, approvalID string) err
 	return c.Post(ctx, "/api/v1/installations/"+url.PathEscape(id)+"/uninstall", map[string]string{"approval_id": approvalID}, nil)
 }
 
-func (c *Client) RequestGrant(ctx context.Context, dest, subject, capability string, expiresIn int64) (ApprovalRequest, error) {
+// RequestGrant asks for a grant. expiresIn 0 = Identity's finite default
+// (1 hour). untilRevoked asks for no expiry; the Admin must then confirm that
+// separately in Identity's page.
+func (c *Client) RequestGrant(ctx context.Context, dest, subject, capability string, expiresIn int64, untilRevoked bool) (ApprovalRequest, error) {
 	var v ApprovalRequest
-	_, raw, err := c.Call(ctx, "POST", "/api/v1/grants/requests", map[string]any{"destination_installation_id": dest,
-		"subject_identity_id": subject, "capability": capability, "expires_in_seconds": expiresIn})
+	body := map[string]any{"destination_installation_id": dest, "subject_identity_id": subject, "capability": capability}
+	if untilRevoked {
+		body["until_revoked"] = true
+	} else if expiresIn > 0 {
+		body["expires_in_seconds"] = expiresIn
+	}
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/grants/requests", body)
 	return v, decodeSignedFor(c, raw, err, &v)
+}
+
+// RequestAdminRevoke asks the Admin to revoke a grant this program may not
+// revoke itself (e.g. one another paired program asked for).
+func (c *Client) RequestAdminRevoke(ctx context.Context, id, reason string) (ApprovalRequest, error) {
+	var v ApprovalRequest
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/grants/"+url.PathEscape(id)+"/revoke/requests", map[string]string{"reason": reason})
+	return v, decodeSignedFor(c, raw, err, &v)
+}
+
+// CommitAdminRevoke carries out an Admin-approved revocation.
+func (c *Client) CommitAdminRevoke(ctx context.Context, id, approvalID string) (GrantView, error) {
+	var v GrantView
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/grants/"+url.PathEscape(id)+"/admin-revoke", map[string]string{"approval_id": approvalID})
+	return v, decodeSigned(raw, err, &v)
 }
 
 func (c *Client) CommitGrant(ctx context.Context, approvalID string) (GrantView, error) {

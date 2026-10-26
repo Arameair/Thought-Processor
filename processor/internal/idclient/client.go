@@ -166,10 +166,21 @@ func (c *Client) Call(ctx context.Context, method, path string, in any) (int, []
 		return 401, nil, &Error{Kind: TokenRefused, Status: 401, Msg: msg}
 	}
 	if !VerifyProof(c.p.Token, nonce, resp.StatusCode, raw, resp.Header.Get(ProofHeader)) {
-		return resp.StatusCode, nil, &Error{Kind: WrongService, Status: resp.StatusCode, Msg: "the answer is not signed by the Identity this Processor connected to"}
+		actual := resp.Header.Get(IDHeader)
+		if actual == "" {
+			actual = "an unsigned program"
+		} else if actual != c.p.IdentitySystemID {
+			actual = "Identity installation " + actual
+		} else {
+			actual = "a program claiming to be it, without a valid proof"
+		}
+		return resp.StatusCode, nil, &Error{Kind: WrongService, Status: resp.StatusCode, Msg: "Expected the paired Identity installation " + c.p.IdentitySystemID +
+			" at " + c.p.BaseURL + ", but " + actual + " answered there. Processor did not trust it or switch to it. Start your own Identity " +
+			"(Processor follows it to a new port through its locator), or choose Connect again only if you really mean to use a different Identity."}
 	}
 	if resp.Header.Get(IDHeader) != c.p.IdentitySystemID {
-		return resp.StatusCode, nil, &Error{Kind: WrongService, Status: resp.StatusCode, Msg: "a different Identity installation answered"}
+		return resp.StatusCode, nil, &Error{Kind: WrongService, Status: resp.StatusCode, Msg: "Expected Identity installation " + c.p.IdentitySystemID +
+			" but " + resp.Header.Get(IDHeader) + " answered at " + c.p.BaseURL + ". Processor did not switch."}
 	}
 	if resp.StatusCode >= 400 {
 		var e struct {

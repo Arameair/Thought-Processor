@@ -154,6 +154,24 @@ type Candidate struct {
 
 // Discover lists Identities answering on this computer: every live locator,
 // plus the default port and any extra address. Unverified by definition.
+// DefaultProbeURL is the well-known address Processor also probes before it
+// is paired (besides the locator folder). TP_IDENTITY_DEFAULT_URL overrides
+// it; "-" turns the probe off (tests do this so a stranger's Identity on
+// 127.0.0.1:7790 is never contacted). Only loopback addresses are accepted.
+func DefaultProbeURL() string {
+	v := os.Getenv("TP_IDENTITY_DEFAULT_URL")
+	switch v {
+	case "":
+		return DefaultURL
+	case "-":
+		return ""
+	}
+	if u, err := LoopbackOnly(v); err == nil {
+		return u
+	}
+	return ""
+}
+
 func Discover(ctx context.Context, extra ...string) []Candidate {
 	seen := map[string]bool{}
 	var out []Candidate
@@ -171,7 +189,7 @@ func Discover(ctx context.Context, extra ...string) []Candidate {
 	for _, l := range ReadLocators() {
 		try(l.BaseURL, l.IdentitySystemID, l.Profile)
 	}
-	try(DefaultURL, "", "")
+	try(DefaultProbeURL(), "", "")
 	for _, e := range extra {
 		if u, err := LoopbackOnly(e); err == nil {
 			try(u, "", "")

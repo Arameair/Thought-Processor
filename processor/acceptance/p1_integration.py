@@ -15,7 +15,8 @@ directly against Identity and the feature — things Processor's UI never offers
 
 Exit code 0 only when every check PASSed.
 """
-import argparse, base64, hashlib, hmac, json, os, re, secrets, shutil, signal, subprocess, sys, time, urllib.error, urllib.request
+import argparse, base64, hashlib, hmac, json, os, re, secrets, shutil, signal, socket, subprocess, sys, threading, time, urllib.error, urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -27,17 +28,28 @@ args = ap.parse_args()
 W = Path(args.work).resolve()
 if W.exists():
     shutil.rmtree(W)
-W.mkdir(parents=True)
+W.mkdir(parents=True, mode=0o700)
+os.chmod(W, 0o700)
 SHOTS = Path(args.shots).resolve() if args.shots else None
 PROC_SRC = Path(__file__).resolve().parent.parent
 FEATURES = PROC_SRC / "testfeatures"
-FX, IP, PP = 8941, 7941, 7961
+def free_port():
+    # The OS picks unused loopback ports, so an Identity/Processor the owner
+    # already runs (7790 / 7860 / 8790 …) is never touched or contacted.
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+FX, IP, PP = free_port(), free_port(), free_port()
 IDENTITY = f"http://127.0.0.1:{IP}"
 PROCESSOR = f"http://127.0.0.1:{PP}"
 PASS = "correct horse battery staple"
 CAP = "worker.test.synthetic"
 LOC = W / "locators"
-ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001")
+# TP_IDENTITY_DEFAULT_URL="-": this run's Processor never probes the default
+# Identity port, so a stranger on 7790 can't interfere (Grok M4).
+ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001", TP_IDENTITY_DEFAULT_URL="-")
 ENV.pop("HTTPS_PROXY", None), ENV.pop("HTTP_PROXY", None), ENV.pop("https_proxy", None), ENV.pop("http_proxy", None)
 NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 results, procs, evidence = [], {}, {}
@@ -83,7 +95,7 @@ def build():
 
 
 def start(name, cmd, env=None):
-    log = open(W / (name + ".console.txt"), "a")
+    log = os.fdopen(os.open(W / (name + ".console.txt"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
     p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env or ENV)
     procs[name] = p
     return p
@@ -122,7 +134,7 @@ def start_processor(env=None):
     f = W / "processor-profile" / "runtime" / "operator-link.txt"
     if f.exists():
         f.unlink()
-    start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser",
+    start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser", "-test-feature-faults",
                         "-trust-feature-dir", str(FEATURES), "-trust-feature-dir", str(W / "trusted-but-blocked")], env=env)
     assert wait_http(PROCESSOR + "/api/health"), "processor did not start"
     for _ in range(100):
@@ -237,6 +249,27 @@ def admin_decide(url, body):
     if st != 200:
         return st, j
     return post("/api/approval/decide", body, j["csrf"])
+
+
+def admin_session(url):
+    """Open the approval page once; return a decide(body) function (same page session)."""
+    m = re.search(r"#a=(apr_[0-9a-f]+)&t=([0-9a-f]+)", url)
+    import http.cookiejar as cj
+    op = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj.CookieJar()))
+
+    def post(path, b, csrf=None):
+        r = urllib.request.Request(IDENTITY + path, data=json.dumps(b).encode(), method="POST")
+        r.add_header("Content-Type", "application/json")
+        r.add_header("Origin", IDENTITY)
+        if csrf:
+            r.add_header("X-Identity-CSRF", csrf)
+        try:
+            with op.open(r, timeout=30) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or b"{}")
+    st, view = post("/api/approval/open", {"id": m.group(1), "token": m.group(2)})
+    return st, view, (lambda body: post("/api/approval/decide", body, view.get("csrf")))
 
 
 def approve(url, passphrase=PASS):
@@ -501,13 +534,27 @@ def main():
         p2.screenshot(path=str(SHOTS / "p1-07-identity-grant-approval.png"), full_page=True)
         st, j = tp.post(f"/api/installations/{INS1}/grants/request", {"subject": TASS, "capability": CAP, "expires_in_seconds": 0})
         gurl = j["approval_url"]
-    st, j = approve(gurl)
+    st, view, decide = admin_session(gurl)
+    rq = (view.get("display") or {}).get("requester") or {}
+    st, j = decide({"decision": "approve", "passphrase": PASS})
     rec("G4", st == 200, "Admin approved the grant OFFLINE (GitHub unreachable) with the local passphrase")
+    rec("G4", rq.get("verified") is True and rq.get("is_primary") is True and not rq.get("warning") and bool(rq.get("label")),
+        "approval page names the requester from Identity's pairing record (primary Processor → no warning)", rq.get("label", ""))
     s = tp.until(lambda s: ident_inst(s, INS1)["active_grants"] >= 1, 20, "grant active")
     g = [x for x in ident_inst(s, INS1)["grants"] if x["status"] == "ACTIVE"]
     GID = g[0]["grant"]["grant_id"] if g else ""
     rec("G4", len(g) == 1 and g[0]["grant"]["requester"] == "processor:" + s["processor"]["processor_id"] and g[0]["grant"]["source_scope"] == "none",
         "exactly one narrow grant: this Processor → this installation → one capability → Tass; sources none", GID)
+    exp = g[0]["grant"].get("expires_at") if g else None
+    left = (datetime.fromisoformat(exp.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds() if exp else 0
+    rec("G4", 3300 < left <= 3600, "no expiry chosen → Identity's finite default (1 hour), not 'until revoked'", str(exp))
+    # 'Never expires' needs a separate, deliberate Admin confirmation.
+    st, j = tp.post(f"/api/installations/{INS1}/grants/request", {"subject": OTHER, "capability": CAP, "until_revoked": True})
+    sto, view, decide = admin_session(j.get("approval_url", ""))
+    st1, _ = decide({"decision": "approve", "passphrase": PASS})
+    st2, j2 = decide({"decision": "deny"})
+    rec("G4", ((view.get("display") or {}).get("expiry") or {}).get("until_revoked") is True and st1 == 400 and st2 == 200
+        and j2["approval"]["state"] == "DENIED", "'until revoked' grant is refused unless the Admin ticks the extra confirmation (then denied here)", "%d/%d" % (st1, st2))
     # on-demand: set on_demand with short idle, then act while stopped
     tp.post(f"/api/installations/{INS1}/policy", {"startup_mode": "on_demand", "idle_seconds": 6, "recovery": "manual"})
     st, j = tp.post(f"/api/installations/{INS1}/action", {"subject": TASS, "capability": CAP, "input": "hello p1"})
@@ -552,6 +599,13 @@ def main():
         (j.get("observation") or {}).get("decision_id", ""))
     st, j = feature_action(FURL, tk, body)
     rec("G4", st == 409 and j.get("error") == "TICKET_REPLAYED", "replayed ticket refused by the feature's durable ledger")
+    # Concurrent replay: one ticket sent 12 times at once → exactly one ALLOW.
+    st, t = b_ticket(B, INS1, TASS, body)
+    tk, outs = t.get("ticket", ""), []
+    ths = [threading.Thread(target=lambda: outs.append(feature_action(FURL, tk, body)[0])) for _ in range(12)]
+    [x.start() for x in ths]
+    [x.join() for x in ths]
+    rec("G4", st == 200 and sorted(outs).count(200) == 1 and len(outs) == 12, "12 simultaneous sends of one ticket → exactly one allowed", ",".join(map(str, sorted(outs))))
     # Forged-with-key EXPIRED ticket (we read the installation credential as the same OS user: this also shows the same-user limit)
     cred = json.loads((W / "processor-profile" / "installations" / INS1 / "credential.json").read_text())
     tkey = hmac.new(cred["secret"].encode(), b"identity/2 ticket key", hashlib.sha256).digest()
@@ -572,6 +626,9 @@ def main():
     st, j = B.call("POST", "/api/v1/grants/%s/revoke" % BGID, {"reason": "test"})
     st, j = feature_action(FURL, tk, body)
     rec("G4", st == 403 and j.get("error") == "DENIED", "after REVOCATION the receiving feature denies (no restart of anything)", j.get("reason", ""))
+    # Grok M2: an unrelated paired program can't revoke someone else's grant.
+    st, j = B.call("POST", "/api/v1/grants/%s/revoke" % GID, {"reason": "B tries"})
+    rec("G4", st == 403 and j.get("error") == "REVOKE_NOT_PERMITTED", "actor B can NOT revoke Processor's grant (only its parties or the Admin)", str(st))
     # Processor's grant: revoke through the UI path.
     st, j = tp.post(f"/api/installations/{INS1}/grants/{GID}/revoke")
     st, j = tp.post(f"/api/installations/{INS1}/action", {"subject": TASS, "capability": CAP, "input": "after revoke"})
@@ -730,6 +787,16 @@ def main():
         "ticket for copy #1 refused by copy #2 (signed with copy #1's key: wrong recipient)", j.get("reason", ""))
     tp.post(f"/api/installations/{INS2}/stop")
     shot("p1-11-two-installations")
+    # Grok M2: Processor can't revoke actor B's grant itself, but the Admin can (emergency path).
+    st, j = tp.post(f"/api/installations/{INS1}/grants/{BGID2}/revoke")
+    rec("G4", st == 403 and "REVOKE_NOT_PERMITTED" in json.dumps(j), "Processor can NOT directly revoke actor B's grant", str(st))
+    st, j = tp.post(f"/api/installations/{INS1}/grants/{BGID2}/admin-revoke")
+    approve(j.get("approval_url", ""))
+    s = tp.until(lambda s: any(x["grant"]["grant_id"] == BGID2 and x["status"] == "REVOKED" for x in ident_inst(s, INS1)["grants"]), 20, "admin revoke")
+    gg = [x["grant"] for x in ident_inst(s, INS1)["grants"] if x["grant"]["grant_id"] == BGID2]
+    st, t = b_ticket(B, INS1, TASS, body)
+    rec("G4", gg and (gg[0].get("revoked_by") or "").startswith("admin:" + adm["admin_id"]) and st == 403 and t.get("reason") == "GRANT_REVOKED",
+        "Admin emergency revocation (approved in Identity) ends B's grant; revoked_by records the Admin", gg[0].get("revoked_by", "") if gg else "")
 
     # Uninstall copy #2 (elevated): tombstone, grants revoked, credential gone.
     st, j = tp.post(f"/api/installations/{INS2}/uninstall", {"keep_data": False})

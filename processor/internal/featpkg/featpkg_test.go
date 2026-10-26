@@ -38,18 +38,18 @@ func editManifest(t *testing.T, dir string, fn func(m map[string]any)) {
 }
 
 func TestRealFixtureLoadsAndIsTrusted(t *testing.T) {
-	p, err := Load(fixtureDir(t), true)
+	p, err := Load(fixtureDir(t), true, DefaultPins(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Blocked != "" || p.Manifest.TrustClass != TrustFixture || len(p.ArtifactSHA256) != 64 {
 		t.Fatalf("fixture not installable: %+v", p)
 	}
-	p2, _ := Load(fixtureDir(t), true)
+	p2, _ := Load(fixtureDir(t), true, DefaultPins(t))
 	if p2.ArtifactSHA256 != p.ArtifactSHA256 {
 		t.Fatal("artifact digest not deterministic")
 	}
-	if u, _ := Load(fixtureDir(t), false); !strings.HasPrefix(u.Blocked, "UNTRUSTED_EXECUTION_BLOCKED") {
+	if u, _ := Load(fixtureDir(t), false, DefaultPins(t)); !strings.HasPrefix(u.Blocked, "UNTRUSTED_EXECUTION_BLOCKED") {
 		t.Fatal("untrusted folder not blocked")
 	}
 }
@@ -99,21 +99,21 @@ func TestRefusals(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			d := copyPkg(t)
 			mut(t, d)
-			if _, err := Load(d, true); err == nil {
+			if _, err := Load(d, true, DefaultPins(t)); err == nil {
 				t.Fatalf("%s accepted", name)
 			}
 		})
 	}
 	d := copyPkg(t)
 	editManifest(t, d, func(m map[string]any) { m["trust_class"] = "THIRD_PARTY_RELEASE" })
-	if p, err := Load(d, true); err != nil || !strings.Contains(p.Blocked, "UNTRUSTED_EXECUTION_BLOCKED") {
+	if p, err := Load(d, true, DefaultPins(t)); err != nil || !strings.Contains(p.Blocked, "UNTRUSTED_EXECUTION_BLOCKED") {
 		t.Fatalf("third-party trust class not blocked: %v %q", err, p.Blocked)
 	}
 }
 
 func TestStageVerifyAndDetectChanges(t *testing.T) {
 	src := copyPkg(t)
-	p, err := Load(src, true)
+	p, err := Load(src, true, DefaultPins(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,5 +139,56 @@ func TestStageVerifyAndDetectChanges(t *testing.T) {
 	}
 	if _, err := os.Stat(dst2); err == nil {
 		t.Fatal("failed staging left a folder")
+	}
+}
+
+func DefaultPins(t *testing.T) Pins {
+	p, err := NewPins(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// The built-in pin must be exactly the reviewed fixture in this repo (and
+// Identity carries the same digest in authority.BuiltinFixturePins).
+func TestBuiltinPinMatchesFixture(t *testing.T) {
+	p, err := Load(fixtureDir(t), true, DefaultPins(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := BuiltinFixturePins[p.ArtifactSHA256]; !ok || p.Blocked != "" || p.TrustBasis == "" {
+		t.Fatalf("fixture artifact %s is not the built-in pin (update BuiltinFixturePins here AND in Identity): %q", p.ArtifactSHA256, p.Blocked)
+	}
+}
+
+// Grok M1: new code in a trusted folder whose manifest claims the fixture
+// trust class (with correct file hashes) is NOT installable.
+func TestSelfLabelledPackageIsBlocked(t *testing.T) {
+	d := copyPkg(t)
+	b, _ := os.ReadFile(filepath.Join(d, "worker.py"))
+	b = append(b, []byte("\n# new code that calls itself the fixture\n")...)
+	os.WriteFile(filepath.Join(d, "worker.py"), b, 0o600)
+	editManifest(t, d, func(m map[string]any) {
+		m["feature_id"] = "p1-self-labelled"
+		m["files"] = []map[string]string{{"path": "worker.py", "sha256": sha(b)}}
+	})
+	p, err := Load(d, true, DefaultPins(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Manifest.TrustClass != TrustFixture || !strings.Contains(p.Blocked, "not a pinned trusted fixture") {
+		t.Fatalf("self-labelled package not blocked: %q", p.Blocked)
+	}
+	// An operator may pin it deliberately (e.g. while reviewing a new fixture).
+	op, err := NewPins([]string{p.ArtifactSHA256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := Load(d, true, op); q.Blocked != "" || !strings.Contains(q.TrustBasis, "operator") {
+		t.Fatalf("operator pin not honoured: %+v", q.TrustBasis)
+	}
+	if _, err := NewPins([]string{"xyz"}); err == nil {
+		t.Fatal("bad pin accepted")
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -61,7 +62,9 @@ type InstallRecord struct {
 	StartupModes     []string             `json:"startup_modes"`
 	SourceDir        string               `json:"source_dir"`
 	SourceRepo       string               `json:"source_repo"`
-	TrustClass       string               `json:"trust_class"`
+	TrustClass       string               `json:"trust_class"` // what the manifest says about itself (descriptive only)
+	TrustBasis       string               `json:"trust_basis"` // why Processor trusts it: the pinned artifact
+	Interpreter      string               `json:"interpreter,omitempty"`
 	IdentitySystemID string               `json:"identity_system_id"`
 	InstalledAt      time.Time            `json:"installed_at"`
 	State            string               `json:"state"` // INSTALLED | UNINSTALLED
@@ -89,9 +92,10 @@ type Tx struct {
 // PendingOp is an Admin approval Processor is waiting for.
 type PendingOp struct {
 	ApprovalID     string    `json:"approval_id"`
-	Kind           string    `json:"kind"` // enroll_admin | grant_capability | uninstall_feature
+	Kind           string    `json:"kind"` // enroll_admin | grant_capability | uninstall_feature | revoke_grant
 	InstallationID string    `json:"installation_id,omitempty"`
 	KeepData       bool      `json:"keep_data,omitempty"`
+	GrantID        string    `json:"grant_id,omitempty"` // revoke_grant
 	ApprovalURL    string    `json:"approval_url"`
 	Summary        []string  `json:"summary"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -119,6 +123,8 @@ type ActionResult struct {
 type p1 struct {
 	mu        sync.Mutex
 	trusted   []string
+	pins      featpkg.Pins
+	testFault bool
 	pending   []PendingOp
 	requests  []ActionResult
 	userStop  map[string]bool
@@ -139,6 +145,21 @@ func (a *App) requestLogPath(id string) string {
 }
 
 // TrustFeatureDirs records the folders the operator explicitly trusted.
+// TrustArtifacts sets the pinned artifact digests (built-in + operator).
+func (a *App) TrustArtifacts(operator []string) error {
+	p, err := featpkg.NewPins(operator)
+	if err != nil {
+		return err
+	}
+	a.P1.pins = p
+	return nil
+}
+
+// EnableTestFaults lets the trusted test fixture honour its TEST-ONLY
+// fault-injection file (TF_FIXTURE_TEST_MODE=1). Off unless the operator
+// starts Processor with -test-feature-faults; never grants anything.
+func (a *App) EnableTestFaults() { a.P1.testFault = true }
+
 func (a *App) TrustFeatureDirs(dirs []string) {
 	for _, d := range dirs {
 		if abs, err := filepath.Abs(d); err == nil {
@@ -149,6 +170,7 @@ func (a *App) TrustFeatureDirs(dirs []string) {
 
 func (a *App) initP1() {
 	a.P1 = &p1{userStop: map[string]bool{}, busy: map[string]bool{}}
+	a.P1.pins, _ = featpkg.NewPins(nil)
 	os.MkdirAll(a.txDir(), 0o700)
 	if b, err := os.ReadFile(a.pendingPath()); err == nil {
 		json.Unmarshal(b, &a.P1.pending)
@@ -270,6 +292,7 @@ type LibraryItem struct {
 	Capabilities   []featpkg.Capability `json:"capabilities"`
 	Command        []string             `json:"command"`
 	Requires       []string             `json:"requires"`
+	TrustBasis     string               `json:"trust_basis,omitempty"`
 	Blocked        string               `json:"blocked,omitempty"`
 	Error          string               `json:"error,omitempty"`
 	Installed      []string             `json:"installed_as"`
@@ -284,7 +307,7 @@ func (a *App) library() []LibraryItem {
 			NotVerified: []string{"publisher identity (the publisher name is only a claim; nothing is signed)",
 				"OS sandboxing (a feature runs with your user account's rights)",
 				"release provenance (this is a local folder you trusted, not a verified release)"}}
-		p, err := featpkg.Load(dir, true)
+		p, err := featpkg.Load(dir, true, a.P1.pins)
 		if err != nil {
 			it.Error = err.Error()
 			it.Blocked = "INVALID_PACKAGE"
@@ -295,6 +318,7 @@ func (a *App) library() []LibraryItem {
 		it.FeatureID, it.Name, it.Version, it.Description = m.FeatureID, m.Name, m.Version, m.Description
 		it.Publisher, it.PublisherProof, it.SourceRepo, it.TrustClass, it.API = m.Publisher.Name, "none (claim only)", m.Source.Repo+"/"+m.Source.Path, m.TrustClass, m.API
 		it.ArtifactSHA256, it.Files, it.Capabilities, it.Command, it.Requires, it.Blocked = p.ArtifactSHA256, m.Files, m.Capabilities, m.Runtime.Command, m.Runtime.Requires, p.Blocked
+		it.TrustBasis = p.TrustBasis
 		for _, r := range insts {
 			if r.FeatureID == m.FeatureID && r.State == "INSTALLED" {
 				it.Installed = append(it.Installed, r.InstallationID)
@@ -326,7 +350,7 @@ func (a *App) findPackage(featureID string) (featpkg.Package, error) {
 		}
 		for _, d := range a.P1.trusted {
 			for _, cand := range []string{d, filepath.Join(d, filepath.Base(it.Dir))} {
-				if p, err := featpkg.Load(cand, true); err == nil && p.Manifest.FeatureID == featureID {
+				if p, err := featpkg.Load(cand, true, a.P1.pins); err == nil && p.Manifest.FeatureID == featureID {
 					if p.Blocked != "" {
 						return p, errors.New(p.Blocked)
 					}
@@ -451,9 +475,18 @@ func (a *App) advanceTx(ctx context.Context, cl *idclient.Client, t Tx) {
 		os.Exit(42)
 	}
 	// Commit the folder: installations/<id>/{package,credential.json,data,runtime,logs,install.json}
-	p, err := featpkg.Load(filepath.Join(dir, "package"), true)
+	p, err := featpkg.Load(filepath.Join(dir, "package"), true, a.P1.pins)
 	if err != nil || p.ArtifactSHA256 != t.ArtifactSHA256 {
 		fail("staged files changed; refused")
+		return
+	}
+	if p.Blocked != "" {
+		fail(p.Blocked)
+		return
+	}
+	interp, ierr := pinInterpreter(p.Manifest.Runtime.Command)
+	if ierr != nil {
+		fail(ierr.Error())
 		return
 	}
 	final := a.recDir(in.ID)
@@ -486,6 +519,7 @@ func (a *App) advanceTx(ctx context.Context, cl *idclient.Client, t Tx) {
 		Command: m.Runtime.Command, Requires: m.Runtime.Requires, Capabilities: m.Capabilities, StartupModes: m.Runtime.StartupModes,
 		SourceDir: store.DisplayPath(t.SourceDir), SourceRepo: m.Source.Repo + "/" + m.Source.Path, TrustClass: m.TrustClass,
 		IdentitySystemID: cred.IdentitySystemID, InstalledAt: time.Now().UTC(), State: "INSTALLED",
+		TrustBasis: p.TrustBasis, Interpreter: interp,
 		Policy: supervisor.Policy{Mode: mode, Idle: idle, Recovery: supervisor.RecoveryManual}}
 	if err := a.saveRecord(rec); err != nil {
 		return
@@ -532,8 +566,9 @@ func (a *App) specFor(id string) (supervisor.Spec, error) {
 	if r.State != "INSTALLED" {
 		return supervisor.Spec{}, errors.New("not installed")
 	}
-	if r.TrustClass != featpkg.TrustFixture {
-		return supervisor.Spec{}, errors.New("UNTRUSTED_EXECUTION_BLOCKED")
+	// Verified again before every start: still pinned, files still identical.
+	if a.P1.pins.Basis(r.ArtifactSHA256) == "" {
+		return supervisor.Spec{}, errors.New("UNTRUSTED_EXECUTION_BLOCKED: this installation's artifact " + r.ArtifactSHA256[:12] + "… is not pinned in this Processor; it will not be started")
 	}
 	if iv := a.Conn.installation(id); iv != nil && iv.Installation.State != "INSTALLED" {
 		return supervisor.Spec{}, errors.New("Identity lists this installation as " + iv.Installation.State + "; it can't be started")
@@ -546,9 +581,18 @@ func (a *App) specFor(id string) (supervisor.Spec, error) {
 	if pr.IdentitySystemID != r.IdentitySystemID {
 		return supervisor.Spec{}, errors.New("this installation belongs to a different Identity installation than the one Processor is connected to")
 	}
+	cmd := append([]string(nil), r.Command...)
+	if r.Interpreter != "" {
+		// Use the interpreter resolved and recorded at install time, never a
+		// fresh PATH lookup (a later PATH shim can't slip in).
+		if fi, err := os.Stat(r.Interpreter); err != nil || fi.IsDir() {
+			return supervisor.Spec{}, errors.New("REQUIREMENT_MISSING: the interpreter recorded at install (" + r.Interpreter + ") is gone; reinstall the feature")
+		}
+		cmd[0] = r.Interpreter
+	}
 	return supervisor.Spec{InstallationID: id, FeatureID: r.FeatureID, PackageDir: pkg, DataDir: filepath.Join(a.recDir(id), "data"),
 		RuntimeDir: filepath.Join(a.recDir(id), "runtime"), LogPath: filepath.Join(a.recDir(id), "logs", "feature.log"),
-		CredentialPath: a.credPath(id), Command: r.Command, IdentityURL: pr.BaseURL, IdentitySystemID: pr.IdentitySystemID}, nil
+		CredentialPath: a.credPath(id), Command: cmd, IdentityURL: pr.BaseURL, IdentitySystemID: pr.IdentitySystemID, TestMode: a.P1.testFault}, nil
 }
 
 // ---- synthetic protected action ----
@@ -738,6 +782,12 @@ func (a *App) reconcileOnce(ctx context.Context) {
 			}
 		case "uninstall_feature":
 			a.finishUninstall(ctx, cl, op)
+		case "revoke_grant":
+			if g, err := cl.CommitAdminRevoke(ctx, op.GrantID, op.ApprovalID); err != nil {
+				a.note("warn", "grant.admin_revoke_failed", op.GrantID+": "+err.Error())
+			} else {
+				a.note("info", "grant.revoked", "grant "+g.Grant.ID+" revoked by "+g.Grant.RevokedBy)
+			}
 		}
 	}
 	if changed {
@@ -799,7 +849,7 @@ type InstView struct {
 }
 
 func (a *App) p1State() map[string]any {
-	out := map[string]any{}
+	out := map[string]any{"test_feature_faults": a.P1.testFault}
 	a.P1.mu.Lock()
 	pending := append([]PendingOp(nil), a.P1.pending...)
 	reqs := append([]ActionResult(nil), a.P1.requests...)
@@ -972,10 +1022,11 @@ func (a *App) p1Routes(m *http.ServeMux) {
 		var b struct {
 			Subject    string `json:"subject"`
 			Capability string `json:"capability"`
-			ExpiresIn  int64  `json:"expires_in_seconds"`
+			ExpiresIn  int64  `json:"expires_in_seconds"` // 0 = Identity's 1-hour default
+			Forever    bool   `json:"until_revoked"`      // the Admin must also confirm it in Identity
 		}
 		decode(r, &b)
-		if !entIDRE.MatchString(b.Subject) || !capIDRE.MatchString(b.Capability) {
+		if !entIDRE.MatchString(b.Subject) || !capIDRE.MatchString(b.Capability) || b.ExpiresIn < 0 {
 			a.fail(w, 400, "choose an identity and a capability")
 			return
 		}
@@ -984,7 +1035,7 @@ func (a *App) p1Routes(m *http.ServeMux) {
 			a.failIdentity(w, err)
 			return
 		}
-		ar, err := cl.RequestGrant(r.Context(), id, b.Subject, b.Capability, b.ExpiresIn)
+		ar, err := cl.RequestGrant(r.Context(), id, b.Subject, b.Capability, b.ExpiresIn, b.Forever)
 		if err != nil {
 			a.failIdentity(w, err)
 			return
@@ -1006,6 +1057,11 @@ func (a *App) p1Routes(m *http.ServeMux) {
 			return
 		}
 		if err := cl.RevokeGrant(r.Context(), gid, "revoked by the person in Thought Processor"); err != nil {
+			var ie *idclient.Error
+			if errors.As(err, &ie) && ie.Code == "REVOKE_NOT_PERMITTED" {
+				a.fail(w, 403, "REVOKE_NOT_PERMITTED: this grant was made for another program, so this Thought Processor can't end it by itself. Use \"Ask the Admin to revoke…\" (approved in Identity).")
+				return
+			}
 			a.failIdentity(w, err)
 			return
 		}
@@ -1013,6 +1069,28 @@ func (a *App) p1Routes(m *http.ServeMux) {
 		a.Conn.Kick()
 		a.Conn.refreshData(r.Context())
 		writeJSON(w, 200, a.State())
+	}))
+	// Admin emergency revocation: for any grant, approved by the Admin in Identity.
+	m.HandleFunc("POST /api/installations/{id}/grants/{gid}/admin-revoke", ins(func(w http.ResponseWriter, r *http.Request, id string) {
+		gid := r.PathValue("gid")
+		if !grantRE.MatchString(gid) {
+			a.fail(w, 400, "unknown grant")
+			return
+		}
+		cl, err := a.Conn.Require(r.Context())
+		if err != nil {
+			a.failIdentity(w, err)
+			return
+		}
+		ar, err := cl.RequestAdminRevoke(r.Context(), gid, "Admin revocation asked for in Thought Processor")
+		if err != nil {
+			a.failIdentity(w, err)
+			return
+		}
+		a.addPending(PendingOp{ApprovalID: ar.Approval.ID, Kind: "revoke_grant", InstallationID: id, GrantID: gid, ApprovalURL: ar.ApprovalURL,
+			Summary: ar.Approval.Summary, CreatedAt: ar.Approval.CreatedAt, ExpiresAt: ar.Approval.ExpiresAt, State: "PENDING"})
+		a.note("info", "grant.admin_revoke_requested", id+": Admin revocation of "+gid+" waiting for the Admin in Identity")
+		writeJSON(w, 200, map[string]any{"approval_url": ar.ApprovalURL, "approval_id": ar.Approval.ID, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/installations/{id}/action", ins(func(w http.ResponseWriter, r *http.Request, id string) {
 		var b struct {
@@ -1086,4 +1164,23 @@ func tailFile(path string, n int) []string {
 		lines = lines[len(lines)-n:]
 	}
 	return lines
+}
+
+// pinInterpreter resolves a bare interpreter name (python3, node) to its real
+// absolute path once, at install time. Grok L4: the interpreter's CONTENT is
+// not pinned (OS updates must keep working); a same-user attacker who can
+// replace it is outside P1's non-isolated threat model.
+func pinInterpreter(command []string) (string, error) {
+	if len(command) == 0 || strings.HasPrefix(command[0], "{package}/") {
+		return "", nil
+	}
+	lp, err := exec.LookPath(command[0])
+	if err != nil {
+		return "", errors.New("REQUIREMENT_MISSING: " + command[0] + " is not installed or not on PATH")
+	}
+	real, err := filepath.EvalSymlinks(lp)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(real)
 }

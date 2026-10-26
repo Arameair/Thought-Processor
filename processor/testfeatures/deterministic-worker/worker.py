@@ -127,26 +127,53 @@ class Worker:
             log("error", "ledger.damaged", "ticket ledger unreadable; protected requests are refused until it is repaired")
             return None
 
+    @staticmethod
+    def _entry(v):
+        # older ledgers stored only the expiry
+        return v if isinstance(v, dict) else {"exp": int(v), "state": "used"}
+
     def _remember_ticket(self, tid, exp):
-        """Record tid before asking Identity. False = already seen; None = can't persist."""
+        """Record tid BEFORE asking Identity (single use, survives restart).
+        Returns (True, None) when new, (False, previous_state) when already
+        seen, (None, None) when the ledger can't be written."""
         with self.lock:
             if self.ledger is None:
-                return None
+                return None, None
             if tid in self.ledger:
-                return False
+                return False, self._entry(self.ledger[tid]).get("state")
             now = int(time.time())
-            nxt = {k: v for k, v in self.ledger.items() if v > now - 600}
-            nxt[tid] = exp
+            nxt = {k: v for k, v in self.ledger.items() if self._entry(v)["exp"] > now - 600}
+            nxt[tid] = {"exp": exp, "state": "checking"}
             try:
                 write_atomic(self.ledger_path, json.dumps(nxt).encode())
             except OSError:
-                return None
+                return None, None
             self.ledger = nxt
-            return True
+            return True, None
+
+    def _mark_ticket(self, tid, state):
+        """Record what happened to a spent ticket (for a clear answer if it is sent again)."""
+        with self.lock:
+            if self.ledger is None or tid not in self.ledger:
+                return
+            nxt = dict(self.ledger)
+            e = self._entry(nxt[tid])
+            e["state"] = state
+            nxt[tid] = e
+            try:
+                write_atomic(self.ledger_path, json.dumps(nxt).encode())
+                self.ledger = nxt
+            except OSError:
+                pass  # the ticket stays spent either way
 
     def _load_faults(self):
-        # TEST-ONLY fault injection: enabled only if the operator/harness put
-        # this file in the installation's data folder. Never on by default.
+        # TEST-ONLY fault injection. Needs BOTH an explicit test mode set by
+        # the launcher (Thought Processor started with -test-feature-faults
+        # sets TF_FIXTURE_TEST_MODE=1) AND this file in the data folder. A
+        # dropped file alone does nothing. Faults only crash/delay AFTER a
+        # live ALLOW; they can never grant anything.
+        if os.environ.get("TF_FIXTURE_TEST_MODE") != "1":
+            return {}
         p = os.path.join(self.data_dir, "TEST-ONLY-fault-injection.json")
         try:
             with open(p) as f:
@@ -261,7 +288,7 @@ class Worker:
                     "heartbeat_seq": self.heartbeat_seq, "uptime_s": int(time.time() - self.started),
                     "in_flight": self.in_flight, "counters": dict(self.counters),
                     "latency_ms_p50": lat[len(lat) // 2] if lat else None, "latency_ms_max": lat[-1] if lat else None,
-                    "trust_class": "TRUSTED_LOCAL_TEST_FIXTURE", "data_class": DATA_CLASS,
+                    "trust_class": "TRUSTED_LOCAL_TEST_FIXTURE", "data_class": DATA_CLASS, "test_mode": bool(self.faults),
                     "heartbeat_note": "heartbeat = process liveness only; it is not an observation, grant or result"}
 
 
@@ -380,14 +407,20 @@ class Handler(BaseHTTPRequestHandler):
                 W.counters["invalid"] += 1
             log("warn", "action.refused", why)
             return reply(401, {"error": "TICKET_INVALID", "reason": why, "detail": "nothing was done"})
-        seen = W._remember_ticket(p["tid"], p["exp"])
+        seen, prev = W._remember_ticket(p["tid"], p["exp"])
         if seen is None:
             return reply(503, {"error": "REPLAY_LEDGER_UNAVAILABLE", "detail": "nothing was done"})
         if seen is False:
             with W.lock:
                 W.counters["invalid"] += 1
-            log("warn", "action.replay", "ticket already used", ticket_id=p["tid"])
-            return reply(409, {"error": "TICKET_REPLAYED", "ticket_id": p["tid"], "detail": "nothing was done"})
+            if prev == "spent_authority_unavailable":
+                # Still refused (single use is not weakened), but say what happened.
+                log("info", "action.spent_ticket", "ticket was spent during an Identity outage; not executed", ticket_id=p["tid"])
+                return reply(409, {"error": "TICKET_SPENT_DURING_OUTAGE", "ticket_id": p["tid"],
+                                   "detail": "this ticket was used once while Identity was unavailable, so the request was NOT carried out. "
+                                             "Tickets are single-use: ask Identity for a new ticket. This is not resent automatically."})
+            log("warn", "action.replay", "ticket already used", ticket_id=p["tid"], previous=prev or "used")
+            return reply(409, {"error": "TICKET_REPLAYED", "ticket_id": p["tid"], "detail": "this ticket was already used; nothing was done"})
         try:
             req = json.loads(body.decode() or "{}")
             text, rid = req.get("input"), req.get("request_id")
@@ -402,15 +435,19 @@ class Handler(BaseHTTPRequestHandler):
         if st == "UNAVAILABLE" or (isinstance(st, int) and st >= 500):
             with W.lock:
                 W.counters["unavailable"] += 1
+            W._mark_ticket(p["tid"], "spent_authority_unavailable")
             log("warn", "action.authority_unavailable", why or "Identity error", ticket_id=p["tid"], request_id=rid)
-            return reply(503, {"error": "AUTHORITY_UNAVAILABLE", "detail": (why or "Identity could not decide") + "; nothing was done",
-                                   "request_id": rid})
+            return reply(503, {"error": "AUTHORITY_UNAVAILABLE", "detail": (why or "Identity could not decide") +
+                               "; nothing was done. This ticket is now spent — ask for a new one when Identity is back.",
+                               "request_id": rid, "ticket_spent": True})
         if st != 200 or not d or d.get("decision") != "ALLOW":
+            W._mark_ticket(p["tid"], "denied")
             with W.lock:
                 W.counters["denied"] += 1
             log("warn", "action.denied", (d or {}).get("reason", ""), ticket_id=p["tid"], request_id=rid, decision_id=(d or {}).get("decision_id"))
             return reply(403, {"error": "DENIED", "reason": (d or {}).get("reason"), "decision_id": (d or {}).get("decision_id"),
                                    "request_id": rid, "detail": "Identity did not allow this; nothing was done"})
+        W._mark_ticket(p["tid"], "executed")
         with W.lock:
             W.in_flight += 1
         try:
@@ -425,7 +462,7 @@ class Handler(BaseHTTPRequestHandler):
                    "capability": capability, "data_class": DATA_CLASS, "output": out,
                    "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
             with W.lock:
-                with open(os.path.join(W.data_dir, "observations.jsonl"), "a") as f:
+                with os.fdopen(os.open(os.path.join(W.data_dir, "observations.jsonl"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as f:
                     f.write(json.dumps({k: obs[k] for k in obs if k != "output"}) + "\n")
                 W.counters["allowed"] += 1
                 W.latencies.append(int((time.time() - t0) * 1000))
@@ -459,6 +496,7 @@ def heartbeat():
 
 def main():
     global W, SERVER
+    os.umask(0o077)  # everything this feature creates is private to its user
     W = Worker()
     SERVER = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     SERVER.daemon_threads = True

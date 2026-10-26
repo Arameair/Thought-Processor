@@ -10,7 +10,7 @@ Windows run and not a real release.
 DIR for --identity-src is a checkout of Arameair/identity at
 experiment/feature-contract-20261026.
 """
-import argparse, hashlib, http.cookiejar, json, os, re, signal, subprocess, sys, time, urllib.request
+import argparse, hashlib, http.cookiejar, json, os, re, signal, socket, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -19,14 +19,23 @@ ap.add_argument("--work", required=True)
 ap.add_argument("--shots", default="")
 args = ap.parse_args()
 W = Path(args.work).resolve()
-W.mkdir(parents=True, exist_ok=True)
+W.mkdir(parents=True, exist_ok=True, mode=0o700)
+os.chmod(W, 0o700)
 SHOTS = Path(args.shots).resolve() if args.shots else None
 if SHOTS:
     SHOTS.mkdir(parents=True, exist_ok=True)
 PROC_SRC = Path(__file__).resolve().parent.parent
-FX, IP, IP2, IP3, PP = 8931, 7931, 7932, 7933, 7961
+def free_port():
+    # OS-chosen ports: never 7790/7860/8790 or anything the owner already runs.
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+FX, IP, IP2, IP3, PP = (free_port() for _ in range(5))
 LOC = W / "locators"
-ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001")
+# TP_IDENTITY_DEFAULT_URL="-": never probe the default Identity port 7790 (Grok M4).
+ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001", TP_IDENTITY_DEFAULT_URL="-")
 results, procs = [], {}
 
 
@@ -46,7 +55,7 @@ def build():
 
 
 def start(name, cmd):
-    log = open(W / (name + ".console.txt"), "w")
+    log = os.fdopen(os.open(W / (name + ".console.txt"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w")
     p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
     procs[name] = p
     return p

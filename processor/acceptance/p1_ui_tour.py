@@ -7,7 +7,7 @@ second browser tab), never into Processor.
 
   python3 -I acceptance/p1_ui_tour.py --identity-src DIR --work DIR --shots DIR
 """
-import argparse, json, os, re, shutil, signal, subprocess, sys, time, urllib.request
+import argparse, json, os, re, shutil, signal, socket, subprocess, sys, time, urllib.request
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -19,13 +19,21 @@ args = ap.parse_args()
 W = Path(args.work).resolve()
 if W.exists():
     shutil.rmtree(W)
-W.mkdir(parents=True)
+W.mkdir(parents=True, mode=0o700)
+os.chmod(W, 0o700)
 SH = Path(args.shots).resolve()
 SH.mkdir(parents=True, exist_ok=True)
 PROC_SRC = Path(__file__).resolve().parent.parent
-FX, IP, PP = 8951, 7951, 7971
+def free_port():
+    # OS-chosen ports: never 7790/7860/8790 or anything the owner already runs.
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+FX, IP, PP = free_port(), free_port(), free_port()
 ENV = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
-ENV.update(IDENTITY_LOCATOR_DIR=str(W / "locators"), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001")
+ENV.update(IDENTITY_LOCATOR_DIR=str(W / "locators"), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001", TP_IDENTITY_DEFAULT_URL="-")
 NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 PASS = "correct horse battery staple"
 procs, results = {}, []
@@ -37,7 +45,8 @@ def rec(ok, name):
 
 
 def start(name, cmd):
-    procs[name] = subprocess.Popen(cmd, stdout=open(W / (name + ".console.txt"), "a"), stderr=subprocess.STDOUT, env=ENV)
+    log = os.fdopen(os.open(W / (name + ".console.txt"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
+    procs[name] = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
 
 
 def wait_http(u, t=20):
@@ -169,10 +178,18 @@ def main():
     page.wait_for_selector(".result.bad", timeout=15000)
     shot("ui-12-denied-before-grant")
     rec("DENIED BY IDENTITY" in page.inner_text("#fx-action-result"), "synthetic request before any grant: DENIED BY IDENTITY")
-    page.select_option("#gf-exp", "0")
+    rec(page.input_value("#gf-exp") == "3600", "grant form defaults to a 1-hour expiry")
     page.click("#grant-form button[type=submit]")
     page.wait_for_selector("#m-approval:not([hidden])")
-    ip = admin_in_identity(lambda: page.click("#ap-open"), lambda p: approve(p, "ui-13-identity-grant-approval"))
+    seen = {}
+
+    def approve_grant(p):
+        seen["text"] = p.inner_text("#ap-main")
+        approve(p, "ui-13-identity-grant-approval")
+    ip = admin_in_identity(lambda: page.click("#ap-open"), approve_grant)
+    t = seen.get("text", "")
+    rec("primary Thought Processor" in t and "Permission expires" in t and "NEVER" not in t and "Information sources" in t
+        and "Allowed action (one)" in t, "Identity's grant page: verified requester label, one action, identity, no sources, finite expiry; IDs under Advanced")
     ip.close()
     page.wait_for_selector("[data-revoke]", timeout=20000)
     page.click("#ap-close")

@@ -35,6 +35,13 @@ Three parties, three jobs:
 
 Processor refuses a package when: unknown fields; any listed file's SHA-256 differs; a file is a symlink or **crosses a symlinked folder**; a path is absolute, contains `..` or odd characters; `runtime.command` names anything other than a listed package file (`{package}/…`) or a bare `python3`/`node`; `information_sources` is not empty; the folder wasn't trusted with `-trust-feature-dir`; or `trust_class` isn't `TRUSTED_LOCAL_TEST_FIXTURE`. **The publisher name is a claim, not proof.** A checksum next to a file proves integrity, not authorship.
 
+**Trust = exact pinned artifact (P1 cleanup, Grok M1).** `trust_class` is only what a package says about itself, so it can't grant trust. A package may be advertised as installable, installed and started only if its **artifact digest** — `sha256("thought.feature-package/1\nmanifest <manifest sha256>\n" + "<file sha256>  <path>\n"…)`, files sorted by path — is pinned:
+
+- built in: the reviewed `p1-deterministic-worker 0.1.0` fixture (`featpkg.BuiltinFixturePins` in Processor, `authority.BuiltinFixturePins` in Identity — the same digest; a unit test fails if the fixture changes without re-pinning);
+- or by the operator: Processor `-trust-feature-artifact <sha256>` **and** Identity `-trust-fixture-artifact <sha256>`.
+
+Checked by Processor before listing as installable, before staging, before registering and before every start (the installed files are re-verified against the approved digest), and independently by Identity before it registers an installation (`403 UNTRUSTED_EXECUTION_BLOCKED: ARTIFACT_NOT_PINNED`), when it commits it, and on every ticket and live check (`ARTIFACT_NOT_PINNED`). Processor also records the interpreter's resolved path (e.g. `/usr/bin/python3.12`) at install and refuses to start if it's gone. **This is trust in reviewed content, not isolation**: a pinned feature still runs with the user's full rights.
+
 **Artifact digest** = SHA-256 of `"thought.feature-package/1\nmanifest <sha256(feature.json)>\n"` followed by `"<sha256>  <path>\n"` for each file in path order. Identity records it; the Admin approves it.
 
 ## 2. Launch (Processor → feature)
@@ -86,10 +93,17 @@ Browser `Origin` headers and non-loopback `Host` headers are refused.
 | `200 {result:"COMPLETED", observation}` | allowed and done; observation carries `decision_id`, `grant_id`, `ticket_id`, `data_class` |
 | `401 TICKET_INVALID` (+ reason) | malformed/forged/expired/wrong recipient/capability/body |
 | `409 TICKET_REPLAYED` | ticket already used |
+| `409 TICKET_SPENT_DURING_OUTAGE` | this ticket was spent on an earlier attempt that Identity couldn't answer; still refused (single use is never relaxed) — ask for a new ticket |
 | `403 DENIED` (+ Identity reason, decision_id) | Identity said no: revoked, expired, unknown ticket… |
-| `503 AUTHORITY_UNAVAILABLE` | Identity didn't answer or answer wasn't signed by the right Identity — **never treated as allow** |
+| `503 AUTHORITY_UNAVAILABLE` (+ `ticket_spent: true`) | Identity didn't answer or answer wasn't signed by the right Identity — **never treated as allow**; the ticket is used up |
 
 No decision is cached. Revocation is seen on the very next request. The live check consumes the ticket at Identity too.
+
+**Who may revoke a grant (Grok M2).** Revoking needs no approval, but only from a party to the grant: the requester it names or the program that asked for it (`POST /api/v1/grants/{id}/revoke`, paired), or the destination feature itself (`POST /api/v1/installation/grants/{id}/revoke`, installation credential). Anyone else gets `403 REVOKE_NOT_PERMITTED` and must ask the Admin: `POST /api/v1/grants/{id}/revoke/requests` → Admin approves in Identity's page → `POST /api/v1/grants/{id}/admin-revoke {approval_id}`. Every revocation stores `revoked_by` and `revoked_at`.
+
+**Expiry (Grok M3).** A grant request without `expires_in_seconds` gets a **1-hour** expiry. `until_revoked: true` asks for none; the Admin must then also tick *I understand this grant does not expire* in Identity's page, or approval is refused (and an unconfirmed approval can't be committed). Grants stored before this rule keep what they had.
+
+**Test-only faults (Grok L5).** The test feature reads `data/TEST-ONLY-fault-injection.json` (crash/delay *after* an allowed request) **only** when Processor runs with `-test-feature-faults`, which sets `TF_FIXTURE_TEST_MODE=1` in the launch environment and shows a TEST MODE banner. Otherwise the file is ignored. The feature creates its ledger and observation files `0600` (umask `077`).
 
 ## 5. Lifecycle (Processor policy, per installation)
 
