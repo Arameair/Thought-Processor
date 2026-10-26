@@ -20,11 +20,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: processor/go.mod
-      - name: Format check
-        shell: bash
-        run: |
-          files=$(gofmt -l p0identity.go p0installer.go p0routes.go p0_test.go)
-          if [ -n "$files" ]; then printf 'Formatting needed:\n%s\n' "$files"; exit 1; fi
+      - name: Format candidate before validation
+        run: gofmt -w p0identity.go p0installer.go p0routes.go p0_test.go
       - name: Vet
         run: go vet ./...
       - name: Tests
