@@ -190,7 +190,7 @@ flowchart TD
   G -->|explicit re-pair after investigation| C
 ```
 
-The public health response only establishes **DISOVERED / UNVERIFIED** (the UI should spell “Discovered”). It cannot establish `VERIFIED`.
+The public health response only establishes **DISCOVERED / UNVERIFIED** (the UI should spell “Discovered”). It cannot establish `VERIFIED`.
 
 **Proposed internal fields:**
 - `connection_state`: `NOT_LOCATED | DISCOVERED_UNVERIFIED | PAIRING | VERIFIED | TOKEN_REFUSED | WRONG_SERVICE | AUTHORITY_UNAVAILABLE | INCOMPATIBLE`.
