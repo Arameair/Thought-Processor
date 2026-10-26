@@ -15,6 +15,14 @@ import(
 func p0Error(w http.ResponseWriter,e error){
  var f *P0Failure
  if errors.As(e,&f){code:=f.HTTP;if code<400||code>599{code=503};writeJSON(w,code,map[string]any{"error":f.Code,"message":f.Detail});return}
+ var i *IdentityError
+ if errors.As(e,&i){
+   code:=i.HTTP
+   // A rejected first-time code is not expiration of the local browser session.
+   if code==401&&i.Code=="REFUSED"{code=400}
+   if code<400||code>599{code=503}
+   writeJSON(w,code,map[string]any{"error":i.Code,"message":i.Msg});return
+ }
  writeJSON(w,503,map[string]any{"error":"OPERATION_FAILED","message":e.Error()})
 }
 func (a *App) p0Pairing() *Pairing {
