@@ -25,6 +25,14 @@ func (a *App) p0Pairing() *Pairing {
 func (a *App) p0Configured() string {
  a.mu.Lock();defer a.mu.Unlock();return a.cands.Identity
 }
+// p0FirstPeer uses actual automatic discovery; manual address is only a fallback.
+// Pairing is still a deliberate human-approved separate action.
+func (a *App) p0FirstPeer(ctx context.Context)(string,error){
+ if a.p0Pairing()!=nil{return "",p0Fail("ALREADY_PAIRED",409,"A pairing already exists")}
+ base,_,state:=p0Discover(ctx,nil,a.p0Configured())
+ if state!="DISCOVERED_UNVERIFIED"{return "",p0Fail(state,503,"Identity could not be discovered. Start Identity or choose its local address.")}
+ return base,nil
+}
 func (a *App) p0Verified(ctx context.Context)(Pairing,string,error){
  pr:=a.p0Pairing()
  if pr==nil{return Pairing{},"",p0Fail("NEEDS_PAIRING",409,"Connect to Identity first")}
@@ -99,9 +107,9 @@ func (a *App) p0Routes(m *http.ServeMux){
  m.HandleFunc("POST /api/p0/pair/request",a.wrap(mutate,func(w http.ResponseWriter,r *http.Request){
   if a.p0Pairing()!=nil {writeJSON(w,409,errBody("already_paired","Disconnect the existing Identity pairing before changing services"));return}
   if !noParams(w,r){return}
-  base:="http://127.0.0.1:7790"
-  if c:=a.p0Configured();c!="" {base=c}
   ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
+  base,discoveryErr:=a.p0FirstPeer(ctx)
+  if discoveryErr!=nil{p0Error(w,discoveryErr);return}
   resp,e:=p0HTTP(ctx,"POST",base,"/api/v1/pair/request","","",map[string]string{"processor_id":a.procID,"processor_label":"Thought Processor P0"})
   if e!=nil{p0Error(w,p0Fail("AUTHORITY_UNAVAILABLE",503,"Identity is not responding"));return}
   defer resp.Body.Close()
@@ -114,8 +122,9 @@ func (a *App) p0Routes(m *http.ServeMux){
   if a.p0Pairing()!=nil {writeJSON(w,409,errBody("already_paired","Unpair before pairing a different Identity"));return}
   var in struct{Code string `json:"code"`}
   if readStrict(r,&in)!=nil || !pairCodeRE.MatchString(strings.TrimSpace(in.Code)) {writeJSON(w,400,errBody("bad_code","Type the eight-character code shown in Identity"));return}
-  base:="http://127.0.0.1:7790";if c:=a.p0Configured();c!=""{base=c}
   ctx,cancel:=context.WithTimeout(r.Context(),15*time.Second);defer cancel()
+  base,discoveryErr:=a.p0FirstPeer(ctx)
+  if discoveryErr!=nil{p0Error(w,discoveryErr);return}
   p,e:=IdentityPair(ctx,base,strings.TrimSpace(in.Code),a.procID,"Thought Processor P0");if e!=nil{p0Error(w,e);return}
   st,e:=p0Signed(ctx,p,base,"GET","/api/v1/status",nil)
   if e!=nil {p0Error(w,e);return}
@@ -132,6 +141,16 @@ func (a *App) p0Routes(m *http.ServeMux){
   if e=a.prof.RemovePairing();e!=nil{p0Error(w,e);return}
   a.mu.Lock();a.pairing=nil;a.mu.Unlock()
   writeJSON(w,200,map[string]string{"connection":"NEEDS_PAIRING"})
+ }))
+ // Explicit local reset is needed after a remote revocation or wrong service.
+ // It does NOT revoke the old token on an unreachable Identity; explain this.
+ m.HandleFunc("POST /api/p0/pair/forget-local",a.wrap(mutate,func(w http.ResponseWriter,r *http.Request){
+  var in struct{Confirm string `json:"confirm"`}
+  if readStrict(r,&in)!=nil||in.Confirm!="forget-local-pairing" {writeJSON(w,400,errBody("confirm_required","Confirm local pairing reset"));return}
+  if e:=a.prof.RemovePairing();e!=nil{p0Error(w,e);return}
+  a.mu.Lock();a.pairing=nil;a.mu.Unlock()
+  a.log.Add("pairing","p0_forget_local","","Operator discarded local pairing; remote pairing may still need revocation inside the old Identity")
+  writeJSON(w,200,map[string]any{"state":"LOCAL_PAIRING_FORGOTTEN","notice":"Old Identity may still trust its previous pairing. Revoke it from Identity's troubleshooting page if available."})
  }))
  m.HandleFunc("POST /api/p0/identity/create",a.wrap(mutate,func(w http.ResponseWriter,r *http.Request){
   var in struct{Name,Kind string}
