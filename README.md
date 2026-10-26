@@ -1,3 +1,15 @@
+> **P0 WORKING IMPLEMENTATION CANDIDATE — EXPERIMENT ONLY (OCTOBER 26, 2026)**
+>
+> This branch runs the **[First Connection workspace](processor/web/workspace.html)** at the Processor's local home page and has a real paired Identity v1 API client, canonical identity selection and generic per-feature install transaction. **Start here: [Windows build and acceptance guide](docs/P0_WINDOWS_TRIAL_2026-10-26.md).**
+>
+> Reused code deliberately imported from [the October 26 Engine-install experiment](https://github.com/Arameair/Thought-Processor/tree/experiment/install-thought-engine-20261026); P0's new client and installer instead use Identity's generic per-feature API. The original diagnostic view remains at `/diagnostics`.
+>
+> **Important:** This branch is NOT owner-accepted Alpha. Its private feature display is not yet enforced by a server-side entitled catalog; a real approved Engine binary/release and publisher signing remain unverified. No Thought Engine runtime grants, feature registration or automatic data-source permissions exist. Linux real-process smoke tests are not Windows owner acceptance. `alpha`, `stable` and `main` remain unchanged.
+>
+> The foundational README below is historical and predates Processor's October 26 role as the **system-wide** human interface. The latest [owner decisions](https://github.com/Arameair/Thought-Processor/issues/15) take precedence for this candidate.
+
+---
+
 # Thought Processor
 
 **The control point for the optional Thought Processing feature.**
