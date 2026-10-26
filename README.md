@@ -1,119 +1,54 @@
 # Thought Processor
 
-**Discovery, connection and operational visibility for an ecosystem of independently running AI capabilities.**
+**The main workspace for managing an ecosystem of independent, identity-aware features.**
 
-Thought Processor is the proposed lightweight **control point** that helps compatible applications find one another, establish permitted connections and expose what is actually happening. It is designed to work with **Identity**, the system's authority for durable participants, relationships and access—not to replace Identity or run the cognitive Thought Engine.
+Thought Processor is the application a person or administrator opens to select an identity, discover available features, review permissions, interact with feature-owned results and understand what is happening. **Identity remains the security and permission authority.** A feature, such as Thought Engine or a future Memory service, runs independently and owns its work and records.
 
-> **Project status — 24 October 2026:** **Documentation-only foundation. There is no runnable Thought Processor in this repository's main/Alpha/Stable release lanes.** Related Thought Engine, worker and controller prototypes live in separate repositories and are **not** a verified end-to-end integration. See [current state](docs/STATUS.md).
+> **Project state — October 26, 2026:** Preparing a **first usable product-experience prototype**. The `main`, `alpha`, and `stable` branches remain documentation-only; runnable diagnostic and Engine-attachment **experiments** exist but have not been promoted or accepted as the end-user product.
 
-## Why this exists
+## First, understand the boundaries
 
-Our features are independently developed and may run on different machines, with different workers or different lifecycles. A developer needs to know:
+| Component | Owns | Does not do |
+| --- | --- | --- |
+| **Thought Processor** | Human/admin interface; Profiles, feature Catalog, Collections, approved actions, status and diagnostics | Issue its own permission grants; hold a second Thought/Memory database; proxy every feature call |
+| **[Identity](https://github.com/Arameair/identity)** | Durable identities, approved relationships, entitlements, grants and security decisions | The actual thinking or the normal human dashboard |
+| **[Thought Engine](https://github.com/Arameair/Thought-engine)** | Observations, queue, processing, identity-scoped Thoughts and worker interactions | Grant itself data access or manage the whole ecosystem |
+| **Independent features** | Own functionality, data and logs; enforce relevant Identity decisions | Gain access to other identities or sources merely by being installed |
 
-- **Which compatible applications exist and which instances are running?**
-- **Which identities and permissions authorize their connections?**
-- **Where did an observation or worker request go, and where did it fail?**
-- **Which exact build was tested, and what evidence supports its status?**
+**No access by default.** A discovered feature is not necessarily trusted or authorized. Publisher permission to **obtain/install** software is different from an identity's permission to **use** it or share specific conversations, game activity or logs. Installation of reusable software does not merge the separate experiences of different identities.
 
-Thought Processor should answer these questions without proxying every worker API request, storing another feature's entire history or taking over another application's process.
+## The design conversation we are having now
 
-## Proposed architecture
+The first diagnostic Processor was built to help test Identity; the next goal is **something an owner can actually use and critique**. The current *proposal* is a small experience organized around **Profiles → Catalog → Collections**:
 
-```text
-                         IDENTITY
-             durable entities + feature IDs
-                trust, grants, relationships
-                            |
-                            v
-                 THOUGHT PROCESSOR
-              discovery + connections
-             real app cards + diagnostics
-                            |
-           verified/authorized service links
-                    /                \
-           SOURCE FEATURES       THOUGHT ENGINE
-         screen · Discord        observations, thoughts,
-           game · logs           processing decisions
-                                       |
-                                       v
-                               REPLACEABLE WORKER
-                             (Chat-Jimmy candidate)
-```
+- **Profiles:** Choose which person, companion, business or other approved identity is being managed.
+- **Catalog:** See real available features, their permission/connection states and the next genuine action.
+- **Collections:** Browse authorized results owned by those features; show honest empty states when none exist.
 
-**Control plane is not the data plane.** After authorized discovery, a Thought Engine may call a worker directly. The Engine owns processing and the actual AI-worker **heartbeat/API request**. Thought Processor observes through honest status and correlated traces; it should not inject itself into the hot path without measured justification.
+This **layout is not yet finalized** and no new UI code has been authorized.
 
-### Working architecture theory — open to challenge
+**Start the review here:**
 
-> **Thought Processor controls the operational setup of thinking. Thought Engine controls the actual act of thinking.**
+[**Current design discussion — Issue #15**](https://github.com/Arameair/Thought-Processor/issues/15) · [**Detailed workshop and testable prototype proposal**](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) · [**Open issues and priority map**](docs/BACKLOG.md)
 
-The owner endorsed this **high-level distinction**, not every implementation detail. [Read the detailed, falsifiable architecture theory](docs/OPERATIONAL_SETUP_THEORY.md): authoritative configuration ownership, verified commands and receipts, desired-versus-observed state, direct Engine execution, a minimal service contract, explicit failure cases and comparisons against simpler alternatives. **Research/design only—not a working integration or approved wire protocol.**
+## What works, and what does not
 
-[Read the responsibility model](docs/ARCHITECTURE.md) · [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md)
-
-## Selected design direction — not yet implemented
-
-| Area | Owner-selected approach |
+| Status | Evidence |
 | --- | --- |
-| **Discovery** | Independent features request Identity registration; Processor discovers the approved catalog, reconciles live endpoints and supports hybrid same-OS/configured/manual fallback |
-| **Trust** | Identity-approved one-time pairing, credential-verified reconnection |
-| **Permissions** | Identity grants scoped access; recipient service enforces; no privilege from discovery alone |
-| **Outages** | Short-lived preapproved authorization can survive brief Identity downtime; expires safely |
-| **Feature adoption** | New capability appears automatically; owner approves identity-specific access |
-| **Status** | Important changes pushed; occasional lightweight health checks |
-| **Diagnostics** | Logs stay with services; shared request IDs and on-demand safe collection |
-| **Versions** | Report real branch/commit/test evidence, never automatically promote |
+| **Experimental Processor diagnostic shell** | [October 25 candidate](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261025) starts and reports local Identity as **found, unverified**; earlier owner trial recorded in [#12](https://github.com/Arameair/Thought-Processor/issues/12). Not the intended product UX. |
+| **Experimental Engine attachment and observations** | [October 26 candidate](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261026) adds an attach code, observation status and Thoughts view. Reported tests included a **fixture worker**, not proof of useful live thinking or Identity-issued ingest grants. |
+| **Experimental Identity-approved Engine installer** | [Separate October 26 experiment](https://github.com/Arameair/Thought-Processor/tree/experiment/install-thought-engine-20261026) used a **simulated GitHub provider** and a temporary repository-visibility rule; it does not establish real publisher entitlement, a release, or permission to start and ingest. |
+| **System-wide Processor experience** | **DESIGN ONLY**. An authenticated Processor-led Identity setup, real profile/catalog API and a meaningful enforced feature action are not yet an accepted end-to-end prototype. |
+| **Alpha / Stable / public release** | **No runnable promotion or release.** Keep candidate commits and owner verdicts separate from branch labels. |
 
-### Operator interface
+[Full evidence ledger](docs/STATUS.md) · [Design decision boundaries](docs/DECISIONS.md)
 
-The intended UI is a **dynamic catalog of real running applications**, not a fixed set of static feature mocks. Collapsed cards show verified lightweight status. Only the selected card opens that application's actual UI (or a clearly labeled **Open Original UI** fallback if embedding is blocked). A collapsible side inspector offers **Logs, Flow and Metrics**, including a connection map, event timeline and copyable sanitized context.
+## Navigation
 
-Feature installations must operate independently even when Processor is offline. **The owner's personal Project Controller is optional development tooling, never an end-user dependency.**
+[Documentation index](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Current design readiness](docs/DESIGN_READINESS_2026-10-26.md) · [Issue backlog](docs/BACKLOG.md) · [Experiment workflow](docs/WORKFLOW.md)
 
-## First planned integration: real Identity grants, observed in Processor
+## Collaboration and release policy
 
-**Owner-selected workflow:** Thought Processor should be the **single operator/testing hub** for the first Identity↔Thought Engine grant integration, while leaving the services independent. **Identity decides; Thought Engine enforces; Thought Processor connects, tests, and explains.**
+New functional experiments **start from the owner-controlled `alpha` branch**, which is presently a documentation baseline. Any older candidate source must be deliberately ported, with its original SHA documented. The owner chooses KEEP / REVISE / REJECT and authorizes each promotion; there is **no automatic merge** into `alpha`, `stable` or `main`. The Project Controller is optional development tooling, not an end-user dependency.
 
-Start by specifying and testing an actual Identity-owned allow/deny grant, authenticated source and Engine identities, immediate denial after revocation, and fail-closed behavior when Identity is unreachable. Then add a narrow Processor test view that shows real Identity decision IDs and Engine intake receipts. Do **not** treat a local on/off flag or open port as verified permission.
-
-[Detailed integration plan](docs/INTEGRATION_AUTHORIZATION_PLAN.md) · [Tracking issue #8](https://github.com/Arameair/Thought-Processor/issues/8) · [Canonical Engine question #2](https://github.com/Arameair/Thought-Processor/issues/2).
-
-**Status:** Plan only; no working Processor, registered grant protocol or secure end-to-end demonstration yet.
-
-## Research direction and independent critique
-
-Identity can be a durable coordination authority without necessarily improving AI cognition. We are investigating an **Identity–Experience hypothesis**: do stable identity/purpose information and relevant memory improve a companion beyond recent context alone?
-
-**[Read the hypothesis, controlled comparison and Grok's user-supplied critique](docs/IDENTITY_EXPERIENCE_RESEARCH.md).** These are proposals to test, not conclusions. A critique from Grok or another AI is explicitly welcome; no AI output counts as owner approval or verified runtime evidence.
-
-**[Participate in the architecture review — GitHub Issue #7](https://github.com/Arameair/Thought-Processor/issues/7).**
-
-## Start here
-
-| Document | Purpose |
-| --- | --- |
-| **[Identity–Experience research](docs/IDENTITY_EXPERIENCE_RESEARCH.md)** | Working theory, competing interpretation, Grok critique, falsification test |
-| [Architecture and responsibilities](docs/ARCHITECTURE.md) | Identity, Processor, Engine, Memory and worker ownership |
-| [Status and evidence](docs/STATUS.md) | Current verification, releases and experiments |
-| [Control surface](docs/CONTROL_POINT.md) | Operator actions and diagnostic proof |
-| [Interface proposals](docs/INTERFACES.md) | Observation, worker and service contracts still to define |
-| [Decision log](docs/DECISIONS.md) | Explicit owner choices versus unresolved questions |
-| [Roadmap](docs/ROADMAP.md) | First independently testable integration gates |
-| [Branch workflow](docs/WORKFLOW.md) | Alpha-first experiments and manual promotion |
-| [AI collaboration](docs/AI_COLLABORATION.md) | Authorship and independent verification policy |
-
-More detailed owner-selected discussion lives on the [six-decision experiment branch](https://github.com/Arameair/Thought-Processor/tree/experiment/six-design-decisions-20261023); that branch's notes do not constitute merged code or a tested integration.
-
-## Development policy
-
-| Branch | Meaning |
-| --- | --- |
-| `main` | Professional documentation and approved public-facing releases |
-| `alpha` | Owner-selected integration baseline |
-| `stable` | Owner-accepted verified snapshot (**currently documentation-only**) |
-| `experiment/*` | Independent candidates **based on Alpha**; no automatic merge |
-
-All claims of success require **real evidence**. Distinguish discovered, paired, authorized, enabled, reachable, request sent, worker replied and thought persisted. Report real commit SHA, build/test results, branch, runtimes, failures and rollback. Existing [Thought-engine](https://github.com/Arameair/Thought-engine), [Thought](https://github.com/Arameair/Thought), [Thought-Controller](https://github.com/Arameair/Thought-Controller) and [Chat-Jimmy](https://github.com/Arameair/chat-jimmy) remain independent experiments.
-
----
-
-**AI collaboration disclosure:** The project is human-directed and developed with AI assistants. The owner makes the final decisions. The architecture critique attributed to Grok was supplied by the owner and has not been independently code-verified. [Read the disclosure](docs/AI_COLLABORATION.md).
+Design notes, source code, fixture tests, real-service tests and owner acceptance are different evidence. Never present unverified access or fake Thoughts as live results. [AI collaboration and verification](docs/AI_COLLABORATION.md).
