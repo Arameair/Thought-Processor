@@ -1,79 +1,32 @@
-# Thought Processor
+# Thought Processor — GPT-6 Frictionless First-Run Experiment
 
-**The control point for the optional Thought Processing feature.**
+**Independent candidate · 2026-10-26 · Not owner-approved Alpha**
 
-Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
+A runnable Windows/Linux Thought Processor candidate focused on a **guided first-run experience** instead of a diagnostic dashboard.
 
-> **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
+The path for a new user is deliberately simple: **Connect Identity → Choose/Create Identity → Discover and review features.** Identity pairing and GitHub approval remain explicit. Processor automatically discovers local Identity locators, remembers its previously verified pairing, and renders truthful feature eligibility, installation state and source permissions. Developer Mode supplies status, logs, metrics and flow separately.
 
-## The product boundary
+**[Windows trial — start here](docs/GPT6_WINDOWS_FIRST_RUN_2026-10-26.md)** · **[Development timeline and test evidence](docs/GPT6_DEVELOPMENT_EVIDENCE_2026-10-26.md)** · **[CI builds and Windows download](https://github.com/Arameair/Thought-Processor/actions/workflows/p0.yml)**
 
-- **Identity** owns identity records, feature entitlements, grants and whether Thought Processing is enabled for a particular identity.
-- **Source features** (TASS, ScreenBridge, logs, Discord, etc.) keep working independently. When permitted and individually connected, their logs/observations can be *fed into* Thought Processing. Disabling Thought Processing must not shut down the source application.
-- **Thought Engine** owns the actual observation queue, Sparks, Traces, Thoughts, processing rules and their persistent history. Model answers are inputs, not an unchecked authority to rewrite history.
-- **Thought Processor (this project)** is the **real control point**: connect/disconnect allowed feeds, inspect service readiness, manage processing policy and queue operations, observe decisions/evidence, select a suitable worker, see logs and metrics. Every control must perform a real operation and report its actual outcome.
-- **AI workers** are interchangeable. Chat-Jimmy is the current candidate fast worker, *not* a permanent dependency, product identity, or place where thought history is stored.
+## Run directly
 
-**Feature-based product principle:** Thought Processing is a separable, optional capability. Installing a source feature does not imply Thought Processing access. Enabling Thought Processing does not automatically authorize every possible log source. A customer may buy/use one feature without the others.
+On Windows, download the `GPT6-Thought-Processor-Windows` artifact from a successful branch-specific Actions run, extract `thought-processor.exe` and double-click it. It opens its own local browser workspace. **Identity must already be independently installed/running, or separately started.** A manual Go build is a fallback, not a requirement for the Processor executable.
 
-## First mental model
+At source checkout: `cd processor && go build -o thought-processor.exe .`, then execute the resulting binary. Default port is `7860`. The older diagnostic UI is still at `/diagnostics`, and the prior GPT-6 onboarding comparison lives at `/previous-onboarding`.
 
-```text
-Identity: TASS
-   └── Thought Processing grant: enabled / disabled
-             |
-Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
-             |
-             v
-      Thought Engine  <---->  Replaceable worker interface
-      observations              (Chat-Jimmy today)
-      Sparks / Traces
-      persistent Thoughts
-             ^
-             | operational status, controls, read-only views
-             v
-      Thought Processor
-      CONTROL POINT: feeds, readiness, queues, policy, workers, diagnostics
-```
+## Architecture and security
 
-Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
+- Processor is the human/admin workspace, not a source of identity or grants.
+- Identity API `identity/1-alpha` owns canonical `ent_…` identities and entitlement checks.
+- Pairing requires a person typing Identity's own one-time code. The Processor Go backend checks a nonce-bound HMAC and exact `identity_system_id` on every protected response.
+- The generic install contract `feature-install/1-alpha` uses feature-ID endpoints. It checks exact release metadata, per-user approval, byte count and SHA-256 before a versioned local receipt. Installation is **not** an Engine start/grant.
+- New identities have no source permissions. Runtime grants are outside P0; Identity currently returns DENIED.
+- Default UX does not expose sensitive tokens or codes in diagnostics. Full Windows DPAPI/ACL audit remains open.
 
-## Start here
+**Not yet working/validated:** a genuinely published approved Thought Engine release (none found at review); server-side privacy of private feature catalog names; independent publisher signing; a clean owner's Windows runtime with screenshots; full managed Identity installation; runtime grants/cognition.
 
-| Document | What it answers |
-|---|---|
-| [Current state and branch ledger](docs/STATUS.md) | What exists on Stable, Alpha and experiments, and what is *actually verified*? |
-| [Vision and boundaries](docs/VISION.md) | What is the feature we intend to sell, and what doesn't belong here? |
-| [Architecture and data ownership](docs/ARCHITECTURE.md) | What talks to what; who owns which records and permissions? |
-| [Control surface and evidence](docs/CONTROL_POINT.md) | What must the operator see and control? |
-| [Interfaces and contracts](docs/INTERFACES.md) | What a feed, engine and replaceable worker need to exchange |
-| [Branch and promotion workflow](docs/WORKFLOW.md) | How experiments become Alpha, Stable and eventually Main |
-| [Roadmap and gates](docs/ROADMAP.md) | What to prove next and in what order |
-| [Decision log](docs/DECISIONS.md) | Decisions made, and questions still open |
+## Attribution and branches
 
-For every iteration: update the **status ledger**, use an issue for the goal, and link the experimental branch, exact commit, tests, limitations and owner decision. Do not quietly overwrite previous evidence.
+Created directly from owner-controlled Processor `alpha` at `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a`. Initial experiment commit `a86efcd98c01387cca7cfa9de6be3c42b249fa69` explicitly reused the author's earlier **GPT-6 P0** backend `260c90556d3eeea5c4a19733cc0d1813c803c863`, **not Claude's parallel branch or UI**. See the detailed evidence ledger for fair development-efficiency comparison.
 
-## Branch policy
-
-| Branch | Meaning | Promotion |
-|---|---|---|
-| `main` | Public-facing release lane *when approved*; the repository may still be private | Owner approval only |
-| `stable` | Latest owner-accepted **reproducible snapshot** | Owner approval only; never automatic |
-| `alpha` | Owner-tested integration candidate; may change as approved | Owner approval only |
-| `experiment/<topic>-YYYYMMDD` | Isolated hypothesis/prototype; **always branch from current Alpha** | Validate, compare and ask owner; no auto-merge |
-
-**Empty-repo bootstrap exception:** The first documentation commit must initialize `main`; `stable` and `alpha` can then be created at that *same documentation-only commit*. This does **not** count as a runnable release. From that point, **every experiment starts from `alpha`**. Experiments may cherry-pick or explicitly port code from other repos/branches, with provenance documented, but never silently replace Alpha.
-
-## Related active experiments (not yet integrated into this repository)
-
-- [Thought-engine — model-assisted Spark/Trace/Thought experiment](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) — separate experimental service; currently Chat-Jimmy-specific. Do not treat live website reasoning as verified on the owner's machine without tests.
-- [Thought — deterministic Spark/Trace/Thought experiment](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) — different implementation; avoid two concurrent authoritative thought stores.
-- [Thought-Controller — live engine dashboard experiment](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) — existing prototype; source for control UI requirements, **not** an automatic migration.
-- [Identity](https://github.com/Arameair/identity) — future owner of real feature grants.
-- [chat-jimmy](https://github.com/Arameair/chat-jimmy/tree/experiment/fast-clean-worker-20261023) — current independent candidate worker.
-
-**Nothing has been merged, renamed, deployed or promoted by writing these notes.**
-
-## Owner acceptance rule
-
-Do not call a behavior working based on source code, screenshots, HTTP 200 on the UI, fake fixtures, or a green unit test alone. Demonstrate it with the actual running independent components; distinguish **process running**, **connected**, **authorized**, **data received**, **worker ready**, **processed**, and **persisted**. If any stage fails, say where and expose enough diagnostics to reproduce it.
+No merges, promotions, tags or releases. Owner must separately approve any Alpha changes. Recommended **REVISE** before promotion.
