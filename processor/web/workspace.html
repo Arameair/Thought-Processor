@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thought Processor — First Connection</title>
+<link rel="stylesheet" href="/workspace.css"><script src="/workspace.js" defer></script></head>
+<body><header class="top"><div class="brand"><span class="mark">◈</span><div><strong>Thought Processor</strong><small>Identity and feature workspace</small></div></div>
+<div><span class="pill" id="conn-head">Checking…</span> <button id="dev-toggle" class="ghost" type="button">Developer Mode</button></div></header>
+<main>
+<section id="signin" class="panel" hidden><p class="eyebrow">Local access</p><h1>Open your workspace</h1>
+<p>Enter the temporary Processor code shown in the window where you started this app. This does not grant access to any data source.</p>
+<form id="signin-form"><input id="code" type="password" placeholder="Local operator code" autocomplete="off"><button class="primary">Continue</button></form></section>
+<div id="app" hidden>
+<section class="panel hero"><p class="eyebrow">Your system</p><h1 id="home-title">Connect Identity</h1><p id="conn-detail">Checking the local Identity service…</p>
+<div class="actions"><button id="refresh">Check connection</button><button id="connect" class="primary" hidden>Connect to Identity</button></div>
+<div id="pair-box" hidden><p>Identity displays a one-time code in its own console or troubleshooting page.</p>
+<div class="actions"><button id="request-code">Request code</button><input id="pair-code" placeholder="ABCD-EFGH" maxlength="9" spellcheck="false" autocomplete="off"><button id="pair-submit" class="primary">Verify code</button></div></div>
+<details><summary>Identity is on another local port?</summary><form id="addr-form"><input id="addr" placeholder="127.0.0.1:7790"><button>Use this address</button></form></details></section>
+<section id="workspace" hidden>
+<div class="bar"><div><p class="eyebrow">Manage identity</p><select id="identities" aria-label="Selected Identity"></select></div><button id="create-open">+ New identity</button></div>
+<section class="panel"><div class="section-head"><div><p class="eyebrow">Available features</p><h2>Your features</h2></div><button id="github-connect">Connect GitHub</button></div>
+<p class="muted" id="github-state">Checking GitHub sign-in status…</p>
+<div id="github-code" class="notice" hidden></div>
+<div id="feature-list" class="cards"></div><p id="more-private" class="muted" hidden>Sign in to GitHub to check for eligible private testing features.</p>
+<p class="subtle">Installed does not mean running or authorized. New identities begin with no source access.</p></section>
+<section class="panel"><h2>Activity and permissions</h2><p>No optional data sources are approved in this Identity candidate. Runtime grants and Thought Engine processing are outside P0.</p></section>
+</section>
+<section id="developer" class="panel" hidden><h2>Developer diagnostics</h2><p>Technical details do not grant additional permissions.</p>
+<pre id="dev-output"></pre><button id="copy-diagnostics">Copy sanitized diagnostics</button></section>
+<section class="footer"><button id="unpair">Disconnect Identity</button><button id="exit">Exit workspace</button><p>Closing the browser tab does not stop Identity or Thought Engine.</p></section>
+</div><p id="message" role="status" class="message"></p>
+</main>
+<dialog id="create-dialog"><form id="create-form"><h2>Create identity</h2><p>Identity stores the new identity. It will have no access to any information sources.</p><label>Name<input id="new-name" required maxlength="80"></label><label>Type<select id="new-kind"><option value="companion">Companion</option><option value="person">Person</option><option value="business">Business</option><option value="project">Project</option></select></label><div class="actions"><button type="button" data-close="create-dialog">Cancel</button><button class="primary">Create</button></div></form></dialog>
+<dialog id="exit-dialog"><h2>Exit Thought Processor</h2><p>Processor currently owns no Identity or Engine subprocesses. Separately started services will not be stopped.</p>
+<label class="choose"><input type="radio" name="exit-choice" value="shutdown" checked> Shut down managed workspace (default)</label>
+<label class="choose"><input type="radio" name="exit-choice" value="keep"> Keep services running</label>
+<div class="actions"><button type="button" data-close="exit-dialog">Cancel</button><button id="confirm-exit" class="primary">Exit Processor</button></div></dialog>
+</body></html>

@@ -1,0 +1,9 @@
+{
+  "setup": "cd processor && go build -o ../thought-processor .",
+  "run": "./thought-processor -port \"$PORT\" -data \"$PC_DATA\"",
+  "windows": {
+    "setup": "cd processor && go build -o ..\\thought-processor.exe .",
+    "run": "thought-processor.exe -port %PORT% -data \"%PC_DATA%\""
+  },
+  "path": "/"
+}

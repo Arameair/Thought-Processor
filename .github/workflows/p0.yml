@@ -1,0 +1,46 @@
+name: P0 candidate checks
+on:
+  push:
+    branches:
+      - experiment/p0-reusable-feature-onboarding-20261026
+  workflow_dispatch:
+jobs:
+  go:
+    name: Go tests and build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: processor/go.mod
+      - name: Format candidate before validation
+        run: gofmt -w p0identity.go p0installer.go p0routes.go p0_test.go
+      - name: Vet
+        run: go vet ./...
+      - name: Tests
+        run: go test ./...
+      - name: Build
+        run: go build -o p0-processor${{ runner.os == 'Windows' && '.exe' || '' }} .
+
+  integration:
+    name: Real-process pairing smoke (Linux; no GitHub)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Arameair/identity
+          ref: b4203e03d5004e1de9f79dcc9054394f53056af4
+          path: identity-ref
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: processor/go.mod
+      - name: Exercise independent Processor and Identity processes
+        run: python3 processor/acceptance/p0_live_smoke.py
