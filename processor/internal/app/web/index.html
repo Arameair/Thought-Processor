@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thought Processor</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div id="gate" class="gate" hidden>
+  <div class="panel narrow">
+    <h1>Thought Processor</h1>
+    <p id="gate-msg">This window isn't signed in. Open Thought Processor with the link printed in its window (it changes every time Processor starts).</p>
+  </div>
+</div>
+
+<div id="shell" hidden>
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true"></span><span>Thought Processor</span></div>
+    <div class="chips">
+      <button class="chip" id="chip-identity" type="button" title="Connection to Identity"><span class="dot"></span><span class="t">Identity</span></button>
+      <button class="chip" id="chip-github" type="button" hidden><span class="dot"></span><span class="t">GitHub</span></button>
+    </div>
+    <div class="actions">
+      <label class="switch" title="Shows technical details. It never changes what anyone is allowed to do."><input type="checkbox" id="devmode"><span>Developer Mode</span></label>
+      <button class="btn ghost" id="exit-btn" type="button">Exit</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- Connect to Identity (shown until the connection is verified) -->
+  <main id="connect" class="center" hidden>
+    <div class="panel narrow">
+      <h1 id="c-title">Connect to Identity</h1>
+      <p id="c-lead" class="lead"></p>
+      <div id="c-body"></div>
+      <p id="c-error" class="error" hidden></p>
+    </div>
+  </main>
+
+  <!-- Home -->
+  <main id="home" class="home" hidden>
+    <aside class="side">
+      <h2>Identities</h2>
+      <p class="muted small">People, companions, businesses or projects. They live in Identity; each starts with no access to anything.</p>
+      <ul id="id-list" class="idlist"></ul>
+      <form id="new-id" class="newid">
+        <input id="new-name" placeholder="Name, e.g. Tass" maxlength="60" autocomplete="off" required>
+        <select id="new-kind">
+          <option value="person">Person</option>
+          <option value="companion">Companion</option>
+          <option value="business">Business</option>
+          <option value="project">Project</option>
+        </select>
+        <button class="btn" type="submit">Add identity</button>
+      </form>
+      <p id="id-error" class="error small" hidden></p>
+    </aside>
+    <section class="main">
+      <div id="no-identity" class="empty" hidden>
+        <h2>Choose or add an identity</h2>
+        <p>Features are shown for one identity at a time, so nothing mixes between them.</p>
+      </div>
+      <div id="features" hidden>
+        <div class="feat-head">
+          <div>
+            <h2 id="f-title">Features</h2>
+            <p class="muted small" id="f-sub"></p>
+          </div>
+        </div>
+        <div id="catalog-note" class="note" hidden></div>
+        <div id="cards" class="cards"></div>
+        <p class="muted small boundary">Installing a feature puts its program on this computer. It does not start it, and it gives it no access to any identity's information — those are separate permissions that Identity will ask about later.</p>
+      </div>
+    </section>
+  </main>
+
+  <section id="dev" class="dev" hidden>
+    <h2>Developer details <span class="muted small">(display only — never grants anything)</span></h2>
+    <div id="dev-body"></div>
+  </section>
+</div>
+
+<!-- Approve install -->
+<div class="modal" id="m-approve" hidden>
+  <div class="panel">
+    <h2 id="a-title">Install?</h2>
+    <dl class="facts" id="a-facts"></dl>
+    <div class="checks" id="a-checks"></div>
+    <p class="warn small" id="a-limit"></p>
+    <p class="small">Installing doesn't start the feature and gives it no access to your identities or information.</p>
+    <div class="row end">
+      <button class="btn ghost" id="a-cancel" type="button">Don't install</button>
+      <button class="btn primary" id="a-ok" type="button">Install</button>
+    </div>
+  </div>
+</div>
+
+<!-- GitHub sign-in -->
+<div class="modal" id="m-github" hidden>
+  <div class="panel narrow">
+    <h2>Sign in to GitHub</h2>
+    <p>Identity uses your GitHub account to check which features you're allowed to install. Your password never passes through Processor or Identity.</p>
+    <ol class="steps">
+      <li>Open GitHub: <a id="g-link" target="_blank" rel="noopener noreferrer">github.com/login/device</a></li>
+      <li>Enter this code: <span class="code" id="g-code">…</span> <button class="btn ghost small" id="g-copy" type="button">Copy</button></li>
+      <li>Press <strong>Authorize</strong>.</li>
+    </ol>
+    <p class="muted small" id="g-status">Waiting for GitHub…</p>
+    <div class="row end"><button class="btn ghost" id="g-cancel" type="button">Cancel</button></div>
+  </div>
+</div>
+
+<!-- Exit -->
+<div class="modal" id="m-exit" hidden>
+  <div class="panel narrow">
+    <h2>Exit Thought Processor</h2>
+    <p id="x-note" class="small"></p>
+    <label class="choice"><input type="radio" name="exit" value="shutdown" checked> <span><strong>Shut down managed workspace</strong><br><span class="small muted">Stops Thought Processor and every program it started.</span></span></label>
+    <label class="choice sub" id="x-identity-row" hidden><input type="checkbox" id="x-identity"> <span>Also stop Identity <span class="small muted" id="x-identity-why"></span></span></label>
+    <label class="choice"><input type="radio" name="exit" value="keep"> <span><strong>Keep services running</strong><br><span class="small muted">Stops only Thought Processor. Next time it reconnects by itself.</span></span></label>
+    <div class="row end">
+      <button class="btn ghost" id="x-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="x-ok" type="button">Exit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="m-done" hidden>
+  <div class="panel narrow">
+    <h2>Thought Processor has stopped</h2>
+    <p id="d-note"></p>
+    <p class="muted small">You can close this tab.</p>
+  </div>
+</div>
+</body>
+</html>
