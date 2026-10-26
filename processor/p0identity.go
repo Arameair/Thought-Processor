@@ -19,6 +19,7 @@ import (
  "os"
  "path/filepath"
  "runtime"
+ "sort"
  "strings"
 )
 
@@ -99,38 +100,87 @@ func p0LocatorPath(systemID string) string {
  conf,e:=os.UserConfigDir();if e!=nil{return ""}
  return filepath.Join(conf,"arameair-identity","instances",systemID+".json")
 }
+// p0LocatorDirectory is *only* a discovery hint. Every locator value is
+// untrusted and must be constrained to loopback and independently verified.
+func p0LocatorDirectory() string {
+ if runtime.GOOS=="windows" {
+  if v:=os.Getenv("LOCALAPPDATA");v!="" {return filepath.Join(v,"Arameair","Identity","instances")}
+  return ""
+ }
+ c,e:=os.UserConfigDir();if e!=nil{return ""}
+ return filepath.Join(c,"arameair-identity","instances")
+}
+func p0LocatorCandidates() []string {
+ dir:=p0LocatorDirectory()
+ if dir=="" {return nil}
+ items,e:=os.ReadDir(dir);if e!=nil{return nil}
+ type candidate struct{base string; modified int64}
+ list:=[]candidate{}
+ for _,f:=range items {
+  if f.IsDir() || !strings.HasSuffix(f.Name(),".json") || len(list)>=32 {continue}
+  // Do not traverse symlinks: the locator is untrusted local input.
+  fi,e:=f.Info();if e!=nil||!fi.Mode().IsRegular()||fi.Size()>8192 {continue}
+  data,e:=os.ReadFile(filepath.Join(dir,f.Name()));if e!=nil{continue}
+  var v struct{BaseURL string `json:"base_url"`}
+  if json.Unmarshal(data,&v)!=nil{continue}
+  base,e:=loopbackURL(v.BaseURL);if e!=nil{continue}
+  list=append(list,candidate{base,fi.ModTime().UnixNano()})
+ }
+ sort.Slice(list,func(i,j int)bool{return list[i].modified>list[j].modified})
+ out:=[]string{}
+ for _,v:=range list {out=append(out,v.base)}
+ return out
+}
 func p0Candidates(pr *Pairing, configured string) []string {
  candidates:=[]string{}
  if pr!=nil {
   if loc:=p0LocatorPath(pr.IdentitySystemID);loc!="" {
    if b,e:=os.ReadFile(loc);e==nil && len(b)<8192 {
-    var m struct {BaseURL string `json:"base_url"`}
+    var m struct{ BaseURL string `json:"base_url"`}
     if json.Unmarshal(b,&m)==nil {candidates=append(candidates,m.BaseURL)}
    }
   }
-  candidates=append(candidates,pr.IdentityAddress)
+  candidates=append(candidates,pr.IdentityAddress,configured)
+ }else{
+  // Explicit address takes precedence; then scan up to 32 user locators.
+  candidates=append(candidates,configured)
+  candidates=append(candidates,p0LocatorCandidates()...)
  }
- candidates=append(candidates,configured,"http://127.0.0.1:7790")
+ candidates=append(candidates,"http://127.0.0.1:7790")
  seen:=map[string]bool{};out:=[]string{}
- for _,c:=range candidates {if c==""{continue};s,e:=loopbackURL(c);if e==nil&&!seen[s]{out=append(out,s);seen[s]=true}}
+ for _,c:=range candidates {
+  if c==""{continue}
+  s,e:=loopbackURL(c)
+  if e==nil&&!seen[s] {out=append(out,s);seen[s]=true}
+ }
  return out
 }
 func p0Discover(ctx context.Context, pr *Pairing, configured string) (string,map[string]any,string) {
+ var rejected,wrong,incompatible string
  for _,base:=range p0Candidates(pr,configured) {
   if pr!=nil {
    v,e:=p0Signed(ctx,*pr,base,"GET","/api/v1/status",nil)
    if e==nil {
-    if v["api"]!="identity/1-alpha" {return base,nil,"INCOMPATIBLE"}
+    if api,_:=v["api"].(string);!strings.HasPrefix(api,"identity/1-") {
+     incompatible=base;continue
+    }
     return base,v,"VERIFIED"
    }
    var f *P0Failure
-   if errors.As(e,&f)&&f.Code=="WRONG_SERVICE" {return base,nil,"WRONG_SERVICE"}
-   if errors.As(e,&f)&&f.Code=="CONNECTION_REMOVED" {return base,nil,"CONNECTION_REMOVED"}
+   if errors.As(e,&f) {
+    if f.Code=="WRONG_SERVICE" {wrong=base}
+    if f.Code=="CONNECTION_REMOVED" {rejected=base}
+   }
   } else if h,e:=p0Health(ctx,base);e==nil {
-   if api,_:=h["api"].(string);!strings.HasPrefix(api,"identity/1-") {return base,nil,"INCOMPATIBLE"}
+   if api,_:=h["api"].(string);!strings.HasPrefix(api,"identity/1-") {
+    incompatible=base;continue
+   }
    return base,nil,"DISCOVERED_UNVERIFIED"
   }
  }
+ if wrong!="" {return wrong,nil,"WRONG_SERVICE"}
+ if rejected!="" {return rejected,nil,"CONNECTION_REMOVED"}
+ if incompatible!="" {return incompatible,nil,"INCOMPATIBLE"}
  return "",nil,"AUTHORITY_UNAVAILABLE"
 }
 func p0Read(ctx context.Context, pr Pairing, base, path string) (map[string]any,error) {
