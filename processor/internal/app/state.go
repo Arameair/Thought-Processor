@@ -63,8 +63,11 @@ func (a *App) State() map[string]any {
 		"verified":       verified,
 		"developer_mode": set.DeveloperMode,
 		"lifecycle":      lifecycle,
-		"exit": map[string]any{"managed_processes": 0,
-			"note": "Thought Processor hasn't started any other programs. Installed features are not started."},
+		"exit":           map[string]any{"note": "Exiting stops every feature process this Processor started (their installation identities, grants and data are kept)."},
+		"theme":          set.Theme,
+	}
+	for k, v := range a.p1State() {
+		out[k] = v
 	}
 	if verified {
 		out["github"] = gh

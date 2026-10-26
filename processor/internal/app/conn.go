@@ -44,6 +44,8 @@ type Conn struct {
 	codeExpires time.Time
 	identities  []idclient.Entity
 	features    *idclient.FeatureList
+	admin       *idclient.AdminView
+	insts       []idclient.InstallationView
 	featuresFor string
 	dataAt      time.Time
 	dataErr     string
@@ -179,10 +181,67 @@ func (c *Conn) check(ctx context.Context) (*idclient.Status, error) {
 	return &s, nil
 }
 
+// Pairing returns the saved pairing (zero value if none).
+func (c *Conn) Pairing() idclient.Pairing {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.client != nil {
+		return c.client.Pairing()
+	}
+	if c.pairing != nil {
+		return *c.pairing
+	}
+	return idclient.Pairing{}
+}
+
+func (c *Conn) adminView() *idclient.AdminView {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state != CVerified {
+		return nil
+	}
+	return c.admin
+}
+
+func (c *Conn) installations() []idclient.InstallationView {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state != CVerified {
+		return []idclient.InstallationView{}
+	}
+	return append([]idclient.InstallationView{}, c.insts...)
+}
+
+// installation returns Identity's last signed view of one installation.
+func (c *Conn) installation(id string) *idclient.InstallationView {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.insts {
+		if c.insts[i].Installation.ID == id {
+			v := c.insts[i]
+			return &v
+		}
+	}
+	return nil
+}
+
 func (c *Conn) refreshData(ctx context.Context) {
 	c.mu.Lock()
 	cl := c.client
 	c.mu.Unlock()
+	if cl == nil {
+		return
+	}
+	if adm, err := cl.Admin(ctx); err == nil {
+		c.mu.Lock()
+		c.admin = &adm
+		c.mu.Unlock()
+	}
+	if insts, err := cl.Installations(ctx); err == nil {
+		c.mu.Lock()
+		c.insts = insts
+		c.mu.Unlock()
+	}
 	ids, err := cl.Identities(ctx)
 	sel := c.prof.Settings().SelectedIdentity
 	found := false
@@ -300,7 +359,7 @@ func (c *Conn) Disconnect(ctx context.Context) {
 	}
 	idclient.DeletePairing(c.prof.Dir)
 	c.mu.Lock()
-	c.pairing, c.client, c.status, c.identities, c.features = nil, nil, nil, nil, nil
+	c.pairing, c.client, c.status, c.identities, c.features, c.admin, c.insts = nil, nil, nil, nil, nil, nil, nil
 	c.setState(CSearching, "Disconnected.")
 	c.mu.Unlock()
 	c.log.Info("identity", "pairing.disconnected", "this Processor's connection to Identity was removed")

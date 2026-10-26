@@ -20,6 +20,7 @@ import (
 	"github.com/Arameair/Thought-Processor/processor/internal/idclient"
 	"github.com/Arameair/Thought-Processor/processor/internal/install"
 	"github.com/Arameair/Thought-Processor/processor/internal/store"
+	"github.com/Arameair/Thought-Processor/processor/internal/supervisor"
 )
 
 const (
@@ -43,6 +44,8 @@ type App struct {
 	Conn    *Conn
 	Inst    *install.Installer
 	Sess    *Sessions
+	P1      *p1
+	Sup     *supervisor.Supervisor
 	Build   Build
 	RunID   string
 	Started time.Time
@@ -60,6 +63,7 @@ func New(prof *store.Profile, b Build) *App {
 	a := &App{Prof: prof, Log: lg, Sess: NewSessions(), Build: b, RunID: run, Started: time.Now(), stop: make(chan struct{})}
 	a.Inst = install.New(prof.Dir, func(level, event, feature, detail string) { lg.Add(level, "install", event, feature+": "+detail) })
 	a.Conn = NewConn(prof, lg)
+	a.initP1()
 	return a
 }
 
@@ -79,6 +83,7 @@ func (a *App) Run(ctx context.Context, ln net.Listener, ready func(link string))
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go a.Conn.Run(cctx)
+	go a.reconcileLoop(cctx)
 	a.Log.Info("lifecycle", "processor.started", fmt.Sprintf("pid %d port %d profile %s version %s commit %s", os.Getpid(), a.Port, store.DisplayPath(a.Prof.Dir), a.Build.Version, short(a.Build.Revision)))
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
@@ -96,6 +101,9 @@ func (a *App) Run(ctx context.Context, ln net.Listener, ready func(link string))
 		}
 	}
 	a.Log.Info("lifecycle", "processor.stopping", why)
+	if n := a.Sup.StopAll("Thought Processor is exiting"); n > 0 {
+		a.Log.Info("lifecycle", "features.stopped", fmt.Sprintf("stopped %d feature process(es) this Processor started; their installation identities and data are kept", n))
+	}
 	sctx, scancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer scancel()
 	srv.Shutdown(sctx)
@@ -196,6 +204,12 @@ func (a *App) failIdentity(w http.ResponseWriter, err error) {
 		case idclient.TokenRefused, idclient.WrongService, idclient.Incompatible:
 			a.fail(w, 409, e.Msg)
 			return
+		case idclient.Refused:
+			// A signed refusal from the right Identity: keep its status.
+			if e.Status >= 400 && e.Status < 600 {
+				a.fail(w, e.Status, e.Msg)
+				return
+			}
 		}
 		a.fail(w, 400, e.Msg)
 		return
@@ -386,6 +400,7 @@ func (a *App) Handler() http.Handler {
 		writeJSON(w, 200, a.State())
 	}))
 
+	a.p1Routes(m)
 	m.HandleFunc("POST /api/devmode", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var b struct{ On bool }
 		decode(r, &b)
@@ -412,7 +427,8 @@ func (a *App) Handler() http.Handler {
 // stopped only when it is MANAGED by this Processor, or when the person
 // explicitly ticked "also stop Identity" for an EXTERNAL one.
 func (a *App) exit(ctx context.Context, choice string, stopIdentity bool) map[string]any {
-	res := map[string]any{"processor": "stopping", "managed_processes": 0}
+	n := a.Sup.StopAll("the person chose Exit")
+	res := map[string]any{"processor": "stopping", "managed_processes": n, "features": fmt.Sprintf("%d feature process(es) stopped (installation identities and data kept)", n)}
 	a.Conn.mu.Lock()
 	st := a.Conn.status
 	cl := a.Conn.client

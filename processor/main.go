@@ -23,7 +23,7 @@ import (
 	"github.com/Arameair/Thought-Processor/processor/internal/store"
 )
 
-const appVersion = "0.2.0-p0"
+const appVersion = "0.3.0-p1"
 
 var buildBranch = "" // -ldflags "-X main.buildBranch=<branch>"
 
@@ -73,6 +73,8 @@ func main() {
 	data := flag.String("data", defaultData(), "profile folder for this Processor")
 	noBrowser := flag.Bool("no-browser", false, "don't open the browser; just print the private link")
 	version := flag.Bool("version", false, "print version and exit")
+	var trusted multiFlag
+	flag.Var(&trusted, "trust-feature-dir", "a folder of LOCAL feature packages you trust (repeatable). Only TRUSTED_LOCAL_TEST_FIXTURE packages from such folders can be installed; nothing else can run")
 	flag.Parse()
 	b := build()
 	if *version {
@@ -87,6 +89,7 @@ func main() {
 	}
 	defer prof.Close()
 	a := app.New(prof, b)
+	a.TrustFeatureDirs(trusted)
 	a.Port = *port
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -100,7 +103,10 @@ func main() {
 		fmt.Printf("  run     : pid %d   port %d (this computer only)   processor %s\n", os.Getpid(), a.Port, prof.Self.ProcessorID)
 		fmt.Println("  open    : " + link)
 		fmt.Println("            (private link — don't share it; it changes every start)")
-		fmt.Println("  stop    : use Exit in the page, or Ctrl+C here.")
+		for _, d := range trusted {
+			fmt.Println("  trusted : " + d + "  (local feature packages you chose to trust)")
+		}
+		fmt.Println("  stop    : use Exit in the page, or Ctrl+C here (feature processes it started are stopped too).")
 		if !*noBrowser {
 			if err := openBrowser(link); err != nil {
 				fmt.Println("  (couldn't open the browser; copy the link above into it)")
@@ -116,3 +122,9 @@ func main() {
 	}
 	fmt.Println("Thought Processor stopped.")
 }
+
+// multiFlag collects a repeatable string flag.
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return fmt.Sprint(*m) }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }

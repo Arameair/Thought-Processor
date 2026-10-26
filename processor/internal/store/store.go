@@ -43,6 +43,7 @@ type Settings struct {
 	SelectedIdentity string `json:"selected_identity,omitempty"`
 	DeveloperMode    bool   `json:"developer_mode,omitempty"`
 	IdentityURL      string `json:"identity_url,omitempty"` // last address the person chose (before pairing)
+	Theme            string `json:"theme,omitempty"`        // system | light | dark (display only)
 }
 
 type Profile struct {
