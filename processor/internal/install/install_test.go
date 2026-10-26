@@ -176,6 +176,7 @@ func TestUnapprovedSourcesRefusedBeforeDownload(t *testing.T) {
 	cases := map[string]func(*fakeSource){
 		"uploaded by a person": func(f *fakeSource) { f.uploader = "someone" },
 		"wrong tag pattern":    func(f *fakeSource) { f.tag = "v9-evil" },
+		"tag escapes folder":   func(f *fakeSource) { f.tag = ".." },
 	}
 	for name, mod := range cases {
 		in, src := New(t.TempDir(), nil), newFake()

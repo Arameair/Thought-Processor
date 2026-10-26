@@ -205,6 +205,16 @@ func (a *App) failIdentity(w http.ResponseWriter, err error) {
 
 func (a *App) Handler() http.Handler {
 	m := http.NewServeMux()
+	// Feature routes accept only well-formed feature ids.
+	feat := func(h http.HandlerFunc) http.HandlerFunc {
+		return a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+			if !install.FeatureRE.MatchString(r.PathValue("id")) {
+				a.fail(w, 400, "unknown feature")
+				return
+			}
+			h(w, r)
+		})
+	}
 	static := func(name, ctype string) http.HandlerFunc {
 		b, err := webFS.ReadFile("web/" + name)
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +338,7 @@ func (a *App) Handler() http.Handler {
 	}))
 
 	// Features: plan → approve → install (reusable; nothing feature-specific)
-	m.HandleFunc("POST /api/features/{id}/plan", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("POST /api/features/{id}/plan", feat(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		cl, err := a.Conn.Require(r.Context())
 		if err != nil {
@@ -345,7 +355,7 @@ func (a *App) Handler() http.Handler {
 		}
 		writeJSON(w, 200, a.State())
 	}))
-	m.HandleFunc("POST /api/features/{id}/approve", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("POST /api/features/{id}/approve", feat(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		var b struct {
 			PlanID string `json:"plan_id"`
@@ -360,15 +370,15 @@ func (a *App) Handler() http.Handler {
 		time.Sleep(150 * time.Millisecond)
 		writeJSON(w, 200, a.State())
 	}))
-	m.HandleFunc("POST /api/features/{id}/cancel", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("POST /api/features/{id}/cancel", feat(func(w http.ResponseWriter, r *http.Request) {
 		a.Inst.CancelPlan(r.PathValue("id"))
 		writeJSON(w, 200, a.State())
 	}))
-	m.HandleFunc("POST /api/features/{id}/verify", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("POST /api/features/{id}/verify", feat(func(w http.ResponseWriter, r *http.Request) {
 		a.Inst.Verify(r.PathValue("id"))
 		writeJSON(w, 200, a.State())
 	}))
-	m.HandleFunc("POST /api/features/{id}/remove", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("POST /api/features/{id}/remove", feat(func(w http.ResponseWriter, r *http.Request) {
 		if err := a.Inst.Remove(r.PathValue("id")); err != nil {
 			a.fail(w, 409, err.Error())
 			return

@@ -6,37 +6,59 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 const tok = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-// fakeIdentity signs answers the way Identity v1 does. mode changes behaviour.
+// fakeIdentity verifies signed requests and signs answers the way Identity
+// identity/2 does. mode changes behaviour. It records every request so tests
+// can prove the secret never travels.
+var seenRequests []string
+
 func fakeIdentity(t *testing.T, sys string, mode *string) *httptest.Server {
+	rk, sk := DeriveKeys(tok)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" {
 			t.Error("client sent a browser Origin header")
 		}
+		raw, _ := io.ReadAll(r.Body)
+		dump := fmt.Sprint(r.Header) + r.URL.String() + string(raw)
+		seenRequests = append(seenRequests, dump)
 		if r.URL.Path == "/api/health" {
-			w.Write([]byte(`{"app":"identity","version":"t","api":"identity/1-alpha"}`))
+			w.Write([]byte(`{"app":"identity","version":"t","api":"identity/2-alpha"}`))
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer "+tok || *mode == "401" {
+		sum := sha256.Sum256(raw)
+		mac := hmac.New(sha256.New, rk)
+		mac.Write([]byte("identity/2 request\n" + r.Method + "\n" + r.URL.RequestURI() + "\n" + r.Header.Get(TimeHeader) + "\n" + r.Header.Get(NonceHeader) + "\n" + hex.EncodeToString(sum[:])))
+		if r.Header.Get(AuthHeader) != hex.EncodeToString(mac.Sum(nil)) || r.Header.Get(PIDHeader) != "tp_000000000000" || *mode == "401" {
 			w.WriteHeader(401)
 			return
 		}
-		body := []byte(`{"state":"READY","api":"identity/1-alpha","identity_system_id":"` + sys + `"}`)
+		body := []byte(`{"state":"READY","api":"identity/2-alpha","identity_system_id":"` + sys + `"}`)
 		code := 200
 		if *mode == "refuse" {
 			body, code = []byte(`{"error":"NO_RELEASE","message":"no release"}`), 404
 		}
-		m := hmac.New(sha256.New, []byte(tok))
-		m.Write([]byte("identity-v1\n" + r.Header.Get(NonceHeader) + "\n"))
+		key := sk
+		if *mode == "impostor" { // signs with what an impostor could know: nothing secret
+			key = []byte(r.Header.Get(AuthHeader))
+		}
+		m := hmac.New(sha256.New, key)
+		status := code
+		if *mode == "status" {
+			status = 500 // proof made for a different status
+		}
+		m.Write([]byte("identity/2 response\n" + r.Header.Get(NonceHeader) + "\n" + strconv.Itoa(status) + "\n"))
 		m.Write(body)
 		proof := hex.EncodeToString(m.Sum(nil))
 		switch *mode {
@@ -61,13 +83,13 @@ func TestCallVerifiesEveryAnswer(t *testing.T) {
 	mode := ""
 	srv := fakeIdentity(t, "idn_aaaaaaaaaaaaaaaaaaaaaaaa", &mode)
 	defer srv.Close()
-	c := New(Pairing{BaseURL: srv.URL, Token: tok, IdentitySystemID: "idn_aaaaaaaaaaaaaaaaaaaaaaaa"})
+	c := New(Pairing{BaseURL: srv.URL, Token: tok, ProcessorID: "tp_000000000000", IdentitySystemID: "idn_aaaaaaaaaaaaaaaaaaaaaaaa"})
 	ctx := context.Background()
 	if s, err := c.Status(ctx); err != nil || s.State != "READY" {
 		t.Fatalf("good answer refused: %v", err)
 	}
 	for m, want := range map[string]Kind{"badproof": WrongService, "noproof": WrongService, "tamper": WrongService,
-		"otherid": WrongService, "401": TokenRefused, "refuse": Refused} {
+		"otherid": WrongService, "401": TokenRefused, "refuse": Refused, "impostor": WrongService, "status": WrongService} {
 		mode = m
 		_, err := c.Status(ctx)
 		if KindOf(err) != want {
@@ -78,6 +100,12 @@ func TestCallVerifiesEveryAnswer(t *testing.T) {
 			if !errorsAs(err, &e) || e.Code != "NO_RELEASE" {
 				t.Errorf("signed refusal code lost: %v", err)
 			}
+		}
+	}
+	// The pairing secret never appears in anything sent to Identity.
+	for _, r := range seenRequests {
+		if strings.Contains(r, tok) {
+			t.Fatal("the pairing secret was sent on the wire")
 		}
 	}
 	srv.Close()

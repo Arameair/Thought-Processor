@@ -306,6 +306,21 @@ def main():
         "Identity down: protected actions blocked (503), installed feature still shown", f"plan {st}, create {st2}")
     shot("p10-identity-unavailable")
 
+    # 11b. An impostor grabs Identity's port: never trusted, never gets the secret.
+    paired = json.loads((W / "processor-profile" / "identity-pairing.json").read_text())
+    imp_log = W / "impostor-requests.jsonl"
+    start("impostor", [sys.executable, "-I", str(PROC_SRC / "acceptance" / "impostor_identity.py"), str(IP), paired["identity_system_id"], str(imp_log)])
+    wait_http(f"http://127.0.0.1:{IP}/api/health")
+    s = tp.until(lambda s: s["connection"]["state"] == "WRONG_SERVICE", 20, "impostor detected")
+    st, _ = tp.post("/api/features/thought-engine/plan")
+    import base64
+    secret = base64.b64decode(paired["sealed_token"]).decode() if paired.get("token_protection", "").startswith("file") else None
+    seen = imp_log.read_text() if imp_log.exists() else ""
+    rec(s["connection"]["state"] == "WRONG_SERVICE" and not s["verified"] and st != 200 and "IMPOSTOR" not in json.dumps(s),
+        "impostor on Identity's port is not trusted; actions refused", s["connection"]["state"])
+    rec(secret is not None and len(seen) > 0 and secret not in seen, "the pairing secret never reached the impostor", f"{seen.count(chr(10))} requests inspected")
+    stop("impostor")
+
     # 12. A different Identity installation on the same port = not trusted.
     start_identity("other", IP, "other-identity-profile")
     s = tp.until(lambda s: s["connection"]["state"] in ("CONNECTION_REMOVED", "WRONG_SERVICE"), 20, "wrong")

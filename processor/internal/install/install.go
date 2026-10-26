@@ -61,6 +61,17 @@ var (
 
 func Platform() string { return runtime.GOOS + "-" + runtime.GOARCH }
 
+// safeName: a tag or file name that is a single, ordinary path element.
+func safeName(re *regexp.Regexp, s string) bool {
+	return re.MatchString(s) && s != "." && s != ".." && !strings.HasPrefix(s, ".") && filepath.Base(s) == s
+}
+
+// inside reports whether p is strictly inside dir.
+func inside(dir, p string) bool {
+	rel, err := filepath.Rel(dir, p)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
+}
+
 // Source is what the installer needs from Identity (idclient.Client).
 type Source interface {
 	Contract(ctx context.Context, feature string) (idclient.Contract, error)
@@ -236,7 +247,7 @@ func (in *Installer) readRecord(f string) (*Record, error) {
 	var cur struct {
 		Tag string `json:"tag"`
 	}
-	if json.Unmarshal(b, &cur) != nil || !tagRE.MatchString(cur.Tag) {
+	if json.Unmarshal(b, &cur) != nil || !safeName(tagRE, cur.Tag) {
 		return nil, errors.New("current.json damaged")
 	}
 	b, err = os.ReadFile(filepath.Join(in.root, f, cur.Tag, "install.json"))
@@ -244,7 +255,7 @@ func (in *Installer) readRecord(f string) (*Record, error) {
 		return nil, fmt.Errorf("install.json for %s missing: %w", cur.Tag, err)
 	}
 	var r Record
-	if json.Unmarshal(b, &r) != nil || r.Feature != f || !assetRE.MatchString(r.Asset) || !shaRE.MatchString(r.SHA256) {
+	if json.Unmarshal(b, &r) != nil || r.Feature != f || !safeName(assetRE, r.Asset) || !shaRE.MatchString(r.SHA256) {
 		return nil, errors.New("install.json damaged")
 	}
 	r.Path = filepath.Join(in.root, f, cur.Tag, r.Asset)
@@ -408,9 +419,9 @@ func CheckRelease(feature, platform string, k idclient.Contract, r idclient.Rele
 	switch {
 	case r.Feature != "" && r.Feature != feature:
 		return PUnapproved, errors.New("the release is for a different feature")
-	case r.Platform != platform || r.Asset != want || !assetRE.MatchString(r.Asset):
+	case r.Platform != platform || r.Asset != want || !safeName(assetRE, r.Asset):
 		return PUnapproved, fmt.Errorf("the release file %q isn't the approved file name %q for this computer", r.Asset, want)
-	case !tagRE.MatchString(r.Tag) || !strings.HasPrefix(r.Tag, k.Source.TagPrefix):
+	case !safeName(tagRE, r.Tag) || !strings.HasPrefix(r.Tag, k.Source.TagPrefix):
 		return PUnapproved, fmt.Errorf("release %q doesn't match the approved tag pattern %s*", r.Tag, k.Source.TagPrefix)
 	case r.Source == nil || !strings.EqualFold(r.Source.Repo, k.Source.Repo):
 		return PUnapproved, errors.New("the release doesn't come from the approved repository " + k.Source.Repo)
@@ -538,6 +549,10 @@ func (in *Installer) Approve(ctx context.Context, src Source, feature, planID st
 	s.phase = Verifying
 	in.mu.Unlock()
 	final := filepath.Join(dir, p.Tag, p.Asset)
+	if !inside(dir, final) {
+		os.Remove(tmp)
+		return in.fail(feature, Problem{Code: PUnapproved, Message: "The release names a file outside the feature's folder.", NextStep: "Nothing was installed."})
+	}
 	if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
 		os.Remove(tmp)
 		return in.fail(feature, Problem{Code: PDisk, Message: err.Error(), NextStep: "Check folder permissions."})

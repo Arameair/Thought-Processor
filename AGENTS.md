@@ -17,7 +17,7 @@ Both repositories are public, so you don't need a token to clone or build.
 
 ## Rules
 
-1. **Never paste, log or send** any of these into chat, issues or reports:
+1. **Never paste, log or send** any of these into chat, issues or reports. Note that Identity's console prints its private troubleshooting link (`…/#key=…`) at start, so crop or blur that line in any screenshot of the Identity window.
    - the 8-character pairing code shown in the Identity window;
    - the GitHub device code;
    - anything after `#code=` or `#key=`;
@@ -44,7 +44,15 @@ git clone --branch experiment/p0-feature-onboarding-20261026 https://github.com/
 cd $HOME\identity-p0 ; .\scripts\build-windows.ps1
 cd $HOME\tp-p0\processor ; .\scripts\build-windows.ps1
 ```
-If PowerShell blocks the scripts, run the same commands by hand in each folder: `go vet ./...`, then `go test ./...`, then `go build -o <name>.exe .`.
+If PowerShell blocks the scripts, run these by hand instead. The `-ldflags` part makes the console show the branch name.
+```powershell
+cd $HOME\identity-p0
+go vet ./... ; go test ./...
+go build -ldflags "-X main.buildBranch=experiment/feature-contract-20261026" -o identity.exe .
+cd $HOME\tp-p0\processor
+go vet ./... ; go test ./...
+go build -ldflags "-X main.buildBranch=experiment/p0-feature-onboarding-20261026" -o thought-processor.exe .
+```
 
 **Expected:**
 - every `go test` line says `ok`;
@@ -59,7 +67,7 @@ cd $HOME\tp-p0\processor
 .\thought-processor.exe
 ```
 **Expected:**
-- The console shows `Thought Processor 0.2.0-p0  branch experiment/p0-feature-onboarding-20261026`.
+- The console shows `Thought Processor 0.2.0-p0  branch experiment/p0-feature-onboarding-20261026  commit <first 12 characters of the Step 1 SHA>`.
 - A browser opens Thought Processor.
 - The page says **Start Identity**, and the top chip says *Identity: not running*.
 
@@ -111,7 +119,7 @@ Press **Sign in to GitHub**. A dialog shows a link and a code. **Owner:** open t
 Press **Install…**.
 
 - **Expected today (no Engine release exists yet): BLOCKED.**
-  - The card shows **No version published yet**, or *Identity couldn't read the release from GitHub (HTTP 403)*. The 403 appears when Identity's GitHub App lacks *Contents: Read-only*.
+  - The card shows **No version published yet**, or a message starting *Identity couldn't read the release from GitHub* that mentions **HTTP 403**. The 403 appears when Identity's GitHub App lacks *Contents: Read-only*.
   - For a private repository GitHub may also answer "not found" when that permission is missing, so the first message alone doesn't prove there's no release.
   - Nothing is installed. Record **BLOCKED** with the message.
 - **Once a release exists** (see "Owner actions" below):
@@ -188,5 +196,7 @@ Turn on Developer Mode to copy the technical details, and check them for codes b
 | Page says *This window isn't signed in* | Processor restarted; use the new browser tab it opened, or the `open :` link from window 1. |
 | *More than one Identity is running* | Choose the one whose profile is `…\.identity\p0`. |
 | *A different Identity is answering* / *connection removed* | A different Identity profile is running on that port. Start the right one, or choose **Connect again**. |
+| Processor never finds Identity, though Identity is running | Processor finds Identity through `%LOCALAPPDATA%\Arameair\Identity\instances\` (written by Identity at start) or port 7790. Both programs must run as the same Windows user. Don't set `IDENTITY_LOCATOR_DIR` unless you set it the same way for both. |
+| *This connection was made with an older Identity* | Identity API is now `identity/2` (security fix: the pairing secret is never sent). Choose **Connect again**. |
 | *The saved connection can't be read* | It was made by another Windows user or computer (DPAPI). Choose **Connect again**. |
 | *Download stopped* / *Download didn't match* | Nothing was installed. Press **Install…** to retry. |

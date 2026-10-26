@@ -27,7 +27,7 @@ type Pairing struct {
 	IdentitySystemID string    `json:"identity_system_id"`
 	IdentityVersion  string    `json:"identity_version"`
 	PairedAt         time.Time `json:"paired_at"`
-	Token            string    `json:"-"`
+	Token            string    `json:"-"` // the pairing secret: sealed at rest, never sent after pairing
 }
 
 type pairingFile struct {
@@ -249,8 +249,11 @@ func CompletePairing(ctx context.Context, u, processorID, code string) (Pairing,
 		}
 		return Pairing{}, &Error{Kind: Refused, Status: st, Msg: msg}
 	}
+	if _, ok := m["secret"]; !ok {
+		return Pairing{}, &Error{Kind: Incompatible, Msg: "this Identity is an older version (identity/1) that sends its secret over the wire; use Identity " + APIMajor + " or newer"}
+	}
 	p := Pairing{BaseURL: u, ProcessorID: processorID, IdentitySystemID: fmt.Sprint(m["identity_system_id"]),
-		IdentityVersion: fmt.Sprint(m["identity_version"]), PairedAt: time.Now().UTC(), Token: fmt.Sprint(m["token"])}
+		IdentityVersion: fmt.Sprint(m["identity_version"]), PairedAt: time.Now().UTC(), Token: fmt.Sprint(m["secret"])}
 	if !tokenRE.MatchString(p.Token) || !strings.HasPrefix(p.IdentitySystemID, "idn_") {
 		return Pairing{}, &Error{Kind: WrongService, Msg: "Identity's pairing answer didn't look right; nothing was saved"}
 	}
