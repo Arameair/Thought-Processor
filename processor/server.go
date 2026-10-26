@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/app.js web/app.css
+//go:embed web/index.html web/app.js web/app.css web/workspace.html web/workspace.js web/workspace.css
 var webFS embed.FS
 
 type App struct {
@@ -42,6 +42,7 @@ type App struct {
 	pairing *Pairing // nil = not paired
 	pairErr string
 	inst    *Installer
+	p0inst *P0InstallManager
 
 	shutdownOnce sync.Once
 	shutdownReq  chan struct{}
@@ -69,6 +70,7 @@ func NewApp(prof *Profile, port int, b BuildInfo, t0 time.Time) (*App, error) {
 		a.pairing = pr
 	}
 	a.inst = NewInstaller(prof.Dir)
+	a.p0inst = NewP0InstallManager(prof.Dir)
 	if err := prof.WriteCode(a.sess.Code()); err != nil {
 		return nil, fmt.Errorf("can't write operator code to profile: %w", err)
 	}
@@ -188,7 +190,10 @@ func (a *App) Routes() *http.ServeMux {
 			w.Write(b)
 		}
 	}
-	m.HandleFunc("GET /{$}", a.wrap(public, static("index.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /{$}", a.wrap(public, static("workspace.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /diagnostics", a.wrap(public, static("index.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /workspace.js", a.wrap(public, static("workspace.js", "text/javascript; charset=utf-8")))
+	m.HandleFunc("GET /workspace.css", a.wrap(public, static("workspace.css", "text/css; charset=utf-8")))
 	m.HandleFunc("GET /app.js", a.wrap(public, static("app.js", "text/javascript; charset=utf-8")))
 	m.HandleFunc("GET /app.css", a.wrap(public, static("app.css", "text/css; charset=utf-8")))
 
@@ -243,6 +248,7 @@ func (a *App) Routes() *http.ServeMux {
 	}))
 	m.HandleFunc("POST /api/engine/{action}", a.wrap(mutate, a.handleProtected))
 	a.installRoutes(m)
+	a.p0Routes(m)
 	m.HandleFunc("POST /api/shutdown", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var in struct{}
 		if err := readStrict(r, &in); err != nil {
