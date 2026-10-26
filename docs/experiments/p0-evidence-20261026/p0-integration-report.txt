@@ -1,12 +1,12 @@
-P0 INTEGRATION REPORT 2026-10-26T07:06:00-0500
+P0 INTEGRATION REPORT 2026-10-26T07:28:02-0500
 Real Thought Processor + real Identity processes; GitHub = TEST FIXTURE; Linux developer machine.
 
 PASS  Processor alone shows 'Start Identity'  — IDENTITY_NOT_FOUND
 PASS  Identity started later is found via its locator  — 1 candidate(s)
 PASS  wrong code refused with an explanation  — that pairing code is wrong or expired; ask Identity for a new one
-PASS  paired: signed status from Identity  — idn_8edac9146aae8f7c6e327d98
+PASS  paired: signed status from Identity  — idn_eb80512afbfd0a1b0f82c348
 PASS  pairing token stored sealed, not as a plain field  — file-permissions-0600
-PASS  identity created in Identity, selected, starts with no access  — ent_69158337c488526db6fd
+PASS  identity created in Identity, selected, starts with no access  — ent_16818a94909a634f8411
 PASS  private Thought Engine hidden before sign-in  — Some features are only shown to approved accounts. Sign in t
 PASS  after sign-in Thought Engine appears, eligible to install  — install
 PASS  eligible to install is not permission to run or read sources  — NOT_GRANTED
@@ -19,7 +19,9 @@ PASS  install record keeps where it came from  — Arameair/Thought-engine
 PASS  Exit → Keep running: Processor stops, Identity stays up
 PASS  Processor restart: reconnected with no code, install re-verified  — INSTALLED
 PASS  Identity down: protected actions blocked (503), installed feature still shown  — plan 503, create 503
-PASS  other Identity on the same port is not trusted  — CONNECTION_REMOVED
+PASS  impostor on Identity's port is not trusted; actions refused  — WRONG_SERVICE
+PASS  the pairing secret never reached the impostor  — 5 requests inspected
+PASS  other Identity on the same port is not trusted  — WRONG_SERVICE
 PASS  paired Identity found again on a new port (locator)  — http://127.0.0.1:7932
 PASS  after Identity restart (GitHub signed out) the private feature is hidden; install still shown as installed  — Installed earlier. Identity isn't confirming this feature ri
 PASS  account without access never sees the private feature from Identity
@@ -28,4 +30,4 @@ PASS  Developer Mode shows details and grants nothing
 PASS  Exit → Shut down + stop Identity: both stopped, verified  — stopped (verified: no longer answering)
 PASS  Identity's locator removed on clean stop
 
-RESULT: PASS (26/26)
+RESULT: PASS (28/28)

@@ -6,8 +6,8 @@
 
 | Repo | Branch | Code commit tested | Based on |
 | --- | --- | --- | --- |
-| Arameair/Thought-Processor | `experiment/p0-feature-onboarding-20261026` | `c64ac6e` (this report and the evidence are added in later docs-only commits) | `alpha` @ `9fac9fa` (docs only; the app is new code) |
-| Arameair/identity | `experiment/feature-contract-20261026` | `ce2cbd2` | `alpha-candidate-20261026` @ `dfbb24e` |
+| Arameair/Thought-Processor | `experiment/p0-feature-onboarding-20261026` | **`9f27a1b`** (this report and the evidence are added in later docs-only commits) | `alpha` @ `9fac9fa` (docs only; the app is new code) |
+| Arameair/identity | `experiment/feature-contract-20261026` | **`c8c0a54`** (API `identity/2-alpha`) | `alpha-candidate-20261026` @ `dfbb24e` |
 | Arameair/Thought-engine | none changed | — | Release workflow exists on `experiment/release-workflow-20261026` @ `2baacc7`; **no release published** |
 
 The Windows runbook and acceptance steps are in [`AGENTS.md`](../../AGENTS.md).
@@ -40,6 +40,34 @@ The Windows runbook and acceptance steps are in [`AGENTS.md`](../../AGENTS.md).
 
 ## Results
 
+### Security finding during verification — FIXED
+
+An independent check from fresh clones found a **high-severity flaw** in the Identity API as first written (`identity/1`). Processor sent the pairing secret on every request, and Identity signed its answers with that same secret.
+
+**What an attacker could do:** run a program on Identity's port while Identity was stopped. That program could:
+- collect the secret;
+- show Processor fake data, including a fake release and SHA-256 in the approval dialog;
+- reuse the secret against the real Identity.
+
+The checker demonstrated this with a 40-line impostor.
+
+**Fix (`identity/2`, Identity `c8c0a54` + Processor `9f27a1b`):**
+- After pairing, the secret is never sent again.
+- Each request carries a one-time signature over the method, path, time, a fresh nonce and the body. Identity refuses a time more than 60 s off and any reused nonce.
+- Answers are signed with a separate derived key, covering the request's nonce, the status and the body.
+- An impostor now gets nothing reusable and can't produce an answer Processor accepts.
+
+**Proof:**
+- Unit tests cover an impostor signing with everything it can observe, status swaps, replay, tampering, stale time and a wrong secret.
+- Integration scenario 11b: an impostor on Identity's real port leaves Processor at *WRONG_SERVICE*, actions are refused, and the secret never reaches the impostor.
+
+Pairings made with `identity/1` must connect again. **The Oct 26 Identity alpha candidate (`alpha-candidate-20261026`) still speaks `identity/1`. It carries a warning and should not be built on.**
+
+The same check led to three smaller fixes:
+- Install tag and file names can no longer contain `.` or `..`, and the final path must stay in the feature folder.
+- Feature ids are validated on every route.
+- Identity's status no longer names a hidden private feature.
+
 ### Automated tests (Linux developer container, Go 1.24, race detector)
 
 | Suite | Result | Evidence |
@@ -52,7 +80,7 @@ The Windows runbook and acceptance steps are in [`AGENTS.md`](../../AGENTS.md).
 
 ### Integration: real processes, headless browser, GitHub as a labelled TEST FIXTURE
 
-The test runs the real Thought Processor and real Identity programs. A headless browser clicks through Processor's own page, and faults are injected through the fixture. **26/26 PASS**: [report](p0-evidence-20261026/p0-integration-report.txt).
+The test runs the real Thought Processor and real Identity programs. A headless browser clicks through Processor's own page, and faults are injected through the fixture. **28/28 PASS** at the final commits: [report](p0-evidence-20261026/p0-integration-report.txt).
 
 | # | Scenario | Result |
 | --- | --- | --- |
@@ -67,6 +95,7 @@ The test runs the real Thought Processor and real Identity programs. A headless 
 | 9 | Person approves in the dialog → installed; file on disk matches the approved SHA-256; the record keeps the source | PASS |
 | 10 | Exit → Keep running; Processor restarts and reconnects with no code; install re-verified | PASS |
 | 11 | Identity stopped → AUTHORITY UNAVAILABLE banner; install and create refused (503); installed feature still shown | PASS |
+| 11b | An **impostor** program on Identity's port is not trusted (WRONG_SERVICE), actions are refused, and it never receives the pairing secret | PASS |
 | 12 | A different Identity installation on the same port is not trusted | PASS |
 | 13 | The paired Identity on a new port is found again by installation ID | PASS |
 | 14 | After the Identity restart (GitHub signed out) the private feature is hidden while the local install is still shown; another account never sees it | PASS |
@@ -91,7 +120,9 @@ Screenshots of these steps are in [p0-evidence-20261026/](p0-evidence-20261026/)
 
 ## Security notes
 
-- Every Identity answer is verified: an HMAC over the exact body with a fresh nonce, plus the installation ID.
+- **The pairing secret never leaves Processor after pairing** (`identity/2`).
+  - Every request is signed: method, path, time, a fresh nonce and the body hash.
+  - Every answer is verified with a separate response key, over the nonce, status and exact body, plus the installation ID.
   - Unsigned or mismatched answers become *WRONG_SERVICE*; 401 becomes *CONNECTION_REMOVED*.
   - Protected actions ask Identity again at that moment. There are no cached allows.
 - The page needs this run's private link (session cookie plus CSRF token, Origin and Host checks). The link is stripped from the address bar after use.
@@ -120,6 +151,7 @@ Screenshots of these steps are in [p0-evidence-20261026/](p0-evidence-20261026/)
 - The installer is driven only by the feature contract, so a second feature needs a contract entry in Identity, not Processor code.
 - Every protected step fails closed.
 - Everything that can be tested without a real release and without Windows passes, including the failure cases.
+- The independent security check found one serious design flaw. It is fixed at the API level and covered by tests, including an impostor run against the real programs.
 
 **Before calling it an Alpha candidate:**
 1. Run AGENTS.md on Windows.

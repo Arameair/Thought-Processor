@@ -1,12 +1,12 @@
---- PASS: TestBrowserBoundaries (0.02s)
---- PASS: TestProtectedActionsFailClosedWithoutIdentity (0.02s)
+--- PASS: TestBrowserBoundaries (0.01s)
+--- PASS: TestProtectedActionsFailClosedWithoutIdentity (0.01s)
 PASS
-ok  	github.com/Arameair/Thought-Processor/processor/internal/app	1.078s
---- PASS: TestCallVerifiesEveryAnswer (0.01s)
---- PASS: TestPairingSavedProtectedAndReloaded (0.00s)
+ok  	github.com/Arameair/Thought-Processor/processor/internal/app	1.050s
+--- PASS: TestCallVerifiesEveryAnswer (0.02s)
+--- PASS: TestPairingSavedProtectedAndReloaded (0.01s)
 --- PASS: TestDiscoveryUsesLocatorsAndLoopbackOnly (0.00s)
 PASS
-ok  	github.com/Arameair/Thought-Processor/processor/internal/idclient	1.036s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/idclient	1.039s
 --- PASS: TestInstallNeedsApprovalVerifiesAndPersists (0.01s)
 --- PASS: TestBadDownloadsInstallNothing (0.01s)
 --- PASS: TestUnapprovedSourcesRefusedBeforeDownload (0.00s)
