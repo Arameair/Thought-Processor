@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -383,6 +384,9 @@ func TestCorruptCandidatesLeftUnchanged(t *testing.T) {
 }
 
 func TestUnwritableProfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix chmod permission test is not valid on Windows; ACL coverage requires a separate Windows test")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores permissions")
 	}
