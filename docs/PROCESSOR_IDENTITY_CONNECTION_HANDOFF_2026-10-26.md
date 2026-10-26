@@ -1,5 +1,13 @@
 # Thought Processor ↔ Identity — connection handoff (2026-10-26)
 
+> **⚠ Superseded for authentication (later on 2026-10-26):** steps 2–4 below describe API `identity/1`, which sent the pairing secret as a bearer token and signed answers with it. Independent verification showed that a program occupying Identity's port could steal the secret and fake answers. **Use `identity/2`** instead, from Identity `experiment/feature-contract-20261026` @ `c8c0a54`:
+> - The secret is never sent after pairing; pairing returns it as `secret`.
+> - Requests carry `X-Processor-ID`, `X-Identity-Time`, `X-Identity-Nonce` and `X-Identity-Auth` = HMAC(request_key, method/path/time/nonce/body-hash).
+> - Answers carry `X-Identity-Proof` = HMAC(response_key, nonce/status/body).
+> - Both keys are derived from the secret.
+>
+> Details: Identity's [API_V1.md](https://github.com/Arameair/identity/blob/experiment/feature-contract-20261026/docs/API_V1.md) and [changelog](https://github.com/Arameair/identity/blob/experiment/feature-contract-20261026/docs/API_CHANGELOG.md). Thought Processor `experiment/p0-feature-onboarding-20261026` implements it, including an impostor test.
+
 **Purpose:** both teams build against the *same* verified connection, rather than two protocols invented separately. **This is documentation only.** It authorizes no code, grant or branch promotion, and it does not claim that Processor has integrated anything.
 
 > **Corrected 2026-10-26 by the Identity team.** Each claim was checked against the running Identity candidate. What changed:
