@@ -1,3 +1,7 @@
+> **Preserved independent critique, not the current approved UX (2026-10-26).** These notes correctly emphasize honest states, but assume that Processor controls only Thought Processing and that users arrive from Identity. The owner later selected **Processor as the system-wide starting interface**. See [current design readiness](DESIGN_READINESS_2026-10-26.md) and [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15). Keep the earlier perspective visible without presenting it as a requirement.
+
+---
+
 # End-user design notes for Thought Processor
 
 *(captured while the design is still open — October 2026)*
