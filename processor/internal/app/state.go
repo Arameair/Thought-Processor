@@ -72,6 +72,11 @@ func (a *App) State() map[string]any {
 	if verified {
 		out["github"] = gh
 		out["identities"] = ids
+	} else if len(ids) > 0 && conn["state"] == CUnavailable {
+		// Display only: the last list Identity signed, so the page can still
+		// explain AUTHORITY UNAVAILABLE. Nothing is decided from it.
+		out["identities"] = ids
+		out["identities_stale"] = true
 	}
 	sel := set.SelectedIdentity
 	if verified && sel != "" && featuresFor == sel {

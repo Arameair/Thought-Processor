@@ -213,9 +213,14 @@ func (c *Conn) installations() []idclient.InstallationView {
 }
 
 // installation returns Identity's last signed view of one installation.
+// It is nil while Identity can't be confirmed: stale authority facts are
+// never presented (or used) as current.
 func (c *Conn) installation(id string) *idclient.InstallationView {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.state != CVerified {
+		return nil
+	}
 	for i := range c.insts {
 		if c.insts[i].Installation.ID == id {
 			v := c.insts[i]

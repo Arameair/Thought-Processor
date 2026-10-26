@@ -2,43 +2,42 @@
 (() => {
   const $ = (q) => document.querySelector(q);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  let csrf = "", state = null, timer = null, openPlanFor = "", exiting = false;
+  const set = (el, h) => { if (el && el.dataset.html !== h) { el.innerHTML = h; el.dataset.html = h; } };
+  const short = (s, n = 12) => (s && s.length > n + 4 ? s.slice(0, n) + "…" : s || "");
+  const ago = (t) => { if (!t) return ""; const d = (Date.now() - new Date(t)) / 1000; return d < 60 ? Math.round(d) + "s ago" : d < 3600 ? Math.round(d / 60) + " min ago" : new Date(t).toLocaleString(); };
+  let csrf = "", state = null, timer = null, exiting = false;
+  let sel = JSON.parse(sessionStorage.getItem("tp_sel") || "null"); // {type:'admin'|'entity'|'feature'|'library', id}
+  let tab = sessionStorage.getItem("tp_tab") || "overview";
+  let approvalWatch = null; // {id, url, kind, summary}
+  let lastAction = {};      // installation -> result
+  let details = {};         // installation -> /details answer
+  let reviewFor = "";
+
+  function choose(s) { sel = s; sessionStorage.setItem("tp_sel", JSON.stringify(s)); render(); if (s && s.type === "entity") act("/api/identities/select", { id: s.id }); }
 
   async function api(method, path, body) {
     const opt = { method, headers: {} };
-    if (method === "POST") {
-      opt.headers["Content-Type"] = "application/json";
-      opt.headers["X-TP-CSRF"] = csrf;
-      opt.body = JSON.stringify(body || {});
-    }
+    if (method === "POST") { opt.headers["Content-Type"] = "application/json"; opt.headers["X-TP-CSRF"] = csrf; opt.body = JSON.stringify(body || {}); }
     const r = await fetch(path, opt);
     let j = {};
     try { j = await r.json(); } catch (_) {}
-    if (r.status === 401) { showGate(j.error); throw new Error(j.error || "not signed in"); }
+    if (r.status === 401 && path.startsWith("/api/state")) { showGate(j.error); throw new Error(j.error || "not signed in"); }
     if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
     return j;
   }
-  function showGate(msg) {
-    $("#shell").hidden = true; $("#gate").hidden = false;
-    if (msg) $("#gate-msg").textContent = msg;
-  }
-
+  function showGate(msg) { $("#shell").hidden = true; $("#gate").hidden = false; if (msg) $("#gate-msg").textContent = msg; }
   async function signIn() {
     const m = location.hash.match(/code=([0-9a-f]+)/);
     if (m) {
       try {
         const r = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: m[1] }) });
         const j = await r.json();
-        if (r.ok) { csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf); }
-        else { showGate(j.error); return false; }
+        if (r.ok) { csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf); } else { showGate(j.error); return false; }
       } catch (_) { showGate(); return false; }
-      history.replaceState(null, "", "/"); // the link is private: remove it from the address bar
-    } else {
-      csrf = sessionStorage.getItem("tp_csrf") || "";
-    }
+      history.replaceState(null, "", "/");
+    } else csrf = sessionStorage.getItem("tp_csrf") || "";
     return true;
   }
-
   async function refresh() {
     if (exiting) return;
     try { state = await api("GET", "/api/state"); } catch (_) { return; }
@@ -47,107 +46,109 @@
   }
   function schedule() {
     clearTimeout(timer);
-    const busy = state && (state.cards || []).some((c) => c.install && c.install.busy);
-    timer = setTimeout(async () => { await refresh(); schedule(); }, busy ? 600 : 2000);
+    const busy = state && ((state.cards || []).some((c) => c.install && c.install.busy) || approvalWatch);
+    timer = setTimeout(async () => { await refresh(); schedule(); }, busy ? 900 : 2000);
   }
   async function act(path, body, errEl) {
     try {
-      state = await api("POST", path, body);
+      const j = await api("POST", path, body);
+      if (j && j.connection) state = j; else if (j && j.state) state = j.state;
       if (errEl) errEl.hidden = true;
       render();
-      return true;
+      return j || true;
     } catch (e) {
-      if (errEl) { errEl.textContent = e.message; errEl.hidden = false; }
-      else alert(e.message);
-      return false;
+      if (errEl) { errEl.textContent = e.message; errEl.hidden = false; } else toast(e.message, "bad");
+      return null;
     }
   }
+  function toast(msg, cls) {
+    let t = $("#toast");
+    if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.append(t); }
+    t.className = "toast " + (cls || ""); t.textContent = msg; t.hidden = false;
+    clearTimeout(t._h); t._h = setTimeout(() => (t.hidden = true), 6000);
+  }
 
-  // ---------- rendering ----------
+  // ---------- theme ----------
+  function applyTheme(th) {
+    const v = th || "dark";
+    if (v === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = v;
+    $("#theme").value = v;
+  }
+
+  // ---------- render ----------
   const connWords = {
-    CONNECTED: ["ok", "Identity: connected"],
-    AUTHORITY_UNAVAILABLE: ["warn", "Identity: can't reach it"],
-    CONNECTION_REMOVED: ["bad", "Identity: connection removed"],
-    WRONG_SERVICE: ["bad", "Identity: not the one you connected"],
-    INCOMPATIBLE: ["bad", "Identity: wrong version"],
-    PAIRING_UNREADABLE: ["bad", "Identity: saved connection unreadable"],
-    WAITING_FOR_CODE: ["", "Identity: waiting for code"],
-    FOUND_NOT_CONNECTED: ["", "Identity: not connected"],
-    IDENTITY_NOT_FOUND: ["", "Identity: not running"],
+    CONNECTED: ["ok", "Identity: connected"], AUTHORITY_UNAVAILABLE: ["warn", "Identity: AUTHORITY UNAVAILABLE"],
+    CONNECTION_REMOVED: ["bad", "Identity: connection removed"], WRONG_SERVICE: ["bad", "Identity: not the one you connected"],
+    INCOMPATIBLE: ["bad", "Identity: wrong version"], PAIRING_UNREADABLE: ["bad", "Identity: saved connection unreadable"],
+    WAITING_FOR_CODE: ["", "Identity: waiting for code"], FOUND_NOT_CONNECTED: ["", "Identity: not connected"], IDENTITY_NOT_FOUND: ["", "Identity: not running"],
   };
-
   function render() {
-    const s = state, c = s.connection;
+    const s = state; if (!s) return;
+    const c = s.connection;
+    applyTheme(s.theme);
     const [cls, words] = connWords[c.state] || ["", c.state];
-    const chip = $("#chip-identity");
-    chip.className = "chip " + cls;
-    chip.querySelector(".t").textContent = words;
-    chip.title = c.detail || "";
+    const chip = $("#chip-identity"); chip.className = "chip " + cls; chip.querySelector(".t").textContent = words; chip.title = c.detail || "";
     $("#devmode").checked = !!s.developer_mode;
-
     const paired = !!c.identity_system_id && !["CONNECTION_REMOVED", "WRONG_SERVICE", "PAIRING_UNREADABLE", "INCOMPATIBLE"].includes(c.state);
     const showHome = s.verified || (paired && c.state === "AUTHORITY_UNAVAILABLE");
-    $("#connect").hidden = showHome;
-    $("#home").hidden = !showHome;
+    $("#connect").hidden = showHome; $("#home").hidden = !showHome;
     const ban = $("#banner");
     if (c.state === "AUTHORITY_UNAVAILABLE" && paired) {
       ban.className = "banner"; ban.hidden = false;
-      ban.textContent = "Can't reach Identity right now. Nothing that needs Identity's permission can be done until it's back — Processor reconnects by itself.";
+      ban.textContent = "AUTHORITY UNAVAILABLE — Identity can't be reached. Nothing that needs Identity's permission can happen (features refuse protected work too). Running features keep their standalone health. Processor reconnects by itself.";
     } else ban.hidden = true;
-
-    renderGitHub(s);
+    renderChips(s);
     if (showHome) renderHome(s); else renderConnect(s);
     renderDev(s);
     renderModals(s);
   }
 
+  function renderChips(s) {
+    const g = s.github, gc = $("#chip-github");
+    gc.hidden = !s.verified || !g;
+    if (g) {
+      gc.className = "chip link " + (g.state === "VERIFIED" ? "ok" : g.state === "WAITING" ? "warn" : "");
+      gc.querySelector(".t").textContent = g.state === "VERIFIED" ? "GitHub: " + (g.account ? g.account.login : "signed in") : g.state === "WAITING" ? "GitHub: waiting for you" : "Sign in to GitHub";
+    }
+    const a = s.admin, ac = $("#chip-admin");
+    ac.hidden = !a;
+    if (a) {
+      ac.className = "chip link " + (a.state === "ENROLLED" ? "ok" : a.state === "DAMAGED" ? "bad" : "warn");
+      ac.querySelector(".t").textContent = a.state === "ENROLLED" ? "Admin: established" : a.state === "DAMAGED" ? "Admin: record damaged" : "Admin: not established";
+    }
+  }
+
+  // ----- connect (unchanged P0 flow) -----
   function renderConnect(s) {
     const c = s.connection, body = $("#c-body");
     let title = "Connect to Identity", lead = "", h = "";
     switch (c.state) {
       case "IDENTITY_NOT_FOUND":
-        title = "Start Identity";
-        lead = "Thought Processor works together with Identity, a separate program on this computer. Start Identity (identity.exe) — Processor will find it by itself.";
-        h = `<p class="muted small">Looking for Identity every few seconds…</p>` + advancedAddress();
-        break;
+        title = "Start Identity"; lead = "Thought Processor works together with Identity, a separate program on this computer. Start Identity — Processor will find it by itself.";
+        h = `<p class="muted small">Looking for Identity every few seconds…</p>` + advancedAddress(); break;
       case "FOUND_NOT_CONNECTED": {
         lead = "Identity is running. Connect Processor to it once; after that they reconnect by themselves.";
         const cands = c.candidates || [];
         h = cands.map((x) => `<div class="cand"><div><strong>Identity ${esc(x.version)}</strong><div class="muted small">${esc(x.base_url)}${x.profile ? " · " + esc(x.profile) : ""}${x.compatible ? "" : " · <span class='error'>version not supported</span>"}</div></div>
           <button class="btn primary" data-connect="${esc(x.base_url)}" ${x.compatible ? "" : "disabled"}>Connect</button></div>`).join("");
         if (cands.length > 1) h = `<p class="small">More than one Identity is running on this computer. Choose the one you use:</p>` + h;
-        h += advancedAddress();
-        break;
+        h += advancedAddress(); break;
       }
       case "WAITING_FOR_CODE":
-        title = "Type the code from Identity";
-        lead = "Look at the Identity window. It's showing an 8-character code in a box marked PAIRING REQUEST. Type it here.";
-        h = `<form id="code-form" class="row"><input id="code-in" class="codein" maxlength="9" placeholder="XXXX-XXXX" autocomplete="off" required>
-             <button class="btn primary" type="submit">Connect</button></form>
-             <p class="muted small">The code works once and expires in 5 minutes. <button class="btn ghost small" type="button" data-newcode="1">Show a new code</button></p>`;
-        break;
-      case "CONNECTION_REMOVED":
-        title = "Identity no longer recognises this Processor";
-        lead = (c.detail || "") + " You'll need to connect again.";
-        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`;
-        break;
-      case "WRONG_SERVICE":
-        title = "A different Identity is answering";
-        lead = "The program answering isn't the Identity this Processor connected to (" + esc(c.identity_system_id || "") + "), so nothing it says is trusted. If you changed Identity on purpose, connect again.";
-        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`;
-        break;
-      case "INCOMPATIBLE":
-      case "PAIRING_UNREADABLE":
-        title = c.state === "INCOMPATIBLE" ? "Identity version doesn't match" : "The saved connection can't be read";
-        lead = c.detail || "";
-        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`;
-        break;
-      default:
-        title = "Checking Identity…";
-        lead = c.detail || "";
+        title = "Type the code from Identity"; lead = "Look at the Identity window. It's showing an 8-character code in a box marked PAIRING REQUEST. Type it here.";
+        h = `<form id="code-form" class="row"><input id="code-in" class="codein" maxlength="9" placeholder="XXXX-XXXX" autocomplete="off" required><button class="btn primary" type="submit">Connect</button></form>
+             <p class="muted small">The code works once and expires in 5 minutes. <button class="btn ghost small" type="button" data-newcode="1">Show a new code</button></p>`; break;
+      case "CONNECTION_REMOVED": title = "Identity no longer recognises this Processor"; lead = (c.detail || "") + " You'll need to connect again.";
+        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`; break;
+      case "WRONG_SERVICE": title = "A different Identity is answering";
+        lead = "The program answering isn't the Identity this Processor connected to (" + (c.identity_system_id || "") + "), so nothing it says is trusted. If you changed Identity on purpose, connect again.";
+        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`; break;
+      case "INCOMPATIBLE": case "PAIRING_UNREADABLE":
+        title = c.state === "INCOMPATIBLE" ? "Identity version doesn't match" : "The saved connection can't be read"; lead = c.detail || "";
+        h = `<div class="row"><button class="btn primary" data-reconnect="1">Connect again</button></div>`; break;
+      default: title = "Checking Identity…"; lead = c.detail || "";
     }
-    $("#c-title").textContent = title;
-    $("#c-lead").textContent = lead;
+    $("#c-title").textContent = title; $("#c-lead").textContent = lead;
     if (body.dataset.html !== h) {
       body.innerHTML = h; body.dataset.html = h;
       const f = $("#code-form");
@@ -161,150 +162,306 @@
       <form id="addr-form" class="row"><input id="addr-in" placeholder="http://127.0.0.1:7790" autocomplete="off"><button class="btn" type="submit">Look there</button></form></details>`;
   }
 
-  function renderGitHub(s) {
-    const chip = $("#chip-github"), g = s.github;
-    chip.hidden = !s.verified || !g;
-    if (!g) return;
-    chip.classList.remove("ok", "warn", "bad", "link");
-    if (g.state === "VERIFIED") { chip.classList.add("ok"); chip.querySelector(".t").textContent = "GitHub: " + (g.account ? g.account.login : "signed in"); }
-    else if (g.state === "WAITING") { chip.classList.add("warn", "link"); chip.querySelector(".t").textContent = "GitHub: waiting for you"; }
-    else { chip.classList.add("link"); chip.querySelector(".t").textContent = "Sign in to GitHub"; }
-  }
+  // ----- workspace -----
+  const stateDot = { RUNNING: "ok", STARTING: "warn", STOPPING: "warn", RESTARTING: "warn", STOPPED: "idle", CRASHED: "bad", NEEDS_ATTENTION: "bad", FAILED_TO_START: "bad" };
+  function features(s) { return s.installations || []; }
+  function findFeature(s, id) { return features(s).find((v) => v.record.installation_id === id); }
 
   function renderHome(s) {
-    const ids = s.identities || [], sel = s.selected;
-    const list = ids.map((e) => `<li><button type="button" class="${sel && sel.id === e.id ? "sel" : ""}" data-select="${esc(e.id)}"><span>${esc(e.name)}</span><span class="kind">${esc(e.kind)}</span></button></li>`).join("")
-      || (s.verified ? `<li class="muted small">No identities yet. Add one below.</li>` : `<li class="muted small">Waiting for Identity…</li>`);
-    if ($("#id-list").dataset.html !== list) { $("#id-list").innerHTML = list; $("#id-list").dataset.html = list; }
-    $("#new-id").querySelectorAll("input,select,button").forEach((x) => (x.disabled = !s.verified));
+    const ids = s.identities || [], a = s.admin;
+    const item = (key, label, kind, extra, dot) => {
+      const on = sel && sel.type + ":" + sel.id === key;
+      return `<button type="button" class="idrow ${on ? "sel" : ""}" data-sel="${esc(key)}"><span class="dot ${dot || ""}"></span><span class="nm">${esc(label)}</span><span class="kind">${esc(kind)}</span>${extra || ""}</button>`;
+    };
+    let h = `<div class="grp"><div class="grp-h">Administrator</div>`;
+    h += a ? item("admin:admin", a.state === "ENROLLED" ? "Admin Identity" : "Establish Admin…", "admin", "", a.state === "ENROLLED" ? "ok" : "warn") : `<div class="muted small pad">Waiting for Identity…</div>`;
+    h += `</div><div class="grp"><div class="grp-h">Companions & people${s.identities_stale ? ` <span class="warn">· last known</span>` : ""}</div>`;
+    h += ids.map((e) => item("entity:" + e.id, e.name, e.kind)).join("") || `<div class="muted small pad">None yet — add one below.</div>`;
+    h += `</div><div class="grp"><div class="grp-h">Installed features</div>`;
+    const fs = features(s).filter((v) => v.record.state === "INSTALLED");
+    h += fs.map((v) => item("feature:" + v.record.installation_id, v.record.name.replace(" (TEST FIXTURE)", ""), "feature", `<span class="sub">${esc(short(v.record.installation_id, 10))}</span>`, stateDot[v.runtime.state] || "idle")).join("")
+      || `<div class="muted small pad">No features installed.</div>`;
+    const tomb = features(s).filter((v) => v.record.state !== "INSTALLED");
+    if (tomb.length) h += tomb.map((v) => item("feature:" + v.record.installation_id, v.record.name.replace(" (TEST FIXTURE)", ""), "uninstalled", `<span class="sub">${esc(short(v.record.installation_id, 10))}</span>`, "gone")).join("");
+    const txs = s.install_txs || [];
+    if (txs.length) h += txs.map((t) => `<div class="txrow"><span class="dot warn"></span><span>${esc(t.name)} — ${esc(t.state === "WAITING_FOR_ADMIN" ? "waiting for Admin" : t.state.toLowerCase())}</span></div>`).join("");
+    h += `</div><div class="grp"><div class="grp-h">Library</div>` + item("library:all", "Add a feature…", "library") + `</div>`;
+    set($("#id-groups"), h);
+    ["#add-id-btn", "#add-feature-btn"].forEach((b) => ($(b).disabled = !s.verified));
+    set($("#trusted-note"), (s.trusted_dirs || []).length ? "Trusted local feature folders: " + s.trusted_dirs.map(esc).join(", ") : "No trusted feature folder (start Processor with -trust-feature-dir).");
 
-    const cards = s.cards || [];
-    $("#no-identity").hidden = !!sel || (!s.verified && cards.length > 0);
-    $("#features").hidden = !sel && !(!s.verified && cards.length > 0);
-    $("#f-title").textContent = sel ? "Features for " + sel.name : "Installed features";
-    $("#f-sub").textContent = sel ? "Shown from Identity. You only see features your account is approved for." : "";
-    const note = $("#catalog-note");
-    if (s.catalog_note && s.github && s.github.state !== "VERIFIED") {
-      note.hidden = false;
-      const h = `<span>${esc(s.catalog_note)}</span><button class="btn primary small" type="button" data-gh="1">Sign in to GitHub</button>`;
-      if (note.dataset.html !== h) { note.innerHTML = h; note.dataset.html = h; }
-    } else note.hidden = true;
-
-    const h = cards.map((c) => card(c, sel, s.verified)).join("") || (sel ? `<p class="muted">No features are available to this account yet.</p>` : "");
-    const box = $("#cards");
-    if (box.dataset.html !== h) { box.innerHTML = h; box.dataset.html = h; }
+    if (!sel || (sel.type === "entity" && !ids.find((e) => e.id === sel.id)) || (sel.type === "feature" && !findFeature(s, sel.id))) sel = a && a.state !== "ENROLLED" ? { type: "admin", id: "admin" } : null;
+    const d = $("#detail");
+    if (!sel) return set(d, `<div class="empty"><h2>Choose an identity</h2><p>The Admin, your companions and every installed feature are identities here. Each one starts with no access to anything.</p></div>`);
+    if (sel.type === "admin") return renderAdmin(s, d);
+    if (sel.type === "entity") return renderEntity(s, d, ids.find((e) => e.id === sel.id));
+    if (sel.type === "feature") return renderFeature(s, d, findFeature(s, sel.id));
+    if (sel.type === "library") return renderLibrary(s, d);
   }
 
-  function fmtSize(n) { return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB"; }
+  function kv(rows) { return `<dl class="kv">${rows.filter(Boolean).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`; }
+  const mono = (s) => `<code>${esc(s)}</code>`;
+  const badge = (t, c, title) => `<span class="badge ${c || ""}" ${title ? `title="${esc(title)}"` : ""}>${esc(t)}</span>`;
 
-  function card(c, sel, verified) {
-    const iv = c.install || {}, inst = iv.installed;
-    const b = [];
-    if (c.visibility === "private") b.push(`<span class="badge info" title="Private: shown only to approved accounts">Approved for your account</span>`);
-    if (inst) {
-      b.push(`<span class="badge ok">Installed ${esc(inst.tag)}</span>`);
-      if (iv.verify === "OK") b.push(`<span class="badge ok" title="Checked against the approved SHA-256 ${esc(new Date(iv.verified_at).toLocaleTimeString())}">Files verified</span>`);
-      else if (iv.verify) b.push(`<span class="badge bad">Files changed or missing</span>`);
-      b.push(`<span class="badge">Not running — starting features comes later</span>`);
-    } else b.push(`<span class="badge">Not installed</span>`);
-    if (sel && c.from_identity) {
-      b.push(`<span class="badge" title="Identity has no grant for this">Not turned on for ${esc(sel.name)}</span>`);
-      b.push(`<span class="badge" title="No information source is allowed by default">No sources allowed</span>`);
+  function renderAdmin(s, d) {
+    const a = s.admin || {}, g = s.github || {};
+    let h = `<div class="dhead"><div class="typed admin">ADMIN IDENTITY</div><h1>Admin Identity</h1>`;
+    if (a.state === "ENROLLED") {
+      const ad = a.admin, cur = a.current_github || {};
+      h += `<div class="badges">${badge("Established", "ok")}${badge("Local authority — works offline", "info")}${badge(ad.github_binding.mode === "real" ? "GitHub verified" : "GitHub: TEST FIXTURE", ad.github_binding.mode === "real" ? "ok" : "warn")}</div></div>`;
+      h += kv([["Admin ID", mono(ad.admin_id)], ["Established", esc(new Date(ad.established_at).toLocaleString())],
+        ["Bound GitHub account", esc(ad.github_binding.login_label) + " · numeric id " + mono(ad.github_binding.id) + ` <span class="muted small">(sign-in alias, not the authority)</span>`],
+        ["Approves with", esc(ad.authenticator) + ` <span class="muted small">— typed only in Identity's own page</span>`],
+        ["Signed-in GitHub now", cur.login ? esc(cur.login) + " (id " + esc(cur.id) + ") " + (cur.is_admin_binding ? badge("this is the Admin's account", "ok") : badge("NOT the Admin's account — no Admin authority", "bad")) : esc(cur.state || "signed out") + ` <span class="muted small">(not needed for local approvals)</span>`],
+        ["Recovery", `<span class="warn">${esc(a.recovery || "")}</span>`]]);
+      h += `<h3>What needs a fresh Admin approval</h3><ul class="plain"><li>Installing a feature (registers its installation identity)</li><li>Granting a capability / connection</li><li>Uninstalling a feature</li></ul>
+        <p class="muted small">Routine actions — viewing, starting or stopping an installed feature, revoking a grant — use this Processor's paired session. Pairing Processor never makes it an Admin.</p>`;
+      h += `<h3>Authenticators</h3>` + kv((a.authenticator_options || []).map((o) => [o.kind, badge(o.status, o.status === "AVAILABLE" ? "ok" : "bad") + ` <span class="muted small">${esc(o.note)}</span>`]));
+    } else if (a.state === "DAMAGED") {
+      h += `</div><div class="problem">${esc(a.error || "The Admin record is damaged.")} Every Admin-approved action is blocked. It was not treated as missing, so nobody can enroll over it.</div>`;
+    } else {
+      const ok = g.state === "VERIFIED";
+      const pend = (s.admin_pending || [])[0];
+      h += `<div class="badges">${badge("Not established yet", "warn")}</div></div>
+        <p>The Admin Identity is this installation's original administrator. It is created <strong>once</strong>, right after a verified GitHub sign-in, with your explicit confirmation. It is a <strong>local</strong> authority: switching GitHub accounts later never transfers it.</p>
+        <ol class="steps2"><li class="${ok ? "done" : "now"}"><strong>Sign in to GitHub</strong> ${ok ? "— " + badge("verified: " + (g.account ? g.account.login : ""), "ok") : `<button class="btn primary small" data-gh="1">Sign in</button>`}</li>
+        <li class="${ok ? "now" : ""}"><strong>Establish the Admin Identity in Identity</strong> — you choose an Admin passphrase there (Linux/WSL authenticator). ${ok ? `<button class="btn primary small" data-enroll="1">Establish Admin Identity…</button>` : ""}</li></ol>
+        ${pend ? `<p class="small muted">A request is waiting: ${esc(pend.approval_id)}. <button class="btn ghost small" data-watch="${esc(pend.approval_id)}">Open it</button></p>` : ""}
+        <p class="warn small">P1 test profiles: recovery is deferred. If the passphrase is lost the profile's Admin can't be recovered — no fallback owner is ever created.</p>`;
     }
-    let body = "";
-    if (iv.busy) {
-      const pct = iv.size ? Math.floor((100 * iv.got) / iv.size) : 0;
-      body += `<div class="small">${iv.phase === "VERIFYING" ? "Checking the file…" : "Downloading through Identity… " + pct + "%"}</div><progress class="progress" max="100" value="${pct}"></progress>`;
-    }
-    if (iv.problem) body += `<div class="problem"><strong>${esc(problemTitle(iv.problem.code))}</strong> ${esc(iv.problem.message)}<br><span class="small">${esc(iv.problem.next_step)}</span></div>`;
-    if (c.note && c.action === "none") body += `<p class="small muted">${esc(c.note)}</p>`;
-    let btn = "";
-    const dis = verified ? "" : "disabled";
-    switch (c.action) {
-      case "install": btn = `<button class="btn primary" data-plan="${esc(c.feature)}" ${dis}>Install…</button>`; break;
-      case "update": btn = `<button class="btn" data-plan="${esc(c.feature)}" ${dis}>Check for a newer version</button>`; break;
-      case "approve": btn = `<button class="btn primary" data-review="${esc(c.feature)}">Review and approve…</button>`; break;
-    }
-    if (inst && !iv.busy) btn += ` <button class="btn ghost small" data-remove="${esc(c.feature)}">Remove</button>`;
-    return `<div class="card"><h3>${esc(c.name)}</h3><div class="muted small">${esc(c.description || "")}</div><div class="badges">${b.join("")}</div>${body}<div class="row">${btn}</div></div>`;
+    set(d, h);
   }
 
-  function problemTitle(code) {
-    return ({ CHECKSUM_MISMATCH: "Download didn't match — nothing installed.", DOWNLOAD_INTERRUPTED: "Download stopped — nothing installed.",
-      UNAPPROVED_SOURCE: "Not from the approved source — nothing installed.", NO_RELEASE: "No version published yet.",
-      AUTHORITY_UNAVAILABLE: "Identity unavailable.", FILES_CHANGED: "Installed files changed.", FILES_MISSING: "Installed files missing.",
-      PLAN_EXPIRED: "Approval out of date.", CONTRACT_INVALID: "Feature description not understood." }[code] || code);
+  function renderEntity(s, d, e) {
+    const conns = [];
+    for (const v of (s.identity_installations || [])) for (const g of v.grants || []) if (g.grant.subject_identity_id === e.id) conns.push([v.installation, g]);
+    let h = `<div class="dhead"><div class="typed">${esc(e.kind.toUpperCase())} IDENTITY</div><h1>${esc(e.name)}</h1><div class="badges">${badge("No information sources", "")}${badge(conns.filter((x) => x[1].status === "ACTIVE").length + " active connection(s) as subject", "")}</div></div>`;
+    h += kv([["Identity ID", mono(e.id)], ["Kind", esc(e.kind)], ["Created", esc(new Date(e.created_at).toLocaleString())]]);
+    h += `<h3>Connections that act for ${esc(e.name)}</h3>`;
+    h += conns.length ? `<table class="tbl"><tr><th>Feature installation</th><th>Capability</th><th>Requester</th><th>Status</th></tr>${conns.map(([i, g]) =>
+      `<tr><td>${esc(i.name)} <span class="muted small">${esc(short(i.installation_id, 12))}</span></td><td>${mono(g.grant.capability)}</td><td>${mono(g.grant.requester)}</td><td>${badge(g.status, g.status === "ACTIVE" ? "ok" : "")}</td></tr>`).join("")}</table>`
+      : `<p class="muted">None. Every identity starts with no access; connections are approved one capability at a time by the Admin.</p>`;
+    const cards = (s.cards || []).filter((c) => c.from_identity);
+    if (cards.length) h += `<h3>Identity's feature catalog (P0 release downloads)</h3><p class="muted small">Downloading a published release is P0 behaviour. Running third-party releases is <strong>BLOCKED</strong> in P1 (no verified provenance or OS sandbox).</p>` +
+      cards.map((c) => `<div class="mini">${esc(c.name)} · ${badge(c.eligible_to_install ? c.eligible_to_install.state : "", c.installable ? "info" : "")} ${c.install && c.install.installed ? badge("downloaded " + c.install.installed.tag, "ok") : ""} ${badge("execution BLOCKED", "bad")}</div>`).join("");
+    set(d, h);
+  }
+
+  function renderLibrary(s, d) {
+    const lib = s.library || [];
+    let h = `<div class="dhead"><div class="typed">LIBRARY</div><h1>Add a feature</h1><p class="muted">Feature packages from local folders you trusted when starting Processor. In P1 only <strong>TRUSTED_LOCAL_TEST_FIXTURE</strong> packages can be installed. Third-party executables stay <strong>BLOCKED</strong> until release provenance and OS sandboxing are verified. Invitations are not built yet.</p></div>`;
+    h += lib.map((x) => `<div class="libcard ${x.blocked ? "blocked" : ""}">
+      <div class="lc-h"><div><h3>${esc(x.name || x.dir)}</h3><div class="muted small">${esc(x.description || x.error || "")}</div></div>
+      ${x.blocked ? badge(x.blocked === "INVALID_PACKAGE" ? "INVALID" : "BLOCKED", "bad", x.blocked) : `<button class="btn primary" data-review="${esc(x.feature_id)}">Install…</button>`}</div>
+      <div class="badges">${x.version ? badge("v" + x.version) : ""}${x.trust_class ? badge(x.trust_class, x.trust_class === "TRUSTED_LOCAL_TEST_FIXTURE" ? "info" : "bad") : ""}${x.api ? badge(x.api) : ""}${(x.installed_as || []).length ? badge("installed ×" + x.installed_as.length, "ok") : ""}</div>
+      ${x.blocked ? `<p class="small error">${esc(x.blocked)}${x.error ? " — " + esc(x.error) : ""}</p>` : ""}
+      <details class="small"><summary>Package details</summary>${kv([["Folder", esc(x.dir)], ["Publisher", esc(x.publisher_claim || "") + " " + badge("claim only — not verified", "warn")], ["Source", esc(x.source_repo || "")],
+        ["Artifact SHA-256", mono(x.artifact_sha256 || "")], ["Runs", mono((x.command || []).join(" "))], ["Needs", esc((x.requires || []).join(", "))],
+        ["Capabilities", (x.capabilities || []).map((c) => mono(c.id) + " " + badge(c.data_class)).join(" ")], ["Files", (x.files || []).map((f) => mono(f.path) + " " + mono(short(f.sha256, 16))).join("<br>")]])}</details></div>`).join("")
+      || `<p class="muted">No packages found in the trusted folders.</p>`;
+    set(d, h);
+  }
+
+  function renderFeature(s, d, v) {
+    const r = v.record, iv = v.identity, rt = v.runtime, ins = r.installation_id;
+    const key = "feature:" + ins + ":" + (r.state);
+    if (d.dataset.key !== key) {
+      d.dataset.key = key; d.dataset.html = "";
+      d.innerHTML = `<div id="fx-head"></div><div class="tabs" role="tablist">${["overview", "connections", "runtime", "metrics", "logs"].map((t) =>
+        `<button type="button" role="tab" data-tab="${t}" class="${tab === t ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+        <div class="pane" id="pane-overview"></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
+        <div class="pane" id="pane-runtime"><div id="fx-rt"></div><div id="fx-policy"></div></div><div class="pane" id="pane-metrics"></div><div class="pane" id="pane-logs"></div>`;
+    }
+    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+    document.querySelectorAll(".pane").forEach((p) => (p.hidden = p.id !== "pane-" + tab));
+    const idState = iv ? iv.installation.state : s.verified ? "NOT LISTED BY IDENTITY" : "can't confirm (AUTHORITY UNAVAILABLE)";
+    const active = iv ? iv.active_grants : 0;
+    const gone = r.state !== "INSTALLED";
+    set($("#fx-head"), `<div class="dhead"><div class="typed feature">FEATURE INSTALLATION IDENTITY</div><h1>${esc(r.name)}</h1>
+      <div class="badges">${badge("Identity: " + idState, idState === "INSTALLED" ? "ok" : gone ? "" : "warn")}${gone ? "" : badge("Process: " + rt.state, stateDot[rt.state] === "ok" ? "ok" : stateDot[rt.state] === "bad" ? "bad" : "")}
+      ${rt.state === "RUNNING" ? badge(rt.health && rt.health.ready ? "Health: READY" : "Health: not ready", rt.health && rt.health.ready ? "ok" : "warn") : ""}
+      ${iv ? badge(active + " active grant" + (active === 1 ? "" : "s"), active ? "info" : "") : gone ? "" : badge("grants: can't confirm", "warn")}${badge("0 information sources")}${badge(r.trust_class, "info", "Trusted because you trusted its local folder; publisher not verified")}
+      ${v.files && v.files !== "OK" && !gone ? badge(v.files, "bad") : ""}</div>
+      ${rt.state === "NEEDS_ATTENTION" ? `<div class="problem"><strong>Needs attention.</strong> ${esc(rt.note || "")}</div>` : ""}
+      ${rt.state === "FAILED_TO_START" ? `<div class="problem"><strong>Did not start.</strong> ${esc(rt.note || "")}</div>` : ""}</div>`);
+    // Overview
+    set($("#pane-overview"), kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
+      ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
+      ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
+      ["Installed", esc(new Date(r.installed_at).toLocaleString())], iv && ["Administered by", mono(iv.installation.administered_by) + " (Admin approval " + mono(short(iv.installation.approval_id, 14)) + ")"],
+      ["Files", gone ? "removed" : v.files === "OK" ? badge("verified against the approved SHA-256", "ok") : badge(v.files, "bad")], ["Data folder", esc(v.data_dir) + (gone && r.data_kept ? " (kept)" : "")],
+      ["Capabilities declared", (r.capabilities || []).map((c) => mono(c.id) + " " + badge(c.data_class)).join(" ")],
+      gone && ["Uninstalled", esc(new Date(r.uninstalled_at).toLocaleString()) + " — tombstone kept; grants revoked; credential removed"]])
+      + (gone ? "" : `<div class="danger"><h3>Uninstall</h3><p class="small muted">Needs a fresh Admin approval. Revokes every grant and removes the credential and files; the installation ID stays as a tombstone.</p>
+        <label class="small"><input type="checkbox" id="keep-data" checked> keep this installation's data folder</label> <button class="btn danger small" data-uninstall="${esc(ins)}">Uninstall…</button></div>`));
+    // Connections
+    const grants = (iv && iv.grants) || [];
+    set($("#fx-grants"), `<h3>Connections (grants from Identity)</h3>` + (grants.length ? `<table class="tbl"><tr><th>Requester</th><th>Subject</th><th>Capability</th><th>Expires</th><th>Status</th><th></th></tr>${grants.map((g) => {
+      const G = g.grant; const ent = (s.identities || []).find((e) => e.id === G.subject_identity_id);
+      return `<tr><td>${mono(G.requester === "processor:" + s.processor.processor_id ? "this Processor" : G.requester)}</td><td>${esc(ent ? ent.name : G.subject_identity_id)}</td><td>${mono(G.capability)}</td>
+        <td class="small">${G.expires_at ? esc(new Date(G.expires_at).toLocaleString()) : "until revoked"}</td><td>${badge(g.status, g.status === "ACTIVE" ? "ok" : "")}</td>
+        <td>${g.status === "ACTIVE" && !gone ? `<button class="btn ghost small" data-revoke="${esc(G.grant_id)}">Revoke</button>` : ""}</td></tr>`;
+    }).join("")}</table>` : !iv ? `<p class="warn">AUTHORITY UNAVAILABLE — Identity can't confirm this installation's grants right now, so no protected work can happen.</p>` : `<p class="muted">No grants. This installation can't do any protected work for anyone.</p>`)
+      + (v.pending || []).map((p) => `<div class="pending"><span class="dot warn"></span> ${esc(p.kind === "grant_capability" ? "Connection request" : "Uninstall request")} ${mono(p.approval_id)} waiting for the Admin <button class="btn ghost small" data-watch="${esc(p.approval_id)}">Open approval</button></div>`).join(""));
+    const ents = s.identities || [], caps = r.capabilities || [];
+    const formKey = ins + "|" + ents.map((e) => e.id).join(",") + "|" + caps.map((c) => c.id).join(",") + "|" + gone;
+    const gf = $("#fx-grant-form");
+    if (gf.dataset.key !== formKey) {
+      gf.dataset.key = formKey;
+      const opts = ents.map((e) => `<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.kind)})</option>`).join("");
+      const copts = caps.map((c) => `<option value="${esc(c.id)}">${esc(c.id)}</option>`).join("");
+      gf.innerHTML = gone ? "" : `<form class="frm" id="grant-form"><h3>Request a connection</h3>
+        <div class="frow"><label>Requester<input value="This Thought Processor" disabled></label><label>For identity<select id="gf-sub" required>${opts}</select></label>
+        <label>Capability<select id="gf-cap">${copts}</select></label><label>Expires<select id="gf-exp"><option value="600">in 10 minutes</option><option value="3600">in 1 hour</option><option value="86400">in 1 day</option><option value="0">never (until revoked)</option></select></label></div>
+        <p class="small muted">Information sources: <strong>none</strong>. The Admin approves this exact request in Identity.</p><button class="btn primary" type="submit" ${opts ? "" : "disabled"}>Ask the Admin…</button>${opts ? "" : ` <span class="small muted">Add an identity first.</span>`}</form>`;
+      $("#fx-action").innerHTML = gone ? "" : `<form class="frm" id="action-form"><h3>Try the protected capability</h3>
+        <p class="small muted">Processor first asks Identity for a one-request ticket. No grant → nothing starts. With a grant, an on-demand feature is started, checks the ticket and asks Identity live before doing anything.</p>
+        <div class="frow"><label>For identity<select id="af-sub">${opts}</select></label><label>Capability<select id="af-cap">${copts}</select></label><label class="grow">Test input<input id="af-in" maxlength="1000" value="hello from P1"></label></div>
+        <button class="btn" type="submit" ${opts ? "" : "disabled"}>Send synthetic request</button></form>`;
+      const f1 = $("#grant-form"), f2 = $("#action-form");
+      if (f1) f1.onsubmit = async (e) => { e.preventDefault(); const j = await act(`/api/installations/${ins}/grants/request`, { subject: $("#gf-sub").value, capability: $("#gf-cap").value, expires_in_seconds: +$("#gf-exp").value }); if (j && j.approval_url) watch(j); };
+      if (f2) f2.onsubmit = async (e) => { e.preventDefault(); const b = e.submitter; if (b) b.disabled = true; const j = await act(`/api/installations/${ins}/action`, { subject: $("#af-sub").value, capability: $("#af-cap").value, input: $("#af-in").value }); if (b) b.disabled = false; if (j && j.result) { lastAction[ins] = j.result; render(); } };
+    }
+    const la = lastAction[ins];
+    const oc = { COMPLETED: "ok", DENIED_BY_IDENTITY: "bad", DENIED_BY_FEATURE: "bad", AUTHORITY_UNAVAILABLE: "warn", REQUEST_UNCERTAIN: "warn", NOT_RUNNING: "warn", TICKET_REJECTED: "bad", ERROR: "bad" };
+    set($("#fx-action-result"), la ? `<div class="result ${oc[la.outcome] || ""}"><div><strong>${esc(la.outcome.replace(/_/g, " "))}</strong> ${la.started_feature ? badge("started on demand", "info") : ""} <span class="muted small">${esc(la.request_id)} · ${la.latency_ms} ms ${la.decision_id ? "· decision " + esc(la.decision_id) : ""}</span></div>
+      <div class="small">${esc(la.detail)}</div>${la.observation ? `<div class="obs"><div class="kicker">${esc(la.observation.data_class)}</div><pre>${esc(JSON.stringify(la.observation.output, null, 2))}</pre></div>` : ""}</div>` : "");
+    set($("#fx-requests"), (v.requests || []).length ? `<h3>Recent requests</h3><table class="tbl small"><tr><th>When</th><th>Request</th><th>Outcome</th><th>Decision</th></tr>${v.requests.map((q) =>
+      `<tr><td>${esc(new Date(q.at).toLocaleTimeString())}</td><td>${mono(q.request_id)}</td><td>${badge(q.outcome, oc[q.outcome] || "")}</td><td>${q.decision_id ? mono(q.decision_id) : ""}</td></tr>`).join("")}</table>` : "");
+    // Runtime
+    const h = rt.health || {};
+    set($("#fx-rt"), gone ? `<p class="muted">Uninstalled — nothing runs.</p>` : `<h3>Process</h3>` + kv([["State", badge(rt.state, stateDot[rt.state] === "ok" ? "ok" : stateDot[rt.state] === "bad" ? "bad" : "") + (rt.note ? ` <span class="small muted">${esc(rt.note)}</span>` : "")],
+      rt.pid && ["PID", mono(rt.pid)], rt.launch_id && ["Launch", mono(rt.launch_id) + ` <span class="muted small">each launch has its own key; the endpoint is trusted only after a status signed with it</span>`],
+      rt.url && ["Local API", mono(rt.url) + " (loopback; port chosen by the OS)"], rt.started_at && ["Started", esc(ago(rt.started_at)) + " · by " + esc(rt.started_by || "")],
+      rt.state === "RUNNING" && ["Heartbeat", (h.ready ? badge("READY", "ok") : badge("not ready", "warn")) + " seq " + esc(h.heartbeat_seq) + ` <span class="muted small">liveness only — not an observation, grant or result</span>`],
+      rt.state === "RUNNING" && h.status && ["Provider", esc(h.status.provider ? h.status.provider.ready : "")], ["In flight", esc(rt.in_flight)],
+      rt.idle_stop_at && ["Idle stop", "at " + esc(new Date(rt.idle_stop_at).toLocaleTimeString()) + " if no work arrives"],
+      rt.last_exit && ["Last exit", esc(new Date(rt.last_exit.at).toLocaleTimeString()) + " code " + esc(rt.last_exit.code) + " — " + esc(rt.last_exit.reason)],
+      (rt.recent_restarts || []).length && ["Automatic restarts", esc(rt.recent_restarts.length) + " in the last 10 min (requests are never resent)"]])
+      + `<div class="row">${rt.state === "RUNNING" ? `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn" data-selftest="${esc(ins)}">Run standalone self-test</button>` : `<button class="btn primary" data-start="${esc(ins)}">Start</button>`}</div>
+      <div id="selftest-${esc(ins)}" class="small"></div>`);
+    const pkey = ins + JSON.stringify(r.policy) + gone;
+    const pf = $("#fx-policy");
+    if (pf.dataset.key !== pkey) {
+      pf.dataset.key = pkey;
+      const modes = [["manual", "Manual — only when you press Start (default for new installs)"], ["on_demand", "On demand — start for an already-authorized request, stop after the idle window"], ["always_running", "Always running — Processor keeps it started"]]
+        .filter(([m]) => m === "manual" || (r.startup_modes || []).includes(m));
+      pf.innerHTML = gone ? "" : `<form class="frm" id="policy-form"><h3>Startup and recovery</h3><p class="small muted">These change <em>when</em> it runs — never <em>what</em> it may access.</p>
+        ${modes.map(([m, t]) => `<label class="choice"><input type="radio" name="pmode" value="${m}" ${r.policy.startup_mode === m ? "checked" : ""}> <span>${esc(t)}</span></label>`).join("")}
+        <div class="frow"><label>Idle window (seconds)<input id="p-idle" type="number" min="5" max="3600" value="${esc(r.policy.idle_seconds)}"></label>
+        <label>Crash recovery<select id="p-rec"><option value="manual" ${r.policy.recovery === "manual" ? "selected" : ""}>Manual (default for experimental features)</option><option value="bounded" ${r.policy.recovery === "bounded" ? "selected" : ""}>Bounded — up to 3 process restarts in 10 min</option></select></label></div>
+        <p class="small muted">Recovery restarts the process, never a request. Uncertain requests are not resent.</p><button class="btn" type="submit">Save</button></form>`;
+      const f = $("#policy-form");
+      if (f) f.onsubmit = (e) => { e.preventDefault(); act(`/api/installations/${ins}/policy`, { startup_mode: document.querySelector('input[name="pmode"]:checked').value, idle_seconds: +$("#p-idle").value, recovery: $("#p-rec").value }); };
+    }
+    // Metrics
+    const st = h.status || {};
+    const c = st.counters || {};
+    const outs = {};
+    (v.requests || []).forEach((q) => (outs[q.outcome] = (outs[q.outcome] || 0) + 1));
+    set($("#pane-metrics"), `<h3>Feature counters <span class="muted small">(reported by the running feature)</span></h3>` + (rt.state === "RUNNING" ? `<div class="stats">${[["requests", c.requests], ["allowed", c.allowed], ["denied", c.denied], ["authority unavailable", c.unavailable], ["refused tickets", c.invalid], ["self-tests", c.self_tests], ["p50 ms", st.latency_ms_p50 ?? "—"], ["uptime s", st.uptime_s]].map(([k, v]) =>
+      `<div class="stat"><div class="n">${esc(v ?? 0)}</div><div class="k">${esc(k)}</div></div>`).join("")}</div>` : `<p class="muted">Not running.</p>`)
+      + `<h3>Processor-side outcomes (this session)</h3><div class="stats">${Object.keys(outs).length ? Object.entries(outs).map(([k, v]) => `<div class="stat"><div class="n">${v}</div><div class="k">${esc(k.replace(/_/g, " ").toLowerCase())}</div></div>`).join("") : `<span class="muted">No requests yet.</span>`}</div>`);
+    // Logs
+    const dt = details[ins];
+    set($("#pane-logs"), `<h3>Identity decisions for this installation</h3>` + (dt && dt.identity_decisions ? `<table class="tbl small"><tr><th>When</th><th>Decision</th><th>Reason</th><th>Event</th><th>ID</th></tr>${dt.identity_decisions.slice(0, 40).map((x) =>
+      `<tr><td>${esc(new Date(x.at).toLocaleTimeString())}</td><td>${badge(x.decision, x.decision.startsWith("ALLOW") ? "ok" : "bad")}</td><td>${esc(x.reason || "")}</td><td>${esc(x.event)}</td><td>${mono(x.decision_id)}</td></tr>`).join("")}</table>` : `<p class="muted">${dt && dt.identity_decisions_error ? "AUTHORITY UNAVAILABLE" : "Loading…"}</p>`)
+      + `<h3>What the feature itself hears from Identity</h3><pre class="logbox">${esc(dt ? JSON.stringify(dt.feature_view_of_connections, null, 2) : "")}</pre>`
+      + `<h3>Feature log</h3><pre class="logbox">${esc(dt ? (dt.log_tail || []).join("\n") : "")}</pre>`);
+    if (tab === "logs" && (!dt || Date.now() - (dt._at || 0) > 3500)) loadDetails(ins);
+  }
+  async function loadDetails(ins) {
+    try { const j = await api("GET", `/api/installations/${ins}/details`); j._at = Date.now(); details[ins] = j; render(); } catch (_) {}
   }
 
   function renderDev(s) {
-    const d = s.dev;
-    $("#dev").hidden = !d;
-    if (!d) return;
+    const d = s.dev; $("#dev").hidden = !d; if (!d) return;
     const logs = (d.log || []).map((e) => `<div class="${e.level === "warn" || e.level === "error" ? "warn" : ""}">${esc(new Date(e.time).toLocaleTimeString())} ${esc(e.component)} ${esc(e.event)} — ${esc(e.detail)}</div>`).join("");
-    const info = { processor: s.processor, connection: s.connection, lifecycle: s.lifecycle, build: d.build, run_id: d.run_id, profile: d.profile,
-      identity_status: d.identity_status, installs: d.installs, identity_features: d.identity_features };
-    const h = `<pre>${esc(JSON.stringify(info, null, 2))}</pre><h3 class="small">Recent activity</h3><div class="log">${logs}</div>`;
-    if ($("#dev-body").dataset.html !== h) { $("#dev-body").innerHTML = h; $("#dev-body").dataset.html = h; }
+    const info = { processor: s.processor, connection: s.connection, lifecycle: s.lifecycle, build: d.build, run_id: d.run_id, profile: d.profile, admin: s.admin, installations: s.identity_installations };
+    set($("#dev-body"), `<pre>${esc(JSON.stringify(info, null, 2))}</pre><h3 class="small">Recent activity</h3><div class="log">${logs}</div>`);
   }
 
+  // ---------- approval hand-off ----------
+  function watch(j) { approvalWatch = { id: j.approval_id, url: j.approval_url, opened: false }; render(); schedule(); }
+  function findApproval(s, id) {
+    const ops = [...(s.admin_pending || []), ...(s.installations || []).flatMap((v) => v.pending || [])];
+    const op = ops.find((p) => p.approval_id === id);
+    const tx = (s.install_txs || []).find((t) => t.approval_id === id);
+    return { op, tx };
+  }
   function renderModals(s) {
-    // GitHub sign-in
     const g = s.github, mg = $("#m-github");
     if (s.verified && g && g.state === "WAITING") {
-      mg.hidden = false;
-      $("#g-code").textContent = g.user_code || "…";
-      $("#g-link").href = g.verification_uri || "#";
+      mg.hidden = false; $("#g-code").textContent = g.user_code || "…"; $("#g-link").href = g.verification_uri || "#";
       $("#g-link").textContent = (g.verification_uri || "").replace(/^https?:\/\//, "");
       $("#g-status").textContent = "Waiting for you to approve on GitHub… " + (g.github_said ? "(GitHub says: " + g.github_said + ")" : "");
     } else mg.hidden = true;
-    // Install approval
-    const c = (s.cards || []).find((x) => x.feature === openPlanFor && x.install && x.install.plan);
-    const ma = $("#m-approve");
-    if (!c) { ma.hidden = true; openPlanFor = ""; return; }
-    const p = c.install.plan;
-    ma.hidden = false;
-    $("#a-title").textContent = (p.upgrade ? "Update " : "Install ") + p.name + "?";
-    const facts = [["Version", p.tag], ["Publisher", p.publisher], ["From", p.repo], ["File", p.asset + " (" + fmtSize(p.size) + ")"],
-      ["For this computer", p.platform], ["SHA-256", p.sha256], ["Built by", p.uploader]];
-    $("#a-facts").innerHTML = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
-    $("#a-checks").innerHTML = `<strong>Checked by Identity and Processor</strong><ul>${(p.checks || []).map((x) => `<li>${esc(x)}</li>`).join("")}<li>the downloaded file must match the SHA-256 above, or nothing is installed</li></ul>`;
-    $("#a-limit").textContent = "Not checked: " + (p.not_checked || "publisher signature (releases aren't signed yet).");
-    $("#a-ok").onclick = async () => { ma.hidden = true; openPlanFor = ""; await act(`/api/features/${encodeURIComponent(c.feature)}/approve`, { plan_id: p.plan_id }); schedule(); };
-    $("#a-cancel").onclick = () => { ma.hidden = true; openPlanFor = ""; act(`/api/features/${encodeURIComponent(c.feature)}/cancel`, {}); };
+    const m = $("#m-approval");
+    if (!approvalWatch) { m.hidden = true; } else {
+      const { op, tx } = findApproval(s, approvalWatch.id);
+      m.hidden = false;
+      $("#ap-title").textContent = op ? ({ enroll_admin: "Establish the Admin Identity", grant_capability: "Approve a connection", uninstall_feature: "Approve an uninstall" }[op.kind] || "Approve") : tx ? "Approve installing " + tx.name : "Approval finished";
+      set($("#ap-summary"), ((op && op.summary) || (tx ? ["Register a new installation identity for " + tx.name + " v" + tx.version, "Artifact SHA-256 " + tx.artifact_sha256, "Zero grants, zero information sources"] : [])).map((x) => `<li>${esc(x)}</li>`).join(""));
+      const done = !op && !tx;
+      $("#ap-status").textContent = done ? "Done — see the result in the workspace and the activity notes." : approvalWatch.opened ? "Waiting for the Admin's decision in Identity…" : "Waiting for the Admin…";
+      $("#ap-open").hidden = done || approvalWatch.opened;
+      $("#ap-open").onclick = () => { window.open(approvalWatch.url, "_blank", "noopener"); approvalWatch.opened = true; render(); };
+      $("#ap-close").onclick = () => { approvalWatch = null; render(); };
+      if (done && s.admin && s.admin.state === "ENROLLED" && sel && sel.type === "admin") {/* admin view updates by itself */}
+    }
+    const mi = $("#m-install");
+    const it = (s.library || []).find((x) => x.feature_id === reviewFor);
+    if (!it) { mi.hidden = true; return; }
+    mi.hidden = false;
+    $("#i-title").textContent = "Install " + it.name + "?";
+    set($("#i-facts"), [["Version", it.version], ["Publisher", it.publisher_claim + " (claim only)"], ["Source", it.source_repo], ["From folder", it.dir], ["Trust", it.trust_class], ["Runs", (it.command || []).join(" ")],
+      ["Needs", (it.requires || []).join(", ")], ["Artifact SHA-256", it.artifact_sha256], ["Capabilities", (it.capabilities || []).map((c) => c.id + " (" + c.data_class + ")").join(", ")]].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join(""));
+    set($("#i-checks"), `<strong>Checked</strong><ul><li>every file matches the SHA-256 in its manifest; no links, no paths outside the package</li><li>the folder is one you trusted with -trust-feature-dir</li><li>trust class is TRUSTED_LOCAL_TEST_FIXTURE</li><li>files are copied and checked again before registering</li></ul>`);
+    set($("#i-not"), `<strong>Not checked</strong><ul>${(it.not_verified || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`);
+    $("#i-ok").onclick = async () => { const f = reviewFor; reviewFor = ""; mi.hidden = true; const j = await act(`/api/library/${encodeURIComponent(f)}/install`, {}); if (j && j.approval_url) watch(j); };
+    $("#i-cancel").onclick = () => { reviewFor = ""; mi.hidden = true; };
   }
 
   // ---------- events ----------
   document.addEventListener("click", async (e) => {
     const t = e.target.closest("button, .chip");
     if (!t) return;
-    if (t.dataset.connect) { await act("/api/connect/request", { url: t.dataset.connect }, $("#c-error")); }
-    else if (t.dataset.newcode) { await act("/api/connect/request", {}, $("#c-error")); }
-    else if (t.dataset.reconnect) { await act("/api/connect/disconnect", {}); }
-    else if (t.dataset.select) { await act("/api/identities/select", { id: t.dataset.select }); }
-    else if (t.dataset.plan) {
-      t.disabled = true;
-      if (await act(`/api/features/${encodeURIComponent(t.dataset.plan)}/plan`, {})) { openPlanFor = t.dataset.plan; render(); }
+    const ds = t.dataset;
+    if (ds.connect) await act("/api/connect/request", { url: ds.connect }, $("#c-error"));
+    else if (ds.newcode) await act("/api/connect/request", {}, $("#c-error"));
+    else if (ds.reconnect) await act("/api/connect/disconnect", {});
+    else if (ds.sel) { const [type, ...rest] = ds.sel.split(":"); choose({ type, id: rest.join(":") }); }
+    else if (ds.tab) { tab = ds.tab; sessionStorage.setItem("tp_tab", tab); render(); if (tab === "logs" && sel) loadDetails(sel.id); }
+    else if (ds.review) { reviewFor = ds.review; render(); }
+    else if (ds.enroll) { const j = await act("/api/admin/enroll", {}); if (j && j.approval_url) watch(j); }
+    else if (ds.watch) {
+      const ops = [...(state.admin_pending || []), ...(state.installations || []).flatMap((v) => v.pending || [])];
+      const op = ops.find((p) => p.approval_id === ds.watch);
+      if (op) watch({ approval_id: op.approval_id, approval_url: op.approval_url });
     }
-    else if (t.dataset.review) { openPlanFor = t.dataset.review; render(); }
-    else if (t.dataset.remove) {
-      if (confirm("Remove the installed files for this feature from this computer?")) await act(`/api/features/${encodeURIComponent(t.dataset.remove)}/remove`, {});
-    }
-    else if (t.dataset.gh || (t.id === "chip-github" && state && state.github && state.github.state !== "VERIFIED")) { await act("/api/github/connect", {}); }
+    else if (ds.start) { t.disabled = true; await act(`/api/installations/${ds.start}/start`, {}); }
+    else if (ds.stop) { t.disabled = true; await act(`/api/installations/${ds.stop}/stop`, {}); }
+    else if (ds.selftest) { const j = await act(`/api/installations/${ds.selftest}/self-test`, {}); if (j && j.self_test) { const el = document.getElementById("selftest-" + ds.selftest); if (el) el.innerHTML = `<div class="result ok"><strong>Self-test ${esc(j.self_test.result)}</strong> <span class="muted">${esc(j.self_test.data_class)} · grants used: ${esc(j.self_test.grants_used)}</span><pre>${esc(JSON.stringify(j.self_test.output, null, 2))}</pre></div>`; } }
+    else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }
+    else if (ds.uninstall) { const j = await act(`/api/installations/${ds.uninstall}/uninstall`, { keep_data: !!($("#keep-data") && $("#keep-data").checked) }); if (j && j.approval_url) watch(j); }
+    else if (ds.gh || (t.id === "chip-github" && state && state.github && state.github.state !== "VERIFIED")) await act("/api/github/connect", {});
+    else if (t.id === "chip-admin") choose({ type: "admin", id: "admin" });
   });
+  $("#add-id-btn").onclick = () => { $("#new-id").hidden = !$("#new-id").hidden; if (!$("#new-id").hidden) $("#new-name").focus(); };
+  $("#add-feature-btn").onclick = () => choose({ type: "library", id: "all" });
+  $("#theme").onchange = (e) => { applyTheme(e.target.value); act("/api/theme", { theme: e.target.value }); };
   $("#g-cancel").onclick = () => act("/api/github/cancel", {});
   $("#g-copy").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("#g-code").textContent);
   $("#devmode").onchange = (e) => act("/api/devmode", { on: e.target.checked });
   $("#new-id").onsubmit = async (e) => {
     e.preventDefault();
-    if (await act("/api/identities", { name: $("#new-name").value, kind: $("#new-kind").value }, $("#id-error"))) $("#new-name").value = "";
+    if (await act("/api/identities", { name: $("#new-name").value, kind: $("#new-kind").value }, $("#id-error"))) { $("#new-name").value = ""; $("#new-id").hidden = true; }
   };
   $("#exit-btn").onclick = () => {
     const s = state || {}, lc = s.lifecycle;
     $("#x-note").textContent = (s.exit && s.exit.note) || "";
-    const row = $("#x-identity-row");
-    row.hidden = !(s.verified && lc);
-    if (lc && lc.ownership === "MANAGED") $("#x-identity-why").textContent = "(Processor started it; it stops with the workspace)";
-    else $("#x-identity-why").textContent = "(you started it separately; it keeps running unless you tick this)";
+    $("#x-identity-row").hidden = !(s.verified && lc);
+    $("#x-identity-why").textContent = lc && lc.ownership === "MANAGED" ? "(Processor started it; it stops with the workspace)" : "(you started it separately; it keeps running unless you tick this)";
     $("#x-identity").checked = !!(lc && lc.ownership === "MANAGED");
     $("#m-exit").hidden = false;
   };
@@ -316,9 +473,8 @@
     try {
       const r = await api("POST", "/api/exit", { choice, stop_identity: choice === "shutdown" && $("#x-identity").checked });
       $("#m-exit").hidden = true; $("#m-done").hidden = false;
-      $("#d-note").textContent = "Identity: " + r.identity + ".";
+      $("#d-note").textContent = (r.features ? r.features + ". " : "") + "Identity: " + r.identity + ".";
     } catch (e) { exiting = false; alert(e.message); }
   };
-
   (async () => { if (await signIn()) { await refresh(); schedule(); } })();
 })();
