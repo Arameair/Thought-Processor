@@ -1,0 +1,20 @@
+repo: identity  HEAD 7cc5d9d717e5fefde259d977c48b10b027dbdde2  go version go1.24.7 linux/amd64  Linux 6.18.44-fc-v153 x86_64
+$ gofmt -l .
+$ go vet ./...
+vet: ok
+$ GOOS=windows go vet ./... && GOOS=windows go build ./...
+windows cross-build: ok (NOT run on Windows)
+$ go test -race -count=1 ./...
+ok  	github.com/Arameair/identity	1.021s
+?   	github.com/Arameair/identity/cmd/identity-probe	[no test files]
+ok  	github.com/Arameair/identity/internal/app	10.057s
+ok  	github.com/Arameair/identity/internal/authority	1.509s
+ok  	github.com/Arameair/identity/internal/discovery	1.033s
+ok  	github.com/Arameair/identity/internal/entities	1.021s
+ok  	github.com/Arameair/identity/internal/features	1.021s
+ok  	github.com/Arameair/identity/internal/github	1.234s
+ok  	github.com/Arameair/identity/internal/logbook	49.927s
+ok  	github.com/Arameair/identity/internal/pairing	1.026s
+ok  	github.com/Arameair/identity/internal/profile	1.020s
+?   	github.com/Arameair/identity/internal/publisher	[no test files]
+ok  	github.com/Arameair/identity/internal/redact	1.025s

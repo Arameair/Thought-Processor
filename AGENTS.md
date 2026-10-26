@@ -1,5 +1,7 @@
 # AGENTS.md — Thought Processor P0 Windows runbook (owner + AI operators such as a Grok bot)
 
+> **On the P1 branch?** This is the older P0 Windows runbook. For P1 follow [docs/P1/START_HERE.md](docs/P1/START_HERE.md) and [docs/P1/TEST_P1.md](docs/P1/TEST_P1.md) (WSL/Linux).
+
 **Goal:** on the owner's **Windows** computer, without Project Controller:
 1. Run **Thought Processor** (P0) and **Identity** (feature-contract experiment).
 2. Connect them.

@@ -29,7 +29,7 @@ If `go version` is older than 1.22 (e.g. Ubuntu 22.04), install Go from https://
 mkdir -p ~/p1 && cd ~/p1
 git clone --branch experiment/p1-feature-foundation-claude-20261026 https://github.com/Arameair/identity.git
 git clone --branch experiment/p1-feature-foundation-claude-20261026 https://github.com/Arameair/Thought-Processor.git
-(cd identity && go build -o ~/p1/identity-p1 .)
+(cd identity && go build -ldflags "-X main.buildBranch=experiment/p1-feature-foundation-claude-20261026" -o ~/p1/identity-p1 .)
 (cd Thought-Processor/processor && go build -ldflags "-X main.buildBranch=experiment/p1-feature-foundation-claude-20261026" -o ~/p1/thought-processor-p1 .)
 git -C identity log -1 --format='identity  %h %s'
 git -C Thought-Processor log -1 --format='processor %h %s'

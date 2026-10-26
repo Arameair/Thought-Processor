@@ -1,5 +1,7 @@
 # Thought Processor
 
+> **P1 experiment branch `experiment/p1-feature-foundation-claude-20261026` (not promoted):** runnable Feature Foundation — original Admin Identity, Admin-approved install of a trusted local test feature with its own durable installation identity, standalone runtime, Admin-approved narrow grant enforced by the receiving feature, identity-first UI. **Start with [docs/P1/START_HERE.md](docs/P1/START_HERE.md)**, then [docs/P1/TEST_P1.md](docs/P1/TEST_P1.md); results in [docs/P1/P1_REPORT_20261026.md](docs/P1/P1_REPORT_20261026.md).
+
 > **Experiment branch `experiment/p0-feature-onboarding-20261026`:** a runnable Thought Processor P0 lives in [`processor/`](processor/). Run it on Windows with [AGENTS.md](AGENTS.md); the [report](docs/experiments/P0_FEATURE_ONBOARDING_2026-10-26.md) covers results and limits. This branch is not promoted.
 
 

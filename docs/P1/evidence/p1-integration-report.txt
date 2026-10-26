@@ -1,0 +1,85 @@
+P1 integration report — REAL Identity, Processor and feature processes; GitHub and the feature are labelled TEST FIXTURES
+identity commit:  7cc5d9d717e5fefde259d977c48b10b027dbdde2
+processor commit: 13ed2093b10b415af26f8eb41852b75a65a56f0f
+platform: Linux vm 6.18.44-fc-v153 #1 SMP PREEMPT_DYNAMIC @0 x86_64
+python: 3.13.17
+elapsed: 97s
+
+PASS [G1] Processor paired with Identity (identity/2 signed requests + signed responses)
+PASS [G1] fresh profile: no Admin Identity yet  — NOT_ENROLLED
+PASS [G1] elevated action refused before an Admin exists  — 409 no Admin Identity is established on this installation yet
+PASS [G1] Admin enrollment refused until GitHub is verified  — 409
+PASS [G1] GitHub sign-in verified through Identity (TEST FIXTURE GitHub, account Arameair id 1001)
+PASS [G1] enrollment request returns an approval link to IDENTITY's page (Processor can't approve)
+PASS [G1] enrollment without the explicit confirmation tick is refused  — 400
+PASS [G1] Admin explicitly established in Identity's page (passphrase never sent to Processor)  — 200
+PASS [G1] exactly one durable Admin Identity bound to GitHub numeric id 1001  — adm_c4c5e6bfb9c632ac248e
+PASS [G1] independent program 'actor B' paired separately (used for negative tests)
+PASS [G1] a different GitHub account (intruder, id 2002) signed in
+PASS [G1] account switch did NOT change or transfer the Admin Identity
+PASS [G1] second enrollment refused (no takeover by signing in)  — 409
+PASS [G1] a paired program claiming approved:true is refused (pairing is not Admin authority)
+PASS [G2] library shows the trusted local test feature from the trusted folder  — TRUSTED_LOCAL_TEST_FIXTURE
+PASS [G2] third-party, symlinked and path-traversal packages are BLOCKED/INVALID  — ~/p1/run-integration/trusted-but-blocked/symlinked=INVALID_PACKAGE; p1-blocked-third-party=UNTRUSTED_EXECUTION_BLOCKED: only TRUSTE; ~/p1/run-integration/trusted-but-blocked/traversal=INVALID_PACKAGE
+PASS [G2] installing a non-fixture package is refused before anything happens
+PASS [G2] install request created; waiting for the Admin in Identity  — apr_8b3097de41c72671eff9
+PASS [G2] wrong Admin passphrase refused  — 401
+PASS [G2] Admin approved the exact install (bound to its SHA-256 action digest)
+PASS [G2] exactly ONE installation identity registered  — ins_c94a7a55de75f05d8ec2
+PASS [G2] it starts with ZERO grants and ZERO information sources
+PASS [G2] installed but not started; startup mode defaults to MANUAL
+PASS [G2] files verified; trust class and 'publisher not verified' shown honestly
+PASS [G2] no leftover install transaction
+PASS [G3] no grant → Identity denies BEFORE anything starts  — Identity: NO_GRANT — nothing was started or sent
+PASS [G3] manual start: RUNNING, endpoint authenticated with its launch key  — http://127.0.0.1:44029
+PASS [G3] live heartbeat through the real local API (separate from any observation)  — seq 2 → 4
+PASS [G3] standalone self-test PASS, labelled SYNTHETIC TEST DATA, no grant used
+PASS [G3] feature status refuses callers without the launch key  — 401
+PASS [G3] public health says only 'running' (no identity details)
+PASS [G3] manual stop: process gone, identity kept  — pid 17370
+PASS [G4] GitHub fixture stopped: from here GitHub is unreachable (offline Admin approval test)
+PASS [G4] connection request: Processor → ins_c94a7a55de75f05d8ec2 / worker.test.synthetic / Tass
+PASS [G4] Admin approved the grant OFFLINE (GitHub unreachable) with the local passphrase
+PASS [G4] exactly one narrow grant: this Processor → this installation → one capability → Tass; sources none  — gnt_af3343621980312aaa6d
+PASS [G4] ALLOW: one synthetic action completed (ticket verified by the feature + live Identity decision)  — dec_09bb5ec27bc1c991
+PASS [G3] ON-DEMAND: the stopped feature was started for an already-authorized request
+PASS [G3] ON-DEMAND idle window ended → clean stop (identity and data kept)
+PASS [G4] DENY wrong subject identity  — Identity: NO_GRANT — nothing was started or sent
+PASS [G4] DENY wrong capability  — Identity: NO_GRANT — nothing was started or sent
+PASS [G4] actor B (different requester) gets NO ticket for Processor's grant  — NO_GRANT
+PASS [G4] forged ticket refused by the feature  — TICKET_SIGNATURE_INVALID
+PASS [G4] actor B received its own separately approved grant  — gnt_8b3204c72809b8a0eb24
+PASS [G4] tampered body refused (ticket bound to the exact request)
+PASS [G4] ticket used for a different capability refused  — 404 UNKNOWN_CAPABILITY
+PASS [G4] actor B's valid request ALLOWED by the feature after a live Identity check  — dec_54e16c12c771f125
+PASS [G4] replayed ticket refused by the feature's durable ledger
+PASS [G4] expired ticket refused
+PASS [G4] a ticket Identity never issued (minted with a stolen key) is DENIED by the live check  — TICKET_UNKNOWN
+PASS [G4] after REVOCATION the receiving feature denies (no restart of anything)  — TICKET_UNKNOWN
+PASS [G4] after revoke, Processor's next request is denied  — Identity: GRANT_REVOKED — nothing was started or sent
+PASS [G4] Identity STOPPED → feature answers AUTHORITY_UNAVAILABLE, does no work
+PASS [G4] Processor: AUTHORITY UNAVAILABLE, distinct from DENIED
+PASS [G3] standalone self-test still works while Identity is down (nonprivileged)
+PASS [G5] Identity restarted: same installation system ID, Processor reconnected
+PASS [G5] installation ID stable, no duplicate registration
+PASS [G5] grant states persisted exactly (1 active, 2 revoked); same Admin  — ACTIVE,REVOKED,REVOKED
+PASS [G5] after Identity restart the active grant works again (fresh live decision)
+PASS [G4] EXPIRING grant: allowed, then denied after expiry  — Identity: GRANT_EXPIRED — nothing was started or s
+PASS [G5] feature crashed mid-request → REQUEST_UNCERTAIN, NOT resent  — the connection to the feature broke before an answer (Post "
+PASS [G5] experimental default = manual recovery: NEEDS_ATTENTION, no automatic restart  — crashed; recovery is MANUAL for this feature (default for ex
+PASS [G5] bounded recovery: 3 automatic process restarts (new launch each), then crash-loop stop → NEEDS_ATTENTION  — launches lch_6fe2b010c8eef5cc,lch_afedf33c8a23b460,lch_3ca6b052e5038a1c,lch_6352662d08f3020e
+PASS [G3] an 8 s request outlived the 5 s idle window: NOT stopped during active work  — 8.1 s
+PASS [G3] …and stopped after the idle window once the work finished
+PASS [G3] ALWAYS-RUNNING: started by Processor without a request
+PASS [G5] Processor killed with the feature running → on restart the orphan proved itself with its old launch key and was stopped  — pid 17434
+PASS [G5] after Processor restart: same installation, always-running feature started again, no duplicate
+PASS [G5] TEST-ONLY crash right after Identity registered copy #2 (Processor exit 42; Identity shows 1 unconfirmed)  — ins_11e2bd2c47cea54aa410
+PASS [G5] install resumed after the crash with the SAME installation ID; no orphan or duplicate registration  — ins_11e2bd2c47cea54aa410
+PASS [G5] second copy of the same package = its own durable installation identity, zero grants, separate data folder
+PASS [G4] ticket for copy #1 refused by copy #2 (signed with copy #1's key: wrong recipient)  — TICKET_SIGNATURE_INVALID
+PASS [G5] uninstall (Admin-approved): Identity tombstone kept, credential and files removed
+PASS [G5] after restarting both programs: same 2 installation IDs (1 installed, 1 tombstone), same Admin  — [('ins_11e2bd2c47cea54aa410', 'UNINSTALLED'), ('ins_c94a7a55de75f05d8ec2', 'INSTALLED')]
+
+evidence: {"admin": {"admin_id": "adm_c4c5e6bfb9c632ac248e", "authenticator": "local-passphrase-pbkdf2-sha256", "established_at": "2026-10-26T16:52:36.212799987Z", "github_binding": {"id": 1001, "login_label": "Arameair", "mode": "TEST FIXTURE", "verified_at": "2026-10-26T16:52:35.613283215Z"}}, "elapsed_s": 97, "first_allowed_request": {"decision_id": "dec_09bb5ec27bc1c991", "latency_ms": 117, "outcome": "COMPLETED", "request_id": "req_1fbb7cb498a62a12", "ticket_id": "tkt_334df104405d3e138d807b97"}, "identity_commit": "7cc5d9d717e5fefde259d977c48b10b027dbdde2", "identity_system_id": "idn_c10cf13fdfa1c2afad32d327", "installation_1": "ins_c94a7a55de75f05d8ec2", "installation_2": "ins_11e2bd2c47cea54aa410", "processor_commit": "13ed2093b10b415af26f8eb41852b75a65a56f0f"}
+
+RESULT: PASS (74 checks, 0 failed)

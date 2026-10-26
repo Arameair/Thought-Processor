@@ -1,4 +1,8 @@
-# Thought Processor — P0 (reusable feature onboarding)
+# Thought Processor — P1 (feature foundation) on top of P0
+
+> **P1:** run it with [../docs/P1/START_HERE.md](../docs/P1/START_HERE.md). New packages: `internal/featpkg` (verify/stage local feature packages), `internal/supervisor` (launch, endpoint discovery, launch-key auth, startup modes, idle stop, controlled recovery, orphan cleanup), `internal/app/p1.go` (install transaction, approvals, grants, tickets-first actions), `testfeatures/deterministic-worker` (trusted local test feature, Python), `acceptance/p1_integration.py`, `acceptance/p1_ui_tour.py`. Extra flag: `-trust-feature-dir <folder>` (repeatable). Contract: [../docs/P1/FEATURE_API_V1.md](../docs/P1/FEATURE_API_V1.md).
+
+## P0 notes (still valid)
 
 The person's interface to the system. It connects to **Identity**, shows the person's real identities, lists the features their account is approved for, and installs them with a **reusable installer** that is driven by each feature's contract (`thought.feature/1`). Thought Engine is the first example.
 
