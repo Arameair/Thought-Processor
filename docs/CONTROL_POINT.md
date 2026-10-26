@@ -1,3 +1,7 @@
+> **Earlier wireframe — not the current first-screen specification (2026-10-26).** This page illustrates the diagnostic/Engine-specific controls considered before the owner's system-wide Processor direction. The starting UX is being reviewed at [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15); see [Design readiness](DESIGN_READINESS_2026-10-26.md). All numbers in the old wireframe are placeholders.
+
+---
+
 # Thought Processor — operator control surface
 
 **Wireframe and acceptance requirements — not a implemented UI.**
