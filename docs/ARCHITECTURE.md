@@ -1,3 +1,7 @@
+> **Scope update — 2026-10-26:** The control/data-plane separation below remains important. However, Processor is now the **whole-system user/admin interface**, not solely a Thought Engine controller. Identity decisions are authoritative; receiving features enforce them; per-identity source access starts empty. The older Spark/Trace/Thought figure describes an experiment, while the later source Spark/Thread/Thought model is still conceptual. See [Design readiness](DESIGN_READINESS_2026-10-26.md) and [owner alignment](https://github.com/Arameair/Thought-Processor/blob/experiment/dynamic-feature-observation-design-20261025/docs/OWNER_DESIGN_ALIGNMENT_2026-10-25.md).
+
+---
+
 # Architecture — control plane separate from evidence
 
 **Design target, not an implemented protocol.** Existing repositories implement different experiments. These notes do not assume they already interoperate.
