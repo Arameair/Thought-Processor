@@ -4,6 +4,7 @@
 
 | Read first | Purpose |
 | --- | --- |
+| **[First Alpha-candidate design agenda](ALPHA_CANDIDATE_DESIGN_AGENDA_2026-10-26.md)** | Ordered questions and tests to settle before approving the first design; work through one at a time. |
 | [Current design readiness](DESIGN_READINESS_2026-10-26.md) | What's settled, what conflicts, and what must be decided before a prototype build |
 | [First experience workshop](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) | Proposed Profiles → Catalog → Collections journey, constraints, smallest test and owner acceptance |
 | [Design discussion #15](https://github.com/Arameair/Thought-Processor/issues/15) | Central place for decisions, alternatives and owner review |
