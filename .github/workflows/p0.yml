@@ -1,12 +1,12 @@
-name: P0 candidate checks
+name: GPT-6 first-run prototype
 on:
   push:
     branches:
-      - experiment/p0-reusable-feature-onboarding-20261026
+      - experiment/gpt6-frictionless-onboarding-20261026
   workflow_dispatch:
 jobs:
-  go:
-    name: Go tests and build (${{ matrix.os }})
+  build:
+    name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -20,27 +20,36 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: processor/go.mod
-      - name: Format candidate before validation
-        run: gofmt -w p0identity.go p0installer.go p0routes.go p0_test.go
+      - name: Check browser source syntax
+        run: node --check web/welcome.js
+      - name: Format candidate source
+        run: gofmt -w p0identity.go p0installer.go p0routes.go p0_test.go main.go server.go processor_test.go
       - name: Vet
         run: go vet ./...
-      - name: Tests
-        run: go test ./...
-      - name: Build
-        run: go build -o p0-processor${{ runner.os == 'Windows' && '.exe' || '' }} .
-
-  integration:
-    name: Real-process pairing smoke (Linux; no GitHub)
+      - name: Automated tests
+        run: go test ./... -count=1 -timeout=3m
+      - name: Build standalone executable
+        run: go build -o thought-processor${{ runner.os == 'Windows' && '.exe' || '' }} .
+      - name: Provide downloadable Windows trial executable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPT6-Thought-Processor-Windows
+          path: processor/thought-processor.exe
+          if-no-files-found: error
+          retention-days: 14
+  live:
+    name: Real Identity and Processor processes (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           repository: Arameair/identity
-          ref: b4203e03d5004e1de9f79dcc9054394f53056af4
+          ref: dfbb24e9999b7f9bbb252cff82702b18f9b3e4c1
           path: identity-ref
       - uses: actions/setup-go@v5
         with:
           go-version-file: processor/go.mod
-      - name: Exercise independent Processor and Identity processes
+      - name: Exercise real local Identity and Processor (no mock provider)
         run: python3 processor/acceptance/p0_live_smoke.py
