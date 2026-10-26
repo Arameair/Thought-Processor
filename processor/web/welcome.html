@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101b2b">
+<title>Thought Processor · Welcome</title>
+<link rel="stylesheet" href="/welcome.css"><script defer src="/welcome.js"></script></head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Thought Processor home"><span class="logo" aria-hidden="true">◈</span>
+    <span><b>Thought Processor</b><small>Your AI workspace</small></span></a>
+  <div class="top-tools">
+    <span class="status" id="connection-badge">Finding Identity…</span>
+    <button class="quiet" id="developer-toggle" type="button" aria-expanded="false">Developer Mode <span class="chevron">⌄</span></button>
+  </div>
+</header>
+<main>
+<section id="signin" class="surface auth" hidden>
+  <div class="step-icon">◎</div><p class="overline">Welcome</p><h1>Open your workspace</h1>
+  <p>This is a private interface on your computer. When Processor starts, it gives you a one-time link or access code.</p>
+  <form id="signin-form"><label for="operator-code">Temporary Processor code</label>
+    <div class="form-row"><input id="operator-code" autocomplete="off" type="password" placeholder="Paste the code from Processor"><button class="primary">Continue</button></div>
+  </form><p class="hint">This is not the Identity pairing code. No information-source access is granted here.</p>
+</section>
+<div id="application" hidden>
+  <div class="hero-intro">
+    <p class="overline">First connection</p><h1 id="journey-title">Your workspace, ready in a few steps.</h1>
+    <p id="journey-subtitle">We'll connect the parts you need. You approve each security-sensitive step.</p>
+  </div>
+  <nav class="progress" aria-label="Setup progress">
+    <div class="progress-step" id="step-connect"><span class="number">1</span><span><b>Connect</b><small>Find Identity</small></span></div>
+    <span class="progress-line" aria-hidden="true"></span>
+    <div class="progress-step" id="step-profile"><span class="number">2</span><span><b>Identity</b><small>Choose who</small></span></div>
+    <span class="progress-line" aria-hidden="true"></span>
+    <div class="progress-step" id="step-feature"><span class="number">3</span><span><b>Features</b><small>What to add</small></span></div>
+  </nav>
+
+  <section class="surface stage" id="stage-connect" aria-labelledby="connect-title">
+    <div class="stage-heading"><div class="step-icon" id="connect-icon">◎</div><div>
+      <p class="overline" id="connect-overline">Step 1 · Safe connection</p>
+      <h2 id="connect-title">Looking for Identity</h2></div></div>
+    <p class="lead" id="connect-explain">Processor is checking whether the Identity service is already running on this computer.</p>
+    <div id="connection-steps" class="subsurface" hidden>
+      <div class="check-item"><span class="circle" id="check-find">1</span><div><b>Find a running Identity</b><p id="check-find-text">Checking local services…</p></div></div>
+      <div class="check-item"><span class="circle" id="check-trust">2</span><div><b>Approve this connection once</b><p id="check-trust-text">Your first connection requires your approval. Reconnection can be automatic afterward.</p></div></div>
+    </div>
+    <div class="next-action" id="connect-actions">
+      <button id="btn-connection" type="button" class="primary">Check again</button>
+      <button id="btn-forget" class="quiet warn" type="button" hidden>Recover connection</button>
+    </div>
+    <div class="pairing-entry" id="pairing-entry" hidden>
+      <p class="overline">Approve this connection</p><h3>Enter the code shown by Identity</h3>
+      <p>Check Identity's own window or troubleshooting page. The code is shown there, not in Processor.</p>
+      <form id="pair-form" class="form-row">
+        <label class="sr-only" for="pair-code">Identity pairing code</label>
+        <input id="pair-code" maxlength="9" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" aria-label="Identity pairing code">
+        <button class="primary">Verify connection</button>
+      </form><p class="hint">The code expires after five minutes. Pairing does not grant access to files, messages or other information.</p>
+    </div>
+    <details id="manual-address"><summary>Identity is running, but wasn't found?</summary>
+      <p>Processor looks for local Identity installations. You can also enter a local address supplied by Identity.</p>
+      <form id="address-form" class="form-row"><label class="sr-only" for="identity-address">Local Identity address</label>
+        <input id="identity-address" placeholder="127.0.0.1:7790"><button>Try address</button></form>
+    </details>
+    <div class="help-inline" id="missing-help" hidden>
+      <b>Identity isn't running?</b><p>Start the separate Identity application, then choose <em>Find Identity again</em>. Processor will never install or start an unrelated service silently.</p>
+      <a href="https://github.com/Arameair/identity" target="_blank" rel="noopener noreferrer">About the Identity application</a>
+    </div>
+  </section>
+
+  <section class="surface stage" id="stage-profile" hidden aria-labelledby="profile-title">
+    <div class="stage-heading"><div class="step-icon">◇</div><div><p class="overline">Step 2 · Your identities</p>
+      <h2 id="profile-title">Who are you setting up?</h2></div></div>
+    <p class="lead">Different identities have separate settings and permissions. Identity stores the real records; Processor only displays them.</p>
+    <div id="existing-profiles" hidden>
+      <label for="profile-picker" class="form-label">Select an existing identity</label>
+      <select id="profile-picker" class="profile-picker"></select>
+      <p class="hint">Selecting an identity does not authorize new data sources.</p>
+      <div class="next-action"><button class="primary" id="btn-profile-next">Continue with this identity</button>
+        <button class="quiet" id="btn-profile-create">Create another</button></div>
+    </div>
+    <form id="profile-form" class="profile-form" hidden>
+      <div class="two-col"><div><label for="profile-name">Name</label><input required maxlength="80" id="profile-name" placeholder="e.g. My Companion"></div>
+      <div><label for="profile-kind">Type</label><select id="profile-kind"><option value="companion">Companion</option><option value="person">Person</option><option value="business">Business</option><option value="project">Project</option></select></div></div>
+      <p class="hint">This starts with no authorized information sources or feature permissions.</p>
+      <div class="next-action"><button class="primary">Create identity</button><button id="btn-profile-cancel" type="button" class="quiet" hidden>Use existing</button></div>
+    </form>
+  </section>
+
+  <section class="surface stage" id="stage-feature" hidden aria-labelledby="feature-title">
+    <div class="stage-heading"><div class="step-icon">⬡</div><div><p class="overline">Step 3 · Feature workspace</p>
+      <h2 id="feature-title">What would you like to add?</h2></div></div>
+    <div class="selected-bar"><div><span class="overline">Working as</span><b id="selected-name">Identity</b></div><button id="btn-change-profile" class="quiet">Change identity</button></div>
+    <p class="lead">You decide which features to install. Installing software does not turn it on for an identity or give it access to any information.</p>
+    <div class="github-card" id="github-card">
+      <span class="github-mark" aria-hidden="true">⌘</span><div class="github-copy">
+        <b id="github-title">GitHub access</b><p id="github-caption">GitHub is only needed when a feature requires an eligibility check.</p></div>
+      <button id="github-button" class="secondary">Connect GitHub</button>
+    </div>
+    <div class="device-code" id="github-device" hidden>
+      <h3>Approve sign-in on GitHub</h3><p>Open GitHub and enter this code. Processor does not receive your GitHub password or token.</p>
+      <div class="device-actions"><output id="device-code" aria-label="Temporary GitHub verification code"></output>
+        <button id="copy-device" class="quiet">Copy code</button></div>
+      <div class="next-action"><a id="open-github" class="link-button primary" rel="noopener noreferrer" target="_blank">Open GitHub</a>
+        <button id="cancel-github" class="quiet">Cancel sign-in</button></div>
+    </div>
+    <p id="feature-summary" class="muted"></p><div id="feature-list" class="feature-list"></div>
+    <div class="complete-note"><span class="note-icon">✓</span><div><b>Secure by default</b>
+      <p>New identities have no approved sources. The current Identity candidate cannot grant runtime feature permissions yet.</p></div></div>
+    <button id="btn-choose-profile" class="quiet">Manage another identity</button>
+  </section>
+
+  <section id="developer" class="surface diagnostics" hidden>
+    <div class="section-head"><div><p class="overline">Developer Mode</p><h2>Diagnostics</h2></div><button id="diagnostics-refresh" class="quiet">Refresh</button></div>
+    <p class="hint">View-only. Developer Mode cannot unlock features or Alpha releases.</p>
+    <div class="diag-tabs" role="tablist">
+      <button class="selected" data-panel="overview" role="tab" aria-selected="true">Status</button>
+      <button data-panel="logs" role="tab" aria-selected="false">Logs</button>
+      <button data-panel="metrics" role="tab" aria-selected="false">Metrics</button>
+      <button data-panel="flow" role="tab" aria-selected="false">Flow</button>
+    </div>
+    <pre id="diagnostics-content">Loading…</pre>
+    <div class="next-action"><button id="copy-report" class="secondary">Copy redacted report</button>
+      <a href="/diagnostics" class="minor-link">Older diagnostics view</a></div>
+  </section>
+
+  <footer><button id="btn-exit" class="quiet">Exit Processor</button><p>Thought Processor does not automatically start or stop your other applications.</p></footer>
+</div>
+<div class="toast" id="notice" role="status" aria-live="polite" hidden></div>
+</main>
+
+<dialog id="install-dialog"><div class="dialog-body"><p class="overline">Installation approval</p><h2 id="install-name">Review installation</h2>
+  <p>These exact software files will be downloaded through the Identity service.</p>
+  <dl class="install-facts"><div><dt>Version</dt><dd id="install-tag"></dd></div><div><dt>Platform file</dt><dd id="install-asset"></dd></div><div><dt>Download size</dt><dd id="install-size"></dd></div><div><dt>SHA-256</dt><dd id="install-hash"></dd></div></dl>
+  <div class="approval-warning"><b>Security boundary</b><p>This installs a verified download only. It does not start the feature or grant any information-source permission. The current publisher release has no independent cryptographic signing; matching SHA-256 alone is not publisher authentication.</p></div>
+  <div class="next-action"><button id="cancel-install" class="quiet">Cancel</button><button id="confirm-install" class="primary">Approve installation</button></div></div>
+</dialog>
+<dialog id="exit-dialog"><div class="dialog-body"><h2>Close Thought Processor?</h2>
+  <p>Identity and Thought Engine were started independently and will remain running. This candidate has no managed subprocesses.</p>
+  <label class="radio"><input type="radio" name="exit-mode" value="managed" checked> Shut down managed workspace (default)</label>
+  <label class="radio"><input type="radio" name="exit-mode" value="keep"> Keep other services running</label>
+  <div class="next-action"><button id="cancel-exit" class="quiet">Cancel</button><button id="confirm-exit" class="primary">Exit Processor</button></div></div>
+</dialog>
+</body></html>
