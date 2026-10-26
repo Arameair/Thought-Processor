@@ -1,3 +1,7 @@
+> **Current design register — 2026-10-26:** The owner confirmed **Thought Processor is the normal human/admin interface for the entire system**, while **Identity owns security/permission decisions** and **the receiving feature enforces them**. New identities/features have **no information-source access without approval**. Older Engine-only control-point and Identity-first launch statements below describe the historical design stage; do not treat them as newer approved requirements. **Begin with [Design readiness](DESIGN_READINESS_2026-10-26.md), [the current workshop](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) and [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15).** This banner is a documentation reconciliation, not authorization to implement or promote.
+
+---
+
 # Decisions and open questions
 
 This log separates **owner direction**, **proposals**, and **confirmed implementation**. Avoid marking design assumptions as owner approval.
