@@ -414,6 +414,13 @@ func (s *Supervisor) wait(id string, p *proc, cmd *exec.Cmd, exited chan struct{
 		s.Log("info", "feature.stopped", id, "process exited cleanly after a stop request; installation identity and data kept")
 		return
 	}
+	if p.state == Starting {
+		// Died before it proved itself: a failed start, never "recovered".
+		ex.Reason = "exited during start-up"
+		p.state, p.note = FailedToStart, fmt.Sprintf("exited during start-up (code %d); see its log", code)
+		s.mu.Unlock()
+		return
+	}
 	ex.Reason = "exited unexpectedly"
 	inflight := p.inFlight
 	pol := s.Policy(id)
@@ -433,16 +440,18 @@ func (s *Supervisor) wait(id string, p *proc, cmd *exec.Cmd, exited chan struct{
 		case len(recent) >= maxRestarts:
 			p.note = "crashed again after " + strconv.Itoa(len(recent)) + " automatic restarts in 10 minutes — stopped trying (crash loop)"
 		}
+		note := p.note
 		s.mu.Unlock()
-		s.Log("warn", "feature.crashed", id, fmt.Sprintf("exit code %d; %d request(s) in flight are UNCERTAIN and are NOT resent; %s", code, inflight, p.note))
+		s.Log("warn", "feature.crashed", id, fmt.Sprintf("exit code %d; %d request(s) in flight are UNCERTAIN and are NOT resent; %s", code, inflight, note))
 		return
 	}
 	p.state = Restarting
 	backoff := time.Duration(1<<len(recent)) * time.Second
 	p.restarts = append(p.restarts, now)
 	p.note = fmt.Sprintf("crashed; bounded recovery: restart %d of %d in %s (requests are never resent)", len(p.restarts), maxRestarts, backoff)
+	note := p.note
 	s.mu.Unlock()
-	s.Log("warn", "feature.crashed", id, fmt.Sprintf("exit code %d; %d request(s) UNCERTAIN, not resent; %s", code, inflight, p.note))
+	s.Log("warn", "feature.crashed", id, fmt.Sprintf("exit code %d; %d request(s) UNCERTAIN, not resent; %s", code, inflight, note))
 	time.AfterFunc(backoff, func() {
 		s.mu.Lock()
 		if p.state != Restarting || s.closed {
