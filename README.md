@@ -1,5 +1,8 @@
 # Thought Processor
 
+> **Experiment branch `experiment/p0-feature-onboarding-20261026`:** a runnable Thought Processor P0 lives in [`processor/`](processor/). Run it on Windows with [AGENTS.md](AGENTS.md); the [report](docs/experiments/P0_FEATURE_ONBOARDING_2026-10-26.md) covers results and limits. This branch is not promoted.
+
+
 **The control point for the optional Thought Processing feature.**
 
 Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.

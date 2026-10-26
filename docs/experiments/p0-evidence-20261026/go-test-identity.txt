@@ -1,0 +1,13 @@
+identity ce2cbd240824ac030d2ffc4782bfbd3be5d732ec Feature contract thought.feature/1, private features hidden, approved release source
+ok  	github.com/Arameair/identity	1.025s
+?   	github.com/Arameair/identity/cmd/identity-probe	[no test files]
+ok  	github.com/Arameair/identity/internal/app	2.549s
+ok  	github.com/Arameair/identity/internal/discovery	1.023s
+ok  	github.com/Arameair/identity/internal/entities	1.020s
+ok  	github.com/Arameair/identity/internal/features	1.019s
+ok  	github.com/Arameair/identity/internal/github	1.273s
+ok  	github.com/Arameair/identity/internal/logbook	50.842s
+ok  	github.com/Arameair/identity/internal/pairing	1.029s
+ok  	github.com/Arameair/identity/internal/profile	1.026s
+?   	github.com/Arameair/identity/internal/publisher	[no test files]
+ok  	github.com/Arameair/identity/internal/redact	1.032s
