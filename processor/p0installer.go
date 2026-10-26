@@ -60,7 +60,7 @@ func (i *P0InstallManager) installed(feature string) (any,string) {
  root,e:=i.rootFor(feature);if e!=nil{return nil,"INVALID_FEATURE"}
  b,e:=os.ReadFile(filepath.Join(root,"current.json"));if errors.Is(e,os.ErrNotExist){return nil,"NOT_INSTALLED"};if e!=nil{return nil,"INSTALL_RECORD_UNREADABLE"}
  var r P0Receipt
- if json.Unmarshal(b,&r)!=nil || r.Feature!=feature || !p0File.MatchString(r.Tag) || !p0File.MatchString(r.Asset) || !p0Digest.MatchString(r.SHA256) || r.Size<=0||r.Size>p0MaxBytes {
+ if json.Unmarshal(b,&r)!=nil || r.Contract!=P0FeatureContractVersion || r.Feature!=feature || !p0File.MatchString(r.Tag) || !p0File.MatchString(r.Asset) || !p0Digest.MatchString(r.SHA256) || r.Size<=0||r.Size>p0MaxBytes {
   return nil,"INSTALL_RECORD_INVALID"
  }
  file:=filepath.Join(root,r.Tag,r.Asset)
