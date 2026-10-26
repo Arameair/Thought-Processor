@@ -195,3 +195,27 @@ func TestIdleStopNeverDuringWork(t *testing.T) {
 	e.sup.End(id)
 	waitState(t, e.sup, id, Stopped, 10*time.Second)
 }
+
+func TestVerifyAnswerRejectsUnsignedOrOtherLaunch(t *testing.T) {
+	s := New()
+	key := []byte("0123456789abcdef0123456789abcdef")
+	s.procs[id] = &proc{key: key, launchID: "lch_1", spec: Spec{InstallationID: id}, state: Running}
+	body := []byte(`{"result":"COMPLETED"}`)
+	h := http.Header{}
+	h.Set("X-TF-Installation-ID", id)
+	h.Set("X-TF-Launch-ID", "lch_1")
+	h.Set("X-TF-Proof", hmacHex(key, []byte(API+" response\nn1\n200\n"), body))
+	if err := s.VerifyAnswer(id, "n1", 200, body, h); err != nil {
+		t.Fatalf("genuine answer refused: %v", err)
+	}
+	if err := s.VerifyAnswer(id, "n2", 200, body, h); err == nil {
+		t.Fatal("answer for another nonce accepted")
+	}
+	if err := s.VerifyAnswer(id, "n1", 200, []byte(`{"result":"FAKED"}`), h); err == nil {
+		t.Fatal("changed body accepted")
+	}
+	h.Set("X-TF-Launch-ID", "lch_old")
+	if err := s.VerifyAnswer(id, "n1", 200, body, h); err == nil {
+		t.Fatal("answer from another launch accepted")
+	}
+}

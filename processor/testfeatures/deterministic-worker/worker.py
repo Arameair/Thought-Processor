@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import signal
 import sys
@@ -358,36 +359,42 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"error": "NOT_FOUND"})
 
     def action(self, capability, body):
+        # If the launcher sends a fresh nonce, every answer below is signed
+        # with this launch's key, so the launcher can tell a real answer from
+        # one made up by whatever might sit on this port after a crash.
+        ln = self.headers.get("X-TF-Nonce", "")
+        ln = ln if re.match(r"^[0-9a-f]{16,64}$", ln) else None
+        reply = lambda st, obj: self.send(st, obj, ln)
         t0 = time.time()
         with W.lock:
             if W.stopping:
-                return self.send(503, {"error": "STOPPING", "detail": "this feature is shutting down; nothing was done"})
+                return reply(503, {"error": "STOPPING", "detail": "this feature is shutting down; nothing was done"})
             W.counters["requests"] += 1
         if capability != CAPABILITY:
             with W.lock:
                 W.counters["invalid"] += 1
-            return self.send(404, {"error": "UNKNOWN_CAPABILITY", "capability": capability[:64]})
+            return reply(404, {"error": "UNKNOWN_CAPABILITY", "capability": capability[:64]})
         p, why = W.verify_ticket(self.headers.get("X-TF-Ticket", ""), capability, body)
         if p is None:
             with W.lock:
                 W.counters["invalid"] += 1
             log("warn", "action.refused", why)
-            return self.send(401, {"error": "TICKET_INVALID", "reason": why, "detail": "nothing was done"})
+            return reply(401, {"error": "TICKET_INVALID", "reason": why, "detail": "nothing was done"})
         seen = W._remember_ticket(p["tid"], p["exp"])
         if seen is None:
-            return self.send(503, {"error": "REPLAY_LEDGER_UNAVAILABLE", "detail": "nothing was done"})
+            return reply(503, {"error": "REPLAY_LEDGER_UNAVAILABLE", "detail": "nothing was done"})
         if seen is False:
             with W.lock:
                 W.counters["invalid"] += 1
             log("warn", "action.replay", "ticket already used", ticket_id=p["tid"])
-            return self.send(409, {"error": "TICKET_REPLAYED", "ticket_id": p["tid"], "detail": "nothing was done"})
+            return reply(409, {"error": "TICKET_REPLAYED", "ticket_id": p["tid"], "detail": "nothing was done"})
         try:
             req = json.loads(body.decode() or "{}")
             text, rid = req.get("input"), req.get("request_id")
             if not isinstance(text, str) or len(text) > 1000 or not isinstance(rid, str) or not (1 <= len(rid) <= 64):
                 raise ValueError
         except Exception:
-            return self.send(400, {"error": "BAD_REQUEST", "expected": {"request_id": "1-64 chars", "input": "text ≤ 1000 chars"}})
+            return reply(400, {"error": "BAD_REQUEST", "expected": {"request_id": "1-64 chars", "input": "text ≤ 1000 chars"}})
         # LIVE decision from Identity — before any work, every time.
         st, d, why = W.identity_call("POST", "/api/v1/authz/check", {
             "ticket_id": p["tid"], "grant_id": p["gid"], "requester": p["req"], "capability": capability,
@@ -396,13 +403,13 @@ class Handler(BaseHTTPRequestHandler):
             with W.lock:
                 W.counters["unavailable"] += 1
             log("warn", "action.authority_unavailable", why or "Identity error", ticket_id=p["tid"], request_id=rid)
-            return self.send(503, {"error": "AUTHORITY_UNAVAILABLE", "detail": (why or "Identity could not decide") + "; nothing was done",
+            return reply(503, {"error": "AUTHORITY_UNAVAILABLE", "detail": (why or "Identity could not decide") + "; nothing was done",
                                    "request_id": rid})
         if st != 200 or not d or d.get("decision") != "ALLOW":
             with W.lock:
                 W.counters["denied"] += 1
             log("warn", "action.denied", (d or {}).get("reason", ""), ticket_id=p["tid"], request_id=rid, decision_id=(d or {}).get("decision_id"))
-            return self.send(403, {"error": "DENIED", "reason": (d or {}).get("reason"), "decision_id": (d or {}).get("decision_id"),
+            return reply(403, {"error": "DENIED", "reason": (d or {}).get("reason"), "decision_id": (d or {}).get("decision_id"),
                                    "request_id": rid, "detail": "Identity did not allow this; nothing was done"})
         with W.lock:
             W.in_flight += 1
@@ -423,7 +430,7 @@ class Handler(BaseHTTPRequestHandler):
                 W.counters["allowed"] += 1
                 W.latencies.append(int((time.time() - t0) * 1000))
             log("info", "action.completed", "synthetic observation produced", request_id=rid, decision_id=d["decision_id"])
-            self.send(200, {"result": "COMPLETED", "observation": obs})
+            reply(200, {"result": "COMPLETED", "observation": obs})
         finally:
             with W.lock:
                 W.in_flight -= 1

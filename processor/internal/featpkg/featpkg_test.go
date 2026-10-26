@@ -63,6 +63,15 @@ func TestRefusals(t *testing.T) {
 			os.Remove(filepath.Join(d, "worker.py"))
 			os.Symlink("/etc/hostname", filepath.Join(d, "worker.py"))
 		},
+		"symlinked parent folder": func(t *testing.T, d string) {
+			os.Symlink("/etc", filepath.Join(d, "sub"))
+			editManifest(t, d, func(m map[string]any) {
+				// the right SHA-256, so the ONLY reason to refuse is the linked folder
+				b, _ := os.ReadFile("/etc/hostname")
+				m["files"] = []map[string]string{{"path": "sub/hostname", "sha256": sha(b)}}
+				m["runtime"].(map[string]any)["command"] = []string{"python3", "{package}/sub/hostname"}
+			})
+		},
 		"traversal": func(t *testing.T, d string) {
 			editManifest(t, d, func(m map[string]any) {
 				m["files"] = []map[string]string{{"path": "../x", "sha256": strings.Repeat("0", 64)}}

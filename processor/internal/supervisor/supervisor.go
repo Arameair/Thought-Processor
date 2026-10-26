@@ -556,6 +556,29 @@ func (s *Supervisor) call(p *proc, method, path string, body []byte) (int, []byt
 	return resp.StatusCode, raw, nil
 }
 
+// ActionNonce returns a fresh nonce for a protected request; VerifyAnswer
+// then checks the feature signed its answer with this launch's key.
+func ActionNonce() string { return randHex(12) }
+
+func (s *Supervisor) VerifyAnswer(id, nonce string, status int, body []byte, h http.Header) error {
+	s.mu.Lock()
+	p := s.procs[id]
+	var key []byte
+	var launch, ins string
+	if p != nil {
+		key, launch, ins = p.key, p.launchID, p.spec.InstallationID
+	}
+	s.mu.Unlock()
+	if key == nil {
+		return errors.New("no launch to verify against")
+	}
+	want := hmacHex(key, []byte(API+" response\n"+nonce+"\n"+strconv.Itoa(status)+"\n"), body)
+	if !hmac.Equal([]byte(want), []byte(h.Get("X-TF-Proof"))) || h.Get("X-TF-Installation-ID") != ins || h.Get("X-TF-Launch-ID") != launch {
+		return errors.New("WRONG_SERVICE: the answer is not signed by the feature launch Processor started")
+	}
+	return nil
+}
+
 // URL returns the running endpoint (for protected requests that carry a ticket).
 func (s *Supervisor) URL(id string) string {
 	s.mu.Lock()

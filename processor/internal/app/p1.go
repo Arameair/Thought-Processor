@@ -612,13 +612,23 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 	req, _ := http.NewRequestWithContext(ctx, "POST", u+"/v1/actions/"+capability, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-TF-Ticket", tk.Ticket)
+	nonce := supervisor.ActionNonce()
+	req.Header.Set("X-TF-Nonce", nonce)
 	resp, err := (&http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
 	if err != nil {
 		res.Outcome, res.Detail = "REQUEST_UNCERTAIN", "the connection to the feature broke before an answer ("+err.Error()+"). It is NOT resent automatically; it may or may not have been processed."
 		return res
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if rerr != nil {
+		res.Outcome, res.Detail = "REQUEST_UNCERTAIN", "the answer was cut off ("+rerr.Error()+"); NOT resent"
+		return res
+	}
+	if err := a.Sup.VerifyAnswer(id, nonce, resp.StatusCode, raw, resp.Header); err != nil {
+		res.Outcome, res.Detail = "REQUEST_UNCERTAIN", err.Error()+" — the result is not trusted and NOT resent"
+		return res
+	}
 	var m map[string]any
 	json.Unmarshal(raw, &m)
 	str := func(k string) string { s, _ := m[k].(string); return s }

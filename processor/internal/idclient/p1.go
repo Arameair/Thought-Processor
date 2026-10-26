@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Arameair/Thought-Processor/processor/internal/store"
@@ -161,15 +162,34 @@ type Ticket struct {
 	ExpiresAt  time.Time `json:"expires_at,omitempty"`
 }
 
+// CheckApprovalURL accepts only a link to the paired Identity's own approval
+// page; Processor never opens anything else as an "approval".
+func (c *Client) CheckApprovalURL(u string) error {
+	if !strings.HasPrefix(u, c.p.BaseURL+"/approve#a=apr_") || strings.ContainsAny(u, " \"<>'") {
+		return &Error{Kind: WrongService, Msg: "Identity returned an approval link that is not its own approval page; refused"}
+	}
+	return nil
+}
+
 // decodeSigned decodes an answer that is signed even when it is a refusal
 // (Refused errors carry the verified raw body).
 func decodeSigned(raw []byte, err error, out any) error {
+	return decodeSignedFor(nil, raw, err, out)
+}
+
+func decodeSignedFor(c *Client, raw []byte, err error, out any) error {
 	var e *Error
 	if err != nil && !(errors.As(err, &e) && e.Kind == Refused && raw != nil) {
 		return err
 	}
 	if raw != nil && out != nil {
 		json.Unmarshal(raw, out)
+	}
+	if ar, ok := out.(*ApprovalRequest); ok && c != nil && err == nil {
+		if e := c.CheckApprovalURL(ar.ApprovalURL); e != nil {
+			*ar = ApprovalRequest{}
+			return e
+		}
 	}
 	return err
 }
@@ -183,7 +203,7 @@ func (c *Client) Admin(ctx context.Context) (AdminView, error) {
 func (c *Client) RequestAdminEnrollment(ctx context.Context) (ApprovalRequest, error) {
 	var v ApprovalRequest
 	_, raw, err := c.Call(ctx, "POST", "/api/v1/admin/enrollment", map[string]any{})
-	return v, decodeSigned(raw, err, &v)
+	return v, decodeSignedFor(c, raw, err, &v)
 }
 
 func (c *Client) Approval(ctx context.Context, id string) (Approval, error) {
@@ -195,7 +215,7 @@ func (c *Client) Approval(ctx context.Context, id string) (Approval, error) {
 func (c *Client) RequestInstall(ctx context.Context, r InstallRequest) (ApprovalRequest, error) {
 	var v ApprovalRequest
 	_, raw, err := c.Call(ctx, "POST", "/api/v1/installations/requests", r)
-	return v, decodeSigned(raw, err, &v)
+	return v, decodeSignedFor(c, raw, err, &v)
 }
 
 func (c *Client) CommitInstall(ctx context.Context, approvalID string) (InstallCommit, error) {
@@ -225,7 +245,7 @@ func (c *Client) AbandonInstall(ctx context.Context, id string) error {
 func (c *Client) RequestUninstall(ctx context.Context, id string) (ApprovalRequest, error) {
 	var v ApprovalRequest
 	_, raw, err := c.Call(ctx, "POST", "/api/v1/installations/"+url.PathEscape(id)+"/uninstall/requests", map[string]any{})
-	return v, decodeSigned(raw, err, &v)
+	return v, decodeSignedFor(c, raw, err, &v)
 }
 
 func (c *Client) CommitUninstall(ctx context.Context, id, approvalID string) error {
@@ -236,7 +256,7 @@ func (c *Client) RequestGrant(ctx context.Context, dest, subject, capability str
 	var v ApprovalRequest
 	_, raw, err := c.Call(ctx, "POST", "/api/v1/grants/requests", map[string]any{"destination_installation_id": dest,
 		"subject_identity_id": subject, "capability": capability, "expires_in_seconds": expiresIn})
-	return v, decodeSigned(raw, err, &v)
+	return v, decodeSignedFor(c, raw, err, &v)
 }
 
 func (c *Client) CommitGrant(ctx context.Context, approvalID string) (GrantView, error) {

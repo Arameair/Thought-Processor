@@ -128,6 +128,23 @@ func readRegular(path string, max int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, max+1))
 }
 
+// insideNoLinks verifies that rel, inside dir, crosses no symbolic link at
+// any level (a linked parent folder could point anywhere on the computer).
+func insideNoLinks(dir, rel string) error {
+	cur := dir
+	for _, part := range strings.Split(rel, "/") {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s crosses a symbolic link; refused", rel)
+		}
+	}
+	return nil
+}
+
 // safeRel checks a manifest path stays inside the package.
 func safeRel(p string) error {
 	if !pathRE.MatchString(p) || strings.Contains(p, "..") || strings.HasPrefix(p, "/") || p == ManifestFile {
@@ -234,6 +251,9 @@ func Load(dir string, trusted bool) (Package, error) {
 		return Package{}, err
 	}
 	for _, f := range m.Files {
+		if err := insideNoLinks(dir, f.Path); err != nil {
+			return Package{}, fmt.Errorf("file %s: %w", f.Path, err)
+		}
 		b, err := readRegular(filepath.Join(dir, filepath.FromSlash(f.Path)), maxFile)
 		if err != nil {
 			return Package{}, fmt.Errorf("file %s: %w", f.Path, err)
@@ -276,6 +296,9 @@ func Stage(p Package, dst string) error {
 		return err
 	}
 	for _, f := range p.Manifest.Files {
+		if err := insideNoLinks(p.Dir, f.Path); err != nil {
+			return err
+		}
 		b, err := readRegular(filepath.Join(p.Dir, filepath.FromSlash(f.Path)), maxFile)
 		if err != nil {
 			return err
@@ -308,6 +331,9 @@ func VerifyInstalled(dir, manifestSHA string, files []File) error {
 		return errors.New("FILES_CHANGED: installed manifest differs from the approved one")
 	}
 	for _, f := range files {
+		if err := insideNoLinks(dir, f.Path); err != nil {
+			return fmt.Errorf("FILES_CHANGED: %v", err)
+		}
 		b, err := readRegular(filepath.Join(dir, filepath.FromSlash(f.Path)), maxFile)
 		if err != nil {
 			return fmt.Errorf("FILES_MISSING: %s: %v", f.Path, err)
