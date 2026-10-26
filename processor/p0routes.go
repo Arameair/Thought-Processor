@@ -48,6 +48,16 @@ func (a *App) p0Verified(ctx context.Context)(Pairing,string,error){
  if state!="VERIFIED" {return Pairing{},"",p0Fail(state,503,"Identity connection is not verified: "+state)}
  return *pr,base,nil
 }
+// Never show a green system connection when a required signed reply failed.
+func p0ConnectionFailure(e error)string{
+ var f *P0Failure
+ if errors.As(e,&f){
+  switch f.Code {
+  case "WRONG_SERVICE","CONNECTION_REMOVED","INCOMPATIBLE":return f.Code
+  }
+ }
+ return "AUTHORITY_UNAVAILABLE"
+}
 func (a *App) p0State(ctx context.Context, selected string)map[string]any {
  pr:=a.p0Pairing()
  base,status,conn:=p0Discover(ctx,pr,a.p0Configured())
@@ -58,7 +68,7 @@ func (a *App) p0State(ctx context.Context, selected string)map[string]any {
  "limitations":[]string{"No Identity grants or feature registration in this candidate","No runtime actions or source access","Publisher-signed release provenance unavailable","Processor owns no external processes"}}
  if conn!="VERIFIED" {return out}
  vals,e:=p0Read(ctx,*pr,base,"/api/v1/identities")
- if e!=nil {out["connection"]="AUTHORITY_UNAVAILABLE";out["message"]=e.Error();return out}
+ if e!=nil {out["connection"]=p0ConnectionFailure(e);out["message"]=e.Error();return out}
  ids,_:=vals["identities"].([]any)
  out["identities"]=ids
  exists:=false
@@ -68,7 +78,7 @@ func (a *App) p0State(ctx context.Context, selected string)map[string]any {
  var path string
  if selected!="" {path="/api/v1/identities/"+selected+"/features"}else{path="/api/v1/features"}
  fs,e:=p0Read(ctx,*pr,base,path)
- if e!=nil {out["message"]="Could not retrieve features: "+e.Error();return out}
+ if e!=nil {out["connection"]=p0ConnectionFailure(e);out["message"]="Could not retrieve features: "+e.Error();return out}
  features,_:=fs["features"].([]any)
  cards:=[]any{}
  installs:=map[string]any{}
