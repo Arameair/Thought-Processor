@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -29,7 +30,7 @@ import (
 const (
 	product    = "thought-processor"
 	protocol   = "thought-processor.diagnostic/0-experimental"
-	appVersion = "0.1.0-experiment"
+	appVersion = "0.2.0-gpt6-frictionless"
 )
 
 // BuildInfo is what the Go toolchain actually embedded. Anything missing is
@@ -65,11 +66,13 @@ func readBuild() BuildInfo {
 type Config struct {
 	DataDir string
 	Port    int
+	OpenBrowser bool // explicitly controlled; tests never auto-launch UI
 }
 
 func main() {
 	dataFlag := flag.String("data", "", "profile folder (default: $THOUGHT_PROCESSOR_DATA, then ~/.thought-processor/default)")
 	port := flag.Int("port", 7860, "loopback port to listen on (0 = any free port)")
+	openBrowser := flag.Bool("open", runtime.GOOS == "windows", "open private local workspace in the default browser (Windows default: true)")
 	flag.Parse()
 
 	dir := *dataFlag
@@ -97,7 +100,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	quit := make(chan struct{})
 	go func() { <-stop; close(quit) }()
-	if err := run(Config{DataDir: abs, Port: *port}, quit, nil, os.Stdout); err != nil {
+	if err := run(Config{DataDir: abs, Port: *port, OpenBrowser: *openBrowser && os.Getenv("PC_MANAGED_BY_CONTROLLER") != "1"}, quit, nil, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
@@ -157,6 +160,22 @@ func run(cfg Config, quit <-chan struct{}, ready chan<- *App, out interface{ Wri
 			fmt.Fprintf(out, "            (the code is also in %s; it changes every run)\n", prof.CodePath())
 		}
 		fmt.Fprintln(out, "  stop    : Ctrl+C here, or Stop Processor in the page")
+	}
+	// A direct Windows double-click can open its workspace without asking the
+	// operator to copy a port or a one-time link. Only the operator's local
+	// browser sees the fragment; it is removed by the page before further work.
+	// The launcher never starts Identity, Engine, or any external service.
+	if cfg.OpenBrowser && runtime.GOOS == "windows" {
+		link := fmt.Sprintf("http://127.0.0.1:%d/#code=%s", port, app.sess.Code())
+		go func() {
+			time.Sleep(450 * time.Millisecond)
+			cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", link)
+			if err := cmd.Start(); err != nil {
+				app.log.Add("lifecycle", "browser_open_failed", "", "Could not open the default browser; use the local link from this window")
+			} else if cmd.Process != nil {
+				_ = cmd.Process.Release()
+			}
+		}()
 	}
 	if ready != nil {
 		ready <- app
