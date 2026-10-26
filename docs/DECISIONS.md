@@ -4,6 +4,21 @@
 
 # Decisions and open questions
 
+## Owner-confirmed conflict resolutions — October 26, 2026
+
+[**Cross-repository decisions: authoritative October 26 register**](CROSS_REPO_DECISIONS_2026-10-26.md) · [Design discussion #15](https://github.com/Arameair/Thought-Processor/issues/15)
+
+1. **Interface vs first process:** Thought Processor is the normal human/admin interface. **Identity or Processor may start first**, provided both arrive at the same verified ready state for full operation. Startup sequence is flexible; unauthenticated discovery is not a ready state.
+2. **Install vs use:** GitHub repository visibility is only a **temporary prototype acquisition/install eligibility** rule. Identity separately authorizes specific identities and named source/action scopes; receiving features enforce. **Zero information-source grants by default.**
+3. **Lifecycle:** **Explicit Processor application exit** prompts **Shut down managed workspace (default)** or **Keep services running**. System-owned processes and descendants must be tracked, shut down cleanly when chosen, checked for orphans, and reported. No killing unowned/external services without separate authorization. **Closing a browser tab is not an explicit app exit.**
+4. **Pairing:** One operator-approved pairing; secure remembered credentials; automatic later reconnect to the **same verified peer**; explicit unpair/revoke. Pairing alone never grants data/feature access. Cryptographic mechanics remain open.
+5. **Offline security:** **Fail closed in the first prototype** if Identity is unreachable or a required grant cannot be verified; block new protected work and queued protected dispatch. **No offline grace/cached allows.** Keep process state distinct from authorization.
+6. **Memory:** Separate optional **future** feature, not implemented, designed or required in the current Processor prototype.
+7. **Sequence:** Identity concept established → **Processor UX/design now** → **Thought Engine next**. Canonical `Thought` vs `Thought-engine` remains open; no automatic replacement/migration.
+8. **Branch policy:** Design approval is not code, test evidence or owner Alpha promotion.
+
+The October 23–25 concepts preserved below may disagree with the above. Where they do, the October 26 confirmed choices govern **design**, while historic text remains for provenance.
+
 This log separates **owner direction**, **proposals**, and **confirmed implementation**. Avoid marking design assumptions as owner approval.
 
 ## Endorsed working distinction — 24 October 2026
@@ -16,7 +31,7 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 
 **New scope:** Identity is the system's durable authority for participants **including independently developed features**, their relationships and permission policies. Thought Processor combines that knowledge with live discovery to help establish permitted connections and provide developer-visible evidence; Thought Engine keeps cognition and actual worker heartbeat/API calls.
 
-**Selected behavior** (all still unimplemented here): a small shared connection core plus optional capabilities; automatic same-OS discovery with configured/manual remote fallback; one-time pairing through Identity; entity/scoped feature approvals; short bounded offline authorization; push-on-change plus occasional health checks; distributed logs and shared request traces; application cards with a single original UI preview; on-demand Flow map/timeline; verified version/test comparisons. Do not interpret connection discovery as authentication or feature approval.
+**Selected behavior** (all still unimplemented here): a small shared connection core plus optional capabilities; automatic same-OS discovery with configured/manual remote fallback; one-time pairing through Identity; entity/scoped feature approvals; **no offline grant allowance in v1 (fail-closed)**; push-on-change plus occasional health checks; distributed logs and shared request traces; application cards with a single original UI preview; on-demand Flow map/timeline; verified version/test comparisons. Do not interpret connection discovery as authentication or feature approval.
 
 **Open design questions:** hierarchical vs independent feature relationships, stable vs evolving Identity purpose, precise registry and pairing protocols, grant expiry and revocation scheme, canonical Engine and Memory boundaries, worker selection authority. [Research note and owner-supplied Grok critique](IDENTITY_EXPERIENCE_RESEARCH.md) · [issue for independent review](https://github.com/Arameair/Thought-Processor/issues/7).
 
@@ -60,12 +75,12 @@ This log separates **owner direction**, **proposals**, and **confirmed implement
 | ID | Question | Why it matters | Status |
 |---|---|---|---|
 | D-01 | Canonical Thought Engine repository and data migration | Prevent competing stores of truth | OPEN |
-| D-02 | Per-feed permission selection vs all enabled sources | Privacy, noise, operational cost | OPEN |
+| D-02 | Mechanism for per-identity and per-feed selection | **Default-deny and explicitly selected sources are confirmed.** Exact UI/API and enforcement mechanics remain open | OPEN implementation |
 | D-03 | Grant verification protocol and auth | Prevent one local service spoofing another | OPEN |
 | D-04 | On/off behavior for existing waiting observations | Durability, owner expectation, retention | OPEN |
 | D-05 | Filter-first vs model-first for high-volume logs | Throughput, costs, usefulness | OPEN |
 | D-06 | Worker adapter contract, routing and fallback | Model independence without fake reasoning | OPEN |
-| D-07 | Whether Processor UI and Engine ship together as one optional feature | Packaging/sales while keeping internal components separate | OPEN |
+| D-07 | Whether Processor UI and Engine ship together as one optional feature | Packaging/sales while keeping their runtime and ownership separate | OPEN |
 
 ## How to close a decision
 
