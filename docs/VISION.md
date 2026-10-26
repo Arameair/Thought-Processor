@@ -1,3 +1,7 @@
+> **Historical focus note (2026-10-26):** This page describes an earlier **Thought Engine-focused** Processor UI. The owner's later goal is a **system-wide operator workspace** (profiles, feature catalog, results/collections and diagnostics). Thought Processing remains an optional feature *within* that workspace. For current scope, see [README](../README.md) and [Design readiness](DESIGN_READINESS_2026-10-26.md). Earlier text is preserved to explain design evolution; it is not a competing product decision.
+
+---
+
 # Vision — a real feature control point
 
 **Status:** Design notes, not working software. Read [STATUS](STATUS.md) before treating a capability as implemented.
