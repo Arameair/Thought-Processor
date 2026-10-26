@@ -50,7 +50,7 @@ def request(base, path, data=None, csrf="", opener=None):
         if csrf:headers["X-TP-CSRF"]=csrf
     rq=urllib.request.Request(base+path,data=raw,headers=headers,method=method)
     try:
-        response=(opener or urllib.request).urlopen(rq,timeout=8)
+        response=opener.open(rq,timeout=8) if opener else urllib.request.urlopen(rq,timeout=8)
     except urllib.error.HTTPError as e:response=e
     with response:
         raw=response.read()
