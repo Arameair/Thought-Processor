@@ -1,6 +1,6 @@
 # Cross-repository decisions — October 26, 2026
 
-**Status:** Owner-confirmed **design** direction, coordinated across [Identity](https://github.com/Arameair/identity) and [Thought Processor](https://github.com/Arameair/Thought-Processor). These are **not** claims that secure protocols, lifecycle supervision, feature grants or release installations have been implemented or tested. Related discussion: [Processor design issue #15](https://github.com/Arameair/Thought-Processor/issues/15); [Identity architecture review #14](https://github.com/Arameair/identity/issues/14) and [authorization issue #15](https://github.com/Arameair/identity/issues/15).
+**Historical owner-confirmed October 26 design register.** The choices below record intent **at that date**. Since then P0 Alpha implements authenticated Identity–Processor pairing, and the P1 cleanup experiment implements limited installation/grant enforcement for a **pinned deterministic fixture**. The full Engine/Worker integration, lifecycle supervision and release security are **not** established. For October 27 decisions see [Issue #20](https://github.com/Arameair/Thought-Processor/issues/20); for code/evidence see [STATUS](STATUS.md). Related discussion: [Processor design issue #15](https://github.com/Arameair/Thought-Processor/issues/15); [Identity architecture review #14](https://github.com/Arameair/identity/issues/14) and [authorization issue #15](https://github.com/Arameair/identity/issues/15).
 
 ## Agreed decisions
 
