@@ -1,10 +1,10 @@
-> **Scope update — 2026-10-26:** The control/data-plane separation below remains important. However, Processor is now the **whole-system user/admin interface**, not solely a Thought Engine controller. Identity decisions are authoritative; receiving features enforce them; per-identity source access starts empty. The older Spark/Trace/Thought figure describes an experiment, while the later source Spark/Thread/Thought model is still conceptual. See [Design readiness](DESIGN_READINESS_2026-10-26.md) and [owner alignment](https://github.com/Arameair/Thought-Processor/blob/experiment/dynamic-feature-observation-design-20261025/docs/OWNER_DESIGN_ALIGNMENT_2026-10-25.md).
+> **Scope update — 2026-10-27:** The control/data-plane separation below remains important. However, Processor is now the **whole-system user/admin interface**, not solely a Thought Engine controller. Identity decisions are authoritative; receiving features enforce them; per-identity source access starts empty. The older Spark/Trace/Thought figure describes an experiment, while the later source Spark/Thread/Thought model is still conceptual. See [Design readiness](DESIGN_READINESS_2026-10-26.md) and [owner alignment](https://github.com/Arameair/Thought-Processor/blob/experiment/dynamic-feature-observation-design-20261025/docs/OWNER_DESIGN_ALIGNMENT_2026-10-25.md).
 
 ---
 
 # Architecture — control plane separate from evidence
 
-**Design target, not an implemented protocol.** Existing repositories implement different experiments. These notes do not assume they already interoperate.
+**Target architecture with partial P0/P1 implementation.** P0 Alpha implements paired Processor–Identity operations. P1 demonstrates scoped permission and a receiver-enforced flow **only with a pinned deterministic fixture**. Thought Engine and Fast AI Worker have not yet adopted the same grant contract. This conceptual overview is not a complete API spec. See [status](STATUS.md).
 
 ```text
    Identity ──(feature grant, identity ID, revocation)─────┐
@@ -31,9 +31,9 @@ The current Identity design also specifies **central organization with feature-o
 
 The owner clarified that **every independent feature has an identity** and that **Identity is the trusted system-level knowledge/policy authority**. Processor's job is to reconcile durable Identity-owned participant/relationship records with **which authorized service instance is actually running now**. It performs dynamic discovery, authorized connection assistance, status/trace correlation and real application previews. It **must not own Identity relationships, issue grants, require Project Controller or proxy every worker API request**.
 
-The Thought Engine owns actual observation processing, Sparks/Traces/Thoughts and decisions to call replaceable AI workers directly when authorized. Memory's future role as a separate continuity/retrieval layer remains an experimental question. This refinement supplements the previous conceptual diagram below, which should be read as a **proposed flow**, not an implemented protocol.
+Thought Engine owns actual observation processing, Sparks/Traces/Thoughts and decisions to call **replaceable, separately authorized** AI workers directly. **Identity creates the canonical subject ID; Engine maintains only subject-linked cognitive records and cannot override Identity grants.** Memory's future role as a separate continuity/retrieval layer remains an experimental question. This refinement supplements the previous conceptual diagram below, which should be read as a **proposed flow**, not an implemented protocol.
 
-**Selected behavioral design:** small core + optional capability interfaces; automatic local discovery plus configured/manual remote fallback; one-time Identity-approved pairing; scoped per-identity grants enforced by receiving services; short-lived bounded continuation during Identity outages; hybrid status reporting; distributed logs with shared correlation IDs; on-demand connection map and event timeline. **Wire format, complete identity graph, routing ownership, secure grant scheme and performance remain unproven/open.**
+**Selected behavioral design:** small core + optional capability interfaces; automatic local discovery plus configured/manual remote fallback; one-time approved pairing; scoped per-identity grants enforced by receiving services; **v1 fail-closed behavior on Identity outage (no cached offline allowance)**; hybrid status reporting; distributed logs with shared correlation IDs; on-demand connection map and event timeline. P0 pairing and P1 fixture grants exist; general Engine/Worker integration and production-grade trust remain unproven.
 
 ## Control plane
 
@@ -54,7 +54,7 @@ A log is not necessarily a Thought. The engine may buffer/deduplicate/filter fir
 
 A local port scan is **discovery only**. Confirm service identity, protocol version, installation identity and required capabilities; show whether the instance is external and who owns its lifecycle. Identity and Thought Processor must not kill, rebuild or take over an independently running Engine or worker merely because a port is open.
 
-No hard-coded worker address assumptions. Discovery can start with explicitly configured loopback ports or local registration files. Network authentication and secure identity-to-engine grants must be designed before multi-user or remote exposure. Loopback-only does not authenticate local callers.
+No hard-coded worker address assumptions. **Fast AI Worker is a backend candidate for Thought Engine, not a global worker for every feature; other features can use their own workers.** Discovery can start with explicitly configured loopback ports or local registration files. Network authentication and secure identity-to-engine grants must be designed before multi-user or remote exposure. Loopback-only does not authenticate local callers.
 
 ## Isolation and lifecycle
 
