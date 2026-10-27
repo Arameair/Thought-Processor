@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -99,6 +101,13 @@ func TestBrowserBoundaries(t *testing.T) {
 	}
 	if st, _ := x.post("/api/session", `{"code":"nope"}`, nil); st != 401 {
 		t.Fatal("wrong link accepted")
+	}
+}
+
+func TestPrivateOperatorLinkIsNeverPersisted(t *testing.T) {
+	x := start(t)
+	if _, err := os.Stat(x.a.Prof.CodePath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("private browser link persisted to profile runtime: %v", err)
 	}
 }
 
