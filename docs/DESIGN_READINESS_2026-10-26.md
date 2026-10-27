@@ -1,6 +1,6 @@
 # Thought Processor — readiness for product-experience design discussion
 
-**Reviewed October 26, 2026.** A document audit, **not** an implementation result, verified code review, owner acceptance or build approval.
+**Historical design-readiness review (October 26, 2026).** This page documents the design stage **at that date**, not current implementation state. Since then P0 was owner-promoted to a **runnable Alpha** and P1 cleanup is a separately implemented/unpromoted experiment. [Current status](STATUS.md) · [Owner design thread #20](https://github.com/Arameair/Thought-Processor/issues/20). The original audit was not an implementation result or release approval.
 
 ## Why this reset matters
 
@@ -28,7 +28,7 @@ The first running Processor prototype was a diagnostic shell used to check Ident
 | --- | --- |
 | **Old Processor = only the Thought feature's operations** versus **Processor = whole-system interface** | The latter is current owner direction. Old Engine-centric diagrams are research/history. |
 | **Open Identity first** versus **use Processor as primary UI** | Normal use is Processor-first. Identity direct UI is a candidate diagnostic/recovery route. Secure bootstrap details remain OPEN. |
-| `docs/STATUS.md` (Oct 23) says “none runnable” versus real Oct 25–26 Go experiments | `main`/`alpha`/`stable` are docs-only; some unpromoted **other branches** do run. Do not mislabel candidate as Alpha. |
+| `docs/STATUS.md` (Oct 23) said “none runnable” versus later executable prototypes | **Historical only:** `main` and `stable` remain docs-only; **`alpha` is now a runnable owner-promoted P0**. P1 cleanup is unpromoted; see [status](STATUS.md). |
 | Old Engine **Spark → Trace → Thought** versus newer source-feature **Spark → Thread → Thought** | Different prototype and design stages. Don't silently turn a new proposal into implemented data schema. |
 | GitHub repo visibility used in a temporary install demo versus genuine publisher entitlement | Prototype rule `repo-visibility-v0` is not an approved general security policy. Installing, starting, attaching and ingesting need separate authority. |
 | Processor↔Engine attach code vs Processor↔Identity pairing HMAC | Two experimental trust mechanisms; do not assume one constitutes secure administrator identity or transferable runtime grants. |
