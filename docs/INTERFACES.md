@@ -1,6 +1,6 @@
-# Interfaces — proposed boundaries (not yet implemented)
+# Interfaces — conceptual contracts and historical proposals
 
-**All examples in this file are design proposals. No API, authentication scheme or status contract is claimed to exist in Thought-Processor yet.**
+**Examples in this file are proposals, not today's wire contract.** P0 Alpha now implements authenticated Identity pairing, and the separate P1 cleanup experiment implements fixture-only install/grant/ticket flows. Thought Engine and Fast AI Worker have **not** adopted the required receiver checks. Consult [status](STATUS.md) and actual matching branch sources before integration.
 
 ## Identity → feature authority
 
@@ -11,7 +11,7 @@ Questions Processor and Engine must be able to answer:
 - Who changed a grant, and when? Can the engine verify it **at action time**?
 - What is the effective revocation behavior when Identity is unreachable?
 
-Proposed default: deny new privileged processing when a grant cannot be verified, preserve existing history, make outage/revocation visible. Define offline grace rules explicitly before deployment.
+**Owner-selected v1 policy:** deny new privileged processing and queued protected dispatch when a grant cannot be verified; preserve existing history, and show outage/revocation distinctly. **No cached offline grace** is authorized.
 
 ## Feed → Thought Engine
 
