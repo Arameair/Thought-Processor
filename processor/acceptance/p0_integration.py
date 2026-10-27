@@ -55,11 +55,11 @@ def start(name, cmd):
         def drain():
             with open(W / (name + ".console.txt"), "w") as log:
                 for line in p.stdout:
-                    match = re.search(r"http://127\\.0\\.0\\.1:[0-9]+/#code=[0-9a-f]+", line)
+                    match = re.search(r"http://127\.0\.0\.1:[0-9]+/#code=[0-9a-f]+", line)
                     if match:
                         operator_links[name] = match.group(0)
                     if "#code=" in line or "#key=" in line:
-                        log.write("private local browser link: [REDACTED]\\n")
+                        log.write("private local browser link: [REDACTED]\n")
                     else:
                         log.write(line)
                     log.flush()
