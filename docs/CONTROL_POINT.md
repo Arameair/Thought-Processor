@@ -1,4 +1,4 @@
-> **Earlier wireframe — not the current first-screen specification (2026-10-26).** This page illustrates the diagnostic/Engine-specific controls considered before the owner's system-wide Processor direction. The starting UX is being reviewed at [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15); see [Design readiness](DESIGN_READINESS_2026-10-26.md). All numbers in the old wireframe are placeholders.
+> **Earlier wireframe — not the current first-screen specification (historical October 26 design).** P0 is now runnable Alpha and P1 has an unpromoted deterministic-fixture implementation; this remains a conceptual wireframe, not live functionality. See [current status](STATUS.md). This page illustrates the diagnostic/Engine-specific controls considered before the owner's system-wide Processor direction. The starting UX is being reviewed at [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15); see [Design readiness](DESIGN_READINESS_2026-10-26.md). All numbers in the old wireframe are placeholders.
 
 ---
 
@@ -34,7 +34,7 @@ The operator should see: authenticated Identity service; authenticated Engine se
 
 For this first integration, show **AUTHORITY UNAVAILABLE** on Identity outage and verify the Engine fails closed without a new model call. Recheck queued events at worker dispatch. Already-sent model data cannot be retrospectively removed after a grant is revoked.
 
-This is a **planned UI slice only**. Processor is currently documentation-only; the backend Identity↔Engine enforcement should be proven independently before treating Processor's display as end-to-end evidence.
+This is a **historical proposed UI slice**. The owner has since promoted runnable Processor P0 Alpha, and an unpromoted P1 fixture demonstrates limited Identity grants. Actual Identity↔Thought Engine enforcement is still unproven; do not treat this drawing as a live UI or its placeholder values as evidence.
 
 ## Required panels
 
