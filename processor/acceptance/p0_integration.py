@@ -10,7 +10,7 @@ Windows run and not a real release.
 DIR for --identity-src is a checkout of Arameair/identity at
 experiment/feature-contract-20261026.
 """
-import argparse, hashlib, http.cookiejar, json, os, re, signal, subprocess, sys, time, urllib.request
+import argparse, hashlib, http.cookiejar, json, os, re, signal, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -28,6 +28,7 @@ FX, IP, IP2, IP3, PP = 8931, 7931, 7932, 7933, 7961
 LOC = W / "locators"
 ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001")
 results, procs = [], {}
+operator_links = {}  # private one-time URLs kept in memory only, never report logs
 
 
 def rec(ok, name, detail=""):
@@ -46,8 +47,26 @@ def build():
 
 
 def start(name, cmd):
-    log = open(W / (name + ".console.txt"), "w")
-    p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
+    if name == "processor":
+        # The application no longer writes a private link to operator-link.txt.
+        # Read its stdout into memory and redact any private URL before logging.
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             env=ENV, text=True, bufsize=1)
+        def drain():
+            with open(W / (name + ".console.txt"), "w") as log:
+                for line in p.stdout:
+                    match = re.search(r"http://127\\.0\\.0\\.1:[0-9]+/#code=[0-9a-f]+", line)
+                    if match:
+                        operator_links[name] = match.group(0)
+                    if "#code=" in line or "#key=" in line:
+                        log.write("private local browser link: [REDACTED]\\n")
+                    else:
+                        log.write(line)
+                    log.flush()
+        threading.Thread(target=drain, daemon=True).start()
+    else:
+        log = open(W / (name + ".console.txt"), "w")
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
     procs[name] = p
     return p
 
@@ -83,11 +102,10 @@ def start_processor():
     start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser"])
     assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
     for _ in range(50):
-        f = W / "processor-profile" / "runtime" / "operator-link.txt"
-        if f.exists():
-            return f.read_text().strip()
+        if operator_links.get("processor"):
+            return operator_links.pop("processor")
         time.sleep(0.1)
-    raise SystemExit("no operator link")
+    raise SystemExit("no private operator link received from Processor stdout")
 
 
 def fixture(path):
