@@ -21,9 +21,9 @@ experiment/alternate-YYYYMMDD ─┼── compare evidence → owner selects �
 - `main`: public-facing lane when the owner explicitly approves a release. The repository can remain private regardless of branch name.
 - Document archive and rollback refs before advancing an already-tested candidate; avoid unsafe force-updates.
 
-### Bootstrap exception for this empty repository
+### Historical bootstrap exception for the originally empty repository
 
-Initialize `main` with **documentation only**, then create `stable` and `alpha` at the same docs commit. This is *not* a runnable program or a promotion from experiment. Then create new experiments from `alpha`, as normal.
+Initially `main`, `stable` and `alpha` were initialized at a documentation-only commit. **That is no longer the current Alpha state**: the owner subsequently promoted runnable P0 at [`ae9e96b`](https://github.com/Arameair/Thought-Processor/commit/ae9e96bb6004f64fe11edf40ff32dc1bd6ade47e). `stable` remains the old documentation snapshot and `main` is public-facing documentation. Branch new work from **current Alpha**, not the historic bootstrap commit. Promotion remains manual. See [status](STATUS.md).
 
 ## Working on a feature
 
