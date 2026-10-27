@@ -1,8 +1,10 @@
-> **Historical roadmap clarification (2026-10-26):** This roadmap was written for proving the early Identity-to-Engine authorization and thinking pipeline, not for designing Processor's **first usable system-wide operator workspace**. The new immediate UX design discussion is [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15) and [Design readiness](DESIGN_READINESS_2026-10-26.md). Security enforcement remains mandatory before any real permission-management claim; newer priorities do not mean this older research has been completed.
+> **Historical roadmap clarification (2026-10-27):** This roadmap was written for proving the early Identity-to-Engine authorization and thinking pipeline, not for designing Processor's **first usable system-wide operator workspace**. The new immediate UX design discussion is [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15) and [Design readiness](DESIGN_READINESS_2026-10-26.md). Security enforcement remains mandatory before any real permission-management claim; newer priorities do not mean this older research has been completed.
+
+**October 27 status correction:** The owner has since promoted a runnable P0 Alpha, and the P1 cleanup experiment reports a real-process fixture grant workflow. The older gate table below is **historical**, not today's test ledger. The **next gate** is the owner's P1 test, followed by real Worker/Engine Identity authorization. See [status](STATUS.md), [P1 START HERE](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/START_HERE.md), and [voice architecture decisions](https://github.com/Arameair/Thought-Processor/issues/20).
 
 ---
 
-# Roadmap — prove one real feature end-to-end
+# Historical roadmap — prove one real feature end-to-end
 
 Each gate is independent, should leave existing applications usable, and has an explicit **pass condition**. The dates below are not release promises.
 
