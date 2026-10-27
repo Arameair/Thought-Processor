@@ -24,4 +24,4 @@ A model's claim that an integration works **is not evidence that it works**. In 
 
 This notice acknowledges AI collaboration; it does not assert legal authorship, copyright ownership, licensing rights, or that a particular AI provider endorses the project. It does not identify every individual prompt or tool used. The commit history and experiment notes should provide more specific provenance where available.
 
-**Status at disclosure:** This repository's documented foundation is AI-assisted, with human direction. A live Thought Processor implementation has **not** been verified here.
+**Status updated October 27, 2026:** P0 is an owner-promoted runnable Alpha development baseline, while the unpromoted P1 cleanup branch has Claude-reported deterministic-fixture real-process integration and negative-test evidence. That is **not** an owner-accepted end-user product, a validated live AI system or a production security certification. See [current status](STATUS.md), [project case study](PROJECT_JOURNEY.md), and [credits](CREDITS.md).
