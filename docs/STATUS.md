@@ -1,52 +1,55 @@
-# Thought Processor — verified status and branch ledger
+# Thought Processor — implementation status and evidence
 
-**Reviewed:** October 26, 2026. This ledger separates **working source**, **reported tests**, **owner acceptance**, and **approved release branches**. A repository or README claim is never a substitute for actual evidence.
+**Reviewed:** October 27, 2026. Distinguish **code present**, **reported developer testing**, **independent review**, **owner-observed acceptance** and **branch promotion**. No publication or production security is implied.
 
-## Executive status
+## Current snapshot
 
-- **The intended system-wide user/admin experience is still a DESIGN.** See [design readiness](DESIGN_READINESS_2026-10-26.md) and [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15).
-- **Runnable Go candidates exist** outside the release branches. The October 25 diagnostic shell can run, discover local Identity **without authenticating it**, and report diagnostics; October 26 Engine attachment/observation tests include a **fixture worker**.
-- **No runnable Alpha or Stable release is established.** Main/Alpha/Stable do **not** contain the current experimental application. No code or candidate was promoted by documentation cleanup.
-- **Production-grade identity/feature administration is not yet proven.** Identity grants, publisher entitlement, real Engine authorization, secure bootstrapping and usable system-wide profile/catalog interactions need separate contracts and evidence.
+**P0 runnable Alpha: yes. P1 enhanced prototype: experimental only. Owner P1 acceptance: pending. Stable executable release: no.**
 
-## Owner-controlled lanes
+- `alpha` contains the owner-promoted runnable P0 service, [`ae9e96bb6004f64fe11edf40ff32dc1bd6ade47e`](https://github.com/Arameair/Thought-Processor/commit/ae9e96bb6004f64fe11edf40ff32dc1bd6ade47e). Its matching Identity P0 baseline is [`c8c0a54`](https://github.com/Arameair/identity/commit/c8c0a54ab333077ccbfbd86c5952fb8a00b55dc1). [P1 planning/promotion context](https://github.com/Arameair/Thought-Processor/issues/19).
+- The latest P1 cleanup experiment [`experiment/p1-cleanup-claude-20261026`](https://github.com/Arameair/Thought-Processor/tree/experiment/p1-cleanup-claude-20261026), with matching Identity experiment, adds first Admin, persistent installed-feature identities, approval and grant workflows, a supervised deterministic test feature, receiver-side checks and revoke/outage handling.
+- [Claude's cleanup test report](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/P1_CLEANUP_REPORT_20261026.md) reports **81/81 integrated checks**, **15/15 security findings checks**, **27/27 P0 regressions**, and a UI walkthrough. Independent [Grok QA](https://github.com/Arameair/Thought-Processor/issues/22) identified defects in the preceding P1 build; Claude reports corrections in the cleanup branch. The reported cleanup results **are not an independently rerun audit or the owner's hands-on pass**.
+- The actual **Fast AI Worker and Thought Engine are not integrated** as P1 authorized receiving features. The supported test feature is a pinned **deterministic Python fixture, not AI**.
 
-| Lane | Current position | Verdict |
+## Branch ledger
+
+| Branch | What exists | Decision/evidence status |
 | --- | --- | --- |
-| [`main`](https://github.com/Arameair/Thought-Processor/tree/main) | Documentation, architecture decisions and navigation | Public explanation, **not** a runnable Processor |
-| [`alpha`](https://github.com/Arameair/Thought-Processor/tree/alpha) | Documentation baseline `9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a` | No functional Alpha promotion |
-| [`stable`](https://github.com/Arameair/Thought-Processor/tree/stable) | Same original documentation baseline | No functional Stable snapshot |
-| `alpha-candidate-20261025` | Runnable diagnostic trial, see below | Experimental, not approved Alpha |
-| `alpha-candidate-20261026` | Added Engine attachment/observation paths | Experimental, not approved Alpha |
+| [`main`](https://github.com/Arameair/Thought-Processor/tree/main) | Public project explanation and documentation. **No runtime source on main.** | Documentation/portfolio lane. |
+| [`alpha`](https://github.com/Arameair/Thought-Processor/tree/alpha) | Runnable P0 Go feature onboarding baseline, exact SHA above. | **Owner-promoted development baseline**, not a general release. |
+| [`stable`](https://github.com/Arameair/Thought-Processor/tree/stable) | Original documentation-only snapshot [`9fac9fa`](https://github.com/Arameair/Thought-Processor/commit/9fac9fa44cb020bb6f8aa6bcb1e9faeda6e0b47a). | No runnable stable accepted. |
+| [P1 initial build](https://github.com/Arameair/Thought-Processor/tree/experiment/p1-feature-foundation-claude-20261026) | Feature-install/grants concept implemented against fixture, before hardening. | Superseded by P1 cleanup for testing; no promotion. |
+| [P1 cleanup](https://github.com/Arameair/Thought-Processor/tree/experiment/p1-cleanup-claude-20261026) | Hardened P1 code and test evidence. | **Next owner hands-on candidate; not approved Alpha.** |
+| [October 26 Engine attach prototype](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261026) | Direct Engine attach and observation loop with labeled test worker. | Separate experiment; its attach token **isn't** an Identity grant. |
+| [October 25 diagnostic candidate](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261025) | Diagnostic shell and unverified discovery. [Owner trial](https://github.com/Arameair/Thought-Processor/issues/12). | Historic trial; not today's P1. |
 
-## Experiments and evidence
+**Provenance:** Branch descriptions and inherited READMEs may be outdated. Inspect `git branch --show-current`, `git rev-parse HEAD` and the matched Identity revision before testing.
 
-| Branch (not a release) | Actual scope and evidence | Caveat |
+## What P1 proves, and what it does not
+
+| Area | P1 experimental evidence | Not yet established |
 | --- | --- | --- |
-| [October 25 diagnostic candidate](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261025), SHA `9e2d549e69eaa7e6c3b18246e9b5db82f29d3aa0` | Processor starts, exposes a diagnostic shell, persists local settings, discovers Identity via loopback health. [Owner trial #12](https://github.com/Arameair/Thought-Processor/issues/12) reports runs and detection in Project Controller. | **Found/unverified**, not authorized, not useful as the whole-system product UI. |
-| [October 26 Engine attach candidate](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261026), SHA `787d828e2996d7749827d74334266f55c5fb8eb2` | Experimental attach-code handshake, send observation, inspect statuses/Thoughts, restart persistence described in candidate and [design notes](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-design-notes-20261025/docs/SERIOUS_PROTOTYPE_DESIGN_NOTES_2026-10-25.md). | Real processes plus a **labelled TEST FIXTURE worker** in reported loop; **not** Identity-governed ingestion, a live model usefulness pass or the target UX. |
-| [Engine install experiment](https://github.com/Arameair/Thought-Processor/tree/experiment/install-thought-engine-20261026), SHA `9596c046fb4dcd2a0a8ed119ae4f673804bb230c` | Identity pairing, temporary GitHub repository visibility check, size/hash-verified Engine install; [demo evidence](https://github.com/Arameair/identity/blob/experiment/engine-access-pairing-20261026/docs/ENGINE_INSTALL_DEMO_20261026.md). | Tested with **simulated GitHub**; no real published release, general entitlement or separately approved Engine start/attach/ingest. |
-| [October 25 owner-aligned design](https://github.com/Arameair/Thought-Processor/tree/experiment/dynamic-feature-observation-design-20261025) | Multi-identity reusable features, default-deny per-source access, common-format source Sparks, Threads and identity-owned Thoughts. | Documentation-only target, **not an implemented replacement** of Spark/Trace/Thought v1. |
-| [October 26 Processor experience workshop](https://github.com/Arameair/Thought-Processor/tree/experiment/processor-experience-design-20261026) | Proposed Profiles / Catalog / Collections workflow with P0/P1/P2 acceptance gates and conflict register. | **Discussion only**; no build authorized. |
+| Processor + Identity | Actual processes, signed pairing, explicit Admin approval and unique installation identities. | End-user acceptance on the owner's target machine for this cleanup SHA. |
+| Feature lifecycle | Install the **pinned trusted fixture** with zero grants; start, stop, restart and self-test. | Real third-party install or signed publisher provenance. |
+| Scoped authorization | One action granted to one requester, destination and subject identity; negative/revocation/outage/replay tests reported. | Feature-independent security certification, true OS isolation and general Engine/Worker enforcement. |
+| Usability | Automated UI tour and developer runbook. | Owner's judgment on flow, clarity and ease of setup on separate machines. |
+| Product architecture | Thought Processor coordinates; Identity decides; features own their work. | Autonomous reasoning/recommendations and real AI integration. |
 
-**No new-runtime test was performed for this October 26 public-documentation audit.** Older real-process and fixture claims are attributed to their respective candidate evidence; verify each selected exact SHA/environment again before accepting a promotion.
+## Risks and outstanding integration conflicts
 
-## Needed before declaring the new Processor experience functional
+1. **OS isolation:** same-OS-user hostile processes can reach local files and loopback; fixture pinning is not sandboxing.
+2. **Admin recovery and strong authentication:** passphrase P1 authenticator exists but Windows Hello/passkey, full backup/recovery and new-user security are incomplete.
+3. **Legacy Engine permissions:** Engine-local identities/processing switches and older attach routes do not yet enforce the canonical Identity grant.
+4. **Worker protection:** Fast AI Worker P0 supports synthetic demo requests; true Identity-authorized processing and per-identity read protections still need implementation. [Worker handoff](https://github.com/Arameair/fast-ai-worker/issues/3).
+5. **Feature dependency policy:** bundling the AI worker with Engine in one explicit installation review remains a **proposal**, not an owner-approved installer.
+6. **Not a real model:** no claim of useful cognition or live Taalas access from a deterministic fixture.
 
-1. An independently running Processor that serves a user-usable workspace rather than only a developer diagnostic shell.
-2. Identity-backed, **authenticated** profile and feature read contracts (or an explicit *blocked/unverified* screen until present), with separation of data and permissions by selected identity.
-3. One real supported operator action and its actual authority and feature receipt. Don't call a local UI toggle a permission grant.
-4. Honest empty, offline, denied, unpaired, installed-but-disabled, queued/failed and unsupported states.
-5. Owner testing on actual target Windows system, no mandatory Project Controller, independent process restarts, exact SHA and redacted diagnostics.
-6. Explicit KEEP/REVISE/REJECT and separate promotion approval.
+## Owner-confirmed design rules, October 27
 
-## Shared status vocabulary
+Identity owns canonical IDs, grants and permission decisions. Processor may coordinate creating a disconnected identity with **zero grants**, which can recommend features but cannot run protected actions without authority. Thought Engine holds reasoning/history keyed to Identity IDs, and the intended Fast AI Worker is a replaceable processing utility. **No protected route may bypass Identity.** Grants can support autonomous work when already valid; missing/revoked/expired grants and Identity outages fail closed. See [owner design thread #20](https://github.com/Arameair/Thought-Processor/issues/20).
 
-- **DESIGN ONLY:** discussed, not coded.
-- **CODE PRESENT / UNVERIFIED:** inspectable source, no sufficient runtime evidence.
-- **FIXTURE-TESTED:** test uses simulated dependent services or a fake worker.
-- **LIVE PROCESS-TESTED:** actual independent processes communicate, *not necessarily authenticated or useful cognition*.
-- **OWNER VERIFIED:** the user ran a reproducible scenario and accepted that scoped outcome.
-- **PROMOTED TO ALPHA:** owner explicitly moved an accepted candidate and recorded rollback; **not currently done**.
+## Next acceptance gate
 
-[Design readiness](DESIGN_READINESS_2026-10-26.md) · [Backlog](BACKLOG.md) · [Release workflow](WORKFLOW.md) · [Current design discussion #15](https://github.com/Arameair/Thought-Processor/issues/15).
+Owner runs the [matched P1 START HERE](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/START_HERE.md) using fresh disposable profiles, documenting the two exact SHAs, Windows/WSL environment, GitHub real vs fixture sign-in, Admin consent, identity persistence, install with zero grants, denied/allowed/revoked request, outage, redacted logs, and **KEEP / REVISE / REJECT**. Only afterward decide whether to promote an exact commit.
+
+[README](../README.md) · [Case study](PROJECT_JOURNEY.md) · [Architecture](ARCHITECTURE.md) · [Decisions](DECISIONS.md) · [Workflow](WORKFLOW.md).
