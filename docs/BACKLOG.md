@@ -1,8 +1,14 @@
 # Thought Processor — active design backlog
 
-**Verified October 26, 2026:** **7 open issues (#2, #4, #6, #7, #8, #13, #15), 7 historical issues closed as superseded (#1, #3, #9, #10, #11, #12, #14), and 0 open pull requests**. PR #5 was closed without merging. Older branches, evidence and conversation remain in GitHub history.
+**Historical triage snapshot — October 26, 2026:** The previous open/closed issue counts reflected that day's design stage, **not today's issue list**. Later P0/P1 build, review and owner voice handoffs now exist. Use the [live GitHub issues](https://github.com/Arameair/Thought-Processor/issues) for current counts, [Issue #20](https://github.com/Arameair/Thought-Processor/issues/20) for confirmed cross-repo decisions, and [STATUS](STATUS.md) for implementation evidence.
 
-## First stop: one design hub
+## Current P0/P1 engineering and owner review
+
+- [#19 — P1 feature plan](https://github.com/Arameair/Thought-Processor/issues/19): owner-promoted P0 and next integration goals.
+- [#20 — Voice architecture decisions](https://github.com/Arameair/Thought-Processor/issues/20): Identity, Processor, Engine, Worker responsibilities and settled security boundaries.
+- [#21 — Initial P1 build](https://github.com/Arameair/Thought-Processor/issues/21), [#22 — adversarial QA](https://github.com/Arameair/Thought-Processor/issues/22), [#23 — P1 cleanup](https://github.com/Arameair/Thought-Processor/issues/23): developer evidence and acceptance caveats. P1 is **not** promoted.
+
+## Historical first stop: one design hub
 
 **[#15 — First usable Thought Processor workspace](https://github.com/Arameair/Thought-Processor/issues/15)** is the focus of the current collaboration: a small, real **system-wide** Processor experience (proposed Profiles → Catalog → Collections). The [October 26 discussion document](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) lists prototype boundaries and owner acceptance criteria. **It is design only. No build is authorized.**
 
