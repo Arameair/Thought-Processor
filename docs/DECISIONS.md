@@ -1,8 +1,17 @@
-> **Current design register — 2026-10-26:** The owner confirmed **Thought Processor is the normal human/admin interface for the entire system**, while **Identity owns security/permission decisions** and **the receiving feature enforces them**. New identities/features have **no information-source access without approval**. Older Engine-only control-point and Identity-first launch statements below describe the historical design stage; do not treat them as newer approved requirements. **Begin with [Design readiness](DESIGN_READINESS_2026-10-26.md), [the current workshop](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) and [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15).** This banner is a documentation reconciliation, not authorization to implement or promote.
+> **Current design register — 2026-10-27:** The owner confirmed **Thought Processor is the normal human/admin interface for the entire system**, while **Identity owns security/permission decisions** and **the receiving feature enforces them**. New identities/features have **no information-source access without approval**. Older Engine-only control-point and Identity-first launch statements below describe the historical design stage; do not treat them as newer approved requirements. **Begin with [Design readiness](DESIGN_READINESS_2026-10-26.md), [the current workshop](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) and [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15).** This banner is a documentation reconciliation, not authorization to implement or promote.
 
 ---
 
 # Decisions and open questions
+
+## Owner-confirmed additions — October 27, 2026
+
+- **Canonical IDs:** Identity owns the one durable identity record. Processor requests creation; Thought Engine references that Identity ID for thought/history and cannot create a competing canonical identity.
+- **Autonomy with no privilege escalation:** Processor may create a disconnected identity with zero grants. An identity may recommend features, but a suggestion cannot install, run, or access data. Routine work may use previously approved valid grants for the specific subject, destination and capability without re-approval on each call.
+- **No protected bypass:** Identity remains the authorization authority. The receiving Engine and Worker enforce independently; local Engine toggles or attach tokens cannot grant access. New protected work and queued dispatch fail closed on missing/revoked/expired grants or Identity outage.
+- **Replaceable worker:** Fast AI Worker is intended as a Thought Engine backend utility, not the only or permanent backend and not an ecosystem-wide worker for every feature. Dependency bundling/installation remains open.
+
+Owner design thread: [Issue #20](https://github.com/Arameair/Thought-Processor/issues/20). These decisions do **not** claim Engine/Worker code complies yet. Current [P0/P1 implementation status](STATUS.md).
 
 ## Owner-confirmed conflict resolutions — October 26, 2026
 
