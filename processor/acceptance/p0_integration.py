@@ -10,7 +10,7 @@ Windows run and not a real release.
 DIR for --identity-src is a checkout of Arameair/identity at
 experiment/feature-contract-20261026.
 """
-import argparse, hashlib, http.cookiejar, json, os, re, signal, subprocess, sys, time, urllib.request
+import argparse, hashlib, http.cookiejar, json, os, re, signal, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -28,6 +28,7 @@ FX, IP, IP2, IP3, PP = 8931, 7931, 7932, 7933, 7961
 LOC = W / "locators"
 ENV = dict(os.environ, IDENTITY_LOCATOR_DIR=str(LOC), IDENTITY_GITHUB_CLIENT_ID="IvFIXTURE00000001")
 results, procs = [], {}
+operator_links = {}  # private one-time URLs kept in memory only, never report logs
 
 
 def rec(ok, name, detail=""):
@@ -46,8 +47,26 @@ def build():
 
 
 def start(name, cmd):
-    log = open(W / (name + ".console.txt"), "w")
-    p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
+    if name == "processor":
+        # The application no longer writes a private link to operator-link.txt.
+        # Read its stdout into memory and redact any private URL before logging.
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             env=ENV, text=True, bufsize=1)
+        def drain():
+            with open(W / (name + ".console.txt"), "w") as log:
+                for line in p.stdout:
+                    match = re.search(r"http://127\.0\.0\.1:[0-9]+/#code=[0-9a-f]+", line)
+                    if match:
+                        operator_links[name] = match.group(0)
+                    if "#code=" in line or "#key=" in line:
+                        log.write("private local browser link: [REDACTED]\n")
+                    else:
+                        log.write(line)
+                    log.flush()
+        threading.Thread(target=drain, daemon=True).start()
+    else:
+        log = open(W / (name + ".console.txt"), "w")
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV)
     procs[name] = p
     return p
 
@@ -80,14 +99,33 @@ def start_identity(name, port, data):
 
 
 def start_processor():
-    start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser"])
-    assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
-    for _ in range(50):
-        f = W / "processor-profile" / "runtime" / "operator-link.txt"
-        if f.exists():
-            return f.read_text().strip()
-        time.sleep(0.1)
-    raise SystemExit("no operator link")
+    # Never send the private URL through normal stdout, logs, files or argv.
+    # FD is inherited anonymously by the child and delivered only to memory.
+    read_fd, write_fd = os.pipe()
+    try:
+        cmd = [str(W / "thought-processor"), "-port", str(PP),
+               "-data", str(W / "processor-profile"), "-no-browser",
+               "-private-link-fd", str(write_fd)]
+        log = open(W / "processor.console.txt", "w")
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV,
+                             pass_fds=(write_fd,))
+        procs["processor"] = p
+        os.close(write_fd)
+        write_fd = -1
+        import select
+        ready, _, _ = select.select([read_fd], [], [], 10)
+        if not ready:
+            raise SystemExit("private pipe handoff timed out")
+        link = os.read(read_fd, 256).decode("ascii").strip()
+        assert re.fullmatch(r"http://127\.0\.0\.1:[0-9]+/#code=[0-9a-f]{48}", link), "invalid private pipe handoff"
+        assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
+        assert not (W / "processor-profile" / "runtime" / "operator-link.txt").exists(), "private link persisted"
+        assert "#code=" not in (W / "processor.console.txt").read_text(), "private link leaked to output"
+        return link
+    finally:
+        os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
 
 
 def fixture(path):

@@ -73,8 +73,11 @@ func (a *App) Run(ctx context.Context, ln net.Listener, ready func(link string))
 		}
 	}
 	a.Port = ln.Addr().(*net.TCPAddr).Port
+	// The operator's one-time browser link stays in process memory and is
+	// delivered only through the ready callback. Never persist it to a
+	// profile/runtime file: even a short-lived file violates the private-link
+	// guarantee of the TheBrain development-control prototype.
 	link := fmt.Sprintf("http://127.0.0.1:%d/#code=%s", a.Port, a.Sess.Code())
-	store.WriteFile(a.Prof.CodePath(), []byte(link+"\n"))
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()

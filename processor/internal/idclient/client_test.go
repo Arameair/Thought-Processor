@@ -151,6 +151,8 @@ func TestDiscoveryUsesLocatorsAndLoopbackOnly(t *testing.T) {
 	mode := ""
 	srv := fakeIdentity(t, "idn_bbbbbbbbbbbbbbbbbbbbbbbb", &mode)
 	defer srv.Close()
+	// Discovery tests must never probe an unrelated real Identity at 7790.
+	t.Setenv("THOUGHT_PROCESSOR_IDENTITY_DISCOVERY_DEFAULT", srv.URL)
 	loc := t.TempDir()
 	t.Setenv("IDENTITY_LOCATOR_DIR", loc)
 	os.WriteFile(filepath.Join(loc, "idn_bbbbbbbbbbbbbbbbbbbbbbbb.json"), []byte(`{"base_url":"`+srv.URL+`","identity_system_id":"idn_bbbbbbbbbbbbbbbbbbbbbbbb"}`), 0o600)

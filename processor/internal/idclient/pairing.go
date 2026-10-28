@@ -171,7 +171,16 @@ func Discover(ctx context.Context, extra ...string) []Candidate {
 	for _, l := range ReadLocators() {
 		try(l.BaseURL, l.IdentitySystemID, l.Profile)
 	}
-	try(DefaultURL, "", "")
+	// Tests may replace the default probe with a loopback fake, so a live
+	// Identity on port 7790 is never contacted by isolated test runs.
+	// An invalid override fails closed rather than falling back to 7790.
+	defaultProbe := DefaultURL
+	if override, set := os.LookupEnv("THOUGHT_PROCESSOR_IDENTITY_DISCOVERY_DEFAULT"); set {
+		defaultProbe = override
+	}
+	if u, err := LoopbackOnly(defaultProbe); err == nil {
+		try(u, "", "")
+	}
 	for _, e := range extra {
 		if u, err := LoopbackOnly(e); err == nil {
 			try(u, "", "")

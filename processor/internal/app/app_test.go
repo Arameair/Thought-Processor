@@ -3,10 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,7 +26,14 @@ type h struct {
 }
 
 func start(t *testing.T) *h {
-	t.Setenv("IDENTITY_LOCATOR_DIR", t.TempDir()) // no real Identity is found
+	t.Setenv("IDENTITY_LOCATOR_DIR", t.TempDir()) // no real Identity locators
+	// A deliberately unavailable fake Identity owns a random loopback port.
+	// Neither discovery nor the protected-action test probes real port 7790.
+	fakeIdentity := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "test Identity unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(fakeIdentity.Close)
+	t.Setenv("THOUGHT_PROCESSOR_IDENTITY_DISCOVERY_DEFAULT", fakeIdentity.URL)
 	prof, err := store.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +101,13 @@ func TestBrowserBoundaries(t *testing.T) {
 	}
 	if st, _ := x.post("/api/session", `{"code":"nope"}`, nil); st != 401 {
 		t.Fatal("wrong link accepted")
+	}
+}
+
+func TestPrivateOperatorLinkIsNeverPersisted(t *testing.T) {
+	x := start(t)
+	if _, err := os.Stat(x.a.Prof.CodePath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("private browser link persisted to profile runtime: %v", err)
 	}
 }
 
