@@ -142,11 +142,11 @@ if grep -qiE 'microsoft|wsl' /proc/version /proc/sys/kernel/osrelease 2>/dev/nul
   if command -v wslview >/dev/null 2>&1; then
     wslview "$url" >/dev/null 2>&1 && opened=1 || :
   fi
-  if (( ! opened )) && command -v powershell.exe >/dev/null 2>&1; then
-    powershell.exe -NoProfile -NonInteractive -Command 'Start-Process -FilePath $args[0]' "$url" >/dev/null 2>&1 && opened=1 || :
-  fi
   if (( ! opened )) && command -v explorer.exe >/dev/null 2>&1; then
     explorer.exe "$url" >/dev/null 2>&1 && opened=1 || :
+  fi
+  if (( ! opened )) && command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -NonInteractive -Command 'Start-Process -FilePath $args[0]' "$url" >/dev/null 2>&1 && opened=1 || :
   fi
 elif [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null 2>&1; then
   # Preserve native Linux behavior; do not print the URL to noninteractive output.
