@@ -28,13 +28,15 @@ The last command **builds and starts** Identity P1 and Thought-Processor P1. Wai
 
 **Next in the UI:** (1) In the Processor page, choose **Connect to Identity** (or the equivalent connection action shown by this experimental build); (2) follow its manual pairing-code flow; (3) complete any required GitHub sign-in and Identity approval yourself. A loaded page or HTTP-ready message **does not** establish connection or authorization. Dustin's WSL observation must confirm the exact UI label.
 
-A browser opener may launch the private Processor page. **If it does not**, run this optional lookup **only in your local Linux terminal**:
+The launcher shows the **current private Processor URL** with a **DO NOT SHARE** warning when run directly in your trusted interactive Linux/WSL terminal (both input and output must be terminals). It also tries to open a browser automatically. **A successful opener command does not prove a browser window appeared.** If needed, copy the private link from that same terminal into your own browser.
+
+If your interactive terminal does not show the link, or you need to recover it after an opener failure, run this **only in your own local terminal**:
 
 ```bash
-grep -m1 'open :' ~/p1c/p1-launcher/processor-private.log
+grep -Em1 '^[[:space:]]*open[[:space:]]*:' ~/p1c/p1-launcher/processor-private.log
 ```
 
-From the matching `open :` line, copy **only the private URL**, not the surrounding log text, into your **own Windows browser** (or your own browser on native Linux). **Never paste the command output, private link, codes, or logs into GitHub, chat, or an issue.** Keep pairing and approval manual.
+The command matches the actual `open    :` log label despite variable spacing. Copy **only the private URL**, not the surrounding log text. Never paste terminal output, private links, codes, or logs into GitHub, chat, an issue, TheBrain, or Drive. Request and enter a **fresh pairing challenge manually** when Processor prompts for it; human Identity approval is still required.
 
 **Stop:** press **Ctrl+C in the launcher terminal**. **Repeat start** after it exits:
 
@@ -42,7 +44,7 @@ From the matching `open :` line, copy **only the private URL**, not the surround
 bash ~/p1c/Thought-Processor/run-p1.sh
 ```
 
-**Privacy — trusted local session only:** a private `#code=` link may briefly appear in the browser opener's process arguments on graphical Linux or WSL. This exposure is **not fixed**. Do not use on an untrusted shared host, and never publish URLs, URL fragments, pairing/device codes, or private logs.
+**Privacy — trusted local session only:** the private `#code=` link is visible in your own interactive terminal and may briefly appear in local browser-opener process arguments on graphical Linux or WSL. This exposure is **not fixed**. Redirected/noninteractive launcher output withholds the link. Do not use on an untrusted shared host or record/share your terminal, and never publish URLs, URL fragments, pairing/device codes, or private logs.
 
 For full setup, ports, profile behavior, restart limitations, and diagnostics, see **[P1 launcher instructions](docs/P1/LAUNCHER.md)**. Independent Linux retest and Dustin's WSL/Windows-browser verification are separate acceptance gates.
 
