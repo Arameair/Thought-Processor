@@ -32,7 +32,10 @@ stop() {
 trap stop EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-for cmd in git go python3 mkdir mktemp; do need "$cmd"; done
+for cmd in git go python3 mkdir mktemp; do
+  if [[ "$INJECT" == "missing-$cmd" ]]; then die "INJECTED: Missing $cmd (install it and retry)."; fi
+  need "$cmd"
+done
 [[ -d "$ID_SRC/.git" && -d "$ROOT/.git" ]] || die "Both cloned repos required. Expected Identity at $ID_SRC and Processor at $ROOT. Set P1_IDENTITY_SRC if needed."
 [[ "$(git -C "$ID_SRC" branch --show-current)" == "$BASE_BRANCH" ]] || die "Identity must be checked out on $BASE_BRANCH (no checkout performed)."
 [[ "$(git -C "$ROOT" branch --show-current)" == "$LAUNCH_BRANCH" ]] || die "Processor must be checked out on $LAUNCH_BRANCH (no checkout performed)."
@@ -72,7 +75,7 @@ mkdir -p "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
 chmod 700 "$WORK" "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
 # Preserve reusable profiles: a service marker alone is not proof of a live process.
 # The launcher lock, port guard and Identity's own profile lock arbitrate use.
-case "$INJECT" in ""|go-build|identity-start|processor-start) ;; *) die "Unknown P1_TEST_INJECT" ;; esac
+case "$INJECT" in ""|missing-go|missing-python3|go-build|identity-start|processor-start) ;; *) die "Unknown P1_TEST_INJECT" ;; esac
 if [[ -n "$INJECT" && "$WORK" != *"/p1c/"* ]]; then die "Injection requires disposable /p1c/ work path"; fi
 if [[ "$INJECT" == go-build ]]; then die "INJECTED: Go build failure (no children started)"; fi
 printf 'Building both source trees with Go...\n'
