@@ -11,7 +11,8 @@ ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
 WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-launcher}"
 ID_PORT="${P1_IDENTITY_PORT:-7792}"
 TP_PORT="${P1_PROCESSOR_PORT:-7862}"
-id_pid= tp_pid= lock= work_created=0
+id_pid= tp_pid= lock=
+INJECT="${P1_TEST_INJECT:-}"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing $1 (install it and retry)."; }
 stop() {
@@ -69,7 +70,11 @@ lock="$WORK/.launcher-running"
 mkdir "$lock" 2>/dev/null || die "Launcher lock exists at $lock (another run or stale lock). Check existing processes before removing it."
 mkdir -p "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
 chmod 700 "$WORK" "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
-[[ ! -f "$WORK/identity-profile/runtime/service.json" ]] || die "Identity profile appears active; inspect before retry."
+# Preserve reusable profiles: a service marker alone is not proof of a live process.
+# The launcher lock, port guard and Identity's own profile lock arbitrate use.
+case "$INJECT" in ""|go-build|identity-start|processor-start) ;; *) die "Unknown P1_TEST_INJECT" ;; esac
+if [[ -n "$INJECT" && "$WORK" != *"/p1c/"* ]]; then die "Injection requires disposable /p1c/ work path"; fi
+if [[ "$INJECT" == go-build ]]; then die "INJECTED: Go build failure (no children started)"; fi
 printf 'Building both source trees with Go...\n'
 (cd "$ID_SRC" && go build -ldflags "-X main.buildBranch=$BASE_BRANCH" -o "$WORK/bin/identity-p1" .) || die "Identity Go build failed"
 (cd "$ROOT/processor" && go build -ldflags "-X main.buildBranch=$BASE_BRANCH" -o "$WORK/bin/processor-p1" .) || die "Processor Go build failed"
@@ -78,11 +83,19 @@ printf 'Starting private P1 trial. Logs stay local in %s (DO NOT SHARE).\n' "$WO
 export IDENTITY_LOCATOR_DIR="$WORK/locators"
 export TP_IDENTITY_DEFAULT_URL="http://127.0.0.1:$ID_PORT"
 mkdir -p "$IDENTITY_LOCATOR_DIR"
-"$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" >"$WORK/identity-private.log" 2>&1 &
+if [[ "$INJECT" == identity-start ]]; then
+  (exit 42) >"$WORK/identity-private.log" 2>&1 &
+else
+  "$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" >"$WORK/identity-private.log" 2>&1 &
+fi
 id_pid=$!
 sleep 0.5
 kill -0 "$id_pid" 2>/dev/null || die "Identity exited: inspect $WORK/identity-private.log locally (private codes/links may be present)."
-"$WORK/bin/processor-p1" -port "$TP_PORT" -data "$WORK/processor-profile" -identity-default-url "$TP_IDENTITY_DEFAULT_URL" -trust-feature-dir "$ROOT/processor/testfeatures" -no-browser >"$WORK/processor-private.log" 2>&1 &
+if [[ "$INJECT" == processor-start ]]; then
+  (exit 42) >"$WORK/processor-private.log" 2>&1 &
+else
+  "$WORK/bin/processor-p1" -port "$TP_PORT" -data "$WORK/processor-profile" -identity-default-url "$TP_IDENTITY_DEFAULT_URL" -trust-feature-dir "$ROOT/processor/testfeatures" -no-browser >"$WORK/processor-private.log" 2>&1 &
+fi
 tp_pid=$!
 # Private URL is parsed and handed directly to the opener, never printed in shared output.
 url=
