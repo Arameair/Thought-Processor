@@ -117,7 +117,7 @@ def start_processor():
         if not ready:
             raise SystemExit("private pipe handoff timed out")
         link = os.read(read_fd, 256).decode("ascii").strip()
-        assert re.fullmatch(r"http://127\\.0\\.0\\.1:[0-9]+/#code=[0-9a-f]{48}", link), "invalid private pipe handoff"
+        assert re.fullmatch(r"http://127\.0\.0\.1:[0-9]+/#code=[0-9a-f]{48}", link), "invalid private pipe handoff"
         assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
         assert not (W / "processor-profile" / "runtime" / "operator-link.txt").exists(), "private link persisted"
         assert "#code=" not in (W / "processor.console.txt").read_text(), "private link leaked to output"
