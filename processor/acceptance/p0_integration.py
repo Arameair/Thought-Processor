@@ -99,13 +99,33 @@ def start_identity(name, port, data):
 
 
 def start_processor():
-    start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser"])
-    assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
-    for _ in range(50):
-        if operator_links.get("processor"):
-            return operator_links.pop("processor")
-        time.sleep(0.1)
-    raise SystemExit("no private operator link received from Processor stdout")
+    # Never send the private URL through normal stdout, logs, files or argv.
+    # FD is inherited anonymously by the child and delivered only to memory.
+    read_fd, write_fd = os.pipe()
+    try:
+        cmd = [str(W / "thought-processor"), "-port", str(PP),
+               "-data", str(W / "processor-profile"), "-no-browser",
+               "-private-link-fd", str(write_fd)]
+        log = open(W / "processor.console.txt", "w")
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=ENV,
+                             pass_fds=(write_fd,))
+        procs["processor"] = p
+        os.close(write_fd)
+        write_fd = -1
+        import select
+        ready, _, _ = select.select([read_fd], [], [], 10)
+        if not ready:
+            raise SystemExit("private pipe handoff timed out")
+        link = os.read(read_fd, 256).decode("ascii").strip()
+        assert re.fullmatch(r"http://127\\.0\\.0\\.1:[0-9]+/#code=[0-9a-f]{48}", link), "invalid private pipe handoff"
+        assert wait_http(f"http://127.0.0.1:{PP}/api/health"), "processor did not start"
+        assert not (W / "processor-profile" / "runtime" / "operator-link.txt").exists(), "private link persisted"
+        assert "#code=" not in (W / "processor.console.txt").read_text(), "private link leaked to output"
+        return link
+    finally:
+        os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
 
 
 def fixture(path):
