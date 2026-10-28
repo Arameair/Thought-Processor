@@ -1,6 +1,54 @@
 # Thought Processor
 
-> **P1 experiment branch `experiment/p1-feature-foundation-claude-20261026` (not promoted):** runnable Feature Foundation — original Admin Identity, Admin-approved install of a trusted local test feature with its own durable installation identity, standalone runtime, Admin-approved narrow grant enforced by the receiving feature, identity-first UI. **Start with [docs/P1/START_HERE.md](docs/P1/START_HERE.md)**, then [docs/P1/TEST_P1.md](docs/P1/TEST_P1.md); results in [docs/P1/P1_REPORT_20261026.md](docs/P1/P1_REPORT_20261026.md).
+## P1 experimental quick start — WSL/Linux (not Alpha)
+
+**P1 cleanup experiment only.** This is a source-built local trial, not Alpha, an installer, or an accepted release. The launcher builds both matching P1 components and keeps GitHub sign-in, Identity pairing, and approval **manual**. It does **not** automatically approve GitHub access.
+
+**Prerequisites:** WSL (Linux shell) or native Linux, Git, Bash, Go **1.22+**, Python **3.8+**, and network access to clone the repositories. Open your **Ubuntu/WSL Linux terminal** (not Windows PowerShell or Command Prompt). On native Linux, use your Linux terminal. Run the following checks there before cloning:
+
+```bash
+git --version
+bash --version | head -n 1
+go version
+python3 --version
+```
+
+If any command is missing, **stop** and install that prerequisite; stop as well if Go is older than **1.22** or Python is older than **3.8**. Refer to [Git installation](https://git-scm.com/downloads), [Go installation](https://go.dev/doc/install), and [Python installation](https://docs.python.org/3/using/index.html) as needed. This check does not verify network access.
+
+**Use a new, clean `~/p1c` directory.** If `~/p1c` already exists, **stop**: inspect your previous trial instead of copying commands over it. Do not delete existing data or reuse active profiles. Paste the entire four-line launch block below into the Linux terminal, and **keep that terminal open** while the launcher runs.
+
+```bash
+mkdir -p ~/p1c && cd ~/p1c
+git clone --branch experiment/p1-cleanup-claude-20261026 https://github.com/Arameair/identity.git
+git clone --branch experiment/p1-launcher-gpt6-20261028 https://github.com/Arameair/Thought-Processor.git
+bash ~/p1c/Thought-Processor/run-p1.sh
+```
+
+The last command **builds and starts** Identity P1 and Thought-Processor P1. Wait for `P1 Processor ready on 127.0.0.1:7862` in the launcher terminal; that is the launcher's Processor HTTP readiness result, **not** proof of pairing, authorization, or feature execution. Default trial ports: Identity `7792`, Processor `7862`.
+
+**Next in the UI:** (1) In the Processor page, choose **Connect to Identity** (or the equivalent connection action shown by this experimental build); (2) follow its manual pairing-code flow; (3) complete any required GitHub sign-in and Identity approval yourself. A loaded page or HTTP-ready message **does not** establish connection or authorization. Dustin's WSL observation must confirm the exact UI label.
+
+The launcher shows the **current private Processor URL** with a **DO NOT SHARE** warning when run directly in your trusted interactive Linux/WSL terminal (both input and output must be terminals). It also tries to open a browser automatically. **A successful opener command does not prove a browser window appeared.** If needed, copy the private link from that same terminal into your own browser.
+
+If your interactive terminal does not show the link, or you need to recover it after an opener failure, run this **only in your own local terminal**:
+
+```bash
+grep -Em1 '^[[:space:]]*open[[:space:]]*:' ~/p1c/p1-launcher/processor-private.log
+```
+
+The command matches the actual `open    :` log label despite variable spacing. Copy **only the private URL**, not the surrounding log text. Never paste terminal output, private links, codes, or logs into GitHub, chat, an issue, TheBrain, or Drive. Request and enter a **fresh pairing challenge manually** when Processor prompts for it; human Identity approval is still required.
+
+**Stop:** press **Ctrl+C in the launcher terminal**. **Repeat start** after it exits:
+
+```bash
+bash ~/p1c/Thought-Processor/run-p1.sh
+```
+
+**Privacy — trusted local session only:** the private `#code=` link is visible in your own interactive terminal and may briefly appear in local browser-opener process arguments on graphical Linux or WSL. This exposure is **not fixed**. Redirected/noninteractive launcher output withholds the link. Do not use on an untrusted shared host or record/share your terminal, and never publish URLs, URL fragments, pairing/device codes, or private logs.
+
+For full setup, ports, profile behavior, restart limitations, and diagnostics, see **[P1 launcher instructions](docs/P1/LAUNCHER.md)**. Independent Linux retest and Dustin's WSL/Windows-browser verification are separate acceptance gates.
+
+> **Other P1 work:** the older `experiment/p1-feature-foundation-claude-20261026` experiment is distinct from this cleanup launcher. For **this branch**, follow the P1 experimental quick start above and [P1 launcher instructions](docs/P1/LAUNCHER.md).
 
 > **Experiment branch `experiment/p0-feature-onboarding-20261026`:** a runnable Thought Processor P0 lives in [`processor/`](processor/). Run it on Windows with [AGENTS.md](AGENTS.md); the [report](docs/experiments/P0_FEATURE_ONBOARDING_2026-10-26.md) covers results and limits. This branch is not promoted.
 
@@ -9,7 +57,7 @@
 
 Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
 
-> **Current status — FOUNDATION DOCUMENTATION ONLY (2026-10-23).** This repository does not contain a runnable Thought Processor yet. No real feature integration, source subscriptions, identity authorization, or model worker has been verified here. The appearance of a branch is not evidence of a working version.
+> **Status for this experimental branch:** a source-built P1 cleanup launcher is available for Linux/WSL testing; independent retest and owner WSL verification are pending. A successful launch does not establish pairing, authorization, or product acceptance. Other branches have separate status.
 
 ## The product boundary
 
