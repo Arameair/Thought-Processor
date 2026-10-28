@@ -4,7 +4,18 @@
 
 **P1 cleanup experiment only.** This is a source-built local trial, not Alpha, an installer, or an accepted release. The launcher builds both matching P1 components and keeps GitHub sign-in, Identity pairing, and approval **manual**. It does **not** automatically approve GitHub access.
 
-**Prerequisites:** WSL (Linux shell) or native Linux, Git, Bash, Go **1.22+**, Python **3.8+**, and network access to clone the repositories. Use a **new, clean** `~/p1c` directory; do not overwrite existing clones or active profiles.
+**Prerequisites:** WSL (Linux shell) or native Linux, Git, Bash, Go **1.22+**, Python **3.8+**, and network access to clone the repositories. Open your **Ubuntu/WSL Linux terminal** (not Windows PowerShell or Command Prompt). On native Linux, use your Linux terminal. Run the following checks there before cloning:
+
+```bash
+git --version
+bash --version | head -n 1
+go version
+python3 --version
+```
+
+If any command is missing, **stop** and install that prerequisite; stop as well if Go is older than **1.22** or Python is older than **3.8**. Refer to [Git installation](https://git-scm.com/downloads), [Go installation](https://go.dev/doc/install), and [Python installation](https://docs.python.org/3/using/index.html) as needed. This check does not verify network access.
+
+**Use a new, clean `~/p1c` directory.** If `~/p1c` already exists, **stop**: inspect your previous trial instead of copying commands over it. Do not delete existing data or reuse active profiles. Paste the entire four-line launch block below into the Linux terminal, and **keep that terminal open** while the launcher runs.
 
 ```bash
 mkdir -p ~/p1c && cd ~/p1c
@@ -15,7 +26,15 @@ bash ~/p1c/Thought-Processor/run-p1.sh
 
 The last command **builds and starts** Identity P1 and Thought-Processor P1. Wait for `P1 Processor ready on 127.0.0.1:7862` in the launcher terminal; that is the launcher's Processor HTTP readiness result, **not** proof of pairing, authorization, or feature execution. Default trial ports: Identity `7792`, Processor `7862`.
 
-A browser opener may launch the private Processor page. **If it does not**, open `~/p1c/p1-launcher/processor-private.log` **locally**, find the `open :` line, and open that full private link in your own browser; do not paste the link into an issue or chat. Connect Identity and enter the local pairing code **manually**; do not share codes or logs.
+**Next in the UI:** (1) In the Processor page, choose **Connect to Identity** (or the equivalent connection action shown by this experimental build); (2) follow its manual pairing-code flow; (3) complete any required GitHub sign-in and Identity approval yourself. A loaded page or HTTP-ready message **does not** establish connection or authorization. Dustin's WSL observation must confirm the exact UI label.
+
+A browser opener may launch the private Processor page. **If it does not**, run this optional lookup **only in your local Linux terminal**:
+
+```bash
+grep -m1 'open :' ~/p1c/p1-launcher/processor-private.log
+```
+
+From the matching `open :` line, copy **only the private URL**, not the surrounding log text, into your **own Windows browser** (or your own browser on native Linux). **Never paste the command output, private link, codes, or logs into GitHub, chat, or an issue.** Keep pairing and approval manual.
 
 **Stop:** press **Ctrl+C in the launcher terminal**. **Repeat start** after it exits:
 
