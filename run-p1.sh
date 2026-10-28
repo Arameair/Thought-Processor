@@ -137,7 +137,7 @@ try:
             if match:
                 print("\nPRIVATE Identity pairing challenge (DO NOT SHARE; local terminal only):\n"
                       + match.group(1) +
-                      "\nEnter this code manually in Processor. No approval is automated.\n",
+                      "\nType this code into Thought Processor. No approval is automated.\n",
                       flush=True)
                 remaining = 0  # Exactly once per fresh announcement.
             else:
@@ -193,9 +193,6 @@ if grep -qiE 'microsoft|wsl' /proc/version /proc/sys/kernel/osrelease 2>/dev/nul
   # The private fragment can briefly be visible in local process arguments.
   if command -v wslview >/dev/null 2>&1; then
     wslview "$url" >/dev/null 2>&1 && opened=1 || :
-  fi
-  if (( ! opened )) && command -v explorer.exe >/dev/null 2>&1; then
-    explorer.exe "$url" >/dev/null 2>&1 && opened=1 || :
   fi
   if (( ! opened )) && command -v powershell.exe >/dev/null 2>&1; then
     powershell.exe -NoProfile -NonInteractive -Command 'Start-Process -FilePath $args[0]' "$url" >/dev/null 2>&1 && opened=1 || :
