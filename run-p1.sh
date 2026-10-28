@@ -56,6 +56,7 @@ try:
     socks=[]
     for port in ports:
         s=socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("127.0.0.1",port))
         socks.append(s)
     for s in socks: s.close()
@@ -69,8 +70,9 @@ WORK="$(cd "$WORK" && pwd -P)"
 for dir in "$WORK/identity-profile" "$WORK/processor-profile"; do
   [[ ! -L "$dir" ]] || die "Refusing symlinked profile $dir"
 done
-lock="$WORK/.launcher-running"
-mkdir "$lock" 2>/dev/null || die "Launcher lock exists at $lock (another run or stale lock). Check existing processes before removing it."
+lock_candidate="$WORK/.launcher-running"
+mkdir "$lock_candidate" 2>/dev/null || die "Launcher lock exists at $lock_candidate (another run or stale lock). Check existing processes before removing it."
+lock="$lock_candidate"
 mkdir -p "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
 chmod 700 "$WORK" "$WORK/bin" "$WORK/identity-profile" "$WORK/processor-profile"
 # Preserve reusable profiles: a service marker alone is not proof of a live process.
@@ -133,7 +135,8 @@ if grep -qi microsoft /proc/version 2>/dev/null && command -v cmd.exe >/dev/null
   if command -v powershell.exe >/dev/null 2>&1; then
     powershell.exe -NoProfile -NonInteractive -Command 'Start-Process -FilePath $args[0]' "$url" >/dev/null 2>&1 && opened=1 || :
   fi
-elif command -v xdg-open >/dev/null 2>&1; then
+elif [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null 2>&1; then
+  # Local argv can expose the private fragment while the opener runs; never log the URL.
   xdg-open "$url" >/dev/null 2>&1 && opened=1 || :
 fi
 if ((opened)); then
