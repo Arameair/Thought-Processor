@@ -129,22 +129,35 @@ except Exception as exc:
     sys.exit("ERROR: Processor did not answer readiness probe (%s); do not assume it is ready" % type(exc).__name__)
 PY
 printf 'P1 Processor ready on 127.0.0.1:%s. Identity trial port %s.\n' "$TP_PORT" "$ID_PORT"
+# Never emit a private session URL into redirected/shared (noninteractive) output.
+if [[ -t 0 && -t 1 ]]; then
+  printf 'PRIVATE P1 Processor link (DO NOT SHARE; trusted local terminal only):\n%s\n' "$url"
+else
+  printf 'Private link withheld from noninteractive output; use the documented local-only log fallback in your own terminal.\n'
+fi
 opened=0
-if grep -qi microsoft /proc/version 2>/dev/null && command -v cmd.exe >/dev/null 2>&1; then
-  # Avoid passing private fragment to cmd.exe shell interpretation; PowerShell Start-Process receives argv.
-  if command -v powershell.exe >/dev/null 2>&1; then
+if grep -qiE 'microsoft|wsl' /proc/version /proc/sys/kernel/osrelease 2>/dev/null; then
+  # Independent, optional WSL openers; never require cmd.exe or a new dependency.
+  # The private fragment can briefly be visible in local process arguments.
+  if command -v wslview >/dev/null 2>&1; then
+    wslview "$url" >/dev/null 2>&1 && opened=1 || :
+  fi
+  if (( ! opened )) && command -v powershell.exe >/dev/null 2>&1; then
     powershell.exe -NoProfile -NonInteractive -Command 'Start-Process -FilePath $args[0]' "$url" >/dev/null 2>&1 && opened=1 || :
   fi
+  if (( ! opened )) && command -v explorer.exe >/dev/null 2>&1; then
+    explorer.exe "$url" >/dev/null 2>&1 && opened=1 || :
+  fi
 elif [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null 2>&1; then
-  # Local argv can expose the private fragment while the opener runs; never log the URL.
+  # Preserve native Linux behavior; do not print the URL to noninteractive output.
   xdg-open "$url" >/dev/null 2>&1 && opened=1 || :
 fi
 if ((opened)); then
-  printf 'Browser opener launched; confirm the private P1 Processor page appears.\n'
+  printf 'Browser opener returned success; confirm the private P1 Processor page actually appears.\n'
 else
-  printf 'Browser did not open automatically. Open the private Processor link from %s/processor-private.log locally (open : line); never share it.\n' "$WORK"
+  printf 'No browser opener succeeded. Use the private URL displayed above (interactive terminal) or the local-only documented log fallback. DO NOT SHARE.\n'
 fi
-printf 'Connect Identity manually in Processor, then read the pairing code in %s/identity-private.log locally. Approvals remain human-only.\n' "$WORK"
+printf 'Connect Identity manually in Processor; only when prompted, request a fresh pairing challenge and inspect %s/identity-private.log locally. No automatic pairing or approval.\n' "$WORK"
 printf 'Press Ctrl+C here to stop ONLY the two child processes this launcher started. Keep profiles to resume; remove them only to reset the trial.\n'
 wait "$tp_pid" || die "Processor exited unsuccessfully; inspect private local log."
 tp_pid=
