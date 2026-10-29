@@ -768,6 +768,10 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 		res.Outcome, res.Detail = "TICKET_REJECTED", "the feature refused the ticket: "+str("error")+" "+str("reason")
 	default:
 		res.Outcome, res.Detail = "ERROR", fmt.Sprintf("HTTP %d %s", resp.StatusCode, str("error"))
+		if d := str("detail"); d != "" {
+			// e.g. a feature that was allowed by Identity but couldn't use the input
+			res.Detail += " — " + d
+		}
 	}
 	return res
 }

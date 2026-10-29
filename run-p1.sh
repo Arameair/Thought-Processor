@@ -5,11 +5,18 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/p1-secure-worker-runtime-claude-20261029
+LAUNCH_BRANCH=experiment/p1-thought-feature-claude-20261029
+# Thought (Spark → Trace → Thought) feature: the exact reviewed package digest.
+# Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact)
+# both pin it; any other content stays BLOCKED in both.
+THOUGHT_BRANCH=experiment/thought-feature-p1-claude-20261029
+THOUGHT_ARTIFACT=8f92ee685c99851128f322c9063ff151e28d7ccf48709315d8857fc56e8079ec
 IDENTITY_SHA=64940b629a5ef52eaa143b2402726ec81d382002
 PROCESSOR_BASE_SHA=db31e4785d292925249a2f9f06e3c06bd78ba5b0
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
+if [[ -z "${P1_THOUGHT_SRC:-}" && -d "$(dirname "$ROOT")/Thought" ]]; then P1_THOUGHT_SRC="$(dirname "$ROOT")/Thought"; fi
+THOUGHT_SRC="${P1_THOUGHT_SRC:-$(dirname "$ROOT")/thought}"
 # Secure worker runtime trial: its OWN work folder and ports, so the owner's
 # existing P1 launcher trial (~/p1c/p1-launcher, ports 7792/7862) is never
 # reused, overwritten or contacted.
@@ -56,6 +63,17 @@ for src in "$ID_SRC" "$ROOT"; do
   [[ -z "$(git -C "$src" status --porcelain --untracked-files=normal)" ]] || die "Dirty working tree in $src. Commit/stash/review changes first; nothing modified."
 done
 printf 'Identity P1 source: %s\nProcessor P1 launcher: %s (base %s)\n' "$id_sha" "$tp_sha" "$PROCESSOR_BASE_SHA"
+ID_EXTRA=() TP_EXTRA=()
+if [[ "${P1_THOUGHT:-on}" != off && -d "$THOUGHT_SRC/.git" ]]; then
+  [[ "$(git -C "$THOUGHT_SRC" branch --show-current)" == "$THOUGHT_BRANCH" ]] || die "Thought must be checked out on $THOUGHT_BRANCH (no checkout performed), or run with P1_THOUGHT=off."
+  [[ -z "$(git -C "$THOUGHT_SRC" status --porcelain --untracked-files=normal)" ]] || die "Dirty working tree in $THOUGHT_SRC. Commit/stash/review changes first; nothing modified."
+  [[ -f "$THOUGHT_SRC/feature/feature.json" && ! -L "$THOUGHT_SRC/feature" ]] || die "No Thought feature package at $THOUGHT_SRC/feature."
+  TP_EXTRA=(-trust-feature-dir "$THOUGHT_SRC/feature" -trust-feature-artifact "$THOUGHT_ARTIFACT")
+  ID_EXTRA=(-trust-fixture-artifact "$THOUGHT_ARTIFACT")
+  printf 'Thought feature source: %s (pinned artifact %s…)\n' "$(git -C "$THOUGHT_SRC" rev-parse HEAD)" "${THOUGHT_ARTIFACT:0:12}"
+else
+  printf 'Thought feature: not offered (no clone at %s, or P1_THOUGHT=off).\n' "$THOUGHT_SRC"
+fi
 python3 - "$ID_PORT" "$TP_PORT" <<'PY'
 import socket,sys
 try:
@@ -100,7 +118,7 @@ mkdir -p "$IDENTITY_LOCATOR_DIR"
 if [[ "$INJECT" == identity-start ]]; then
   (exit 42) >"$WORK/identity-private.log" 2>&1 &
 else
-  "$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" >"$WORK/identity-private.log" 2>&1 &
+  "$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" ${ID_EXTRA[@]+"${ID_EXTRA[@]}"} >"$WORK/identity-private.log" 2>&1 &
 fi
 id_pid=$!
 sleep 0.5
@@ -154,7 +172,7 @@ start_pairing_watcher
 if [[ "$INJECT" == processor-start ]]; then
   (exit 42) >"$WORK/processor-private.log" 2>&1 &
 else
-  "$WORK/bin/processor-p1" -port "$TP_PORT" -data "$WORK/processor-profile" -identity-default-url "$TP_IDENTITY_DEFAULT_URL" -trust-feature-dir "$ROOT/processor/testfeatures" -no-browser >"$WORK/processor-private.log" 2>&1 &
+  "$WORK/bin/processor-p1" -port "$TP_PORT" -data "$WORK/processor-profile" -identity-default-url "$TP_IDENTITY_DEFAULT_URL" -trust-feature-dir "$ROOT/processor/testfeatures" ${TP_EXTRA[@]+"${TP_EXTRA[@]}"} -no-browser >"$WORK/processor-private.log" 2>&1 &
 fi
 tp_pid=$!
 # Private URL is parsed and handed directly to the opener, never printed in shared output.

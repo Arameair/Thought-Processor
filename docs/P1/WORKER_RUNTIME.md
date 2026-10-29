@@ -100,7 +100,7 @@ Leave this terminal open.
 
 On the **Connections** tab:
 
-1. **Send synthetic request.**
+1. **Send request** (Input `hello from P1`).
    **Expected:** red **DENIED BY IDENTITY** — *NO_GRANT — nothing was started or sent*.
 2. **Ask the Admin…** (1 hour), then approve in Identity's page. Send again.
    **Expected:** green **COMPLETED**, with output `"upper": "HELLO FROM P1"`.
