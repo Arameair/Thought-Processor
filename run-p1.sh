@@ -11,6 +11,7 @@ LAUNCH_BRANCH=experiment/p1-thought-feature-claude-20261029
 # both pin it; any other content stays BLOCKED in both.
 THOUGHT_BRANCH=experiment/thought-feature-p1-claude-20261029
 THOUGHT_ARTIFACT=8f92ee685c99851128f322c9063ff151e28d7ccf48709315d8857fc56e8079ec
+THOUGHT_BASE_SHA=772200b5bc29efce6da3b0e064fb6714570da1d4
 IDENTITY_SHA=64940b629a5ef52eaa143b2402726ec81d382002
 PROCESSOR_BASE_SHA=db31e4785d292925249a2f9f06e3c06bd78ba5b0
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -52,27 +53,62 @@ for cmd in git go python3 mkdir mktemp; do
   if [[ "$INJECT" == "missing-$cmd" ]]; then die "INJECTED: Missing $cmd (install it and retry)."; fi
   need "$cmd"
 done
-[[ -d "$ID_SRC/.git" && -d "$ROOT/.git" ]] || die "Both cloned repos required. Expected Identity at $ID_SRC and Processor at $ROOT. Set P1_IDENTITY_SRC if needed."
+# A checkout may be an ordinary clone (.git is a folder) or a Git worktree
+# (.git is a file pointing at the main repository). Git itself decides; the
+# checks below are the same for both and are not loosened for either.
+checkout_ok() { # dir expected-owner/repo label
+  local dir="$1" slug="$2" label="$3" top url norm
+  [[ -d "$dir" && ! -L "$dir" ]] || die "$label: expected a checkout folder at $dir (not a link). Set P1_IDENTITY_SRC / P1_THOUGHT_SRC if it lives elsewhere."
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "$label: $dir is not a working Git checkout (clone or worktree), or its worktree link is broken."
+  [[ "$(cd "$dir" && pwd -P)" == "$(cd "$top" && pwd -P)" ]] || die "$label: $dir is inside another checkout ($top), not a checkout itself."
+  [[ "$(git -C "$dir" rev-parse --is-bare-repository)" == false ]] || die "$label: $dir is a bare repository."
+  url="$(git -C "$dir" remote get-url origin 2>/dev/null)" || die "$label: $dir has no 'origin' remote; can't confirm it is $slug."
+  norm="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
+  norm="${norm%/}"; norm="${norm%.git}"
+  case "$norm" in
+    "https://github.com/${slug,,}"|"git@github.com:${slug,,}"|"ssh://git@github.com/${slug,,}") ;;
+    *) die "$label: $dir is a checkout of a different repository (origin: $url); expected $slug." ;;
+  esac
+  [[ -z "$(git -C "$dir" status --porcelain --untracked-files=normal)" ]] || die "Dirty working tree in $dir. Commit/stash/review changes first; nothing modified."
+}
+checkout_ok "$ID_SRC" Arameair/identity Identity
+checkout_ok "$ROOT" Arameair/Thought-Processor "Thought Processor"
 [[ "$(git -C "$ID_SRC" branch --show-current)" == "$BASE_BRANCH" ]] || die "Identity must be checked out on $BASE_BRANCH (no checkout performed)."
 [[ "$(git -C "$ROOT" branch --show-current)" == "$LAUNCH_BRANCH" ]] || die "Processor must be checked out on $LAUNCH_BRANCH (no checkout performed)."
 id_sha="$(git -C "$ID_SRC" rev-parse HEAD)"
 tp_sha="$(git -C "$ROOT" rev-parse HEAD)"
 [[ "$id_sha" == "$IDENTITY_SHA" ]] || die "Identity changed: expected $IDENTITY_SHA, found $id_sha. Review before proceeding."
-git -C "$ROOT" merge-base --is-ancestor "$PROCESSOR_BASE_SHA" HEAD || die "Processor is not descended from the reviewed P1 cleanup commit."
-for src in "$ID_SRC" "$ROOT"; do
-  [[ -z "$(git -C "$src" status --porcelain --untracked-files=normal)" ]] || die "Dirty working tree in $src. Commit/stash/review changes first; nothing modified."
-done
-printf 'Identity P1 source: %s\nProcessor P1 launcher: %s (base %s)\n' "$id_sha" "$tp_sha" "$PROCESSOR_BASE_SHA"
+git -C "$ROOT" merge-base --is-ancestor "$PROCESSOR_BASE_SHA" HEAD 2>/dev/null || die "Processor is not descended from the reviewed P1 cleanup commit."
+printf 'Identity P1 source: %s (%s)\nProcessor P1 launcher: %s (base %s) (%s)\n' "$id_sha" "$ID_SRC" "$tp_sha" "$PROCESSOR_BASE_SHA" "$ROOT"
 ID_EXTRA=() TP_EXTRA=()
-if [[ "${P1_THOUGHT:-on}" != off && -d "$THOUGHT_SRC/.git" ]]; then
+if [[ "${P1_THOUGHT:-on}" != off && -e "$THOUGHT_SRC" ]]; then
+  # A folder is there, so it must be the reviewed Thought checkout; never skip it silently.
+  checkout_ok "$THOUGHT_SRC" Arameair/Thought Thought
   [[ "$(git -C "$THOUGHT_SRC" branch --show-current)" == "$THOUGHT_BRANCH" ]] || die "Thought must be checked out on $THOUGHT_BRANCH (no checkout performed), or run with P1_THOUGHT=off."
-  [[ -z "$(git -C "$THOUGHT_SRC" status --porcelain --untracked-files=normal)" ]] || die "Dirty working tree in $THOUGHT_SRC. Commit/stash/review changes first; nothing modified."
+  git -C "$THOUGHT_SRC" merge-base --is-ancestor "$THOUGHT_BASE_SHA" HEAD 2>/dev/null || die "Thought is not descended from the reviewed commit $THOUGHT_BASE_SHA."
   [[ -f "$THOUGHT_SRC/feature/feature.json" && ! -L "$THOUGHT_SRC/feature" ]] || die "No Thought feature package at $THOUGHT_SRC/feature."
+  # Integrity before anything is built or started: the package must be exactly the pinned artifact.
+  thought_digest="$(python3 -I - "$THOUGHT_SRC/feature" <<'PY'
+import hashlib, json, os, sys
+d = sys.argv[1]
+def h(p):
+    if os.path.islink(p) or not os.path.isfile(p):
+        sys.exit("not a regular file: " + os.path.basename(p))
+    with open(p, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+m = json.load(open(os.path.join(d, "feature.json"), "rb"))
+files = sorted(m["files"], key=lambda f: f["path"])
+b = "thought.feature-package/1\nmanifest %s\n" % h(os.path.join(d, "feature.json"))
+b += "".join("%s  %s\n" % (h(os.path.join(d, f["path"])), f["path"]) for f in files)
+print(hashlib.sha256(b.encode()).hexdigest())
+PY
+)" || die "Could not read the Thought package at $THOUGHT_SRC/feature."
+  [[ "$thought_digest" == "$THOUGHT_ARTIFACT" ]] || die "Thought package content ($thought_digest) is not the reviewed pinned artifact ($THOUGHT_ARTIFACT). Nothing started."
   TP_EXTRA=(-trust-feature-dir "$THOUGHT_SRC/feature" -trust-feature-artifact "$THOUGHT_ARTIFACT")
   ID_EXTRA=(-trust-fixture-artifact "$THOUGHT_ARTIFACT")
-  printf 'Thought feature source: %s (pinned artifact %s…)\n' "$(git -C "$THOUGHT_SRC" rev-parse HEAD)" "${THOUGHT_ARTIFACT:0:12}"
+  printf 'Thought feature source: %s (%s) — package matches pinned artifact %s…\n' "$(git -C "$THOUGHT_SRC" rev-parse HEAD)" "$THOUGHT_SRC" "${THOUGHT_ARTIFACT:0:12}"
 else
-  printf 'Thought feature: not offered (no clone at %s, or P1_THOUGHT=off).\n' "$THOUGHT_SRC"
+  printf 'Thought feature: not offered (no checkout at %s, or P1_THOUGHT=off).\n' "$THOUGHT_SRC"
 fi
 python3 - "$ID_PORT" "$TP_PORT" <<'PY'
 import socket,sys
@@ -90,6 +126,14 @@ try:
 except (OSError,ValueError) as e:
     sys.exit("ERROR: P1 trial ports busy/invalid: %s. Choose unused P1_IDENTITY_PORT and P1_PROCESSOR_PORT; no existing process was stopped." % e)
 PY
+if [[ "${P1_PREFLIGHT_ONLY:-}" == 1 ]]; then
+  # Checks only: nothing is built, started, created or changed.
+  if [[ -d "$WORK/processor-profile" || -d "$WORK/identity-profile" ]]; then prof="existing profiles will be reused"; else prof="no profiles yet (fresh trial)"; fi
+  printf 'Trial folder: %s (%s). Ports %s/%s are free.
+PREFLIGHT OK — nothing was built or started.
+' "$WORK" "$prof" "$ID_PORT" "$TP_PORT"
+  exit 0
+fi
 [[ -d "$WORK" || ! -e "$WORK" ]] || die "Work path is not a directory: $WORK"
 mkdir -p "$WORK"
 WORK="$(cd "$WORK" && pwd -P)"
