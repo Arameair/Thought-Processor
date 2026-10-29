@@ -259,11 +259,10 @@ class Supervisor:
             raise RuntimeError('READY_NOT_CONFIRMED')
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
             self.error = str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__.upper()
+            self.cleanup_children()
             self.state = 'FAILED'
-            self.stop()
 
-    def stop(self):
-        self.stop_requested.set()
+    def cleanup_children(self):
         for name in ('processor', 'identity'):
             proc = self.children.get(name)
             if proc and proc.poll() is None:
@@ -281,7 +280,12 @@ class Supervisor:
                             pass
         self.link = None
         self.pairing = None
-        self.state = 'STOPPED' if not listener(ID_PORT) and not listener(TP_PORT) else 'STOP_INCOMPLETE_PORT_BUSY'
+        return not listener(ID_PORT) and not listener(TP_PORT)
+
+    def stop(self):
+        self.stop_requested.set()
+        clear = self.cleanup_children()
+        self.state = 'STOPPED' if clear else 'STOP_INCOMPLETE_PORT_BUSY'
 
     def handle(self, cmd):
         with self.lock:
