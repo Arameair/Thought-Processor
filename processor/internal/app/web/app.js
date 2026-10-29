@@ -199,6 +199,8 @@
 
     if (!sel || (sel.type === "entity" && !ids.find((e) => e.id === sel.id)) || (sel.type === "feature" && !findFeature(s, sel.id))) sel = { type: "platform", id: "all" };
     const d = $("#detail");
+    const view = sel.type + ":" + sel.id;
+    if (d.dataset.view !== view) { d.dataset.view = view; d.dataset.key = ""; d.dataset.html = ""; d.innerHTML = ""; }
     if (sel.type === "platform") return renderPlatform(s, d);
     if (!sel) return set(d, `<div class="empty"><h2>Choose an identity</h2><p>The Admin, your companions and every installed feature are identities here. Each one starts with no access to anything.</p></div>`);
     if (sel.type === "admin") return renderAdmin(s, d);
@@ -256,6 +258,8 @@
       : !fs.length ? `Install your first service below (each install is approved by the Admin).`
       : !running.length ? `Start a service below, or <strong>Start all</strong>.` : "";
     if (next) h += `<div class="next"><strong>Next:</strong> ${next}</div>`;
+    const top = h;
+    h = "";
     // services
     h += `<div class="row between"><h3>Services</h3><div>${fs.length ? `<button class="btn small" data-startall="1" ${s.verified ? "" : "disabled"}>Start all</button> <button class="btn small" data-stopall="1">Stop all</button>` : ""}</div></div>`;
     h += fs.length ? `<table class="tbl plat"><tr><th>Service</th><th>State and evidence</th><th>Who may use it</th><th>Last self-test</th><th></th></tr>${fs.map((v) => {
@@ -282,7 +286,53 @@
     h += `<h3>Recent requests</h3>` + (reqs.length ? `<table class="tbl small"><tr><th>When</th><th>Service</th><th>For</th><th>Capability</th><th>Outcome</th></tr>${reqs.map(([n, q]) =>
       `<tr><td>${esc(new Date(q.at).toLocaleTimeString())}</td><td>${esc(n)}</td><td>${esc(name(q.subject_identity_id))}</td><td>${mono(q.capability)}</td><td>${badge(q.outcome.replace(/_/g, " "), oc[q.outcome] || "")}</td></tr>`).join("")}</table>
       <p class="small muted">Outcomes only: Processor keeps no copy of what a service answered.</p>` : `<p class="muted small">None yet this session.</p>`);
-    set(d, h);
+    // Stable parts, so TASS's chat (what you type, a picked picture) survives the screen's refreshes.
+    if (!$("#plat-top") || !d.contains($("#plat-top"))) {
+      d.innerHTML = `<div id="plat-top"></div><div id="plat-tass" class="plat-tass"><div id="plat-tass-head"></div><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div><div id="ov-model"></div><div id="ov-self"></div></div><div id="plat-rest"></div>`;
+      d.dataset.html = "";
+    }
+    set($("#plat-top"), top);
+    renderPlatformTass(s);
+    set($("#plat-rest"), h);
+  }
+
+  // TASS on the workbench: install it, run it, get it ready for a person, and talk to it — all here.
+  let tassFor = "";
+  const TASS_NEEDS = [/\.chat\.send$/, /\.chat\.history$/, /\.model\.set$/, /\.self\.read$/];
+  function renderPlatformTass(s) {
+    const el = $("#plat-tass-head");
+    if (!el) return;
+    const isChat = (caps) => (caps || []).some((c) => /\.chat\.send$/.test(c.id));
+    const v = features(s).find((x) => x.record.state === "INSTALLED" && isChat(x.record.capabilities));
+    const lib = (s.library || []).find((x) => !x.blocked && isChat(x.capabilities));
+    const clearChat = () => { set($("#chat-head"), ""); set($("#chat-log"), ""); $("#chat-log").hidden = true; const f = $("#chat-form"); f.innerHTML = ""; f.dataset.key = ""; const m = $("#ov-model"); m.innerHTML = ""; m.dataset.key = ""; set($("#ov-self"), ""); };
+    $("#plat-tass").hidden = !v && !lib;
+    if (!v) {
+      clearChat();
+      return set(el, lib ? `<h2>TASS</h2><div class="next"><strong>Next:</strong> put TASS on this computer. When the Admin approves, Identity gives TASS its own identity. <button class="btn small primary" data-review="${esc(lib.feature_id)}" ${s.verified && (s.admin || {}).state === "ENROLLED" ? "" : "disabled"}>Install TASS…</button></div>` : "");
+    }
+    const r = v.record, rt = v.runtime, iv = v.identity, ins = r.installation_id, [word, cls] = phaseOf(rt.state);
+    const busy = rt.state === "STARTING" || rt.state === "RESTARTING" || rt.state === "STOPPING";
+    const people = (s.identities || []).filter((e) => e.kind === "person");
+    if (!people.find((e) => e.id === tassFor)) tassFor = (people[0] || {}).id || "";
+    const needs = TASS_NEEDS.map((rx) => (r.capabilities || []).find((c) => rx.test(c.id))).filter(Boolean);
+    const active = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE");
+    const missing = needs.filter((c) => !active.some((g) => g.grant.capability === c.id && g.grant.subject_identity_id === tassFor));
+    const pend = (v.pending || []).filter((p) => p.kind === "grant_capability");
+    let h = `<h2>TASS</h2><div class="tass-run"><span class="dot ${cls}"></span> <strong>${esc(word)}</strong> <span class="badges">${svcEvidence(v)}</span>
+      ${rt.state === "RUNNING" ? `<button class="btn small" data-stop="${esc(ins)}">Stop TASS</button>` : busy ? `<button class="btn small" disabled>${esc(word)}</button>` : `<button class="btn small primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>Run TASS</button>`}
+      <button class="btn ghost small" data-sel="feature:${esc(ins)}">Full page →</button></div>`;
+    if (!people.length) h += `<div class="next"><strong>Next:</strong> add yourself as a person (<strong>+ Identity</strong>, kind <em>person</em>) so TASS can be allowed to talk with you.</div>`;
+    else {
+      const pick = `<select id="tass-for">${people.map((e) => `<option value="${esc(e.id)}" ${e.id === tassFor ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>`;
+      h += missing.length ? `<div class="next"><strong>Next:</strong> TASS may not do everything for ${pick} yet
+        (missing: ${missing.map((c) => mono(c.id)).join(", ")}). <button class="btn small primary" data-tassready="${esc(ins)}" ${s.verified ? "" : "disabled"}>Get TASS ready for this person</button>
+        <div class="small muted">Asks the Admin for each missing permission (valid 1 day); you approve each one in Identity's page.</div></div>`
+        : `<p class="small">For ${pick}: ${badge("✓ ready", "ok")} <span class="muted">talk, history, choose the model, read its pulse</span></p>`;
+    }
+    if (pend.length) h += pend.map((p, i) => `<div class="pending"><span class="dot warn"></span> Permission ${i + 1} of ${pend.length} waiting for the Admin: ${esc((p.summary || []).find((x) => /tass\./.test(x)) || p.approval_id)} <button class="btn small" data-watch="${esc(p.approval_id)}">Approve…</button></div>`).join("");
+    set(el, h);
+    if (rt.state === "RUNNING") { renderChat(s, v, iv); renderSelf(s, v, iv); } else clearChat();
   }
 
   function kv(rows) { return `<dl class="kv">${rows.filter(Boolean).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`; }
@@ -788,6 +838,19 @@
         try { await navigator.clipboard.writeText(j.text); toast("Activity copied — no keys, tickets, codes or private links.", "ok"); } catch (_) { toast("Shown below — select it and copy.", "ok"); }
         render(); } catch (e) { toast(e.message, "bad"); }
     }
+    else if (ds.tassready) {
+      t.disabled = true;
+      const v = findFeature(state, ds.tassready), active = ((v.identity && v.identity.grants) || []).filter((g) => g.status === "ACTIVE");
+      const needs = TASS_NEEDS.map((rx) => (v.record.capabilities || []).find((c) => rx.test(c.id))).filter(Boolean);
+      let first = null;
+      for (const c of needs) {
+        if (active.some((g) => g.grant.capability === c.id && g.grant.subject_identity_id === tassFor)) continue;
+        const j = await act(`/api/installations/${ds.tassready}/grants/request`, { subject: tassFor, capability: c.id, expires_in_seconds: 86400 });
+        if (j && j.approval_url && !first) first = j;
+      }
+      t.disabled = false;
+      if (first) watch(first);
+    }
     else if (ds.startall || ds.stopall) {
       t.disabled = true;
       for (const v of features(state).filter((x) => x.record.state === "INSTALLED")) {
@@ -811,6 +874,7 @@
     else if (ds.gh || (t.id === "chip-github" && state && state.github && state.github.state !== "VERIFIED")) await act("/api/github/connect", {});
     else if (t.id === "chip-admin") choose({ type: "admin", id: "admin" });
   });
+  document.addEventListener("change", (e) => { if (e.target && e.target.id === "tass-for") { tassFor = e.target.value; render(); } });
   $("#add-id-btn").onclick = () => { $("#new-id").hidden = !$("#new-id").hidden; if (!$("#new-id").hidden) $("#new-name").focus(); };
   $("#add-feature-btn").onclick = () => choose({ type: "library", id: "all" });
   $("#theme").onchange = (e) => { applyTheme(e.target.value); act("/api/theme", { theme: e.target.value }); };

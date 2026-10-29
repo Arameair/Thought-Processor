@@ -185,3 +185,7 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .selfview .seeds { margin: 4px 0 8px 18px; padding: 0; }
 .selfview .reflection { border-top: 1px dashed var(--line); padding: 8px 0; }
 .selfview pre { white-space: pre-wrap; font: 12px/1.45 var(--mono); margin: 6px 0 0; }
+.plat-tass { border: 1px solid var(--line); border-radius: 14px; padding: 4px 16px 12px; margin: 14px 0; background: var(--panel); }
+.plat-tass h2 { margin: 10px 0 6px; }
+.tass-run { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plat-tass .pending { margin: 6px 0; }

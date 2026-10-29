@@ -13,7 +13,7 @@ The exact commits are in the delivery report and at the top of each draft PR.
 
 | You think of it as | What happens |
 |---|---|
-| **Open the development workbench** | `run-p1.sh` starts Identity and Thought Processor. The browser lands on the **Developer Platform**. |
+| **Open the development workbench** | `run-p1.sh` starts Identity and Thought Processor. The browser lands on the **Developer Platform**, which has a **TASS** box where you install it, run it, get it ready for you, choose its model and talk to it. |
 | **Sign in as TASS** | You **install TASS** from the Developer Platform. You approve it as Admin in Identity's page, and **Identity gives TASS its own identity** (an installation ID that is never reused). From then on TASS *is* that identity on your computer. |
 | **Let me talk to it / see it think / pick its model** | You (the person *Dustin*) get one permission for each thing, each approved by the Admin: `tass.chat.send`, `tass.chat.history`, `tass.self.read`, `tass.model.set`. |
 | **The model** | **Ollama**, running in WSL on your computer, with **`qwen3.5:4b`**. That model reads pictures and text, and it can think. TASS only accepts a model at `127.0.0.1`. |
@@ -45,7 +45,7 @@ It can only do what this paired Processor session could already do. Installs and
 | Suite | Result |
 |---|---|
 | `Arameair/TASS` `tests/test_tass_feature.py` | **49** tests: pictures, model abilities, chat thinking, model choice, the pulse and genesis, conversations, isolation, the loopback guard, redirects, proxies, timeouts, forgetting, the protocol |
-| `processor/acceptance/p1_tass.py --shots DIR` | **74** checks with real Identity, Processor, TASS, Thought, the worker and a real browser |
+| `processor/acceptance/p1_tass.py --shots DIR` | **78** checks with real Identity, Processor, TASS, Thought, the worker and a real browser |
 | Every earlier suite | still passing |
 
 In the automated tests, the "model" is a **test stand-in** on `127.0.0.1` that answers the way Ollama's API does (the same fields: `images`, `think`, `message.thinking`, and `capabilities` from `/api/show`). It proves the path end to end. **A real Ollama model has not run in the test environment** (it has no internet). Your run below is the first one with a real model.
@@ -123,23 +123,23 @@ P1_TASS_SRC=~/p1c/tass-companion bash ./run-p1.sh
 
 **Expected:** `P1 Processor ready on 127.0.0.1:7867`, and the browser opens. Leave this terminal open; Ctrl+C here stops everything at the end.
 
-### E. In the browser
+### E. In the browser: everything on the Developer Platform
 
 | # | Do | Expected |
 |---|---|---|
 | 1 | **Connect**, then type the code shown in the terminal | *Identity: connected*, then the **Developer Platform** |
 | 2 | **Sign in to GitHub** → **Establish Admin Identity…** → in Identity's page set a passphrase, tick, establish | *Admin: established*. Skip this if your earlier TASS trial already did it |
-| 3 | **+ Identity**: `Dustin`, kind *person* | Dustin on the left |
-| 4 | **"Sign in as TASS":** Developer Platform → **Ready to install** → **TASS (private companion)** → **Install…** → **Install** → approval page → passphrase → **Approve** | TASS appears under **Services** with its own installation ID |
-| 5 | **Start** (on its row) | Running. Within about 15 s: **RUNNING · CONNECTED · READY · MODEL: NOT CONFIGURED · PULSE: born** |
-| 6 | **Open →** TASS → **Connections** → *Request a connection* for **Dustin**, four times, approving each in Identity's page: `tass.chat.send`, `tass.chat.history`, `tass.model.set`, `tass.self.read` | four **ACTIVE** grants |
-| 7 | **Overview** → **TASS's model**: it already says `qwen3.5:4b` → **Use this model** | *TASS will use qwen3.5:4b…*. Within about 10 s the chip reads **MODEL: REACHABLE · qwen3.5:4b · vision · thinking** |
+| 3 | **+ Identity** (left): `Dustin`, kind *person* | Dustin on the left |
+| 4 | **"Sign in as TASS":** in the **TASS** box on the platform → **Install TASS…** → **Install** → approval page → passphrase → **Approve** | the TASS box shows **Stopped** and a **Run TASS** button. TASS now has its own identity |
+| 5 | **Run TASS** | **Running**. Within about 15 s the chips read **RUNNING · CONNECTED · READY · MODEL: NOT CONFIGURED · PULSE: born** |
+| 6 | *For Dustin* → **Get TASS ready for this person** → approve each request (**Approve…** → passphrase), four in all | **For Dustin: ✓ ready**. The **Talk to TASS** chat and **TASS's model** appear in the same box |
+| 7 | **TASS's model** (it already says `qwen3.5:4b`) → **Use this model** | within about 10 s: **MODEL: REACHABLE · qwen3.5:4b · thinking · vision** |
 | 8 | **Talk to TASS**: `hello TASS, what are you?` → **Send** | TASS answers, labelled with the model's name |
-| 9 | **Attach picture** → choose any test photo → type `what is this picture of?` → **Send** | your message shows 📎 *the file name*, and TASS describes the picture |
-| 10 | Wait about a minute, then **Read TASS's pulse** | **I am · I am · What am I?** (seeds), *Born …*, and a reflection on *What am I?* with **Thinking** under a fold-out |
-| 11 | Optional: in **TASS's model**, tick *show thinking in chat* → **Use this model** → ask something | TASS's answers now have a **Thinking** fold-out. They are slower |
+| 9 | **Attach picture** → choose a test photo → `what is this picture of?` → **Send** | your message shows 📎 *the file name*, and TASS describes the picture |
+| 10 | Wait about a minute → **Read TASS's pulse** (further down the box) | **I am · I am · What am I?** (seeds), *Born …*, and a reflection with **Thinking** under a fold-out |
+| 11 | Optional: tick *show thinking in chat* → **Use this model** → ask something | answers get a **Thinking** fold-out (slower) |
 | 12 | **Privacy check:** in a second terminal, while TASS answers: `ss -tnp \| grep "pid=$(pgrep -f 'python[0-9.]* -I .*/p1-tass/processor-profile/installations/ins_[^ ]*/package/[t]ass_feature\.py$'),"` | every address is `127.0.0.1` |
-| 13 | Developer Platform → **Stop all**, then **Start all** | everything stops, then runs again; TASS is the same TASS (same birth time) |
+| 13 | **Stop TASS**, then **Run TASS**, then **Load conversation** | it's the same TASS: same birth time, same conversation |
 
 ### F. Finish
 

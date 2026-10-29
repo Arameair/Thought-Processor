@@ -575,7 +575,7 @@ def ui_check(link, ti, me_name):
     rec("UI", not errors, "no JavaScript errors on the TASS screen", "; ".join(errors)[:120])
 
 
-def ui_platform(link, svc_ids):
+def ui_platform(link, svc_ids, tp=None, ti=None, other=None):
     """The Developer Platform: the landing screen, every service with evidence, Start all / Stop all (OS-checked)."""
     from playwright.sync_api import sync_playwright
     shots = Path(args.shots)
@@ -624,8 +624,39 @@ def ui_platform(link, svc_ids):
         page.wait_for_timeout(2500)
         rec("PLATFORM", all(n == 1 for n in alive().values()) and page.locator(".tbl.plat [data-stop]").count() == len(svc_ids),
             "Start all: exactly one process per service again (OS check) and each row offers Stop", str(alive()))
-        txt = page.inner_text("#detail")
-        rec("PLATFORM", "recent requests" in txt.lower() and MARK not in txt and "DENIED BY IDENTITY" in txt, "recent requests across services show outcomes (incl. denials) and never what was said")
+        if tp and ti and other:
+            # TASS on the workbench: run it, get it ready for a person, talk to it — without leaving the platform
+            page.wait_for_selector("#plat-tass .tass-run >> text=Running", timeout=20000)
+            page.select_option("#tass-for", label="Other")
+            page.wait_for_selector("[data-tassready]", timeout=10000)
+            page.click("[data-tassready]")
+            page.wait_for_selector("#m-approval:not([hidden])", timeout=15000)
+            page.click("#ap-close")
+            pend = [p for p in inst(tp.state(), ti)["pending"] if p["kind"] == "grant_capability"]
+            rec("PLATFORM", len(pend) == 3, "Get TASS ready (for Other): one click asks the Admin for each missing permission (send, model, pulse; history was already allowed)", "%d requests" % len(pend))
+            for p_ in pend:
+                approve(p_["approval_url"])
+            s_ = tp.until(lambda s: len([g for g in inst(s, ti)["identity"]["grants"] if g["status"] == "ACTIVE" and g["grant"]["subject_identity_id"] == other]) >= 4, 20, "other ready")
+            mine = sorted(g["grant"]["capability"] for g in inst(s_, ti)["identity"]["grants"] if g["status"] == "ACTIVE" and g["grant"]["subject_identity_id"] == other)
+            rec("PLATFORM", mine == sorted([SEND, HIST, MODEL, SELF]), "after the Admin approves each one, Other has exactly the four TASS permissions — nothing more", ", ".join(mine))
+            for _ in range(50):
+                if "Get TASS ready" not in page.inner_text("#plat-tass-head"):
+                    break
+                page.wait_for_timeout(200)
+            page.wait_for_selector("#plat-tass #chat-in", timeout=15000)
+            n0 = page.locator("#plat-tass #chat-log .msg").count()
+            page.fill("#plat-tass #chat-in", "hello from the workbench")
+            page.click("#plat-tass #chat-send")
+            for _ in range(100):
+                if page.locator("#plat-tass #chat-log .msg").count() >= n0 + 2:
+                    break
+                page.wait_for_timeout(200)
+            rec("PLATFORM", "I heard: hello from the workbench" in page.inner_text("#plat-tass #chat-log") and "Use this model" in page.inner_text("#plat-tass #ov-model"),
+                "talk to TASS right on the Developer Platform (the chat and the model box are there)")
+            page.screenshot(path=str(shots / "platform-03-tass.png"), full_page=True)
+        txt = page.inner_text("#plat-rest")
+        rec("PLATFORM", "recent requests" in txt.lower() and MARK not in txt and "COMPLETED" in txt and "tass.chat.send" in txt,
+            "recent requests across services show outcomes and never what was said (the conversation itself shows only in TASS's chat)")
         b.close()
     rec("PLATFORM", not errors, "no JavaScript errors on the Developer Platform", "; ".join(errors)[:120])
 
@@ -916,7 +947,7 @@ def main():
 
     # ---- the owner's screen ----
     if args.shots:
-        ui_platform(LINK["url"], [TI, WK, TH])
+        ui_platform(LINK["url"], [TI, WK, TH], tp, TI, OTHER)
         tp.until(lambda s: entrance(s, TI).get("ready") and status_of(s, TI).get("model", {}).get("state") == "REACHABLE", 30, "tass ready after Start all")
         ui_check(LINK["url"], TI, "Dustin")
         tp.post(f"/api/installations/{TI}/grants/{GS}/revoke")
