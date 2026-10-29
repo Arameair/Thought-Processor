@@ -84,6 +84,17 @@ class TestLauncher(unittest.TestCase):
                     p.kill()
                     p.wait(timeout=5)
 
+    def test_start_failure_stays_observable_without_spawning(self):
+        o = launcher.Supervisor()
+        failure = MagicMock(returncode=1, stdout=b'')
+        with patch.object(launcher.subprocess, 'run', return_value=failure), patch.object(launcher, 'listener', return_value=False):
+            o.build_and_start()
+            status = o.handle('status')
+        self.assertEqual(status['launcher'], 'FAILED')
+        self.assertEqual(status['error'], 'PREFLIGHT_REFUSED')
+        self.assertFalse(o.stop_requested.is_set())
+        self.assertEqual(o.children, {})
+
     def test_versions_refuses_to_apply(self):
         with patch.object(launcher, 'git_rev', return_value='UNAVAILABLE'), patch.object(launcher, 'pinned', return_value={'TASS_ARTIFACT': 'test'}):
             v = launcher.versions()
