@@ -1,0 +1,45 @@
+{
+  "schema": "thought.feature-manifest/1",
+  "feature_id": "developer-utility-adapter",
+  "name": "Developer Utility Adapter (BLOCKED until approved)",
+  "version": "0.0.1-experiment",
+  "description": "Signed local lifecycle adapter only; no TheBrain host launch; not approved for install",
+  "publisher": {
+    "name": "Arameair owner prototype (claim only)",
+    "proof": "none"
+  },
+  "source": {
+    "repo": "Arameair/Thought-Processor",
+    "path": "processor/developer-utility"
+  },
+  "trust_class": "OWNER_REVIEW_REQUIRED",
+  "api": "thought.feature-api/1",
+  "runtime": {
+    "command": [
+      "python3",
+      "-I",
+      "{package}/utility_agent.py"
+    ],
+    "requires": [
+      "python3 3.8+"
+    ],
+    "startup_modes": [
+      "manual"
+    ],
+    "default_startup": "manual",
+    "default_idle_seconds": 30,
+    "recovery": "manual"
+  },
+  "capabilities": [],
+  "standalone": {
+    "health": true,
+    "self_test": false
+  },
+  "information_sources": [],
+  "files": [
+    {
+      "path": "utility_agent.py",
+      "sha256": "786a3065a83685cad4cda05967029eb9a77f4f5d4714be4cd1c525d4af4a7d03"
+    }
+  ]
+}
