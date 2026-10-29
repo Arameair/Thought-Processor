@@ -17,8 +17,8 @@ import sys
 OLD = "86d79ba30ab3afb26bf015364fa0556dfa553c1e48d673b4243a827d6f8ba757"
 NEW = "985027bbaebfd99bb07926285ceac218726ddca3fca0dff421bf665e2781abef"
 EXPECTED_ID = "ins_2883db5a24e1e0e93cad"
-GOOD_PATH = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\Z")
-DIGEST = re.compile(r"[0-9a-f]{64}\\Z")
+GOOD_PATH = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\Z")
+DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class GateError(Exception):
@@ -72,8 +72,8 @@ def package_digest(folder):
             raise GateError("FILES_CHANGED")
         lines.append((rel, actual))
     raw_sha = hashlib.sha256(manifest_raw).hexdigest()
-    payload = "thought.feature-package/1\\nmanifest " + raw_sha + "\\n"
-    payload += "".join(d + "  " + p + "\\n" for p, d in sorted(lines))
+    payload = "thought.feature-package/1\nmanifest " + raw_sha + "\n"
+    payload += "".join(d + "  " + p + "\n" for p, d in sorted(lines))
     return hashlib.sha256(payload.encode()).hexdigest(), manifest, raw_sha
 
 
