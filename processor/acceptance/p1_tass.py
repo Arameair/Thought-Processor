@@ -388,7 +388,17 @@ def status_of(s, ins):
 # ---------------- TASS-specific helpers ----------------
 
 TASS = "tass"
-SEND, HIST, CLEAR, SELF = "tass.chat.send", "tass.chat.history", "tass.chat.clear", "tass.self.read"
+SEND, HIST, CLEAR, SELF, MODEL = "tass.chat.send", "tass.chat.history", "tass.chat.clear", "tass.self.read", "tass.model.set"
+
+
+def make_png(seed):
+    """A real, unique 2×2 PNG (so its bytes can be searched for afterwards)."""
+    import struct, zlib
+    rnd = hashlib.sha256(seed.encode()).digest()
+    raw = b"".join(b"\x00" + rnd[i * 8:i * 8 + 8] for i in range(2))  # 2 rows × 2 RGBA pixels
+    def chunk(t, d):
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 WCAP = "worker.test.synthetic"
 LINK = {}
 MARK = "kestrel-" + secrets.token_hex(6)  # a unique phrase: where it appears is where the conversation is
@@ -426,11 +436,14 @@ class StandIn:
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-                seen.append(body)
                 if redirect:
                     return self.bounce()
+                if self.path == "/api/show":  # what the model can do, as Ollama reports it
+                    return self.answer({"capabilities": ["completion", "vision", "thinking"]})
+                seen.append(body)
                 last = body["messages"][-1]["content"]
-                msg = {"role": "assistant", "content": "(test stand-in) I heard: " + last}
+                n = len(body["messages"][-1].get("images") or [])
+                msg = {"role": "assistant", "content": ("(test stand-in) I see %d picture(s); you asked: " % n if n else "(test stand-in) I heard: ") + last}
                 if body.get("think"):
                     msg = {"role": "assistant", "thinking": "(test stand-in reasoning)", "content": "(test stand-in) I am TASS, going by the facts."}
                 self.answer({"message": msg})
@@ -535,6 +548,22 @@ def ui_check(link, ti, me_name):
             page.wait_for_timeout(200)
         log_txt = page.inner_text("#chat-log")
         rec("UI", "I heard: hello from the screen" in log_txt and page.input_value("#chat-in") == "", "Send from the screen: your message and TASS's answer appear; the box clears")
+        pic = shots / "kitchen.png"
+        pic.write_bytes(make_png("ui-" + MARK))
+        n1 = page.locator("#chat-log .msg").count()
+        page.set_input_files("#chat-file", str(pic))
+        page.wait_for_selector("#chat-att >> text=kitchen.png", timeout=5000)
+        page.fill("#chat-in", "what is this picture of?")
+        page.click("#chat-send")
+        for _ in range(100):
+            if page.locator("#chat-log .msg").count() >= n1 + 2:
+                break
+            page.wait_for_timeout(200)
+        lt = page.inner_text("#chat-log")
+        rec("UI", "I see 1 picture" in lt and "kitchen.png" in lt and page.inner_text("#chat-att").strip() == "",
+            "attach a picture on the screen, ask “what is this picture of?”: the answer comes back and the picture is named in your message")
+        mb = page.inner_text("#ov-model")
+        rec("UI", "Use this model" in mb and page.input_value("#model-in") == "qwen3.5:4b", "the model box offers qwen3.5:4b and a Use this model button")
         page.screenshot(path=str(shots / "tass-01-chat.png"), full_page=True)
         page.click("#ov-self [data-selfread]")
         page.wait_for_selector("#ov-self .selfview", timeout=15000)
@@ -572,6 +601,12 @@ def ui_platform(link, svc_ids):
         rec("PLATFORM", head.count("RUNNING") >= len(svc_ids) and "CONNECTED" in head and "MODEL: REACHABLE" in head and "PULSE: born" in head and "Identity" in head and "Admin" in head,
             "each running service shows its evidence chips; the system strip shows Identity, Admin and Processor")
         page.screenshot(path=str(shots / "platform-01-running.png"), full_page=True)
+        page.click(".mini-list [data-review]")
+        page.wait_for_selector("#m-install:not([hidden])", timeout=10000)
+        mi = page.inner_text("#m-install")
+        rec("PLATFORM", "Install" in mi and "Artifact SHA-256" in mi and "pinned" in mi.lower(),
+            "Install… on the Developer Platform opens the install review (what gets an identity, its exact fingerprint)", mi.split("\n")[0][:60])
+        page.click("#i-cancel")
         page.click("[data-stopall]")
         for _ in range(100):
             if all(n == 0 for n in alive().values()):
@@ -672,8 +707,8 @@ def main():
     # ---- discoverable, pinned; tampered/unknown denied ----
     lib = {x.get("feature_id"): x for x in s["library"]}
     d = lib.get(TASS) or {}
-    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR, SELF]),
-        "TASS is in Processor's library as a reviewed, pinned package with exactly its 4 capabilities (3 chat + reading its own pulse)", d.get("trust_basis") or d.get("blocked") or "missing")
+    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR, SELF, MODEL]),
+        "TASS is in Processor's library as a reviewed, pinned package with exactly its 5 capabilities (3 chat, its own pulse, choosing its model)", d.get("trust_basis") or d.get("blocked") or "missing")
     t = lib.get("tass-tampered") or {}
     st, j = tp.post("/api/library/tass-tampered/install")
     rec("TRUST", bool(t.get("blocked")) and st == 409, "a changed copy (one that would allow a non-local model) is BLOCKED and can't be installed", (t.get("blocked") or "")[:50])
@@ -739,9 +774,19 @@ def main():
 
     # ---- talk, with a local model (test stand-in on 127.0.0.1) ----
     model = StandIn()
-    set_model(TI, "http://127.0.0.1:%d" % model.port)
+    r = ask(tp, TI, ME, MODEL, "stand-in:1b")
+    rec("MODEL", r["outcome"] == "DENIED_BY_IDENTITY", "choosing TASS's model needs its own permission")
+    grant(tp, TI, ME, MODEL)
+    r = ask(tp, TI, ME, MODEL, json.dumps({"url": "http://example.com:11434", "model": "stand-in:1b"}))
+    rec("MODEL", r["outcome"] == "ERROR" and "MODEL_REFUSED" in r["detail"] and not (data_dir(TI) / "model.json").exists(),
+        "choosing a model address that isn't this computer is REFUSED from the screen too; nothing is written", r["detail"][:60])
+    r = ask(tp, TI, ME, MODEL, json.dumps({"url": "http://127.0.0.1:%d" % model.port, "model": "stand-in:1b"}))
+    mj = data_dir(TI) / "model.json"
+    rec("MODEL", r["outcome"] == "COMPLETED" and mj.exists() and (mj.stat().st_mode & 0o777) == 0o600, "the model is chosen from the screen (tass.model.set) and saved privately", out(r).get("headline", r["detail"])[:60])
     s = tp.until(lambda s: status_of(s, TI).get("model", {}).get("state") == "REACHABLE", 25, "model reachable")
-    rec("MODEL", status_of(s, TI).get("model", {}).get("state") == "REACHABLE", "local model set up: MODEL: REACHABLE (checked by TASS, loopback only)", status_of(s, TI).get("model", {}).get("detail", "")[:70])
+    mv = status_of(s, TI).get("model", {})
+    rec("MODEL", mv.get("state") == "REACHABLE" and "vision" in (mv.get("abilities") or []) and "thinking" in (mv.get("abilities") or []),
+        "MODEL: REACHABLE, and TASS reports what it can do (vision, thinking) as Ollama states it", mv.get("detail", "")[:70])
     r = ask(tp, TI, ME, SEND, "what did I ask you to remember?")
     o = out(r)
     sent = model.seen[-1] if model.seen else {}
@@ -753,6 +798,31 @@ def main():
     pid = tass_pid(tp, TI)
     ends = outbound([pid])
     rec("PRIVACY", all(is_loopback(a) for a, _ in ends), "while answering, every TASS connection is to 127.0.0.1 (OS check)", str(sorted(set(ends)))[:80])
+
+    # ---- a picture: "what is this picture of?" ----
+    import base64 as _b64
+    img = make_png(MARK)
+    B64 = _b64.b64encode(img).decode()
+    st_, j_ = tp.post(f"/api/installations/{TI}/action", {"subject": ME, "capability": SEND, "input": "what is this picture of?",
+                                                          "attachment": {"name": "garden.png", "mime": "image/png", "base64": B64}})
+    r = j_.get("result") or {}
+    o = out(r)
+    chat = [b for b in model.seen if b["messages"][-1].get("images")]
+    rec("VISION", r.get("outcome") == "COMPLETED" and "I see 1 picture" in (o.get("reply") or "") and chat and chat[-1]["messages"][-1]["images"] == [B64],
+        "a picture with “what is this picture of?” reaches the local model as an image and comes back answered", (o.get("reply") or r.get("detail", ""))[:70])
+    you = [m for m in o.get("conversation") or [] if m["role"] == "you"][-1:] or [{}]
+    pics = list((data_dir(TI) / "tass" / "images" / ME).glob("*")) if (data_dir(TI) / "tass" / "images" / ME).exists() else []
+    rec("VISION", (you[0].get("attachment") or {}).get("name") == "garden.png" and len(pics) == 1 and pics[0].read_bytes() == img and (pics[0].stat().st_mode & 0o777) == 0o600 and B64 not in json.dumps(o),
+        "the picture is kept privately by TASS (0600) and the conversation only names it")
+    st_, j_ = tp.post(f"/api/installations/{TI}/action", {"subject": ME, "capability": SEND, "input": "and this?",
+                                                          "attachment": {"name": "x.gif", "mime": "image/gif", "base64": _b64.b64encode(b"GIF89a" + b"0" * 30).decode()}})
+    rec("VISION", st_ == 400 and "image refused" in (j_.get("error") or ""), "a file that isn't a PNG/JPEG/WebP picture is refused by Processor before anything is sent", (j_.get("error") or "")[:60])
+    st_, j_ = tp.post(f"/api/installations/{TI}/action", {"subject": ME, "capability": SEND, "input": "fake",
+                                                          "attachment": {"name": "fake.png", "mime": "image/png", "base64": _b64.b64encode(b"not a png at all").decode()}})
+    rec("VISION", st_ == 400, "a file that only claims to be a PNG is refused (its bytes are checked)")
+    proc_txt = json.dumps(tp.state()) + "".join(p.read_text(errors="replace") for p in (W / "processor-profile").rglob("*") if p.is_file() and "/data/" not in str(p) and p.stat().st_size < 5 << 20)
+    id_txt = "".join(p.read_text(errors="replace") for p in (W / "identity-profile").rglob("*") if p.is_file())
+    rec("VISION", B64[:60] not in proc_txt and B64[:60] not in id_txt, "Processor and Identity keep no copy of the picture")
 
     s = tp.until(lambda s: ((status_of(s, TI).get("pulse") or {}).get("counters") or {}).get("thought", 0) >= 1, 90, "pulse thought")
     pv = status_of(s, TI).get("pulse") or {}

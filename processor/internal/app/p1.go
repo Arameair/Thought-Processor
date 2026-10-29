@@ -17,6 +17,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -671,7 +672,46 @@ func (a *App) specFor(id string) (supervisor.Spec, error) {
 
 // ---- synthetic protected action ----
 
-func (a *App) runAction(ctx context.Context, id, subject, capability, input string) (res ActionResult) {
+// Attachment is one image a person sends with a request (e.g. "what is this
+// picture of?"). Processor checks it, passes it through to the feature inside
+// the ticketed request body (Identity sees only the request's SHA-256), and
+// keeps no copy of it.
+type Attachment struct {
+	Name string `json:"name"`
+	Mime string `json:"mime"`
+	Data string `json:"base64"`
+}
+
+var attNameRE = regexp.MustCompile(`^[A-Za-z0-9_.() -]{1,128}$`)
+
+const maxAttachment = 4 << 20
+
+func checkAttachment(at *Attachment) error {
+	if at == nil {
+		return nil
+	}
+	if !attNameRE.MatchString(at.Name) || strings.Contains(at.Name, "..") {
+		return fmt.Errorf("the file name isn't allowed")
+	}
+	magic := map[string][]byte{"image/png": []byte("\x89PNG\r\n\x1a\n"), "image/jpeg": {0xff, 0xd8, 0xff}, "image/webp": []byte("RIFF")}
+	m, ok := magic[at.Mime]
+	if !ok {
+		return fmt.Errorf("only PNG, JPEG or WebP images can be sent")
+	}
+	if len(at.Data) > maxAttachment*4/3+16 {
+		return fmt.Errorf("the image is larger than 4 MB")
+	}
+	raw, err := base64.StdEncoding.DecodeString(at.Data)
+	if err != nil || len(raw) == 0 || len(raw) > maxAttachment {
+		return fmt.Errorf("the image couldn't be read, or is larger than 4 MB")
+	}
+	if !bytes.HasPrefix(raw, m) || (at.Mime == "image/webp" && (len(raw) < 12 || string(raw[8:12]) != "WEBP")) {
+		return fmt.Errorf("the file isn't really a %s image", at.Mime)
+	}
+	return nil
+}
+
+func (a *App) runAction(ctx context.Context, id, subject, capability, input string, att ...*Attachment) (res ActionResult) {
 	res = ActionResult{RequestID: "req_" + store.RandHex(8), InstallationID: id, Capability: capability, Subject: subject, At: time.Now().UTC()}
 	t0 := time.Now()
 	defer func() {
@@ -700,7 +740,11 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 		res.Outcome, res.Detail = "ERROR", "not an installed feature"
 		return res
 	}
-	body, _ := json.Marshal(map[string]string{"request_id": res.RequestID, "input": input})
+	reqBody := map[string]any{"request_id": res.RequestID, "input": input}
+	if len(att) > 0 && att[0] != nil {
+		reqBody["attachment"] = att[0]
+	}
+	body, _ := json.Marshal(reqBody)
 	cl, err := a.Conn.Require(ctx)
 	if err != nil {
 		res.Outcome, res.Detail = "AUTHORITY_UNAVAILABLE", "Identity can't be reached, so nothing was started or sent"
@@ -1246,16 +1290,24 @@ func (a *App) p1Routes(m *http.ServeMux) {
 	}))
 	m.HandleFunc("POST /api/installations/{id}/action", ins(func(w http.ResponseWriter, r *http.Request, id string) {
 		var b struct {
-			Subject    string `json:"subject"`
-			Capability string `json:"capability"`
-			Input      string `json:"input"`
+			Subject    string      `json:"subject"`
+			Capability string      `json:"capability"`
+			Input      string      `json:"input"`
+			Attachment *Attachment `json:"attachment"`
 		}
-		decode(r, &b)
+		if err := decode(r, &b); err != nil {
+			a.fail(w, 400, "the request couldn't be read (an image must be 4 MB or smaller)")
+			return
+		}
 		if !entIDRE.MatchString(b.Subject) || !capIDRE.MatchString(b.Capability) || len(b.Input) > 1000 {
 			a.fail(w, 400, "choose an identity, a capability and up to 1000 characters of test input")
 			return
 		}
-		res := a.runAction(r.Context(), id, b.Subject, b.Capability, b.Input)
+		if err := checkAttachment(b.Attachment); err != nil {
+			a.fail(w, 400, "image refused: "+err.Error()+"; nothing was sent")
+			return
+		}
+		res := a.runAction(r.Context(), id, b.Subject, b.Capability, b.Input, b.Attachment)
 		writeJSON(w, 200, map[string]any{"result": res, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/installations/{id}/uninstall", ins(func(w http.ResponseWriter, r *http.Request, id string) {

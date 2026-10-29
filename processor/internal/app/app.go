@@ -142,7 +142,13 @@ const (
 
 func (a *App) wrap(lv level, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		// 16 KB for every request, except a feature request that may carry one
+		// image attachment (validated again in the action handler and in the feature).
+		limit := int64(16 << 10)
+		if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/installations/") && strings.HasSuffix(r.URL.Path, "/action") {
+			limit = 8 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		if lv == public {
 			h(w, r)
 			return

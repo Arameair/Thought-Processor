@@ -9,199 +9,176 @@ The exact commits are in the delivery report and at the top of each draft PR.
 - **Identity:** unchanged at `64940b6`. No Identity code or policy changed.
 - **Not merged anywhere.** Your older TASS branches (Discord, local screen, ChatGPT) are untouched, as are `main`, `alpha`, PR #27/#28/#29 and every other trial.
 
+## How "putting TASS on your computer" works
+
+| You think of it as | What happens |
+|---|---|
+| **Open the development workbench** | `run-p1.sh` starts Identity and Thought Processor. The browser lands on the **Developer Platform**. |
+| **Sign in as TASS** | You **install TASS** from the Developer Platform. You approve it as Admin in Identity's page, and **Identity gives TASS its own identity** (an installation ID that is never reused). From then on TASS *is* that identity on your computer. |
+| **Let me talk to it / see it think / pick its model** | You (the person *Dustin*) get one permission for each thing, each approved by the Admin: `tass.chat.send`, `tass.chat.history`, `tass.self.read`, `tass.model.set`. |
+| **The model** | **Ollama**, running in WSL on your computer, with **`qwen3.5:4b`**. That model reads pictures and text, and it can think. TASS only accepts a model at `127.0.0.1`. |
+
 ## The Developer Platform
 
-Once Processor is connected, it opens on **Developer Platform** (first item on the left). It is your home screen for the whole system:
+Once Processor is connected, it opens on the **Developer Platform** (first item on the left). It is the home screen for the whole system:
 
-- **System strip:** Identity (connected?), Admin (established?), Thought Processor (version, pid), and services running.
-- **Next:** while you're setting up, the one thing to do now.
-- **Services:** every installed service with its state and evidence chips (RUNNING, CONNECTED, READY, and MODEL for TASS), who may use it, its last self-test, and **Start / Stop / Self-test / Open →**. **Start all** and **Stop all** act on every service.
-- **Ready to install:** reviewed, pinned packages you haven't installed. **Install…** still needs the Admin's approval in Identity.
-- **Recent requests:** across all services. It shows outcomes only (COMPLETED, DENIED…), never what was said.
+- **System strip:** Identity, Admin, Processor and services.
+- **Next:** one step while you're setting up.
+- **Services:** every service with its evidence chips (RUNNING, CONNECTED, READY; for TASS also MODEL and PULSE), who may use it, its last self-test, and **Start / Stop / Self-test / Open →**, plus **Start all / Stop all**.
+- **Ready to install:** reviewed, pinned packages. The Admin still approves each install.
+- **Recent requests:** outcomes only (COMPLETED, DENIED…), never what was said.
 
-It can only do what this paired Processor session could already do. Installs and permissions still go through the Admin, so **no Identity change was needed**.
+It can only do what this paired Processor session could already do. Installs and permissions still go through the Admin.
 
-## What TASS is now
-
-TASS is a feature you install, start, watch and stop from Thought Processor, like the worker, Thought and the Developer entrance.
+## What TASS does
 
 | | |
 |---|---|
-| **Who may talk to it** | Only an identity the Admin granted `tass.chat.send` to, checked live by Identity on **every** message. History (`tass.chat.history`) and forgetting (`tass.chat.clear`) are separate permissions. |
-| **Where the conversation lives** | One private file per identity (`0600`) in TASS's own data folder. Processor passes each message through and keeps only the outcome. Identity sees only a SHA-256 fingerprint of each message. Logs record who and when, never the words. |
-| **Who answers** | A **local model on this computer** (Ollama or any OpenAI-compatible server on `127.0.0.1`), if you set one up. Until then TASS says plainly *"no local model yet — your message was saved, nothing was answered"*. It never makes up an answer. |
-| **What it can't do** | Run programs, read files, browse, see your screen or change settings. It has **no tools**: a model's words are only words, and you decide what to do. |
-| **What it refuses** | Any model address that isn't this computer (a hostname, another PC, `https` to anywhere, even `localhost`). It ignores proxy settings and never follows a redirect, so nothing can bounce a conversation to the internet. |
-
-**TASS's pulse (its birth and its thinking):**
-- **One cheap tick every 5 s.** The first three ticks write TASS's first thoughts: **I am · I am · What am I?** These are fixed text from you, labelled as seeds. After the third tick, TASS is **born**: its birth time, its installation, and its first question, "What am I?". It is born once and stays born across restarts.
-- **After birth, at most once a minute.** TASS wakes the local model only when the facts about TASS changed, for example a model was added. The model thinks about "What am I?" from those true facts alone, and its **thinking trace** is saved next to the answer, labelled *the model's reasoning — not a fact*.
-- **Every other tick is skipped.** A skip takes well under a millisecond: no model, no disk, no network. With no model, the tick records that it *would* think, and thinks nothing. Missed ticks are never replayed.
-- **The pulse never reads anyone's conversation.**
-- **Viewing it:**
-  - The **PULSE** chip shows its stage and tick counts.
-  - **Reading its first thoughts and reflections** needs its own permission, `tass.self.read`.
-
-**The screen** is TASS's **Overview** tab:
-- the chips **RUNNING · CONNECTED · READY · MODEL**;
-- who is allowed;
-- a **Talk to TASS** panel: your conversation, a message box and **Send**. Enter sends; Shift+Enter makes a new line.
+| **Talk** | Text, or **one picture** (PNG/JPEG/WebP, up to 4 MB) plus a question such as "what is this picture of?". **Every message is checked live by Identity.** |
+| **Where things live** | One private conversation file per identity (`0600`). Pictures are stored privately next to it (`0600`), and *forget everything* deletes both. Processor and Identity keep **no copy** of your words or pictures; Identity sees only a SHA-256 fingerprint of each request. |
+| **Who answers** | The local model you chose. With no model, TASS says so and invents nothing. If the model can't see pictures, TASS says that and saves nothing. |
+| **Its pulse** | One cheap tick every 5 s. Its first three thoughts are **I am · I am · What am I?** (fixed seeds from you); then it is **born**, once. After that, at most once a minute and only when something about it changed, the model thinks about "What am I?" from true facts about TASS. The **thinking trace** is saved, labelled *the model's reasoning — not a fact*. |
+| **What it can't do** | Run programs, read files, browse, see your screen, change settings, or reach anything outside your computer. Any model address that isn't `127.0.0.1` is refused, proxies are ignored, and redirects are refused. |
 
 ## Results (Linux, automated)
 
-| Suite | What it proves |
+| Suite | Result |
 |---|---|
-| `Arameair/TASS` `tests/test_tass_feature.py` | 39 tests: the pulse and genesis, conversations, isolation, the loopback-only guard, redirects, proxies, timeouts, forgetting, the protocol |
-| `processor/acceptance/p1_tass.py --shots DIR` | 64 checks with real Identity, Processor, TASS, Thought and the worker, and a real browser (TASS chat and the Developer Platform) |
-| Every earlier suite | nothing that worked before broke |
+| `Arameair/TASS` `tests/test_tass_feature.py` | **49** tests: pictures, model abilities, chat thinking, model choice, the pulse and genesis, conversations, isolation, the loopback guard, redirects, proxies, timeouts, forgetting, the protocol |
+| `processor/acceptance/p1_tass.py --shots DIR` | **74** checks with real Identity, Processor, TASS, Thought, the worker and a real browser |
+| Every earlier suite | still passing |
 
-What `p1_tass.py` checks:
-- **Trust:** pinned package; a tampered copy is BLOCKED; Identity refuses an impostor.
-- **Install:** Admin deny, then approve.
-- **Denials:** no permission, a direct call with no ticket, and another program all get DENIED.
-- **No model:** an honest answer.
-- **With a local test stand-in model on 127.0.0.1:**
-  - the answer comes back with the model's name;
-  - the model received the earlier conversation;
-  - a non-local address is REFUSED;
-  - a redirect is refused;
-  - **every open TASS connection goes to 127.0.0.1 (OS check)**.
-- **Isolation:** each identity has its own conversation.
-- **Privacy:** the words are **not** in Processor's state, logs or activity, and **not** anywhere in Identity.
-- **Lifecycle:**
-  - revoke, then DENIED;
-  - Identity down, then fails closed and turns NOT CONNECTED;
-  - Stop, then process and port gone;
-  - after restarting everything, **TASS still has the conversation**;
-  - "forget everything" deletes it.
-
-The stand-in model is a test fixture that answers with fixed text. It proves the path, not any AI.
+In the automated tests, the "model" is a **test stand-in** on `127.0.0.1` that answers the way Ollama's API does (the same fields: `images`, `think`, `message.thinking`, and `capabilities` from `/api/show`). It proves the path end to end. **A real Ollama model has not run in the test environment** (it has no internet). Your run below is the first one with a real model.
 
 **Owner acceptance on Windows/WSL: NOT RUN** until you do the steps below.
 
-## Owner walkthrough (Windows + WSL)
+---
 
-**What this keeps safe:**
+## Start here (Windows + WSL)
+
+**Kept safe:**
 - New folders `~/p1c/tp-tass-clone`, `~/p1c/tass-companion` and `~/p1c/p1-tass`, on ports **7797/7867**.
-- Your other trials (`p1-launcher`, `p1-worker-runtime`, `p1-developer-entrance`, their clones and profiles) are **never touched**.
-- Fresh profiles: you'll pair once, sign in to GitHub and establish an Admin for this trial.
+- Your other trials are **never touched**.
 
-**Never share:** pairing codes, the GitHub device code, anything after `#code=`, `#key=` or `/approve#`, your passphrase, `credential.json`, or `*-private.log`. **To report a problem,** copy only the `ERROR:` line, red result text, or **Copy activity**.
+**Never share:** pairing codes, the GitHub device code, anything after `#code=`, `#key=` or `/approve#`, your passphrase, `credential.json`, or `*-private.log`.
 
-**Use test words** (e.g. "hello TASS") until the Identity vault exists. Until then the conversation file is private to your user but not encrypted.
+**Use test words and test pictures** until the Identity vault exists. Files are private to your user but not encrypted yet.
 
-One command at a time, in a WSL terminal.
+Run one command at a time in a WSL terminal.
 
-### 1. Check the layout (reads only)
+### A. Get the model ready (once)
 
+1. **Install Ollama in WSL.** This downloads software from ollama.com, so it's your decision.
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ```
+2. **Check the version.** `qwen3.5` needs **0.17.4 or newer**.
+   ```bash
+   ollama --version
+   ```
+3. **Download the model** (about 3.4 GB; reads pictures and text, and can think):
+   ```bash
+   ollama pull qwen3.5:4b
+   ```
+   If this says it *could not connect*, open a **second** WSL terminal, run `ollama serve`, leave it open, and try again.
+4. **Warm it up** so TASS's first answer isn't slow. This loads the model onto your graphics card.
+   ```bash
+   ollama run qwen3.5:4b "Say hello in five words." && ollama ps
+   ```
+   **Expected:** a short hello, then a line for `qwen3.5:4b`. `100% GPU` means your RTX 2070 is doing the work. If it shows CPU, it still works, just slower.
+
+### B. Get the code
+
+**First time:**
 ```bash
-git -C ~/p1c/identity rev-parse HEAD; ls -d ~/p1c/p1-tass ~/p1c/tp-tass-clone ~/p1c/tass-companion 2>&1 | tail -3
+git clone --branch experiment/tass-companion-claude-20261029 https://github.com/Arameair/Thought-Processor.git ~/p1c/tp-tass-clone && git clone --branch experiment/tass-companion-feature-claude-20261029 https://github.com/Arameair/TASS.git ~/p1c/tass-companion
 ```
-
-**Expected:**
-- `64940b629a5ef52eaa143b2402726ec81d382002`;
-- three lines ending in `No such file or directory`.
-
-### 2. Get the code (new folders)
-
+**If you cloned these earlier today:**
 ```bash
-git clone --branch experiment/tass-companion-claude-20261029 https://github.com/Arameair/Thought-Processor.git ~/p1c/tp-tass-clone && git clone --branch experiment/tass-companion-feature-claude-20261029 https://github.com/Arameair/TASS.git ~/p1c/tass-companion && git -C ~/p1c/tp-tass-clone rev-parse HEAD && git -C ~/p1c/tass-companion rev-parse HEAD
+git -C ~/p1c/tp-tass-clone pull && git -C ~/p1c/tass-companion pull
 ```
+**Check:**
+```bash
+git -C ~/p1c/identity rev-parse HEAD; git -C ~/p1c/tp-tass-clone rev-parse HEAD; git -C ~/p1c/tass-companion rev-parse HEAD
+```
+**Expected:** `64940b629a5ef52eaa143b2402726ec81d382002`, then the two SHAs from the delivery report.
 
-TASS is private, so Git may ask you to sign in.
-
-**Expected:** the two commit SHAs from the delivery report.
-
-### 3. Preflight (checks only; builds and starts nothing)
+### C. Preflight (checks only; builds and starts nothing)
 
 ```bash
 cd ~/p1c/tp-tass-clone && P1_TASS_SRC=~/p1c/tass-companion P1_PREFLIGHT_ONLY=1 bash ./run-p1.sh
 ```
 
 **Expected:**
-- `Identity P1 source: 64940b6…`.
-- `Developer Utility package: matches pinned artifact 9d33ed8bfccf…`.
-- `TASS feature source: … — package matches pinned artifact 86d79ba30ab3…`.
-- A Thought line. Either form is fine.
-- `Trial folder: …/p1c/p1-tass (no profiles yet (fresh trial)). Ports 7797/7867 are free.`
+- `TASS feature source: … — package matches pinned artifact 985027bbaebf…`
 - `PREFLIGHT OK — nothing was built or started.`
 
-### 4. Start the trial
+If you ran an earlier TASS trial today, it may also say *existing profiles will be reused*. That's fine.
+
+### D. Open the workbench
 
 ```bash
 P1_TASS_SRC=~/p1c/tass-companion bash ./run-p1.sh
 ```
 
-**Expected:** `P1 Processor ready on 127.0.0.1:7867`, and the browser opens. Leave the terminal open. After 5.1 the page lands on the **Developer Platform**.
+**Expected:** `P1 Processor ready on 127.0.0.1:7867`, and the browser opens. Leave this terminal open; Ctrl+C here stops everything at the end.
 
-### 5. In the browser
+### E. In the browser
 
-| # | Do | Expected (PASS only if you see it) |
+| # | Do | Expected |
 |---|---|---|
-| 5.1 | **Connect**, then type the code from the terminal | *Identity: connected* |
-| 5.2 | **Sign in to GitHub** → **Establish Admin Identity…** → in Identity's page set a passphrase, tick, establish | *Admin: established* |
-| 5.3 | **+ Identity**: `Dustin`, kind *person* | Dustin on the left |
-| 5.4 | **Add a feature…** | card **TASS (private companion)**, badge **pinned artifact**, **Install…** |
-| 5.5 | **Install…** → **Install** → approval page → passphrase → **Approve** | *TASS (private companion)* under Installed features |
-| 5.6 | Open it. **Overview** → **Start** | **Running**; chips **RUNNING · CONNECTED · READY · MODEL: NOT CONFIGURED**; *Access: not allowed for anyone yet*; under **Talk to TASS**: *nobody may talk to it yet* |
-| 5.7 | **Connections** → *Request a connection*: Dustin, `tass.chat.send` → **Ask the Admin…** → approve. Do the same for `tass.chat.history` | both **ACTIVE** in the grants table |
-| 5.8 | **Overview** → **Talk to TASS**: type `hello TASS` → **Send** | your message appears, marked *saved · not answered (no local model)*, with *TASS has no local model yet — your message was saved, nothing was answered* |
-| 5.9 | Second WSL terminal: `pgrep -af 'python[0-9.]* -I .*/p1-tass/processor-profile/installations/ins_[^ ]*/package/[t]ass_feature\.py$'` | exactly **one** line |
-| 5.10 | **Connections**: **Revoke** Dustin's `tass.chat.send`. Then in **Try the protected capability**: Dustin, `tass.chat.send`, input `are you there?`, **Send request** | red **DENIED BY IDENTITY**: *The permission was revoked…*. On **Overview**, Talk to TASS says *Dustin may read the conversation but not send*, and **Send** is greyed out |
-| 5.11 | **Overview** → **Stop** | **Stopped**; 5.9 prints nothing |
-| 5.12 | **Start** again, then **Load conversation** | `hello TASS` is still there (TASS remembers across restarts); `are you there?` is not |
-| 5.12a | About 15 s after **Start**: look at the chips | **PULSE: born**. Hover it: ticks, skipped, *waiting for a model* |
-| 5.12b | **Connections**: ask the Admin for `tass.self.read` for Dustin and approve it. Then **Overview** → **Read TASS's pulse** | *TASS was born …* and its first thoughts **I am · I am · What am I?**, each marked *seed — written by Dustin*. With no model: *No reflections yet*. With a model (step 6): a reflection, with **Thinking** under a fold-out |
-| 5.13 | Optional, for more services: **Developer Platform** → **Ready to install** → install **Thought** and **Developer Utility** (Admin approves each) | they appear under **Services** |
-| 5.14 | **Developer Platform** → **Stop all** | every row says **Stopped** with a **Start** button; 5.9 prints nothing |
-| 5.15 | **Start all** | every row **Running** with its chips (TASS: RUNNING · CONNECTED · READY · MODEL); 5.9 prints one line |
-| 5.16 | Look at **Recent requests** | your earlier COMPLETED and DENIED requests, with no message text anywhere |
+| 1 | **Connect**, then type the code shown in the terminal | *Identity: connected*, then the **Developer Platform** |
+| 2 | **Sign in to GitHub** → **Establish Admin Identity…** → in Identity's page set a passphrase, tick, establish | *Admin: established*. Skip this if your earlier TASS trial already did it |
+| 3 | **+ Identity**: `Dustin`, kind *person* | Dustin on the left |
+| 4 | **"Sign in as TASS":** Developer Platform → **Ready to install** → **TASS (private companion)** → **Install…** → **Install** → approval page → passphrase → **Approve** | TASS appears under **Services** with its own installation ID |
+| 5 | **Start** (on its row) | Running. Within about 15 s: **RUNNING · CONNECTED · READY · MODEL: NOT CONFIGURED · PULSE: born** |
+| 6 | **Open →** TASS → **Connections** → *Request a connection* for **Dustin**, four times, approving each in Identity's page: `tass.chat.send`, `tass.chat.history`, `tass.model.set`, `tass.self.read` | four **ACTIVE** grants |
+| 7 | **Overview** → **TASS's model**: it already says `qwen3.5:4b` → **Use this model** | *TASS will use qwen3.5:4b…*. Within about 10 s the chip reads **MODEL: REACHABLE · qwen3.5:4b · vision · thinking** |
+| 8 | **Talk to TASS**: `hello TASS, what are you?` → **Send** | TASS answers, labelled with the model's name |
+| 9 | **Attach picture** → choose any test photo → type `what is this picture of?` → **Send** | your message shows 📎 *the file name*, and TASS describes the picture |
+| 10 | Wait about a minute, then **Read TASS's pulse** | **I am · I am · What am I?** (seeds), *Born …*, and a reflection on *What am I?* with **Thinking** under a fold-out |
+| 11 | Optional: in **TASS's model**, tick *show thinking in chat* → **Use this model** → ask something | TASS's answers now have a **Thinking** fold-out. They are slower |
+| 12 | **Privacy check:** in a second terminal, while TASS answers: `ss -tnp \| grep "pid=$(pgrep -f 'python[0-9.]* -I .*/p1-tass/processor-profile/installations/ins_[^ ]*/package/[t]ass_feature\.py$'),"` | every address is `127.0.0.1` |
+| 13 | Developer Platform → **Stop all**, then **Start all** | everything stops, then runs again; TASS is the same TASS (same birth time) |
 
-### 6. Optional: give TASS a local model
+### F. Finish
 
-**Your decision:** which model, and installing it. Nothing here does that for you.
+Press **Ctrl+C** in the workbench terminal. Leave `ollama serve` running or stop it; your choice.
 
-The suggested default is **`qwen3:1.7b`**. It is about 1.2 GB, runs on a processor alone in about 4 GB of RAM, and has a thinking mode, so the pulse gets real reasoning traces. On your RTX 2070 it runs entirely on the graphics card. Step up to `qwen3.5:4b` if its answers feel too thin. Run the model **inside WSL**, so `127.0.0.1` is the same computer TASS sees.
+### If something goes wrong
 
-1. Install Ollama in WSL (from ollama.com), then `ollama pull qwen3:1.7b`.
-2. Find TASS's data folder: it is the **Data folder** row on TASS's Overview.
-3. Tell TASS about the model. Replace `DATA` with that folder:
-   ```bash
-   printf '{"kind":"ollama","url":"http://127.0.0.1:11434","model":"qwen3:1.7b"}\n' > DATA/model.json
-   ```
-4. Within about 10 s the chip becomes **MODEL: REACHABLE**. Send a message, and TASS answers. The answer is labelled with the model's name.
-5. **Privacy check.** While it's answering, run this in the second terminal:
-   ```bash
-   ss -tnp | grep "pid=$(pgrep -f 'python[0-9.]* -I .*/p1-tass/processor-profile/installations/ins_[^ ]*/package/[t]ass_feature\.py$'),"
-   ```
-   Every address shown is `127.0.0.1`.
-
-A model answer can take a while on a CPU. TASS gives up after 25 s and saves nothing. Then try a smaller model.
-
-### 7. Finish
-
-Press **Ctrl+C** in the trial terminal. The prompt returns, and 5.9 prints nothing.
+| You see | Do this |
+|---|---|
+| **MODEL: UNREACHABLE** | Ollama isn't running: start `ollama serve` in a second WSL terminal |
+| **MODEL: MODEL MISSING** | `ollama pull qwen3.5:4b` |
+| *The local model took too long* (MODEL_TIMEOUT) | The first answer loads the model. Run the warm-up in A.4 and send again. Nothing was saved |
+| *The chosen model can't see pictures* | You picked a text-only model. Use `qwen3.5:4b` |
+| *ollama: qwen3.5 requires a newer version* | Rerun the install command in A.1 |
+| An `ERROR:` line in the terminal | Copy just that line to me |
 
 ### Report
 
 Paste back:
-- the SHAs from steps 1–2;
-- the step 3 output;
-- **PASS / FAIL / NOT RUN** for 5.1–5.16 (including 5.12a/b) (and step 6 if you did it);
-- any `ERROR:` or red text.
+- the three SHAs;
+- the C output;
+- **PASS / FAIL** for E1–E13;
+- any red text.
 
 ## Rollback (keeps every other installation)
 
-With the trial stopped:
+With the workbench stopped:
 
 ```bash
 rm -rf ~/p1c/p1-tass ~/p1c/tp-tass-clone ~/p1c/tass-companion
 ```
 
+`ollama rm qwen3.5:4b` removes the model.
+
 ## Known limits (honest)
 
-- **Not encrypted yet.** The conversation file is `0600` (private to your user), but any program running as you could read it. The Identity vault (Option C) is what fixes this. Use test words until then.
-- **Same-user isolation only** (as for every P1 service). Loopback HTTP is signed but not encrypted.
-- **No model chosen yet.** TASS works honestly without one; the model is your decision.
-- **Memory is the conversation only** (the last 200 messages; the model sees the last 12). Connecting it to Thought's Spark → Trace → Thought is the next step, and it needs a Processor-routed feature-to-feature permission.
-- **Windows-side models:** a model running in Windows (not WSL) is reachable at `127.0.0.1` only with WSL's mirrored networking. Keep the model in WSL.
+- **Not encrypted yet.** Files are `0600`, but any program running as you could read them. The Identity vault (Option C) fixes this.
+- **Same-user isolation only.** Loopback HTTP is signed but not encrypted.
+- **Ollama is outside the protected point.** It is a separate program any local program can use, and it can download models. Making it a pinned, managed service is the next security step.
+- **Answers must finish within about 25 s.** On a GPU that's plenty. On a slow CPU, use a smaller model. Pulse thinking runs in the background and may take up to 2 minutes.
+- **Memory is the conversation** (last 200 messages; the model sees the last 12). The model sees each picture only with the message it came with.
+- **Windows-side models** are reachable from WSL only with mirrored networking. Keep the model in WSL.

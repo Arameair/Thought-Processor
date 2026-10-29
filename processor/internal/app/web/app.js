@@ -211,6 +211,13 @@
   // Every part with the evidence behind its state, who may use it, and the
   // controls that make sense now. It only shows and does what this paired
   // session can already do; installs and permissions still go to the Admin.
+  function modelBadge(st) {
+    const m = st && st.model;
+    if (!m) return "";
+    const ab = (m.abilities || []).filter((x) => x !== "completion");
+    return badge("MODEL: " + String(m.state || "?").replace(/_/g, " ") + (m.state === "REACHABLE" && m.name ? " · " + m.name : "") + (ab.length ? " · " + ab.join(" · ") : ""),
+      m.state === "REACHABLE" ? "ok" : m.state === "NOT_CONFIGURED" || m.state === "CHECKING" ? "warn" : "bad", m.detail || "");
+  }
   function pulseBadge(st) {
     const p = st && st.pulse;
     if (!p) return "";
@@ -226,8 +233,7 @@
     if (st.entrance) h += badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED", st.entrance.connected ? "ok" : "bad", (st.authority || {}).detail || "")
       + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn");
     else h += badge(rt.health && rt.health.ready ? "READY" : "NOT READY", rt.health && rt.health.ready ? "ok" : "warn", "the service's own signed health");
-    if (st.model) h += badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "");
-    return h + pulseBadge(st);
+    return h + modelBadge(st) + pulseBadge(st);
   }
   function renderPlatform(s, d) {
     const fs = features(s).filter((v) => v.record.state === "INSTALLED"), lib = s.library || [];
@@ -360,7 +366,10 @@
     MODEL_UNAVAILABLE: "TASS couldn't get an answer from the local model (is it running?). Your message was not saved; send it again.",
     MODEL_TIMEOUT: "The local model took too long to answer. Your message was not saved; try again or use a smaller model.",
     RATE_LIMITED: "Too many messages in one minute. Nothing was saved; wait a moment.",
-    STORE_DAMAGED: "This identity's saved conversation can't be read. It was left untouched; nothing was done." };
+    STORE_DAMAGED: "This identity's saved conversation can't be read. It was left untouched; nothing was done.",
+    NO_MODEL_FOR_IMAGE: "TASS can't look at a picture without a local model. Choose a vision model (e.g. qwen3.5:4b) in “TASS's model” below. Nothing was saved.",
+    MODEL_CANT_SEE: "The chosen model can't see pictures. Choose a vision model such as qwen3.5:4b. Nothing was saved.",
+    BAD_IMAGE: "The picture was refused: only PNG, JPEG or WebP up to 4 MB. Nothing was sent." };
   function explain(r) {
     if (!r) return "";
     if (r.outcome === "AUTHORITY_UNAVAILABLE") return "Identity can't be reached, so nothing was allowed or started. Start Identity; Processor reconnects by itself.";
@@ -404,7 +413,7 @@
       h += `<div class="badges evid">${badge("RUNNING", "ok", "Processor verified this launch's signed status (pid " + rt.pid + ")")}`
         + badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED (" + (a.state || "?") + ")", st.entrance.connected ? "ok" : "bad", a.detail || "")
         + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn")
-        + (st.model ? badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "") : "") + pulseBadge(st) + `</div>`
+        + modelBadge(st) + pulseBadge(st) + `</div>`
         + (st.pulse ? `<p class="small muted">Pulse: ${esc(st.pulse.stage)}${st.pulse.born_at ? " · born " + esc(new Date(st.pulse.born_at).toLocaleString()) : ""} · ${esc((st.pulse.counters || {}).ticks || 0)} ticks${st.pulse.last && st.pulse.last.outcome ? " · last tick: " + esc(st.pulse.last.outcome) + " (" + esc(st.pulse.last.ms) + " ms)" + (st.pulse.last.why ? " — " + esc(st.pulse.last.why) : "") : ""}</p>` : "")
         + `<p class="small muted">Identity link: ${esc(a.detail || "")}${a.checked_at ? " · checked " + esc(new Date(a.checked_at).toLocaleTimeString()) : ""}</p>`;
     }
@@ -451,7 +460,7 @@
       d.dataset.key = key; d.dataset.html = "";
       d.innerHTML = `<div id="fx-head"></div><div class="tabs" role="tablist">${["overview", "connections", "runtime", "metrics", "logs"].map((t) =>
         `<button type="button" role="tab" data-tab="${t}" class="${tab === t ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-        <div class="pane" id="pane-overview"><div id="ov-run"></div><div id="ov-chat"><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div></div><div id="ov-self"></div><div id="ov-install"></div></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
+        <div class="pane" id="pane-overview"><div id="ov-run"></div><div id="ov-chat"><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div></div><div id="ov-model"></div><div id="ov-self"></div><div id="ov-install"></div></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
         <div class="pane" id="pane-runtime"><div id="fx-rt"></div><div id="fx-policy"></div></div><div class="pane" id="pane-metrics"></div><div class="pane" id="pane-logs"></div>`;
     }
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
@@ -578,7 +587,7 @@
     const running = rt.state === "RUNNING", st = (rt.health && rt.health.status) || {}, m = st.model;
     const title = esc((r.name || "it").split(" (")[0]);
     let h = `<h3>Talk to ${title}</h3>`;
-    if (m) h += `<p class="small">${badge("Model: " + String(m.state || "?").replace(/_/g, " "), m.state === "REACHABLE" ? "ok" : m.state === "NOT_CONFIGURED" || m.state === "CHECKING" ? "warn" : "bad")} ${esc(m.detail || "")}</p>`;
+    if (m) h += `<p class="small">${modelBadge(st)} ${esc(m.detail || "")}</p>`;
     if (st.privacy) h += `<p class="small muted">${esc(st.privacy)}. Processor passes each message through and keeps only the outcome; Identity sees only a fingerprint (SHA-256) of it.</p>`;
     if (!running) h += `<p class="small muted">Start it first (above).</p>`;
     else if (subs.length && !can(send, sub)) h += `<p class="small warn">${esc(name(sub))} may read the conversation but not send: ${mono(send.id)} isn't allowed (or was revoked).</p>`;
@@ -586,7 +595,7 @@
     set(head, h);
     logEl.hidden = !(running && subs.length);
     const msgs = c.messages || [];
-    set(logEl, (msgs.length ? msgs.map((x) => `<div class="msg ${x.role === "tass" ? "them" : "you"}"><div class="who">${x.role === "tass" ? title : esc(name(sub))} · ${esc(new Date(x.at).toLocaleTimeString())}${x.by ? ` <span class="muted" title="${esc(x.by)}">· ${esc(x.by.split(" (")[0])}</span>` : ""}</div><div class="txt">${esc(x.text)}</div>${x.role === "you" && x.answered === false ? `<div class="small muted">saved · not answered (no local model)</div>` : ""}</div>`).join("")
+    set(logEl, (msgs.length ? msgs.map((x) => `<div class="msg ${x.role === "tass" ? "them" : "you"}"><div class="who">${x.role === "tass" ? title : esc(name(sub))} · ${esc(new Date(x.at).toLocaleTimeString())}${x.by ? ` <span class="muted" title="${esc(x.by)}">· ${esc(x.by.split(" (")[0])}</span>` : ""}</div><div class="txt">${esc(x.text)}</div>${x.attachment ? `<div class="small muted">📎 ${esc(x.attachment.name)} · ${esc(Math.max(1, Math.round(x.attachment.bytes / 1024)))} KB · kept privately by TASS</div>` : ""}${x.thinking ? `<details class="small"><summary>Thinking (${esc(x.thinking_label || "the model's reasoning")})</summary><pre>${esc(x.thinking)}</pre></details>` : ""}${x.role === "you" && x.answered === false ? `<div class="small muted">saved · not answered (no local model)</div>` : ""}</div>`).join("")
       : `<p class="small muted">${can(hist, sub) ? "No conversation loaded yet." : "Your conversation shows here after you send a message."}</p>`)
       + (c.note ? `<p class="small"><strong>${esc(c.note)}</strong></p>` : "") + (c.err ? resultBox(c.err) : ""));
     if (logEl.dataset.scrolled !== String(msgs.length)) { logEl.dataset.scrolled = String(msgs.length); logEl.scrollTop = logEl.scrollHeight; }
@@ -596,8 +605,9 @@
       form.dataset.key = fkey;
       form.innerHTML = !(running && subs.length) ? "" : `<form class="frm chatform" id="chat-f">
         <div class="frow">${subs.length > 1 ? `<label>Talking as<select id="chat-sub">${subs.map((x) => `<option value="${esc(x)}" ${x === sub ? "selected" : ""}>${esc(name(x))}</option>`).join("")}</select></label>` : `<span class="small muted">Talking as <strong>${esc(name(sub))}</strong></span>`}</div>
-        <textarea id="chat-in" maxlength="1000" rows="3" placeholder="Say something to ${title}…"></textarea>
-        <div class="row"><button class="btn primary" type="submit" id="chat-send" ${senders.includes(sub) ? "" : "disabled title=\"Needs the send permission\""}>Send</button>${hist ? ` <button class="btn ghost small" type="button" id="chat-load">Load conversation</button>` : ""}<span class="small muted" id="chat-busy"></span></div></form>`;
+        <textarea id="chat-in" maxlength="1000" rows="3" placeholder="Say something to ${title}… (or attach a picture and ask about it)"></textarea>
+        <div class="row"><input type="file" id="chat-file" accept="image/png,image/jpeg,image/webp" hidden><button class="btn small" type="button" id="chat-attach">Attach picture</button> <span class="small" id="chat-att"></span>
+        <button class="btn primary" type="submit" id="chat-send" ${senders.includes(sub) ? "" : "disabled title=\"Needs the send permission\""}>Send</button>${hist ? ` <button class="btn ghost small" type="button" id="chat-load">Load conversation</button>` : ""}<span class="small muted" id="chat-busy"></span></div></form>`;
       const f = $("#chat-f");
       if (f) {
         const cs = $("#chat-sub");
@@ -613,15 +623,28 @@
         const lb = $("#chat-load");
         if (lb) lb.onclick = load;
         $("#chat-in").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } };
+        let picked = null;
+        const showPick = () => { $("#chat-att").innerHTML = picked ? `📎 ${esc(picked.name)} <button class="btn ghost small" type="button" id="chat-unattach">remove</button>` : ""; const u = $("#chat-unattach"); if (u) u.onclick = () => { picked = null; $("#chat-file").value = ""; showPick(); }; };
+        $("#chat-attach").onclick = () => $("#chat-file").click();
+        $("#chat-file").onchange = () => {
+          const file = $("#chat-file").files[0];
+          if (!file) return;
+          if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024) { toast("Only PNG, JPEG or WebP pictures up to 4 MB.", "bad"); $("#chat-file").value = ""; return; }
+          const rd = new FileReader();
+          rd.onload = () => { picked = { name: file.name.replace(/[^A-Za-z0-9_.() -]/g, "_").slice(0, 128), mime: file.type, base64: String(rd.result).split(",")[1] || "" }; showPick(); };
+          rd.readAsDataURL(file);
+        };
         f.onsubmit = async (e) => {
           e.preventDefault();
           const ta = $("#chat-in"), text = ta.value.trim(), b = $("#chat-send"), who = chatSub[ins], k = ins + "|" + who;
-          if (!text) return;
+          if (!text && !picked) return;
           b.disabled = true; $("#chat-busy").textContent = " asking Identity, then " + (r.name || "it").split(" (")[0] + "…";
-          const j = await act(`/api/installations/${ins}/action`, { subject: who, capability: send.id, input: text });
+          const body = { subject: who, capability: send.id, input: text };
+          if (picked) body.attachment = picked;
+          const j = await act(`/api/installations/${ins}/action`, body);
           b.disabled = false; $("#chat-busy").textContent = "";
           const res = j && j.result, out = res && res.outcome === "COMPLETED" && res.observation && res.observation.output;
-          if (out) { chats[k] = { messages: out.conversation || [], note: out.reply ? "" : out.headline, err: null }; ta.value = ""; }
+          if (out) { chats[k] = { messages: out.conversation || [], note: out.reply ? "" : out.headline, err: null }; ta.value = ""; picked = null; $("#chat-file").value = ""; showPick(); }
           else chats[k] = Object.assign(chats[k] || {}, { err: res || null, note: "" });
           render(); ta.focus();
         };
@@ -633,7 +656,35 @@
   // A companion's own pulse: its seed thoughts, its birth, and what its local
   // model reasoned about itself. Reading it is its own Identity permission.
   let selfViews = {};      // installation -> last answer (this page only)
+  function renderModelBox(s, v, iv) {
+    const r = v.record, ins = r.installation_id, caps = r.capabilities || [], el = $("#ov-model");
+    const cap = caps.find((c) => /\.model\.set$/.test(c.id));
+    if (!el) return;
+    if (!cap || r.state !== "INSTALLED") { el.innerHTML = ""; el.dataset.key = ""; return; }
+    const grants = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE" && g.grant.capability === cap.id);
+    const subs = [...new Set(grants.map((g) => g.grant.subject_identity_id))];
+    const running = v.runtime.state === "RUNNING";
+    const key = ins + "|" + subs.join(",") + "|" + running;
+    const title = esc((r.name || "it").split(" (")[0]);
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.innerHTML = `<h3>${title}'s model</h3>` + (!running ? `<p class="small muted">Start it first.</p>`
+      : !subs.length ? `<p class="small muted">Choosing the model needs the ${mono(cap.id)} permission. <button class="btn small" data-tab="connections">Ask the Admin →</button></p>`
+      : `<form class="frm" id="model-f"><div class="frow"><label class="grow">Ollama model on this computer<input id="model-in" value="qwen3.5:4b" maxlength="100" autocomplete="off"></label>
+         <label><input type="checkbox" id="model-think"> show thinking in chat (slower)</label></div>
+         <div class="row"><button class="btn primary" type="submit">Use this model</button> <button class="btn ghost small" type="button" id="model-none">No model</button> <span class="small muted">Only Ollama at http://127.0.0.1:11434 — nothing outside this computer.</span></div></form>`);
+    const f = $("#model-f");
+    if (!f) return;
+    const go = async (input) => {
+      const j = await act(`/api/installations/${ins}/action`, { subject: subs[0], capability: cap.id, input });
+      const res = j && j.result, out = res && res.observation && res.observation.output;
+      if (out) toast(out.headline, "ok"); else if (res) toast(res.outcome.replace(/_/g, " ") + " — " + (explain(res) || res.detail), "bad");
+    };
+    f.onsubmit = (e) => { e.preventDefault(); const name = $("#model-in").value.trim(); if (!name) return; go($("#model-think").checked ? JSON.stringify({ model: name, chat_think: true }) : name); };
+    $("#model-none").onclick = () => go("none");
+  }
   function renderSelf(s, v, iv) {
+    renderModelBox(s, v, iv);
     const r = v.record, ins = r.installation_id, caps = r.capabilities || [], el = $("#ov-self");
     const cap = caps.find((c) => /\.self\.read$/.test(c.id));
     if (!cap || r.state !== "INSTALLED") return set(el, "");
