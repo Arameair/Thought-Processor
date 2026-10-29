@@ -1,36 +1,55 @@
-# Developer Utility — isolated lifecycle adapter
+# Developer Utility: the secure Developer entrance
 
-**STATUS: INTEGRATION BLOCKED.** This is an experimental checkpoint, not a runnable Identity-approved Developer Utility or the Windows Brain Bar.
+**Status:** experimental, runnable. The Developer Utility is installed through Identity's Admin approval and run by Thought Processor. Its one operation is authorized live by Identity. Owner acceptance on Windows/WSL is still **NOT RUN**.
 
-## Source and boundaries
+How to run it and test it: [`docs/P1/DEVELOPER_ENTRANCE.md`](../../docs/P1/DEVELOPER_ENTRANCE.md).
 
-- This work starts from Thought Processor launcher commit `45a6af30cc411166300608003aebba9375730262`. The existing P1 branch, profiles and PR #27 are not modified.
-- Reference Brain Bar candidate: `Arameair/The_Brain`, branch `experiment/brain-utility-alpha-claude-20261027`, commit `4b324f6b1344c965b964ce76d10900289c8dd1c1`. Its Windows Forms `install.ps1` / `brain-bar.ps1` remain separate; this adapter does **not** start them.
-- Protocol follows existing P1 `docs/P1/FEATURE_API_V1.md` and the deterministic-worker signing scheme. No proprietary TheBrain application source is copied.
+## What it is
 
-## Implemented
+A Thought Processor feature service (`thought.feature-api/1`):
 
-`utility_agent.py` provides a Python standard-library loopback HTTP feature endpoint with:
-- signed `GET /v1/status`, `GET /v1/capabilities`, `GET /v1/connections`, and `POST /v1/shutdown`;
-- process-bound launch key, matching installation-credential fields and atomic endpoint discovery;
-- replay and invalid-MAC denial, without any privileged actions.
+- **Package:** one file, `utility_agent.py`, Python 3.8+ standard library only. It is admitted only by its exact artifact digest, which is pinned in **both** Processor and Identity, plus the Admin's approval.
+- **One capability, `developer.connection.check`.** It is read-only. It reports:
+  - the entrance's Processor link (per-launch signed);
+  - its Identity link (Identity's own signed answer about this installation, fetched fresh);
+  - the grants Identity says it holds;
+  - who asked.
 
-**Status is intentionally unambiguous:** `ready=false`, `utility_state=NOT_INTEGRATED`, `brain_bar_state=NOT_LAUNCHED`, `authority=NOT_VERIFIED`. An adapter PID is never represented as a real Windows Brain Bar process.
+  It takes no input.
+- **It cannot** run commands, read or write files outside its data folder, or reach other Brain services. Each of those would be a new capability with its own Identity grant, added only after review.
+- **Status is evidence:**
+  - RUNNING means Processor authenticated this launch.
+  - CONNECTED means Identity signed an answer about this installation within the last 15 s.
+  - READY means both, plus a writable ticket ledger.
 
-### Local tests (isolated, synthetic credentials)
+## History
+
+It started from the Automated Full Stack Engineer's adapter on `experiment/developer-utility-install-launch-20261029` @ `79ecd77`: signed status, signed shutdown, and 6 protocol tests. That code is merged unchanged into this branch's history. This branch adds:
+
+- tickets, the single-use ledger, live Identity checks and the Identity-link monitor (the reviewed P1 worker protocol);
+- the one capability and the self-test.
+
+The adapter's tests were updated for the real protocol. Two things in them changed:
+- they use a realistic credential and an **unused** port (the old test pointed at 7794, a real owner trial port);
+- they add checks for the ticket requirement and for an honest NOT READY when Identity is unreachable.
+
+## Trust: no Identity change was needed
+
+Identity registers a local package only when **both** of these hold:
+- its `trust_class` is `TRUSTED_LOCAL_TEST_FIXTURE`;
+- its exact digest is pinned (`identity/internal/authority/installations.go`: request validation; `internal/app/p1.go`: pin re-checked on every ticket and live check).
+
+The earlier label `OWNER_REVIEW_REQUIRED` is what Identity refused. Since the P1 cleanup, a package's label grants nothing: only the operator pin (`-trust-fixture-artifact`, the existing mechanism Thought also uses) plus the Admin's approval admit it.
+
+The acceptance test proves both directions:
+- the real package with the pin installs;
+- Identity refuses an unknown digest, and still refuses the old label even with the right digest.
+
+## Tests
 
 ```bash
-python3 -m unittest discover -s processor/developer-utility -p 'test_*.py' -v
+python3 -m unittest discover -s processor/developer-utility -p 'test_*.py' -v      # 8 isolated protocol tests
+python3 -I processor/acceptance/p1_developer_entrance.py --identity-src ../identity --thought-src ../Thought --work /tmp/dev-entrance
 ```
 
-The six adapter tests ran in the engineering scratch environment with PASS. They do **not** establish an Identity-approved installation, WSL/Windows handoff, real browser UI or owner acceptance. No secret values are required for these tests.
-
-## Required decisions / missing functionality
-
-1. **Identity policy:** Existing P1 independently refuses non-fixture registration. This package declares `OWNER_REVIEW_REQUIRED` and ships with no trusted artifact pin. Do not re-label the package as a fixture, pin only the Processor side, or bypass Admin approval. Project Lead/Dustin must approve an exact owner-utility trust policy before real installation can be called a PASS.
-2. **Host lifecycle:** Need an explicitly allowlisted and source-pinned Windows launcher plus proof of ownership, readiness and stop of the **specific** Brain Bar process. Must not take over or kill an existing bar or TheBrain desktop session.
-3. **Windows/WSL guide and tests:** After both gates, provide an isolated-clone install → Identity Admin approve → launch → RUNNING → stop → STOPPED walkthrough, denial/revocation tests, and exact SHA. Do not use the existing `~/p1c` working trial.
-
-**NOT RUN:** Identity install/authorization, real Windows Brain Bar start/stop, owner WSL test and P1 regression tests.
-
-No Project Controller dependency. No additional features, source promotions, PR or merges.
+The second command runs end to end with real Identity, Processor, Developer, Thought and the worker.

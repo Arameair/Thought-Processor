@@ -11,6 +11,7 @@
   let approvalWatch = null; // {id, url, kind, summary}
   let lastAction = {};      // installation -> result
   let details = {};         // installation -> /details answer
+  let activity = {};        // installation -> copied activity text
   let reviewFor = "";
 
   function choose(s) { sel = s; sessionStorage.setItem("tp_sel", JSON.stringify(s)); render(); if (s && s.type === "entity") act("/api/identities/select", { id: s.id }); }
@@ -272,25 +273,90 @@
   // standalone self-test as the worker actually answered it.
   const phaseOf = (st) => ({ STOPPED: ["Stopped", "idle"], STARTING: ["Starting…", "warn"], RESTARTING: ["Starting…", "warn"], RUNNING: ["Running", "ok"],
     STOPPING: ["Stopping…", "warn"], FAILED_TO_START: ["Error", "bad"], NEEDS_ATTENTION: ["Error", "bad"], CRASHED: ["Error", "bad"] })[st] || [st, ""];
-  function runCard(v, iv) {
-    const rt = v.runtime, ins = v.record.installation_id, [word, cls] = phaseOf(rt.state);
+  // Plain words for why a request was refused (the raw reason stays visible too).
+  const why = { NO_GRANT: "No permission yet. Ask the Admin to allow it (Connections → Ask the Admin…).",
+    GRANT_REVOKED: "The permission was revoked. Ask the Admin again if it should be allowed.",
+    GRANT_EXPIRED: "The permission expired (they last 1 hour unless the Admin chose otherwise). Ask the Admin again.",
+    TICKET_UNKNOWN: "Identity no longer knows that one-time ticket (for example, after a revocation). Nothing was done.",
+    ARTIFACT_NOT_PINNED: "Identity doesn't trust this exact package version. Nothing was started.",
+    BAD_INPUT: "The service was allowed to run the request but couldn't use the input. Nothing changed." };
+  function explain(r) {
+    if (!r) return "";
+    if (r.outcome === "AUTHORITY_UNAVAILABLE") return "Identity can't be reached, so nothing was allowed or started. Start Identity; Processor reconnects by itself.";
+    if (r.outcome === "NOT_RUNNING") return "The service is stopped. Press Start first; nothing was sent.";
+    const m = (r.detail || "").match(/\b([A-Z][A-Z_]{5,})\b/g) || [];
+    for (const k of m) if (why[k]) return why[k];
+    return "";
+  }
+  // A service's answer: its own headline and a few plain facts first; the raw
+  // answer (IDs, protocol details) stays one click away.
+  function obsBlock(o) {
+    const out = o.output || {}, il = out.identity_link, pl = out.processor_link, tr = out.this_request;
+    const facts = [];
+    if (pl) facts.push("Processor link: " + pl.state);
+    if (il) facts.push("Identity link: " + il.state + (il.this_installation && il.this_installation.active_grants != null ? " · " + il.this_installation.active_grants + " active grant(s)" : ""));
+    if (tr) facts.push("Allowed by: " + tr.allowed_by);
+    if (out.cannot) facts.push("Cannot: " + out.cannot.join("; "));
+    const raw = `<pre>${esc(JSON.stringify(out, null, 2))}</pre>`;
+    return `<div class="obs"><div class="kicker">${esc(o.data_class)}</div>` + (out.headline
+      ? `<div><strong>${esc(out.headline)}</strong></div>${facts.length ? `<ul class="plain small">${facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}<details class="small"><summary>Full answer</summary>${raw}</details>`
+      : raw) + `</div>`;
+  }
+  function resultBox(la) {
+    const oc = { COMPLETED: "ok", DENIED_BY_IDENTITY: "bad", DENIED_BY_FEATURE: "bad", AUTHORITY_UNAVAILABLE: "warn", REQUEST_UNCERTAIN: "warn", NOT_RUNNING: "warn", TICKET_REJECTED: "bad", ERROR: "bad" };
+    const x = explain(la);
+    return `<div class="result ${oc[la.outcome] || ""}"><div><strong>${esc(la.outcome.replace(/_/g, " "))}</strong> ${la.started_feature ? badge("started on demand", "info") : ""} <span class="muted small">${esc(la.request_id)} · ${la.latency_ms} ms ${la.decision_id ? "· decision " + esc(la.decision_id) : ""}</span></div>
+      ${x ? `<div class="small"><strong>${esc(x)}</strong></div>` : ""}<div class="small">${esc(la.detail)}</div>${la.observation ? obsBlock(la.observation) : ""}</div>`;
+  }
+  // The owner-facing run card: one plain state, the evidence behind it, who may
+  // use it, ONE next action, and the last self-test as the service answered it.
+  function runCard(s, v, iv) {
+    const rt = v.runtime, r = v.record, ins = r.installation_id, [word, cls] = phaseOf(rt.state);
     const busy = rt.state === "STARTING" || rt.state === "RESTARTING" || rt.state === "STOPPING";
+    const st = (rt.health && rt.health.status) || {};
     let h = `<div class="runcard"><div class="rc-h"><span class="dot ${cls}"></span><strong class="rc-state">${esc(word)}</strong>`;
     if (rt.state === "RUNNING") h += ` <span class="muted small">pid ${esc(rt.pid)} · launch ${esc(rt.launch_id)} · ${rt.health && rt.health.ready ? "health READY" : "health not ready"}</span>`;
     h += `</div>`;
+    if (rt.state === "RUNNING" && st.entrance) {
+      // Each chip is the service's own launch-signed status, polled every 2 s.
+      const a = st.authority || {};
+      h += `<div class="badges evid">${badge("RUNNING", "ok", "Processor verified this launch's signed status (pid " + rt.pid + ")")}`
+        + badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED (" + (a.state || "?") + ")", st.entrance.connected ? "ok" : "bad", a.detail || "")
+        + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn") + `</div>`
+        + `<p class="small muted">Identity link: ${esc(a.detail || "")}${a.checked_at ? " · checked " + esc(new Date(a.checked_at).toLocaleTimeString()) : ""}</p>`;
+    }
     if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
+    // Who may use it (Identity's signed grants).
+    const caps = r.capabilities || [], grants = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE");
+    const name = (eid) => { const e = (s.identities || []).find((x) => x.id === eid); return e ? e.name : eid; };
+    if (caps.length) h += `<p class="small"><strong>Access</strong> ${!iv ? `<span class="warn">Identity can't confirm grants right now — nothing protected can run.</span>` : caps.map((c) => {
+      const gs = grants.filter((g) => g.grant.capability === c.id);
+      return `${mono(c.id)}: ${gs.length ? "allowed for " + gs.map((g) => esc(name(g.grant.subject_identity_id))).join(", ") : `<span class="muted">not allowed for anyone yet</span>`}`;
+    }).join(" · ")}</p>`;
     h += `<div class="row">`;
-    if (rt.state === "RUNNING") h += `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn primary" data-selftest="${esc(ins)}">Run self-test</button>`;
+    if (rt.state === "RUNNING") h += `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn" data-selftest="${esc(ins)}">Run self-test</button>`;
     else if (busy) h += `<button class="btn" disabled>${esc(word)}</button>`;
-    else h += `<button class="btn primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>${cls === "bad" ? "Start again" : "Start"}</button><button class="btn" disabled title="The self-test runs inside the worker: start it first">Run self-test</button>`;
-    h += `</div>`;
+    else h += `<button class="btn primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>${cls === "bad" ? "Start again" : "Start"}</button><button class="btn" disabled title="The self-test runs inside the service: start it first">Run self-test</button>`;
+    h += `<button class="btn ghost small" data-copyact="${esc(ins)}" title="Copies Processor's record of this service: no keys, tickets, codes or private links">Copy activity</button></div>`;
+    // ONE next action.
     if (!iv && !busy && rt.state !== "RUNNING") h += `<p class="small warn">Start needs Identity: it must confirm this installation before anything runs.</p>`;
+    else if (rt.state === "RUNNING" && caps.length) {
+      const quick = r.feature_id === "developer-utility" ? caps[0] : null;
+      const allowed = quick ? grants.filter((g) => g.grant.capability === quick.id) : [];
+      if (quick && allowed.length) h += `<div class="next"><strong>Next:</strong> ${allowed.map((g) => `<button class="btn primary small" data-quick="${esc(ins)}" data-sub="${esc(g.grant.subject_identity_id)}" data-cap="${esc(quick.id)}">Run ${esc(quick.id.split(".").slice(1).join(" "))} for ${esc(name(g.grant.subject_identity_id))}</button>`).join(" ")}</div>`;
+      else if (!grants.length) h += `<div class="next"><strong>Next:</strong> nothing may use it yet. <button class="btn small" data-tab="connections">Ask the Admin for a permission →</button></div>`;
+      else h += `<div class="next"><strong>Next:</strong> <button class="btn small" data-tab="connections">Send a request →</button></div>`;
+    }
+    if (r.feature_id === "developer-utility" && lastAction[ins]) h += resultBox(lastAction[ins]);
     const t = v.self_test;
     if (t) {
       const stale = rt.launch_id && t.launch_id && t.launch_id !== rt.launch_id;
       h += `<div class="result ${t.result === "PASS" ? "ok" : "bad"}"><div><strong>Self-test ${esc(t.result)}</strong> <span class="muted small">${esc(new Date(t.at).toLocaleTimeString())} · launch ${esc(t.launch_id || "?")}${stale ? " (an earlier launch)" : ""}</span></div>`
-        + (t.error ? `<div class="small">${esc(t.error)}</div>` : `<div class="small muted">${esc(t.data_class || "")} · external calls: ${esc(t.external_calls ?? "")} · grants used: ${esc(t.grants_used || "")}</div><pre>${esc(JSON.stringify(t.output, null, 2))}</pre>`) + `</div>`;
-    } else if (rt.state === "RUNNING") h += `<p class="small muted">Self-test not run yet for this launch. It uses built-in test data and no grant.</p>`;
+        + (t.error ? `<div class="small">${esc(t.error)}</div>` : `<div class="small muted">${esc(t.data_class || "")} · external calls: ${esc(t.external_calls ?? "")} · grants used: ${esc(t.grants_used || "")}</div>`
+          + (t.output && t.output.checks ? `<ul class="plain small">${t.output.checks.map((c) => `<li>${c.ok ? "✓" : "✗"} ${esc(c.check)}</li>`).join("")}</ul><details class="small"><summary>Full answer</summary><pre>${esc(JSON.stringify(t.output, null, 2))}</pre></details>`
+            : `<pre>${esc(JSON.stringify(t.output, null, 2))}</pre>`)) + `</div>`;
+    } else if (rt.state === "RUNNING") h += `<p class="small muted">Self-test not run yet for this launch. It uses no grant.</p>`;
+    if (activity[ins]) h += `<details class="small" open><summary>Activity (copied to clipboard)</summary><pre class="logbox">${esc(activity[ins])}</pre></details>`;
     return h + `</div>`;
   }
 
@@ -316,7 +382,7 @@
       ${v.files && v.files !== "OK" && !gone ? badge(v.files, "bad") : ""}</div>
       ${v.same_artifact_copies && !gone ? `<p class="small warn">${esc(v.same_artifact_copies)} other installation(s) of this same artifact exist in this workspace (made before repeated installs returned the existing one). Nothing was removed; uninstall extras yourself if you don't want them.</p>` : ""}</div>`);
     // Overview: running it comes first.
-    set($("#pane-overview"), (gone ? "" : `<h3>Run</h3>` + runCard(v, iv)) + `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
+    set($("#pane-overview"), (gone ? "" : `<h3>Run</h3>` + runCard(s, v, iv)) + `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
       ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
       ["Trusted because", esc(r.trust_basis || "artifact pin (recorded before the cleanup)")], ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
       ["Installed", esc(new Date(r.installed_at).toLocaleString())], iv && ["Administered by", mono(iv.installation.administered_by) + " (Admin approval " + mono(short(iv.installation.approval_id, 14)) + ")"],
@@ -362,8 +428,7 @@
     }
     const la = lastAction[ins];
     const oc = { COMPLETED: "ok", DENIED_BY_IDENTITY: "bad", DENIED_BY_FEATURE: "bad", AUTHORITY_UNAVAILABLE: "warn", REQUEST_UNCERTAIN: "warn", NOT_RUNNING: "warn", TICKET_REJECTED: "bad", ERROR: "bad" };
-    set($("#fx-action-result"), la ? `<div class="result ${oc[la.outcome] || ""}"><div><strong>${esc(la.outcome.replace(/_/g, " "))}</strong> ${la.started_feature ? badge("started on demand", "info") : ""} <span class="muted small">${esc(la.request_id)} · ${la.latency_ms} ms ${la.decision_id ? "· decision " + esc(la.decision_id) : ""}</span></div>
-      <div class="small">${esc(la.detail)}</div>${la.observation ? `<div class="obs"><div class="kicker">${esc(la.observation.data_class)}</div><pre>${esc(JSON.stringify(la.observation.output, null, 2))}</pre></div>` : ""}</div>` : "");
+    set($("#fx-action-result"), la ? resultBox(la) : "");
     set($("#fx-requests"), (v.requests || []).length ? `<h3>Recent requests</h3><table class="tbl small"><tr><th>When</th><th>Request</th><th>Outcome</th><th>Decision</th></tr>${v.requests.map((q) =>
       `<tr><td>${esc(new Date(q.at).toLocaleTimeString())}</td><td>${mono(q.request_id)}</td><td>${badge(q.outcome, oc[q.outcome] || "")}</td><td>${q.decision_id ? mono(q.decision_id) : ""}</td></tr>`).join("")}</table>` : "");
     // Runtime
@@ -376,7 +441,7 @@
       rt.idle_stop_at && ["Idle stop", "at " + esc(new Date(rt.idle_stop_at).toLocaleTimeString()) + " if no work arrives"],
       rt.last_exit && ["Last exit", esc(new Date(rt.last_exit.at).toLocaleTimeString()) + " code " + esc(rt.last_exit.code) + " — " + esc(rt.last_exit.reason)],
       (rt.recent_restarts || []).length && ["Automatic restarts", esc(rt.recent_restarts.length) + " in the last 10 min (requests are never resent)"]])
-      + (gone ? "" : runCard(v, iv)));
+      + (gone ? "" : runCard(s, v, iv)));
     const pkey = ins + JSON.stringify(r.policy) + gone;
     const pf = $("#fx-policy");
     if (pf.dataset.key !== pkey) {
@@ -480,6 +545,12 @@
     }
     else if (ds.start) { t.disabled = true; await act(`/api/installations/${ds.start}/start`, {}); }
     else if (ds.stop) { t.disabled = true; await act(`/api/installations/${ds.stop}/stop`, {}); }
+    else if (ds.quick) { t.disabled = true; const j = await act(`/api/installations/${ds.quick}/action`, { subject: ds.sub, capability: ds.cap, input: "" }); if (j && j.result) { lastAction[ds.quick] = j.result; render(); } }
+    else if (ds.copyact) {
+      try { const j = await api("GET", `/api/installations/${ds.copyact}/activity`); activity[ds.copyact] = j.text;
+        try { await navigator.clipboard.writeText(j.text); toast("Activity copied — no keys, tickets, codes or private links.", "ok"); } catch (_) { toast("Shown below — select it and copy.", "ok"); }
+        render(); } catch (e) { toast(e.message, "bad"); }
+    }
     else if (ds.selftest) { t.disabled = true; await act(`/api/installations/${ds.selftest}/self-test`, {}); } // result is kept by Processor and shown in the run card
     else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }
     else if (ds.adminrevoke) { const j = await act(`/api/installations/${sel.id}/grants/${ds.adminrevoke}/admin-revoke`, {}); if (j && j.approval_url) watch(j); }

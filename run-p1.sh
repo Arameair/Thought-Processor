@@ -5,7 +5,11 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/p1-thought-feature-claude-20261029
+LAUNCH_BRANCH=experiment/developer-entrance-claude-20261029
+# Developer Utility (the Developer entrance): exact reviewed package digest,
+# pinned in Processor (-trust-feature-artifact) and Identity
+# (-trust-fixture-artifact). Any other content is refused before anything starts.
+DEV_ARTIFACT=9d33ed8bfccff317aeec1914718e32c3691845a5a2dac33b57d344487001b39d
 # Thought (Spark → Trace → Thought) feature: the exact reviewed package digest.
 # Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact)
 # both pin it; any other content stays BLOCKED in both.
@@ -18,12 +22,12 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
 if [[ -z "${P1_THOUGHT_SRC:-}" && -d "$(dirname "$ROOT")/Thought" ]]; then P1_THOUGHT_SRC="$(dirname "$ROOT")/Thought"; fi
 THOUGHT_SRC="${P1_THOUGHT_SRC:-$(dirname "$ROOT")/thought}"
-# Secure worker runtime trial: its OWN work folder and ports, so the owner's
-# existing P1 launcher trial (~/p1c/p1-launcher, ports 7792/7862) is never
-# reused, overwritten or contacted.
-WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-worker-runtime}"
-ID_PORT="${P1_IDENTITY_PORT:-7794}"
-TP_PORT="${P1_PROCESSOR_PORT:-7864}"
+# Developer entrance trial: its OWN work folder and ports. The owner's other
+# trials (~/p1c/p1-launcher 7792/7862, ~/p1c/p1-worker-runtime 7794/7864)
+# are never reused, overwritten or contacted.
+WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-developer-entrance}"
+ID_PORT="${P1_IDENTITY_PORT:-7796}"
+TP_PORT="${P1_PROCESSOR_PORT:-7866}"
 id_pid= tp_pid= watch_pid= lock=
 INJECT="${P1_TEST_INJECT:-}"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -56,6 +60,23 @@ done
 # A checkout may be an ordinary clone (.git is a folder) or a Git worktree
 # (.git is a file pointing at the main repository). Git itself decides; the
 # checks below are the same for both and are not loosened for either.
+# Exact artifact digest of a feature package (same algorithm as Processor and Identity).
+package_digest() {
+  python3 -I - "$1" <<'PY'
+import hashlib, json, os, sys
+d = sys.argv[1]
+def h(p):
+    if os.path.islink(p) or not os.path.isfile(p):
+        sys.exit("not a regular file: " + os.path.basename(p))
+    with open(p, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+m = json.load(open(os.path.join(d, "feature.json"), "rb"))
+files = sorted(m["files"], key=lambda f: f["path"])
+b = "thought.feature-package/1\nmanifest %s\n" % h(os.path.join(d, "feature.json"))
+b += "".join("%s  %s\n" % (h(os.path.join(d, f["path"])), f["path"]) for f in files)
+print(hashlib.sha256(b.encode()).hexdigest())
+PY
+}
 checkout_ok() { # dir expected-owner/repo label
   local dir="$1" slug="$2" label="$3" top url norm
   [[ -d "$dir" && ! -L "$dir" ]] || die "$label: expected a checkout folder at $dir (not a link). Set P1_IDENTITY_SRC / P1_THOUGHT_SRC if it lives elsewhere."
@@ -81,6 +102,11 @@ tp_sha="$(git -C "$ROOT" rev-parse HEAD)"
 git -C "$ROOT" merge-base --is-ancestor "$PROCESSOR_BASE_SHA" HEAD 2>/dev/null || die "Processor is not descended from the reviewed P1 cleanup commit."
 printf 'Identity P1 source: %s (%s)\nProcessor P1 launcher: %s (base %s) (%s)\n' "$id_sha" "$ID_SRC" "$tp_sha" "$PROCESSOR_BASE_SHA" "$ROOT"
 ID_EXTRA=() TP_EXTRA=()
+DEV_PKG="$ROOT/processor/developer-utility"
+[[ -f "$DEV_PKG/feature.json" && ! -L "$DEV_PKG" ]] || die "No Developer Utility package at $DEV_PKG."
+dev_digest="$(package_digest "$DEV_PKG")" || die "Could not read the Developer Utility package at $DEV_PKG."
+[[ "$dev_digest" == "$DEV_ARTIFACT" ]] || die "Developer Utility package content ($dev_digest) is not the reviewed pinned artifact ($DEV_ARTIFACT). Nothing started."
+printf 'Developer Utility package: matches pinned artifact %s…\n' "${DEV_ARTIFACT:0:12}"
 if [[ "${P1_THOUGHT:-on}" != off && -e "$THOUGHT_SRC" ]]; then
   # A folder is there, so it must be the reviewed Thought checkout; never skip it silently.
   checkout_ok "$THOUGHT_SRC" Arameair/Thought Thought
@@ -88,28 +114,16 @@ if [[ "${P1_THOUGHT:-on}" != off && -e "$THOUGHT_SRC" ]]; then
   git -C "$THOUGHT_SRC" merge-base --is-ancestor "$THOUGHT_BASE_SHA" HEAD 2>/dev/null || die "Thought is not descended from the reviewed commit $THOUGHT_BASE_SHA."
   [[ -f "$THOUGHT_SRC/feature/feature.json" && ! -L "$THOUGHT_SRC/feature" ]] || die "No Thought feature package at $THOUGHT_SRC/feature."
   # Integrity before anything is built or started: the package must be exactly the pinned artifact.
-  thought_digest="$(python3 -I - "$THOUGHT_SRC/feature" <<'PY'
-import hashlib, json, os, sys
-d = sys.argv[1]
-def h(p):
-    if os.path.islink(p) or not os.path.isfile(p):
-        sys.exit("not a regular file: " + os.path.basename(p))
-    with open(p, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
-m = json.load(open(os.path.join(d, "feature.json"), "rb"))
-files = sorted(m["files"], key=lambda f: f["path"])
-b = "thought.feature-package/1\nmanifest %s\n" % h(os.path.join(d, "feature.json"))
-b += "".join("%s  %s\n" % (h(os.path.join(d, f["path"])), f["path"]) for f in files)
-print(hashlib.sha256(b.encode()).hexdigest())
-PY
-)" || die "Could not read the Thought package at $THOUGHT_SRC/feature."
+  thought_digest="$(package_digest "$THOUGHT_SRC/feature")" || die "Could not read the Thought package at $THOUGHT_SRC/feature."
   [[ "$thought_digest" == "$THOUGHT_ARTIFACT" ]] || die "Thought package content ($thought_digest) is not the reviewed pinned artifact ($THOUGHT_ARTIFACT). Nothing started."
-  TP_EXTRA=(-trust-feature-dir "$THOUGHT_SRC/feature" -trust-feature-artifact "$THOUGHT_ARTIFACT")
-  ID_EXTRA=(-trust-fixture-artifact "$THOUGHT_ARTIFACT")
+  TP_EXTRA+=(-trust-feature-dir "$THOUGHT_SRC/feature" -trust-feature-artifact "$THOUGHT_ARTIFACT")
+  ID_EXTRA+=(-trust-fixture-artifact "$THOUGHT_ARTIFACT")
   printf 'Thought feature source: %s (%s) — package matches pinned artifact %s…\n' "$(git -C "$THOUGHT_SRC" rev-parse HEAD)" "$THOUGHT_SRC" "${THOUGHT_ARTIFACT:0:12}"
 else
   printf 'Thought feature: not offered (no checkout at %s, or P1_THOUGHT=off).\n' "$THOUGHT_SRC"
 fi
+TP_EXTRA+=(-trust-feature-dir "$DEV_PKG" -trust-feature-artifact "$DEV_ARTIFACT")
+ID_EXTRA+=(-trust-fixture-artifact "$DEV_ARTIFACT")
 python3 - "$ID_PORT" "$TP_PORT" <<'PY'
 import socket,sys
 try:

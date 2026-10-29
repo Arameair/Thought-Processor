@@ -752,7 +752,7 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 	str := func(k string) string { s, _ := m[k].(string); return s }
 	switch resp.StatusCode {
 	case 200:
-		res.Outcome, res.Detail = "COMPLETED", "the feature verified the ticket, Identity allowed it live, and it returned SYNTHETIC TEST DATA"
+		res.Outcome, res.Detail = "COMPLETED", "the service verified the ticket, Identity allowed it live, and it answered (data class shown with the result)"
 		res.Observation, _ = m["observation"].(map[string]any)
 		if res.Observation != nil {
 			res.DecisionID, _ = res.Observation["decision_id"].(string)
@@ -1274,6 +1274,21 @@ func (a *App) p1Routes(m *http.ServeMux) {
 			ApprovalURL: ar.ApprovalURL, Summary: ar.Approval.Summary, CreatedAt: ar.Approval.CreatedAt, ExpiresAt: ar.Approval.ExpiresAt, State: "PENDING"})
 		writeJSON(w, 200, map[string]any{"approval_url": ar.ApprovalURL, "approval_id": ar.Approval.ID, "state": a.State()})
 	}))
+	// Copyable activity for one installation: Processor's own records about it
+	// (lifecycle, decisions, request outcomes), scrubbed, as plain text.
+	m.HandleFunc("GET /api/installations/{id}/activity", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if !insIDRE.MatchString(id) {
+			a.fail(w, 400, "unknown installation")
+			return
+		}
+		rec, err := a.loadRecord(id)
+		if err != nil {
+			a.fail(w, 404, "unknown installation")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"installation_id": id, "text": a.activityText(rec)})
+	}))
 	m.HandleFunc("GET /api/installations/{id}/details", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if !insIDRE.MatchString(id) {
@@ -1335,4 +1350,29 @@ func pinInterpreter(command []string) (string, error) {
 		return "", err
 	}
 	return filepath.Abs(real)
+}
+
+// activityText is a shareable, credential-free account of one installation:
+// what Processor did and what Identity decided, newest last.
+func (a *App) activityText(r InstallRecord) string {
+	id := r.InstallationID
+	var b strings.Builder
+	v := a.Sup.View(id)
+	fmt.Fprintf(&b, "Thought Processor activity — %s (%s %s), installation %s\n", r.Name, r.FeatureID, r.Version, id)
+	fmt.Fprintf(&b, "artifact %s · process %s", r.ArtifactSHA256, v.State)
+	if v.PID != 0 {
+		fmt.Fprintf(&b, " · pid %d · launch %s", v.PID, v.LaunchID)
+	}
+	idState := "AUTHORITY UNAVAILABLE (Identity can't confirm right now)"
+	if iv := a.Conn.installation(id); iv != nil {
+		idState = fmt.Sprintf("%s, %d active grant(s)", iv.Installation.State, iv.ActiveGrants)
+	}
+	fmt.Fprintf(&b, " · Identity: %s\n", idState)
+	fmt.Fprintf(&b, "copied %s — contains no keys, tickets, pairing codes or private links\n\n", time.Now().Format(time.RFC3339))
+	for _, e := range a.Log.Recent(300) {
+		if strings.Contains(e.Detail, id) {
+			fmt.Fprintf(&b, "%s %-5s %s — %s\n", e.Time.Local().Format("15:04:05"), e.Level, e.Event, strings.ReplaceAll(e.Detail, id+": ", ""))
+		}
+	}
+	return scrub(b.String())
 }
