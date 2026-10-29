@@ -290,6 +290,8 @@ class Supervisor:
     def handle(self, cmd):
         with self.lock:
             if cmd == 'status':
+                if self.state == 'RUNNING' and any(p.poll() is not None for p in self.children.values()):
+                    self.state, self.error = 'FAILED', 'OWNED_SERVICE_EXITED'
                 return redact_status(self.state, self.children, self.link, self.error, self.github)
             if cmd == 'open':
                 link = self.link
