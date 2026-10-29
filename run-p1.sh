@@ -5,7 +5,7 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/tass-companion-claude-20261029
+LAUNCH_BRANCH=experiment/p0-windows-wsl-launcher-20261029
 # TASS (private companion) feature: the exact reviewed package digest, pinned
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.
