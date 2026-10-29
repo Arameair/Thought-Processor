@@ -10,8 +10,8 @@ LAUNCH_BRANCH=experiment/tass-companion-claude-20261029
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.
 TASS_BRANCH=experiment/tass-companion-feature-claude-20261029
-TASS_ARTIFACT=86d79ba30ab3afb26bf015364fa0556dfa553c1e48d673b4243a827d6f8ba757
-TASS_BASE_SHA=570a371135d13ad8d742fb2c13adc9982211c4c2
+TASS_ARTIFACT=74ec0032f1e9223f287320938466f0a31e2fea490aeae3a6c4b4e6d2b5d2ab73
+TASS_BASE_SHA=5001a3fbbfd2ebf36b40783cf11d448286a3b06e
 # Developer Utility (the Developer entrance): exact reviewed package digest,
 # pinned in Processor (-trust-feature-artifact) and Identity
 # (-trust-fixture-artifact). Any other content is refused before anything starts.

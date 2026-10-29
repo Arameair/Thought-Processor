@@ -181,3 +181,7 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .linklike:hover strong { text-decoration: underline; }
 .mini-list .mini { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .mini-list .mini button { margin-left: auto; }
+.selfview { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 8px 0; background: var(--panel2); }
+.selfview .seeds { margin: 4px 0 8px 18px; padding: 0; }
+.selfview .reflection { border-top: 1px dashed var(--line); padding: 8px 0; }
+.selfview pre { white-space: pre-wrap; font: 12px/1.45 var(--mono); margin: 6px 0 0; }

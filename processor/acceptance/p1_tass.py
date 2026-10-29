@@ -388,7 +388,7 @@ def status_of(s, ins):
 # ---------------- TASS-specific helpers ----------------
 
 TASS = "tass"
-SEND, HIST, CLEAR = "tass.chat.send", "tass.chat.history", "tass.chat.clear"
+SEND, HIST, CLEAR, SELF = "tass.chat.send", "tass.chat.history", "tass.chat.clear", "tass.self.read"
 WCAP = "worker.test.synthetic"
 LINK = {}
 MARK = "kestrel-" + secrets.token_hex(6)  # a unique phrase: where it appears is where the conversation is
@@ -430,7 +430,10 @@ class StandIn:
                 if redirect:
                     return self.bounce()
                 last = body["messages"][-1]["content"]
-                self.answer({"message": {"role": "assistant", "content": "(test stand-in) I heard: " + last}})
+                msg = {"role": "assistant", "content": "(test stand-in) I heard: " + last}
+                if body.get("think"):
+                    msg = {"role": "assistant", "thinking": "(test stand-in reasoning)", "content": "(test stand-in) I am TASS, going by the facts."}
+                self.answer({"message": msg})
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -533,6 +536,12 @@ def ui_check(link, ti, me_name):
         log_txt = page.inner_text("#chat-log")
         rec("UI", "I heard: hello from the screen" in log_txt and page.input_value("#chat-in") == "", "Send from the screen: your message and TASS's answer appear; the box clears")
         page.screenshot(path=str(shots / "tass-01-chat.png"), full_page=True)
+        page.click("#ov-self [data-selfread]")
+        page.wait_for_selector("#ov-self .selfview", timeout=15000)
+        sv = page.inner_text("#ov-self")
+        rec("UI", all(w in sv for w in ("I am", "What am I?", "Born", "Thinking")) and MARK not in sv,
+            "TASS's pulse panel shows its first thoughts, its birth and its reflection, with the thinking under a fold-out")
+        page.screenshot(path=str(shots / "tass-03-pulse.png"), full_page=True)
         b.close()
     rec("UI", not errors, "no JavaScript errors on the TASS screen", "; ".join(errors)[:120])
 
@@ -560,7 +569,7 @@ def ui_platform(link, svc_ids):
         rows = page.locator(".tbl.plat tr").count() - 1
         rec("PLATFORM", "DEVELOPER PLATFORM" in head.upper() and rows == len(svc_ids) and all(w in head for w in ("TASS (private companion)", "Thought", "P1 Deterministic Worker")),
             "the Developer Platform is the landing screen and lists every installed service", "%d services" % rows)
-        rec("PLATFORM", head.count("RUNNING") >= len(svc_ids) and "CONNECTED" in head and "MODEL: REACHABLE" in head and "Identity" in head and "Admin" in head,
+        rec("PLATFORM", head.count("RUNNING") >= len(svc_ids) and "CONNECTED" in head and "MODEL: REACHABLE" in head and "PULSE: born" in head and "Identity" in head and "Admin" in head,
             "each running service shows its evidence chips; the system strip shows Identity, Admin and Processor")
         page.screenshot(path=str(shots / "platform-01-running.png"), full_page=True)
         page.click("[data-stopall]")
@@ -663,8 +672,8 @@ def main():
     # ---- discoverable, pinned; tampered/unknown denied ----
     lib = {x.get("feature_id"): x for x in s["library"]}
     d = lib.get(TASS) or {}
-    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR]),
-        "TASS is in Processor's library as a reviewed, pinned package with exactly its 3 chat capabilities", d.get("trust_basis") or d.get("blocked") or "missing")
+    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR, SELF]),
+        "TASS is in Processor's library as a reviewed, pinned package with exactly its 4 capabilities (3 chat + reading its own pulse)", d.get("trust_basis") or d.get("blocked") or "missing")
     t = lib.get("tass-tampered") or {}
     st, j = tp.post("/api/library/tass-tampered/install")
     rec("TRUST", bool(t.get("blocked")) and st == 409, "a changed copy (one that would allow a non-local model) is BLOCKED and can't be installed", (t.get("blocked") or "")[:50])
@@ -705,6 +714,15 @@ def main():
     stt_ = j.get("self_test") or {}
     checks = (stt_.get("output") or {}).get("checks") or []
     rec("RUN", stt_.get("result") == "PASS" and len(checks) >= 9 and all(c["ok"] for c in checks), "self-test PASS: store, identity isolation, non-local addresses refused, redirect refused, Identity link", "%d checks" % len(checks))
+    t_start = time.time()
+    s = tp.until(lambda s: (status_of(s, TI).get("pulse") or {}).get("stage") == "born", 40, "born")
+    pv = status_of(s, TI).get("pulse") or {}
+    rec("PULSE", pv.get("stage") == "born" and (pv.get("counters") or {}).get("seeded") == 3 and pv.get("every_s") == 5,
+        "the pulse runs: three seed ticks, then TASS is born", "born after ~%ds" % int(time.time() - t_start))
+    s = tp.until(lambda s: ((status_of(s, TI).get("pulse") or {}).get("counters") or {}).get("waiting_for_model", 0) >= 1, 20, "waiting for model")
+    pv = status_of(s, TI).get("pulse") or {}
+    rec("PULSE", (pv.get("counters") or {}).get("waiting_for_model", 0) >= 1 and (pv.get("counters") or {}).get("thought") == 0,
+        "no model yet: the pulse says it would think about “What am I?” but thinks nothing", (pv.get("last") or {}).get("why", "")[:70])
     st, _ = http("POST", endpoint(TI) + "/v1/actions/" + SEND, json.dumps({"request_id": "x", "input": "hi"}).encode(), {"Content-Type": "application/json"})
     rec("AUTHZ", st == 401, "calling TASS directly without an Identity ticket: refused", str(st))
     st, t = B.call("POST", "/api/v1/tickets", {"destination_installation_id": TI, "subject_identity_id": ME, "capability": SEND, "request_sha256": "0" * 64})
@@ -736,6 +754,23 @@ def main():
     ends = outbound([pid])
     rec("PRIVACY", all(is_loopback(a) for a, _ in ends), "while answering, every TASS connection is to 127.0.0.1 (OS check)", str(sorted(set(ends)))[:80])
 
+    s = tp.until(lambda s: ((status_of(s, TI).get("pulse") or {}).get("counters") or {}).get("thought", 0) >= 1, 90, "pulse thought")
+    pv = status_of(s, TI).get("pulse") or {}
+    rec("PULSE", (pv.get("counters") or {}).get("thought", 0) >= 1, "with a local model, the next Thought cycle wakes it once to think about “What am I?”", "%s ticks, %s skipped" % ((pv.get("counters") or {}).get("ticks"), (pv.get("counters") or {}).get("skipped")))
+    reflect = [b for b in model.seen if "Question: What am I?" in json.dumps(b)]
+    rec("PULSE", reflect and all(b.get("think") is True for b in reflect) and not any(MARK in json.dumps(b) for b in reflect),
+        "the pulse asks the model to think, from TASS's own facts only — never anyone's conversation")
+    r = ask(tp, TI, ME, SELF)
+    rec("PULSE", r["outcome"] == "DENIED_BY_IDENTITY", "reading TASS's pulse needs its own permission")
+    GSELF = grant(tp, TI, ME, SELF)
+    r = ask(tp, TI, ME, SELF)
+    o = out(r)
+    refl = (o.get("reflections") or [{}])[-1]
+    rec("PULSE", r["outcome"] == "COMPLETED" and [x["text"] for x in o.get("seeds") or []] == ["I am", "I am", "What am I?"] and (o.get("born") or {}).get("first_question") == "What am I?",
+        "TASS's first thoughts are I am · I am · What am I?, then it was born", (o.get("born") or {}).get("at", ""))
+    rec("PULSE", refl.get("thinking") == "(test stand-in reasoning)" and refl.get("label", "").startswith("the model's reasoning") and "stand-in:1b" in refl.get("model", ""),
+        "its reflection keeps the model's thinking trace, labelled as reasoning (not fact), with which model produced it")
+    BORN = (o.get("born") or {}).get("at")
     set_model(TI, "http://example.com:11434")
     GH = grant(tp, TI, ME, HIST)
     _, conv0 = history(tp, TI, ME)
@@ -843,6 +878,9 @@ def main():
     r, conv_r = history(tp, TI, ME)
     rec("RESTART", inst(tp.state(), TI)["record"]["installation_id"] == TI and r["outcome"] == "COMPLETED" and conv_pre and [x["text"] for x in conv_r] == [x["text"] for x in conv_pre],
         "after restarting Identity, Processor and TASS: same installation, and TASS still has the same conversation", "%d messages" % len(conv_r))
+    r2 = ask(tp, TI, ME, SELF)
+    rec("RESTART", r2["outcome"] == "COMPLETED" and (out(r2).get("born") or {}).get("at") == BORN and len(out(r2).get("seeds") or []) == 3,
+        "after the full restart TASS is still the same one: born once, same birth time, same three first thoughts", BORN or "")
     r = ask(tp, TI, ME, CLEAR, "forget everything")
     _, conv_f = history(tp, TI, ME)
     rec("FORGET", r["outcome"] == "COMPLETED" and out(r).get("deleted_messages") == len(conv_pre) and conv_f == [] and not cf.exists(),

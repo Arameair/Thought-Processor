@@ -33,6 +33,15 @@ TASS is a feature you install, start, watch and stop from Thought Processor, lik
 | **What it can't do** | Run programs, read files, browse, see your screen or change settings. It has **no tools**: a model's words are only words, and you decide what to do. |
 | **What it refuses** | Any model address that isn't this computer (a hostname, another PC, `https` to anywhere, even `localhost`). It ignores proxy settings and never follows a redirect, so nothing can bounce a conversation to the internet. |
 
+**TASS's pulse (its birth and its thinking):**
+- **One cheap tick every 5 s.** The first three ticks write TASS's first thoughts: **I am · I am · What am I?** These are fixed text from you, labelled as seeds. After the third tick, TASS is **born**: its birth time, its installation, and its first question, "What am I?". It is born once and stays born across restarts.
+- **After birth, at most once a minute.** TASS wakes the local model only when the facts about TASS changed, for example a model was added. The model thinks about "What am I?" from those true facts alone, and its **thinking trace** is saved next to the answer, labelled *the model's reasoning — not a fact*.
+- **Every other tick is skipped.** A skip takes well under a millisecond: no model, no disk, no network. With no model, the tick records that it *would* think, and thinks nothing. Missed ticks are never replayed.
+- **The pulse never reads anyone's conversation.**
+- **Viewing it:**
+  - The **PULSE** chip shows its stage and tick counts.
+  - **Reading its first thoughts and reflections** needs its own permission, `tass.self.read`.
+
 **The screen** is TASS's **Overview** tab:
 - the chips **RUNNING · CONNECTED · READY · MODEL**;
 - who is allowed;
@@ -42,8 +51,8 @@ TASS is a feature you install, start, watch and stop from Thought Processor, lik
 
 | Suite | What it proves |
 |---|---|
-| `Arameair/TASS` `tests/test_tass_feature.py` | 28 tests: conversations, isolation, the loopback-only guard, redirects, proxies, timeouts, forgetting, the protocol |
-| `processor/acceptance/p1_tass.py --shots DIR` | 55 checks with real Identity, Processor, TASS, Thought and the worker, and a real browser (TASS chat and the Developer Platform) |
+| `Arameair/TASS` `tests/test_tass_feature.py` | 39 tests: the pulse and genesis, conversations, isolation, the loopback-only guard, redirects, proxies, timeouts, forgetting, the protocol |
+| `processor/acceptance/p1_tass.py --shots DIR` | 64 checks with real Identity, Processor, TASS, Thought and the worker, and a real browser (TASS chat and the Developer Platform) |
 | Every earlier suite | nothing that worked before broke |
 
 What `p1_tass.py` checks:
@@ -141,6 +150,8 @@ P1_TASS_SRC=~/p1c/tass-companion bash ./run-p1.sh
 | 5.10 | **Connections**: **Revoke** Dustin's `tass.chat.send`. Then in **Try the protected capability**: Dustin, `tass.chat.send`, input `are you there?`, **Send request** | red **DENIED BY IDENTITY**: *The permission was revoked…*. On **Overview**, Talk to TASS says *Dustin may read the conversation but not send*, and **Send** is greyed out |
 | 5.11 | **Overview** → **Stop** | **Stopped**; 5.9 prints nothing |
 | 5.12 | **Start** again, then **Load conversation** | `hello TASS` is still there (TASS remembers across restarts); `are you there?` is not |
+| 5.12a | About 15 s after **Start**: look at the chips | **PULSE: born**. Hover it: ticks, skipped, *waiting for a model* |
+| 5.12b | **Connections**: ask the Admin for `tass.self.read` for Dustin and approve it. Then **Overview** → **Read TASS's pulse** | *TASS was born …* and its first thoughts **I am · I am · What am I?**, each marked *seed — written by Dustin*. With no model: *No reflections yet*. With a model (step 6): a reflection, with **Thinking** under a fold-out |
 | 5.13 | Optional, for more services: **Developer Platform** → **Ready to install** → install **Thought** and **Developer Utility** (Admin approves each) | they appear under **Services** |
 | 5.14 | **Developer Platform** → **Stop all** | every row says **Stopped** with a **Start** button; 5.9 prints nothing |
 | 5.15 | **Start all** | every row **Running** with its chips (TASS: RUNNING · CONNECTED · READY · MODEL); 5.9 prints one line |
@@ -150,13 +161,13 @@ P1_TASS_SRC=~/p1c/tass-companion bash ./run-p1.sh
 
 **Your decision:** which model, and installing it. Nothing here does that for you.
 
-Choose the model after checking your PC's memory and graphics card. `llama3.2:3b` below is only an example of a small one. Run the model **inside WSL**, so `127.0.0.1` is the same computer TASS sees.
+The suggested default is **`qwen3:1.7b`**. It is about 1.2 GB, runs on a processor alone in about 4 GB of RAM, and has a thinking mode, so the pulse gets real reasoning traces. On your RTX 2070 it runs entirely on the graphics card. Step up to `qwen3.5:4b` if its answers feel too thin. Run the model **inside WSL**, so `127.0.0.1` is the same computer TASS sees.
 
-1. Install Ollama in WSL (from ollama.com), then `ollama pull llama3.2:3b`.
+1. Install Ollama in WSL (from ollama.com), then `ollama pull qwen3:1.7b`.
 2. Find TASS's data folder: it is the **Data folder** row on TASS's Overview.
 3. Tell TASS about the model. Replace `DATA` with that folder:
    ```bash
-   printf '{"kind":"ollama","url":"http://127.0.0.1:11434","model":"llama3.2:3b"}\n' > DATA/model.json
+   printf '{"kind":"ollama","url":"http://127.0.0.1:11434","model":"qwen3:1.7b"}\n' > DATA/model.json
    ```
 4. Within about 10 s the chip becomes **MODEL: REACHABLE**. Send a message, and TASS answers. The answer is labelled with the model's name.
 5. **Privacy check.** While it's answering, run this in the second terminal:
@@ -176,7 +187,7 @@ Press **Ctrl+C** in the trial terminal. The prompt returns, and 5.9 prints nothi
 Paste back:
 - the SHAs from steps 1–2;
 - the step 3 output;
-- **PASS / FAIL / NOT RUN** for 5.1–5.16 (and step 6 if you did it);
+- **PASS / FAIL / NOT RUN** for 5.1–5.16 (including 5.12a/b) (and step 6 if you did it);
 - any `ERROR:` or red text.
 
 ## Rollback (keeps every other installation)

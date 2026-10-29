@@ -211,6 +211,14 @@
   // Every part with the evidence behind its state, who may use it, and the
   // controls that make sense now. It only shows and does what this paired
   // session can already do; installs and permissions still go to the Admin.
+  function pulseBadge(st) {
+    const p = st && st.pulse;
+    if (!p) return "";
+    const c = p.counters || {}, l = p.last || {};
+    const word = p.stage === "born" ? "PULSE: born" : p.stage === "damaged" ? "PULSE: record damaged" : "PULSE: " + p.stage;
+    return badge(word, p.stage === "born" ? "ok" : p.stage === "damaged" ? "bad" : "warn",
+      `every ${p.every_s} s · ${c.ticks || 0} ticks: ${c.skipped || 0} skipped, ${c.thought || 0} thought, ${c.waiting_for_model || 0} waiting for a model` + (l.outcome ? ` · last: ${l.outcome} (${l.ms} ms) ${l.why || ""}` : ""));
+  }
   function svcEvidence(v) {
     const rt = v.runtime, st = (rt.health && rt.health.status) || {};
     if (rt.state !== "RUNNING") return "";
@@ -219,7 +227,7 @@
       + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn");
     else h += badge(rt.health && rt.health.ready ? "READY" : "NOT READY", rt.health && rt.health.ready ? "ok" : "warn", "the service's own signed health");
     if (st.model) h += badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "");
-    return h;
+    return h + pulseBadge(st);
   }
   function renderPlatform(s, d) {
     const fs = features(s).filter((v) => v.record.state === "INSTALLED"), lib = s.library || [];
@@ -396,7 +404,8 @@
       h += `<div class="badges evid">${badge("RUNNING", "ok", "Processor verified this launch's signed status (pid " + rt.pid + ")")}`
         + badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED (" + (a.state || "?") + ")", st.entrance.connected ? "ok" : "bad", a.detail || "")
         + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn")
-        + (st.model ? badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "") : "") + `</div>`
+        + (st.model ? badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "") : "") + pulseBadge(st) + `</div>`
+        + (st.pulse ? `<p class="small muted">Pulse: ${esc(st.pulse.stage)}${st.pulse.born_at ? " · born " + esc(new Date(st.pulse.born_at).toLocaleString()) : ""} · ${esc((st.pulse.counters || {}).ticks || 0)} ticks${st.pulse.last && st.pulse.last.outcome ? " · last tick: " + esc(st.pulse.last.outcome) + " (" + esc(st.pulse.last.ms) + " ms)" + (st.pulse.last.why ? " — " + esc(st.pulse.last.why) : "") : ""}</p>` : "")
         + `<p class="small muted">Identity link: ${esc(a.detail || "")}${a.checked_at ? " · checked " + esc(new Date(a.checked_at).toLocaleTimeString()) : ""}</p>`;
     }
     if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
@@ -442,7 +451,7 @@
       d.dataset.key = key; d.dataset.html = "";
       d.innerHTML = `<div id="fx-head"></div><div class="tabs" role="tablist">${["overview", "connections", "runtime", "metrics", "logs"].map((t) =>
         `<button type="button" role="tab" data-tab="${t}" class="${tab === t ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-        <div class="pane" id="pane-overview"><div id="ov-run"></div><div id="ov-chat"><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div></div><div id="ov-install"></div></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
+        <div class="pane" id="pane-overview"><div id="ov-run"></div><div id="ov-chat"><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div></div><div id="ov-self"></div><div id="ov-install"></div></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
         <div class="pane" id="pane-runtime"><div id="fx-rt"></div><div id="fx-policy"></div></div><div class="pane" id="pane-metrics"></div><div class="pane" id="pane-logs"></div>`;
     }
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
@@ -459,6 +468,7 @@
     // Overview: running it comes first.
     set($("#ov-run"), gone ? "" : `<h3>Run</h3>` + runCard(s, v, iv));
     renderChat(s, v, iv);
+    renderSelf(s, v, iv);
     set($("#ov-install"), `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
       ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
       ["Trusted because", esc(r.trust_basis || "artifact pin (recorded before the cleanup)")], ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
@@ -620,6 +630,34 @@
       if (running && sub && can(hist, sub) && !chats[key]) { chats[key] = { messages: [], note: "Loading…" }; const lb2 = $("#chat-load"); if (lb2) lb2.click(); }
     }
   }
+  // A companion's own pulse: its seed thoughts, its birth, and what its local
+  // model reasoned about itself. Reading it is its own Identity permission.
+  let selfViews = {};      // installation -> last answer (this page only)
+  function renderSelf(s, v, iv) {
+    const r = v.record, ins = r.installation_id, caps = r.capabilities || [], el = $("#ov-self");
+    const cap = caps.find((c) => /\.self\.read$/.test(c.id));
+    if (!cap || r.state !== "INSTALLED") return set(el, "");
+    const grants = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE" && g.grant.capability === cap.id);
+    const name = (eid) => { const e = (s.identities || []).find((x) => x.id === eid); return e ? e.name : eid; };
+    const title = esc((r.name || "it").split(" (")[0]);
+    let h = `<h3>${title}'s pulse</h3>`;
+    if (!grants.length) h += `<p class="small muted">Reading its first thoughts and reflections needs the ${mono(cap.id)} permission. <button class="btn small" data-tab="connections">Ask the Admin →</button></p>`;
+    else h += `<div class="row">${grants.map((g) => `<button class="btn small" data-selfread="${esc(ins)}" data-sub="${esc(g.grant.subject_identity_id)}" data-cap="${esc(cap.id)}">Read ${title}'s pulse (as ${esc(name(g.grant.subject_identity_id))})</button>`).join(" ")}</div>`;
+    const x = selfViews[ins];
+    if (x && x.err) h += resultBox(x.err);
+    else if (x) {
+      const o = x.out;
+      h += `<div class="selfview"><p><strong>${esc(o.headline)}</strong></p>
+        <ol class="seeds">${(o.seeds || []).map((sd) => `<li><strong>${esc(sd.text)}</strong> <span class="muted small">${esc(new Date(sd.at).toLocaleTimeString())} · ${esc(sd.source)}</span></li>`).join("")}</ol>
+        ${o.born ? `<p class="small">Born ${esc(new Date(o.born.at).toLocaleString())} · first question: <strong>${esc(o.born.first_question)}</strong></p>` : ""}
+        ${(o.reflections || []).length ? (o.reflections.slice().reverse().map((rf) => `<div class="reflection"><div class="small muted">${esc(new Date(rf.at).toLocaleString())} · ${esc(rf.model)} · ${esc(rf.took_s)} s</div>
+          <div><strong>${esc(rf.question)}</strong> ${esc(rf.answer || "(no answer within the thinking limit)")}</div>
+          ${rf.thinking ? `<details class="small"><summary>Thinking (${esc(rf.label)})</summary><pre>${esc(rf.thinking)}</pre></details>` : `<div class="small muted">no reasoning trace from this model</div>`}</div>`).join(""))
+          : `<p class="small muted">No reflections yet${o.pulse && o.pulse.last && o.pulse.last.why ? " — " + esc(o.pulse.last.why) : ""}.</p>`}
+        <p class="small muted">${esc(o.honesty || "")}</p></div>`;
+    }
+    set(el, h);
+  }
   async function loadDetails(ins) {
     try { const j = await api("GET", `/api/installations/${ins}/details`); j._at = Date.now(); details[ins] = j; render(); } catch (_) {}
   }
@@ -707,6 +745,13 @@
         if (ds.stopall && (st === "RUNNING" || st === "STARTING")) await act(`/api/installations/${v.record.installation_id}/stop`, {});
       }
       t.disabled = false;
+    }
+    else if (ds.selfread) {
+      t.disabled = true;
+      const j = await act(`/api/installations/${ds.selfread}/action`, { subject: ds.sub, capability: ds.cap, input: "" });
+      const res = j && j.result, out = res && res.outcome === "COMPLETED" && res.observation && res.observation.output;
+      selfViews[ds.selfread] = out ? { out } : { err: res || null };
+      render();
     }
     else if (ds.selftest) { t.disabled = true; await act(`/api/installations/${ds.selftest}/self-test`, {}); } // result is kept by Processor and shown in the run card
     else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }
