@@ -49,6 +49,41 @@ class TestLauncher(unittest.TestCase):
         kill.assert_not_called()
         self.assertEqual(o.state, 'STOP_INCOMPLETE_PORT_BUSY')
 
+    def test_stop_closes_real_owned_test_listeners(self):
+        import socket
+        import subprocess
+        import sys
+        import time
+        ports = []
+        for _ in range(2):
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+                ports.append(sock.getsockname()[1])
+        supervisor = launcher.Supervisor()
+        for name, port in zip(('identity', 'processor'), ports):
+            child = subprocess.Popen([sys.executable, '-c',
+                                      'import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("127.0.0.1",int(__import__("sys").argv[1]))); s.listen(); time.sleep(30)',
+                                      str(port)], stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     start_new_session=True)
+            supervisor.children[name] = child
+        try:
+            for _ in range(100):
+                if all(launcher.listener(port) for port in ports):
+                    break
+                time.sleep(.02)
+            self.assertTrue(all(launcher.listener(port) for port in ports))
+            with patch.object(launcher, 'ID_PORT', ports[0]), patch.object(launcher, 'TP_PORT', ports[1]):
+                supervisor.stop()
+            self.assertEqual(supervisor.state, 'STOPPED')
+            self.assertTrue(all(p.poll() is not None for p in supervisor.children.values()))
+            self.assertTrue(all(not launcher.listener(port) for port in ports))
+        finally:
+            for p in supervisor.children.values():
+                if p.poll() is None:
+                    p.kill()
+                    p.wait(timeout=5)
+
     def test_versions_refuses_to_apply(self):
         with patch.object(launcher, 'git_rev', return_value='UNAVAILABLE'), patch.object(launcher, 'pinned', return_value={'TASS_ARTIFACT': 'test'}):
             v = launcher.versions()
