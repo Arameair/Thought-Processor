@@ -404,6 +404,13 @@
     const rt = v.runtime, r = v.record, ins = r.installation_id, [word, cls] = phaseOf(rt.state);
     const busy = rt.state === "STARTING" || rt.state === "RESTARTING" || rt.state === "STOPPING";
     const st = (rt.health && rt.health.status) || {};
+    // #31: an old approved TASS package is not a substitute for the newly pinned
+    // artifact. Until Identity supports same-ID upgrades, fail visibly closed.
+    const tassUpgradePending = r.feature_id === "tass"
+      && r.artifact_sha256 === "86d79ba30ab3afb26bf015364fa0556dfa553c1e48d673b4243a827d6f8ba757"
+      && (s.library || []).some((x) => x.feature_id === "tass"
+        && x.artifact_sha256 === "985027bbaebfd99bb07926285ceac218726ddca3fca0dff421bf665e2781abef"
+        && !x.blocked);
     let h = `<div class="runcard"><div class="rc-h"><span class="dot ${cls}"></span><strong class="rc-state">${esc(word)}</strong>`;
     if (rt.state === "RUNNING") h += ` <span class="muted small">pid ${esc(rt.pid)} · launch ${esc(rt.launch_id)} · ${rt.health && rt.health.ready ? "health READY" : "health not ready"}</span>`;
     h += `</div>`;
@@ -417,7 +424,8 @@
         + (st.pulse ? `<p class="small muted">Pulse: ${esc(st.pulse.stage)}${st.pulse.born_at ? " · born " + esc(new Date(st.pulse.born_at).toLocaleString()) : ""} · ${esc((st.pulse.counters || {}).ticks || 0)} ticks${st.pulse.last && st.pulse.last.outcome ? " · last tick: " + esc(st.pulse.last.outcome) + " (" + esc(st.pulse.last.ms) + " ms)" + (st.pulse.last.why ? " — " + esc(st.pulse.last.why) : "") : ""}</p>` : "")
         + `<p class="small muted">Identity link: ${esc(a.detail || "")}${a.checked_at ? " · checked " + esc(new Date(a.checked_at).toLocaleTimeString()) : ""}</p>`;
     }
-    if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
+    if (tassUpgradePending) h += `<div class="problem small"><strong>Upgrade required — not available yet.</strong> This TASS installation is approved for an older artifact. Its identity, grants and chat are preserved. Start is disabled until Identity approves a same-ID pinned upgrade. Do not uninstall or replace installed files.</div>`;
+    else if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
     // Who may use it (Identity's signed grants).
     const caps = r.capabilities || [], grants = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE");
     const name = (eid) => { const e = (s.identities || []).find((x) => x.id === eid); return e ? e.name : eid; };
@@ -428,6 +436,7 @@
     h += `<div class="row">`;
     if (rt.state === "RUNNING") h += `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn" data-selftest="${esc(ins)}">Run self-test</button>`;
     else if (busy) h += `<button class="btn" disabled>${esc(word)}</button>`;
+    else if (tassUpgradePending) h += `<button class="btn primary" disabled title="An Identity-approved upgrade is required">Upgrade required</button>`;
     else h += `<button class="btn primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>${cls === "bad" ? "Start again" : "Start"}</button><button class="btn" disabled title="The self-test runs inside the service: start it first">Run self-test</button>`;
     h += `<button class="btn ghost small" data-copyact="${esc(ins)}" title="Copies Processor's record of this service: no keys, tickets, codes or private links">Copy activity</button></div>`;
     // ONE next action.
