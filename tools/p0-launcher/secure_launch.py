@@ -24,7 +24,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-fresh'))).expanduser()
 IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity'))).expanduser()
-TASS = Path(os.environ.get('P1_TASS_SRC', str(ROOT.parent / 'tass'))).expanduser()
+TASS = Path(os.environ.get('P1_TASS_SRC', str(Path.home() / 'p1c/tass-companion'))).expanduser()
 THOUGHT = Path(os.environ.get('P1_THOUGHT_SRC', str(ROOT.parent / 'thought'))).expanduser()
 RUN = ROOT / 'run-p1.sh'
 RUNTIME = WORK / 'launcher-control'
@@ -203,6 +203,8 @@ class Supervisor:
             pre = subprocess.run(['bash', str(RUN)], env=env, capture_output=True, timeout=15)
             if pre.returncode != 0 or b'PREFLIGHT OK' not in pre.stdout:
                 raise RuntimeError('PREFLIGHT_REFUSED')
+            if not (TASS / 'feature/feature.json').is_file():
+                raise RuntimeError('TASS_CHECKOUT_MISSING')
             safe_dir(WORK)
             for folder in ('bin', 'identity-profile', 'processor-profile', 'locators'):
                 safe_dir(WORK / folder)
@@ -222,8 +224,10 @@ class Supervisor:
             if thought.is_dir() and os.environ.get('P1_THOUGHT', 'on') != 'off':
                 id_flags += ['-trust-fixture-artifact', pin['THOUGHT_ARTIFACT']]
                 tp_flags += ['-trust-feature-dir', str(thought), '-trust-feature-artifact', pin['THOUGHT_ARTIFACT']]
-            runtime_env = {**os.environ, 'IDENTITY_LOCATOR_DIR': str(WORK / 'locators'),
-                           'TP_IDENTITY_DEFAULT_URL': 'http://127.0.0.1:7797'}
+            keep = ('PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'USER', 'WSL_DISTRO_NAME', 'WSL_INTEROP')
+            runtime_env = {k: os.environ[k] for k in keep if k in os.environ}
+            runtime_env.update(IDENTITY_LOCATOR_DIR=str(WORK / 'locators'),
+                               TP_IDENTITY_DEFAULT_URL='http://127.0.0.1:7797')
             if listener(ID_PORT) or listener(TP_PORT):
                 raise RuntimeError('PORTS_OCCUPIED_REFUSED')
             if self.stop_requested.is_set():
