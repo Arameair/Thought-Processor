@@ -401,7 +401,9 @@ func (s *Supervisor) wait(id string, p *proc, cmd *exec.Cmd, exited chan struct{
 			code = ee.ExitCode()
 		}
 	}
-	close(exited)
+	// Signal "exited" only after the state below is final, so Stop/kill
+	// callers never return while the view still says STOPPING.
+	defer close(exited)
 	s.mu.Lock()
 	if p.cmd != cmd { // superseded
 		s.mu.Unlock()
