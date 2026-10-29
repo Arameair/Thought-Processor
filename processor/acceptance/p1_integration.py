@@ -752,7 +752,8 @@ def main():
     link = start_processor(env=dict(ENV, TP_TEST_CRASH_POINT="after-register"))
     tp = TP(link)
     tp.until(lambda s: s["verified"], 30, "processor back")
-    st, j = tp.post("/api/library/p1-deterministic-worker/install")
+    # Installs are idempotent by default; a second copy must be asked for explicitly.
+    st, j = tp.post("/api/library/p1-deterministic-worker/install", {"new_copy": True})
     approve(j["approval_url"])
     p = procs["processor"]
     try:

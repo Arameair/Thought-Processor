@@ -339,6 +339,7 @@ func (s *Supervisor) launch(ctx context.Context, id, by string) error {
 	}
 	if ep.API != API || ep.InstallationID != spec.InstallationID || !endpointURLRE.MatchString(ep.URL) || ep.PID != cmd.Process.Pid {
 		s.kill(p)
+		os.Remove(keyFile)
 		return errors.New("WRONG_SERVICE: endpoint.json does not describe this launch (api, installation, loopback URL or pid differ)")
 	}
 	s.mu.Lock()
@@ -351,6 +352,7 @@ func (s *Supervisor) launch(ctx context.Context, id, by string) error {
 	}
 	if err != nil || st != 200 || status["installation_id"] != spec.InstallationID || status["launch_id"] != launchID {
 		s.kill(p)
+		os.Remove(keyFile)
 		if err == nil {
 			err = errors.New("status did not match this launch")
 		}
@@ -412,18 +414,24 @@ func (s *Supervisor) wait(id string, p *proc, cmd *exec.Cmd, exited chan struct{
 	ex := &Exit{At: time.Now().UTC(), Code: code, Expected: p.stopping}
 	p.lastExit, p.url, p.health = ex, "", nil
 	removeLaunchRecord(p.spec.RuntimeDir)
+	// Checked before p.stopping: a start that failed (and was killed by the
+	// launcher, which sets stopping) must stay FAILED_TO_START with its
+	// reason, never be reported as a clean stop.
+	if p.state == Starting || p.state == FailedToStart {
+		// Died before it proved itself: a failed start, never "recovered".
+		ex.Reason, ex.Expected = "exited during start-up", false
+		if p.state == Starting {
+			p.state, p.note = FailedToStart, fmt.Sprintf("exited during start-up (code %d); see its log", code)
+		}
+		s.mu.Unlock()
+		s.Log("warn", "feature.start_exit", id, fmt.Sprintf("process exited during start-up (code %d); nothing is left running", code))
+		return
+	}
 	if p.stopping {
 		ex.Reason = "stopped by Processor"
 		p.state = Stopped
 		s.mu.Unlock()
 		s.Log("info", "feature.stopped", id, "process exited cleanly after a stop request; installation identity and data kept")
-		return
-	}
-	if p.state == Starting {
-		// Died before it proved itself: a failed start, never "recovered".
-		ex.Reason = "exited during start-up"
-		p.state, p.note = FailedToStart, fmt.Sprintf("exited during start-up (code %d); see its log", code)
-		s.mu.Unlock()
 		return
 	}
 	ex.Reason = "exited unexpectedly"

@@ -32,13 +32,24 @@ type Entry struct {
 var (
 	codeLike = regexp.MustCompile(`\b[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}\b`)
 	keyLink  = regexp.MustCompile(`#(code|key)=[0-9a-f]+`)
+	// Identity approval links: /approve#a=apr_…&t=<one-time token>
+	approvalToken = regexp.MustCompile(`([#&]t=)[0-9A-Za-z_-]+`)
+	// Request tickets: tk1.<payload>.<mac>
+	ticketLike = regexp.MustCompile(`\btk1\.[A-Za-z0-9_-]+\.[0-9a-f]+`)
+	// Secret-bearing JSON or key=value fields.
+	secretField = regexp.MustCompile(`(?i)("?(secret|launch_key|password|passphrase|token|authorization|x-tf-ticket|x-tf-auth|x-identity-auth)"?\s*[:=]\s*"?)[^",\s}]+`)
 )
 
+// scrub masks anything secret-shaped. Secrets are never logged on purpose;
+// this is the second line of defence for text that came from elsewhere
+// (error messages, a feature's own log). SHA-256 digests and IDs stay
+// visible: they identify things but unlock nothing.
 func scrub(s string) string {
 	s = keyLink.ReplaceAllString(s, "#$1=<removed>")
+	s = approvalToken.ReplaceAllString(s, "${1}<removed>")
+	s = ticketLike.ReplaceAllString(s, "tk1.<removed>")
+	s = secretField.ReplaceAllString(s, "${1}<removed>")
 	s = codeLike.ReplaceAllString(s, "XXXX-XXXX")
-	// sha256 values in install details are fine to show; secrets are never
-	// logged. Only mask hex that follows "token".
 	return s
 }
 

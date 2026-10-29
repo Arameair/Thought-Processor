@@ -255,7 +255,9 @@
     let h = `<div class="dhead"><div class="typed">LIBRARY</div><h1>Add a feature</h1><p class="muted">Feature packages from local folders you trusted when starting Processor. In P1 only the exact, pinned reviewed test fixture (or an artifact you pinned with <code>-trust-feature-artifact</code>) can be installed — what a package says about itself never counts. Third-party executables stay <strong>BLOCKED</strong> until release provenance and OS sandboxing are verified. Invitations are not built yet.</p></div>`;
     h += lib.map((x) => `<div class="libcard ${x.blocked ? "blocked" : ""}">
       <div class="lc-h"><div><h3>${esc(x.name || x.dir)}</h3><div class="muted small">${esc(x.description || x.error || "")}</div></div>
-      ${x.blocked ? badge(x.blocked === "INVALID_PACKAGE" ? "INVALID" : "BLOCKED", "bad", x.blocked) : `<button class="btn primary" data-review="${esc(x.feature_id)}">Install…</button>`}</div>
+      ${x.blocked ? badge(x.blocked === "INVALID_PACKAGE" ? "INVALID" : "BLOCKED", "bad", x.blocked)
+        : (x.installed_as || []).length ? `<button class="btn primary" data-sel="feature:${esc(x.installed_as[0])}">Open installed feature</button>`
+        : `<button class="btn primary" data-review="${esc(x.feature_id)}">Install…</button>`}</div>
       <div class="badges">${x.version ? badge("v" + x.version) : ""}${x.trust_basis ? badge("pinned artifact", "info", x.trust_basis) : x.trust_class ? badge("claims " + x.trust_class + " — not pinned", "bad", "A package's own label can't grant trust") : ""}${x.api ? badge(x.api) : ""}${(x.installed_as || []).length ? badge("installed ×" + x.installed_as.length, "ok") : ""}</div>
       ${x.blocked ? `<p class="small error">${esc(x.blocked)}${x.error ? " — " + esc(x.error) : ""}</p>` : ""}
       <details class="small"><summary>Package details</summary>${kv([["Folder", esc(x.dir)], ["Publisher", esc(x.publisher_claim || "") + " " + badge("claim only — not verified", "warn")], ["Source", esc(x.source_repo || "")],
@@ -263,6 +265,33 @@
         ["Capabilities", (x.capabilities || []).map((c) => mono(c.id) + " " + badge(c.data_class)).join(" ")], ["Files", (x.files || []).map((f) => mono(f.path) + " " + mono(short(f.sha256, 16))).join("<br>")]])}</details></div>`).join("")
       || `<p class="muted">No packages found in the trusted folders.</p>`;
     set(d, h);
+  }
+
+  // The owner-facing run card: one plain state (Stopped / Starting / Running /
+  // Stopping / Error), the one button that makes sense now, and the last
+  // standalone self-test as the worker actually answered it.
+  const phaseOf = (st) => ({ STOPPED: ["Stopped", "idle"], STARTING: ["Starting…", "warn"], RESTARTING: ["Starting…", "warn"], RUNNING: ["Running", "ok"],
+    STOPPING: ["Stopping…", "warn"], FAILED_TO_START: ["Error", "bad"], NEEDS_ATTENTION: ["Error", "bad"], CRASHED: ["Error", "bad"] })[st] || [st, ""];
+  function runCard(v, iv) {
+    const rt = v.runtime, ins = v.record.installation_id, [word, cls] = phaseOf(rt.state);
+    const busy = rt.state === "STARTING" || rt.state === "RESTARTING" || rt.state === "STOPPING";
+    let h = `<div class="runcard"><div class="rc-h"><span class="dot ${cls}"></span><strong class="rc-state">${esc(word)}</strong>`;
+    if (rt.state === "RUNNING") h += ` <span class="muted small">pid ${esc(rt.pid)} · launch ${esc(rt.launch_id)} · ${rt.health && rt.health.ready ? "health READY" : "health not ready"}</span>`;
+    h += `</div>`;
+    if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
+    h += `<div class="row">`;
+    if (rt.state === "RUNNING") h += `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn primary" data-selftest="${esc(ins)}">Run self-test</button>`;
+    else if (busy) h += `<button class="btn" disabled>${esc(word)}</button>`;
+    else h += `<button class="btn primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>${cls === "bad" ? "Start again" : "Start"}</button><button class="btn" disabled title="The self-test runs inside the worker: start it first">Run self-test</button>`;
+    h += `</div>`;
+    if (!iv && !busy && rt.state !== "RUNNING") h += `<p class="small warn">Start needs Identity: it must confirm this installation before anything runs.</p>`;
+    const t = v.self_test;
+    if (t) {
+      const stale = rt.launch_id && t.launch_id && t.launch_id !== rt.launch_id;
+      h += `<div class="result ${t.result === "PASS" ? "ok" : "bad"}"><div><strong>Self-test ${esc(t.result)}</strong> <span class="muted small">${esc(new Date(t.at).toLocaleTimeString())} · launch ${esc(t.launch_id || "?")}${stale ? " (an earlier launch)" : ""}</span></div>`
+        + (t.error ? `<div class="small">${esc(t.error)}</div>` : `<div class="small muted">${esc(t.data_class || "")} · external calls: ${esc(t.external_calls ?? "")} · grants used: ${esc(t.grants_used || "")}</div><pre>${esc(JSON.stringify(t.output, null, 2))}</pre>`) + `</div>`;
+    } else if (rt.state === "RUNNING") h += `<p class="small muted">Self-test not run yet for this launch. It uses built-in test data and no grant.</p>`;
+    return h + `</div>`;
   }
 
   function renderFeature(s, d, v) {
@@ -285,10 +314,9 @@
       ${rt.state === "RUNNING" ? badge(rt.health && rt.health.ready ? "Health: READY" : "Health: not ready", rt.health && rt.health.ready ? "ok" : "warn") : ""}
       ${iv ? badge(active + " active grant" + (active === 1 ? "" : "s"), active ? "info" : "") : gone ? "" : badge("grants: can't confirm", "warn")}${badge("0 information sources")}${badge("pinned artifact", "info", (r.trust_basis || "artifact pin") + " — publisher not verified")}
       ${v.files && v.files !== "OK" && !gone ? badge(v.files, "bad") : ""}</div>
-      ${rt.state === "NEEDS_ATTENTION" ? `<div class="problem"><strong>Needs attention.</strong> ${esc(rt.note || "")}</div>` : ""}
-      ${rt.state === "FAILED_TO_START" ? `<div class="problem"><strong>Did not start.</strong> ${esc(rt.note || "")}</div>` : ""}</div>`);
-    // Overview
-    set($("#pane-overview"), kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
+      ${v.same_artifact_copies && !gone ? `<p class="small warn">${esc(v.same_artifact_copies)} other installation(s) of this same artifact exist in this workspace (made before repeated installs returned the existing one). Nothing was removed; uninstall extras yourself if you don't want them.</p>` : ""}</div>`);
+    // Overview: running it comes first.
+    set($("#pane-overview"), (gone ? "" : `<h3>Run</h3>` + runCard(v, iv)) + `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
       ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
       ["Trusted because", esc(r.trust_basis || "artifact pin (recorded before the cleanup)")], ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
       ["Installed", esc(new Date(r.installed_at).toLocaleString())], iv && ["Administered by", mono(iv.installation.administered_by) + " (Admin approval " + mono(short(iv.installation.approval_id, 14)) + ")"],
@@ -345,8 +373,7 @@
       rt.idle_stop_at && ["Idle stop", "at " + esc(new Date(rt.idle_stop_at).toLocaleTimeString()) + " if no work arrives"],
       rt.last_exit && ["Last exit", esc(new Date(rt.last_exit.at).toLocaleTimeString()) + " code " + esc(rt.last_exit.code) + " — " + esc(rt.last_exit.reason)],
       (rt.recent_restarts || []).length && ["Automatic restarts", esc(rt.recent_restarts.length) + " in the last 10 min (requests are never resent)"]])
-      + `<div class="row">${rt.state === "RUNNING" ? `<button class="btn" data-stop="${esc(ins)}">Stop</button><button class="btn" data-selftest="${esc(ins)}">Run standalone self-test</button>` : `<button class="btn primary" data-start="${esc(ins)}">Start</button>`}</div>
-      <div id="selftest-${esc(ins)}" class="small"></div>`);
+      + (gone ? "" : runCard(v, iv)));
     const pkey = ins + JSON.stringify(r.policy) + gone;
     const pf = $("#fx-policy");
     if (pf.dataset.key !== pkey) {
@@ -425,7 +452,9 @@
       ["Needs", (it.requires || []).join(", ")], ["Artifact SHA-256", it.artifact_sha256], ["Capabilities", (it.capabilities || []).map((c) => c.id + " (" + c.data_class + ")").join(", ")]].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join(""));
     set($("#i-checks"), `<strong>Checked</strong><ul><li>every file matches the SHA-256 in its manifest; no links, no paths outside the package</li><li>the folder is one you trusted with -trust-feature-dir</li><li>this exact artifact is pinned (${esc(it.trust_basis || "")}); the package's own trust label is not evidence</li><li>files are copied and checked again before registering</li></ul>`);
     set($("#i-not"), `<strong>Not checked</strong><ul>${(it.not_verified || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`);
-    $("#i-ok").onclick = async () => { const f = reviewFor; reviewFor = ""; mi.hidden = true; const j = await act(`/api/library/${encodeURIComponent(f)}/install`, {}); if (j && j.approval_url) watch(j); };
+    $("#i-ok").onclick = async () => { const f = reviewFor; reviewFor = ""; mi.hidden = true; const j = await act(`/api/library/${encodeURIComponent(f)}/install`, {});
+      if (j && j.already_installed) { toast("Already installed — opened the existing installation (nothing new was registered).", "ok"); choose({ type: "feature", id: j.installation_id }); }
+      else if (j && j.approval_url) watch(j); };
     $("#i-cancel").onclick = () => { reviewFor = ""; mi.hidden = true; };
   }
 
@@ -448,7 +477,7 @@
     }
     else if (ds.start) { t.disabled = true; await act(`/api/installations/${ds.start}/start`, {}); }
     else if (ds.stop) { t.disabled = true; await act(`/api/installations/${ds.stop}/stop`, {}); }
-    else if (ds.selftest) { const j = await act(`/api/installations/${ds.selftest}/self-test`, {}); if (j && j.self_test) { const el = document.getElementById("selftest-" + ds.selftest); if (el) el.innerHTML = `<div class="result ok"><strong>Self-test ${esc(j.self_test.result)}</strong> <span class="muted">${esc(j.self_test.data_class)} · grants used: ${esc(j.self_test.grants_used)}</span><pre>${esc(JSON.stringify(j.self_test.output, null, 2))}</pre></div>`; } }
+    else if (ds.selftest) { t.disabled = true; await act(`/api/installations/${ds.selftest}/self-test`, {}); } // result is kept by Processor and shown in the run card
     else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }
     else if (ds.adminrevoke) { const j = await act(`/api/installations/${sel.id}/grants/${ds.adminrevoke}/admin-revoke`, {}); if (j && j.approval_url) watch(j); }
     else if (ds.uninstall) { const j = await act(`/api/installations/${ds.uninstall}/uninstall`, { keep_data: !!($("#keep-data") && $("#keep-data").checked) }); if (j && j.approval_url) watch(j); }
