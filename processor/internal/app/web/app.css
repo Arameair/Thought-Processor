@@ -162,3 +162,5 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .runcard .rc-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .runcard .rc-state { font-size: 1.1em; }
 .runcard .row { margin-top: 10px; }
+.runcard .evid { margin-top: 8px; }
+.runcard .next { margin-top: 10px; padding: 8px 10px; border-radius: 9px; background: var(--idle-bg); }
