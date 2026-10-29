@@ -5,7 +5,13 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/developer-entrance-claude-20261029
+LAUNCH_BRANCH=experiment/tass-companion-claude-20261029
+# TASS (private companion) feature: the exact reviewed package digest, pinned
+# in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
+# Any other content is refused before anything starts.
+TASS_BRANCH=experiment/tass-companion-feature-claude-20261029
+TASS_ARTIFACT=86d79ba30ab3afb26bf015364fa0556dfa553c1e48d673b4243a827d6f8ba757
+TASS_BASE_SHA=570a371135d13ad8d742fb2c13adc9982211c4c2
 # Developer Utility (the Developer entrance): exact reviewed package digest,
 # pinned in Processor (-trust-feature-artifact) and Identity
 # (-trust-fixture-artifact). Any other content is refused before anything starts.
@@ -22,12 +28,14 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
 if [[ -z "${P1_THOUGHT_SRC:-}" && -d "$(dirname "$ROOT")/Thought" ]]; then P1_THOUGHT_SRC="$(dirname "$ROOT")/Thought"; fi
 THOUGHT_SRC="${P1_THOUGHT_SRC:-$(dirname "$ROOT")/thought}"
-# Developer entrance trial: its OWN work folder and ports. The owner's other
-# trials (~/p1c/p1-launcher 7792/7862, ~/p1c/p1-worker-runtime 7794/7864)
-# are never reused, overwritten or contacted.
-WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-developer-entrance}"
-ID_PORT="${P1_IDENTITY_PORT:-7796}"
-TP_PORT="${P1_PROCESSOR_PORT:-7866}"
+if [[ -z "${P1_TASS_SRC:-}" && -d "$(dirname "$ROOT")/TASS" ]]; then P1_TASS_SRC="$(dirname "$ROOT")/TASS"; fi
+TASS_SRC="${P1_TASS_SRC:-$(dirname "$ROOT")/tass}"
+# TASS trial: its OWN work folder and ports. The owner's other trials
+# (~/p1c/p1-launcher 7792/7862, ~/p1c/p1-worker-runtime 7794/7864,
+# ~/p1c/p1-developer-entrance 7796/7866) are never reused, overwritten or contacted.
+WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-tass}"
+ID_PORT="${P1_IDENTITY_PORT:-7797}"
+TP_PORT="${P1_PROCESSOR_PORT:-7867}"
 id_pid= tp_pid= watch_pid= lock=
 INJECT="${P1_TEST_INJECT:-}"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -79,7 +87,7 @@ PY
 }
 checkout_ok() { # dir expected-owner/repo label
   local dir="$1" slug="$2" label="$3" top url norm
-  [[ -d "$dir" && ! -L "$dir" ]] || die "$label: expected a checkout folder at $dir (not a link). Set P1_IDENTITY_SRC / P1_THOUGHT_SRC if it lives elsewhere."
+  [[ -d "$dir" && ! -L "$dir" ]] || die "$label: expected a checkout folder at $dir (not a link). Set P1_IDENTITY_SRC / P1_THOUGHT_SRC / P1_TASS_SRC if it lives elsewhere."
   top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || die "$label: $dir is not a working Git checkout (clone or worktree), or its worktree link is broken."
   [[ "$(cd "$dir" && pwd -P)" == "$(cd "$top" && pwd -P)" ]] || die "$label: $dir is inside another checkout ($top), not a checkout itself."
   [[ "$(git -C "$dir" rev-parse --is-bare-repository)" == false ]] || die "$label: $dir is a bare repository."
@@ -121,6 +129,20 @@ if [[ "${P1_THOUGHT:-on}" != off && -e "$THOUGHT_SRC" ]]; then
   printf 'Thought feature source: %s (%s) — package matches pinned artifact %s…\n' "$(git -C "$THOUGHT_SRC" rev-parse HEAD)" "$THOUGHT_SRC" "${THOUGHT_ARTIFACT:0:12}"
 else
   printf 'Thought feature: not offered (no checkout at %s, or P1_THOUGHT=off).\n' "$THOUGHT_SRC"
+fi
+if [[ "${P1_TASS:-on}" != off && -e "$TASS_SRC" ]]; then
+  # A folder is there, so it must be the reviewed TASS checkout; never skip it silently.
+  checkout_ok "$TASS_SRC" Arameair/TASS TASS
+  [[ "$(git -C "$TASS_SRC" branch --show-current)" == "$TASS_BRANCH" ]] || die "TASS must be checked out on $TASS_BRANCH (no checkout performed), or run with P1_TASS=off."
+  git -C "$TASS_SRC" merge-base --is-ancestor "$TASS_BASE_SHA" HEAD 2>/dev/null || die "TASS is not descended from the reviewed commit $TASS_BASE_SHA."
+  [[ -f "$TASS_SRC/feature/feature.json" && ! -L "$TASS_SRC/feature" ]] || die "No TASS feature package at $TASS_SRC/feature."
+  tass_digest="$(package_digest "$TASS_SRC/feature")" || die "Could not read the TASS package at $TASS_SRC/feature."
+  [[ "$tass_digest" == "$TASS_ARTIFACT" ]] || die "TASS package content ($tass_digest) is not the reviewed pinned artifact ($TASS_ARTIFACT). Nothing started."
+  TP_EXTRA+=(-trust-feature-dir "$TASS_SRC/feature" -trust-feature-artifact "$TASS_ARTIFACT")
+  ID_EXTRA+=(-trust-fixture-artifact "$TASS_ARTIFACT")
+  printf 'TASS feature source: %s (%s) — package matches pinned artifact %s…\n' "$(git -C "$TASS_SRC" rev-parse HEAD)" "$TASS_SRC" "${TASS_ARTIFACT:0:12}"
+else
+  printf 'TASS feature: not offered (no checkout at %s, or P1_TASS=off).\n' "$TASS_SRC"
 fi
 TP_EXTRA+=(-trust-feature-dir "$DEV_PKG" -trust-feature-artifact "$DEV_ARTIFACT")
 ID_EXTRA+=(-trust-fixture-artifact "$DEV_ARTIFACT")

@@ -12,6 +12,8 @@
   let lastAction = {};      // installation -> result
   let details = {};         // installation -> /details answer
   let activity = {};        // installation -> copied activity text
+  let chats = {};           // installation|identity -> {messages, note, err} (this page only; never stored by Processor)
+  let chatSub = {};         // installation -> identity chosen for talking
   let reviewFor = "";
 
   function choose(s) { sel = s; sessionStorage.setItem("tp_sel", JSON.stringify(s)); render(); if (s && s.type === "entity") act("/api/identities/select", { id: s.id }); }
@@ -177,7 +179,8 @@
       const on = sel && sel.type + ":" + sel.id === key;
       return `<button type="button" class="idrow ${on ? "sel" : ""}" data-sel="${esc(key)}"><span class="dot ${dot || ""}"></span><span class="nm">${esc(label)}</span><span class="kind">${esc(kind)}</span>${extra || ""}</button>`;
     };
-    let h = `<div class="grp"><div class="grp-h">Administrator</div>`;
+    let h = `<div class="grp"><div class="grp-h">Developer</div>` + item("platform:all", "Developer Platform", "home", "", s.verified ? "ok" : "warn") + `</div>`;
+    h += `<div class="grp"><div class="grp-h">Administrator</div>`;
     h += a ? item("admin:admin", a.state === "ENROLLED" ? "Admin Identity" : "Establish Admin…", "admin", "", a.state === "ENROLLED" ? "ok" : "warn") : `<div class="muted small pad">Waiting for Identity…</div>`;
     h += `</div><div class="grp"><div class="grp-h">Companions & people${s.identities_stale ? ` <span class="warn">· last known</span>` : ""}</div>`;
     h += ids.map((e) => item("entity:" + e.id, e.name, e.kind)).join("") || `<div class="muted small pad">None yet — add one below.</div>`;
@@ -194,13 +197,78 @@
     ["#add-id-btn", "#add-feature-btn"].forEach((b) => ($(b).disabled = !s.verified));
     set($("#trusted-note"), (s.trusted_dirs || []).length ? "Trusted local feature folders: " + s.trusted_dirs.map(esc).join(", ") : "No trusted feature folder (start Processor with -trust-feature-dir).");
 
-    if (!sel || (sel.type === "entity" && !ids.find((e) => e.id === sel.id)) || (sel.type === "feature" && !findFeature(s, sel.id))) sel = a && a.state !== "ENROLLED" ? { type: "admin", id: "admin" } : null;
+    if (!sel || (sel.type === "entity" && !ids.find((e) => e.id === sel.id)) || (sel.type === "feature" && !findFeature(s, sel.id))) sel = { type: "platform", id: "all" };
     const d = $("#detail");
+    if (sel.type === "platform") return renderPlatform(s, d);
     if (!sel) return set(d, `<div class="empty"><h2>Choose an identity</h2><p>The Admin, your companions and every installed feature are identities here. Each one starts with no access to anything.</p></div>`);
     if (sel.type === "admin") return renderAdmin(s, d);
     if (sel.type === "entity") return renderEntity(s, d, ids.find((e) => e.id === sel.id));
     if (sel.type === "feature") return renderFeature(s, d, findFeature(s, sel.id));
     if (sel.type === "library") return renderLibrary(s, d);
+  }
+
+  // ----- Developer Platform: the whole system on one screen -----
+  // Every part with the evidence behind its state, who may use it, and the
+  // controls that make sense now. It only shows and does what this paired
+  // session can already do; installs and permissions still go to the Admin.
+  function svcEvidence(v) {
+    const rt = v.runtime, st = (rt.health && rt.health.status) || {};
+    if (rt.state !== "RUNNING") return "";
+    let h = badge("RUNNING", "ok", "Processor verified this launch's signed status (pid " + rt.pid + ")");
+    if (st.entrance) h += badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED", st.entrance.connected ? "ok" : "bad", (st.authority || {}).detail || "")
+      + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn");
+    else h += badge(rt.health && rt.health.ready ? "READY" : "NOT READY", rt.health && rt.health.ready ? "ok" : "warn", "the service's own signed health");
+    if (st.model) h += badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "");
+    return h;
+  }
+  function renderPlatform(s, d) {
+    const fs = features(s).filter((v) => v.record.state === "INSTALLED"), lib = s.library || [];
+    const ids = s.identities || [], a = s.admin || {}, g = s.github || {}, c = s.connection || {};
+    const name = (eid) => { const e = ids.find((x) => x.id === eid); return e ? e.name : eid; };
+    const running = fs.filter((v) => v.runtime.state === "RUNNING");
+    const nm = (r) => r.name.replace(" (TEST FIXTURE)", "");
+    let h = `<div class="dhead"><div class="typed">DEVELOPER PLATFORM</div><h1>Your Brain system</h1>
+      <p class="muted">Every part, the evidence behind its state, who may use it, and what you can do now. Installs and permissions are always approved by the Admin in Identity's own page.</p></div>`;
+    // system strip
+    const tile = (label, word, cls, sub) => `<div class="tile"><div class="t-l">${esc(label)}</div><div class="t-w"><span class="dot ${cls}"></span> ${esc(word)}</div><div class="t-s muted small">${sub}</div></div>`;
+    h += `<div class="tiles">` + tile("Identity", s.verified ? "Connected" : c.state === "AUTHORITY_UNAVAILABLE" ? "Unavailable" : "Not connected", s.verified ? "ok" : "bad", esc(c.identity_system_id ? short(c.identity_system_id, 14) : c.detail || ""))
+      + tile("Admin", a.state === "ENROLLED" ? "Established" : a.state === "DAMAGED" ? "Damaged" : "Not established", a.state === "ENROLLED" ? "ok" : a.state === "DAMAGED" ? "bad" : "warn", g.state === "VERIFIED" ? "GitHub: " + esc(g.account ? g.account.login : "signed in") : "GitHub: " + esc((g.state || "signed out").toLowerCase().replace(/_/g, " ")))
+      + tile("Thought Processor", "Running", "ok", "v" + esc((s.processor || {}).version || "") + " · pid " + esc((s.processor || {}).pid || ""))
+      + tile("Services", running.length + " of " + fs.length + " running", running.length ? "ok" : "idle", esc(fs.length ? fs.map((v) => nm(v.record)).join(" · ") : "none installed yet")) + `</div>`;
+    // the ONE next step while setting up
+    const next = !s.verified ? "Connect Processor to Identity (top of the page)."
+      : a.state !== "ENROLLED" ? `Establish the Admin Identity. <button class="btn small primary" data-sel="admin:admin">Admin →</button>`
+      : !ids.length ? `Add an identity for yourself (<strong>+ Identity</strong> on the left).`
+      : !fs.length ? `Install your first service below (each install is approved by the Admin).`
+      : !running.length ? `Start a service below, or <strong>Start all</strong>.` : "";
+    if (next) h += `<div class="next"><strong>Next:</strong> ${next}</div>`;
+    // services
+    h += `<div class="row between"><h3>Services</h3><div>${fs.length ? `<button class="btn small" data-startall="1" ${s.verified ? "" : "disabled"}>Start all</button> <button class="btn small" data-stopall="1">Stop all</button>` : ""}</div></div>`;
+    h += fs.length ? `<table class="tbl plat"><tr><th>Service</th><th>State and evidence</th><th>Who may use it</th><th>Last self-test</th><th></th></tr>${fs.map((v) => {
+      const r = v.record, rt = v.runtime, ins = r.installation_id, iv = v.identity, [word, cls] = phaseOf(rt.state);
+      const busy = rt.state === "STARTING" || rt.state === "RESTARTING" || rt.state === "STOPPING";
+      const gr = ((iv && iv.grants) || []).filter((x) => x.status === "ACTIVE");
+      const who = [...new Set(gr.map((x) => name(x.grant.subject_identity_id)))];
+      const t = v.self_test;
+      return `<tr><td><button class="linklike" data-sel="feature:${esc(ins)}"><strong>${esc(nm(r))}</strong></button><div class="muted small">${esc(r.feature_id)} v${esc(r.version)} · ${mono(short(ins, 12))}</div></td>
+        <td><div><span class="dot ${cls}"></span> ${esc(word)}${rt.state !== "RUNNING" && rt.last_exit ? ` <span class="muted small">last exit: ${esc(rt.last_exit.reason || "")}</span>` : ""}</div><div class="badges">${svcEvidence(v)}${iv ? "" : badge("Identity can't confirm", "warn")}${v.files && v.files !== "OK" ? badge(v.files, "bad") : ""}</div></td>
+        <td class="small">${!iv ? `<span class="warn">can't confirm</span>` : who.length ? esc(who.join(", ")) + ` <span class="muted">(${gr.length} permission${gr.length === 1 ? "" : "s"})</span>` : `<span class="muted">nobody yet</span>`}</td>
+        <td class="small">${t ? badge(t.result, t.result === "PASS" ? "ok" : "bad") + ` <span class="muted">${esc(new Date(t.at).toLocaleTimeString())}${rt.launch_id && t.launch_id && t.launch_id !== rt.launch_id ? " (earlier launch)" : ""}</span>` : `<span class="muted">not run</span>`}</td>
+        <td class="acts">${rt.state === "RUNNING" ? `<button class="btn small" data-stop="${esc(ins)}">Stop</button> <button class="btn small" data-selftest="${esc(ins)}">Self-test</button>`
+          : busy ? `<button class="btn small" disabled>${esc(word)}</button>` : `<button class="btn small primary" data-start="${esc(ins)}" ${iv ? "" : "disabled"}>Start</button>`} <button class="btn ghost small" data-sel="feature:${esc(ins)}">Open →</button></td></tr>`;
+    }).join("")}</table>` : `<p class="muted">No services installed yet.</p>`;
+    // what can be added
+    const avail = lib.filter((x) => !x.blocked && !(x.installed_as || []).length);
+    if (avail.length) h += `<h3>Ready to install</h3><div class="mini-list">${avail.map((x) => `<div class="mini"><strong>${esc(x.name)}</strong> ${badge("pinned artifact", "info", x.trust_basis || "")} <span class="muted small">${esc((x.capabilities || []).map((c) => c.id).join(", "))}</span> <button class="btn small primary" data-review="${esc(x.feature_id)}" ${s.verified && a.state === "ENROLLED" ? "" : "disabled"}>Install…</button></div>`).join("")}</div>`;
+    const blocked = lib.filter((x) => x.blocked);
+    if (blocked.length) h += `<p class="small muted">${blocked.length} package(s) in trusted folders are BLOCKED (not the pinned reviewed artifact): ${esc(blocked.map((x) => x.feature_id || x.dir).join(", "))}.</p>`;
+    // recent activity: outcomes only, never what was said
+    const oc = { COMPLETED: "ok", DENIED_BY_IDENTITY: "bad", DENIED_BY_FEATURE: "bad", AUTHORITY_UNAVAILABLE: "warn", REQUEST_UNCERTAIN: "warn", NOT_RUNNING: "warn", TICKET_REJECTED: "bad", ERROR: "bad" };
+    const reqs = fs.flatMap((v) => (v.requests || []).map((q) => [nm(v.record), q])).sort((x, y) => (x[1].at < y[1].at ? 1 : -1)).slice(0, 15);
+    h += `<h3>Recent requests</h3>` + (reqs.length ? `<table class="tbl small"><tr><th>When</th><th>Service</th><th>For</th><th>Capability</th><th>Outcome</th></tr>${reqs.map(([n, q]) =>
+      `<tr><td>${esc(new Date(q.at).toLocaleTimeString())}</td><td>${esc(n)}</td><td>${esc(name(q.subject_identity_id))}</td><td>${mono(q.capability)}</td><td>${badge(q.outcome.replace(/_/g, " "), oc[q.outcome] || "")}</td></tr>`).join("")}</table>
+      <p class="small muted">Outcomes only: Processor keeps no copy of what a service answered.</p>` : `<p class="muted small">None yet this session.</p>`);
+    set(d, h);
   }
 
   function kv(rows) { return `<dl class="kv">${rows.filter(Boolean).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`; }
@@ -279,7 +347,12 @@
     GRANT_EXPIRED: "The permission expired (they last 1 hour unless the Admin chose otherwise). Ask the Admin again.",
     TICKET_UNKNOWN: "Identity no longer knows that one-time ticket (for example, after a revocation). Nothing was done.",
     ARTIFACT_NOT_PINNED: "Identity doesn't trust this exact package version. Nothing was started.",
-    BAD_INPUT: "The service was allowed to run the request but couldn't use the input. Nothing changed." };
+    BAD_INPUT: "The service was allowed to run the request but couldn't use the input. Nothing changed.",
+    MODEL_REFUSED: "TASS refused its model settings: the model must be on this computer (http://127.0.0.1:port). Nothing was sent or saved.",
+    MODEL_UNAVAILABLE: "TASS couldn't get an answer from the local model (is it running?). Your message was not saved; send it again.",
+    MODEL_TIMEOUT: "The local model took too long to answer. Your message was not saved; try again or use a smaller model.",
+    RATE_LIMITED: "Too many messages in one minute. Nothing was saved; wait a moment.",
+    STORE_DAMAGED: "This identity's saved conversation can't be read. It was left untouched; nothing was done." };
   function explain(r) {
     if (!r) return "";
     if (r.outcome === "AUTHORITY_UNAVAILABLE") return "Identity can't be reached, so nothing was allowed or started. Start Identity; Processor reconnects by itself.";
@@ -322,7 +395,8 @@
       const a = st.authority || {};
       h += `<div class="badges evid">${badge("RUNNING", "ok", "Processor verified this launch's signed status (pid " + rt.pid + ")")}`
         + badge(st.entrance.connected ? "CONNECTED" : "NOT CONNECTED (" + (a.state || "?") + ")", st.entrance.connected ? "ok" : "bad", a.detail || "")
-        + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn") + `</div>`
+        + badge(st.entrance.ready ? "READY" : "NOT READY", st.entrance.ready ? "ok" : "warn")
+        + (st.model ? badge("MODEL: " + String(st.model.state || "?").replace(/_/g, " "), st.model.state === "REACHABLE" ? "ok" : st.model.state === "NOT_CONFIGURED" || st.model.state === "CHECKING" ? "warn" : "bad", st.model.detail || "") : "") + `</div>`
         + `<p class="small muted">Identity link: ${esc(a.detail || "")}${a.checked_at ? " · checked " + esc(new Date(a.checked_at).toLocaleTimeString()) : ""}</p>`;
     }
     if (cls === "bad") h += `<div class="problem small"><strong>${esc(rt.state.replace(/_/g, " "))}:</strong> ${esc(rt.note || (rt.last_exit ? rt.last_exit.reason : ""))} Nothing is left running. Fix the cause, then press Start again.</div>`;
@@ -345,6 +419,7 @@
       const allowed = quick ? grants.filter((g) => g.grant.capability === quick.id) : [];
       if (quick && allowed.length) h += `<div class="next"><strong>Next:</strong> ${allowed.map((g) => `<button class="btn primary small" data-quick="${esc(ins)}" data-sub="${esc(g.grant.subject_identity_id)}" data-cap="${esc(quick.id)}">Run ${esc(quick.id.split(".").slice(1).join(" "))} for ${esc(name(g.grant.subject_identity_id))}</button>`).join(" ")}</div>`;
       else if (!grants.length) h += `<div class="next"><strong>Next:</strong> nothing may use it yet. <button class="btn small" data-tab="connections">Ask the Admin for a permission →</button></div>`;
+      else if (caps.some((c) => /\.chat\.send$/.test(c.id))) h += `<div class="next"><strong>Next:</strong> talk to it below ↓</div>`;
       else h += `<div class="next"><strong>Next:</strong> <button class="btn small" data-tab="connections">Send a request →</button></div>`;
     }
     if (r.feature_id === "developer-utility" && lastAction[ins]) h += resultBox(lastAction[ins]);
@@ -367,7 +442,7 @@
       d.dataset.key = key; d.dataset.html = "";
       d.innerHTML = `<div id="fx-head"></div><div class="tabs" role="tablist">${["overview", "connections", "runtime", "metrics", "logs"].map((t) =>
         `<button type="button" role="tab" data-tab="${t}" class="${tab === t ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-        <div class="pane" id="pane-overview"></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
+        <div class="pane" id="pane-overview"><div id="ov-run"></div><div id="ov-chat"><div id="chat-head"></div><div id="chat-log" class="chatlog" aria-live="polite"></div><div id="chat-form"></div></div><div id="ov-install"></div></div><div class="pane" id="pane-connections"><div id="fx-grants"></div><div id="fx-grant-form"></div><div id="fx-action"></div><div id="fx-action-result"></div><div id="fx-requests"></div></div>
         <div class="pane" id="pane-runtime"><div id="fx-rt"></div><div id="fx-policy"></div></div><div class="pane" id="pane-metrics"></div><div class="pane" id="pane-logs"></div>`;
     }
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
@@ -382,7 +457,9 @@
       ${v.files && v.files !== "OK" && !gone ? badge(v.files, "bad") : ""}</div>
       ${v.same_artifact_copies && !gone ? `<p class="small warn">${esc(v.same_artifact_copies)} other installation(s) of this same artifact exist in this workspace (made before repeated installs returned the existing one). Nothing was removed; uninstall extras yourself if you don't want them.</p>` : ""}</div>`);
     // Overview: running it comes first.
-    set($("#pane-overview"), (gone ? "" : `<h3>Run</h3>` + runCard(s, v, iv)) + `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
+    set($("#ov-run"), gone ? "" : `<h3>Run</h3>` + runCard(s, v, iv));
+    renderChat(s, v, iv);
+    set($("#ov-install"), `<h3>Installation</h3>` + kv([["Installation ID", mono(ins) + ` <span class="muted small">durable · minted by Identity · never reused</span>`], ["Feature", mono(r.feature_id) + " v" + esc(r.version)],
       ["Publisher", esc(r.publisher_claim) + " " + badge("claim only — not verified", "warn")], ["Source", esc(r.source_repo) + `<br><span class="muted small">installed from ${esc(r.source_dir)}</span>`],
       ["Trusted because", esc(r.trust_basis || "artifact pin (recorded before the cleanup)")], ["Artifact SHA-256", mono(r.artifact_sha256)], ["Manifest SHA-256", mono(r.manifest_sha256)], ["API", mono("thought.feature-api/1")],
       ["Installed", esc(new Date(r.installed_at).toLocaleString())], iv && ["Administered by", mono(iv.installation.administered_by) + " (Admin approval " + mono(short(iv.installation.approval_id, 14)) + ")"],
@@ -472,6 +549,77 @@
       + `<h3>Feature log</h3><pre class="logbox">${esc(dt ? (dt.log_tail || []).join("\n") : "")}</pre>`);
     if (tab === "logs" && (!dt || Date.now() - (dt._at || 0) > 3500)) loadDetails(ins);
   }
+  // Talk to a companion feature (one that offers *.chat.send). Every message is
+  // its own Identity-checked request for the chosen identity; what was said
+  // lives only in the feature's own private file and on this page.
+  function renderChat(s, v, iv) {
+    const r = v.record, ins = r.installation_id, rt = v.runtime, caps = r.capabilities || [];
+    const send = caps.find((c) => /\.chat\.send$/.test(c.id)), hist = caps.find((c) => /\.chat\.history$/.test(c.id));
+    const head = $("#chat-head"), logEl = $("#chat-log"), form = $("#chat-form");
+    if (!send || r.state !== "INSTALLED") { set(head, ""); set(logEl, ""); form.innerHTML = ""; form.dataset.key = ""; logEl.hidden = true; return; }
+    const grants = ((iv && iv.grants) || []).filter((g) => g.status === "ACTIVE");
+    const can = (cap, sub) => !!cap && grants.some((g) => g.grant.capability === cap.id && g.grant.subject_identity_id === sub);
+    // Anyone allowed to send or to read their history gets the panel; Send works only with the send permission.
+    const subs = [...new Set(grants.filter((g) => g.grant.capability === send.id || (hist && g.grant.capability === hist.id)).map((g) => g.grant.subject_identity_id))];
+    const senders = subs.filter((x) => can(send, x));
+    const name = (eid) => { const e = (s.identities || []).find((x) => x.id === eid); return e ? e.name : eid; };
+    if (!subs.includes(chatSub[ins])) chatSub[ins] = subs[0] || "";
+    const sub = chatSub[ins], key = ins + "|" + sub, c = chats[key] || {};
+    const running = rt.state === "RUNNING", st = (rt.health && rt.health.status) || {}, m = st.model;
+    const title = esc((r.name || "it").split(" (")[0]);
+    let h = `<h3>Talk to ${title}</h3>`;
+    if (m) h += `<p class="small">${badge("Model: " + String(m.state || "?").replace(/_/g, " "), m.state === "REACHABLE" ? "ok" : m.state === "NOT_CONFIGURED" || m.state === "CHECKING" ? "warn" : "bad")} ${esc(m.detail || "")}</p>`;
+    if (st.privacy) h += `<p class="small muted">${esc(st.privacy)}. Processor passes each message through and keeps only the outcome; Identity sees only a fingerprint (SHA-256) of it.</p>`;
+    if (!running) h += `<p class="small muted">Start it first (above).</p>`;
+    else if (subs.length && !can(send, sub)) h += `<p class="small warn">${esc(name(sub))} may read the conversation but not send: ${mono(send.id)} isn't allowed (or was revoked).</p>`;
+    if (running && !subs.length) h += `<div class="next"><strong>Next:</strong> nobody may talk to it yet. Ask the Admin to allow ${mono(send.id)} for you. <button class="btn small" data-tab="connections">Ask the Admin for a permission →</button></div>`;
+    set(head, h);
+    logEl.hidden = !(running && subs.length);
+    const msgs = c.messages || [];
+    set(logEl, (msgs.length ? msgs.map((x) => `<div class="msg ${x.role === "tass" ? "them" : "you"}"><div class="who">${x.role === "tass" ? title : esc(name(sub))} · ${esc(new Date(x.at).toLocaleTimeString())}${x.by ? ` <span class="muted" title="${esc(x.by)}">· ${esc(x.by.split(" (")[0])}</span>` : ""}</div><div class="txt">${esc(x.text)}</div>${x.role === "you" && x.answered === false ? `<div class="small muted">saved · not answered (no local model)</div>` : ""}</div>`).join("")
+      : `<p class="small muted">${can(hist, sub) ? "No conversation loaded yet." : "Your conversation shows here after you send a message."}</p>`)
+      + (c.note ? `<p class="small"><strong>${esc(c.note)}</strong></p>` : "") + (c.err ? resultBox(c.err) : ""));
+    if (logEl.dataset.scrolled !== String(msgs.length)) { logEl.dataset.scrolled = String(msgs.length); logEl.scrollTop = logEl.scrollHeight; }
+    // The form is built once per (installation, allowed identities, running) so redraws never wipe what you are typing.
+    const fkey = ins + "|" + subs.join(",") + "|" + senders.join(",") + "|" + running;
+    if (form.dataset.key !== fkey) {
+      form.dataset.key = fkey;
+      form.innerHTML = !(running && subs.length) ? "" : `<form class="frm chatform" id="chat-f">
+        <div class="frow">${subs.length > 1 ? `<label>Talking as<select id="chat-sub">${subs.map((x) => `<option value="${esc(x)}" ${x === sub ? "selected" : ""}>${esc(name(x))}</option>`).join("")}</select></label>` : `<span class="small muted">Talking as <strong>${esc(name(sub))}</strong></span>`}</div>
+        <textarea id="chat-in" maxlength="1000" rows="3" placeholder="Say something to ${title}…"></textarea>
+        <div class="row"><button class="btn primary" type="submit" id="chat-send" ${senders.includes(sub) ? "" : "disabled title=\"Needs the send permission\""}>Send</button>${hist ? ` <button class="btn ghost small" type="button" id="chat-load">Load conversation</button>` : ""}<span class="small muted" id="chat-busy"></span></div></form>`;
+      const f = $("#chat-f");
+      if (f) {
+        const cs = $("#chat-sub");
+        if (cs) cs.onchange = () => { chatSub[ins] = cs.value; render(); };
+        const load = async () => {
+          const who = chatSub[ins], k = ins + "|" + who;
+          if (!can(hist, who)) { chats[k] = Object.assign(chats[k] || {}, { note: "Loading needs its own permission: " + hist.id + " for " + name(who) + ".", err: null }); return render(); }
+          const j = await act(`/api/installations/${ins}/action`, { subject: who, capability: hist.id, input: "" });
+          const res = j && j.result, out = res && res.observation && res.observation.output;
+          chats[k] = out ? { messages: out.conversation || [], note: out.headline, err: null } : Object.assign(chats[k] || {}, { err: res || null });
+          render();
+        };
+        const lb = $("#chat-load");
+        if (lb) lb.onclick = load;
+        $("#chat-in").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } };
+        f.onsubmit = async (e) => {
+          e.preventDefault();
+          const ta = $("#chat-in"), text = ta.value.trim(), b = $("#chat-send"), who = chatSub[ins], k = ins + "|" + who;
+          if (!text) return;
+          b.disabled = true; $("#chat-busy").textContent = " asking Identity, then " + (r.name || "it").split(" (")[0] + "…";
+          const j = await act(`/api/installations/${ins}/action`, { subject: who, capability: send.id, input: text });
+          b.disabled = false; $("#chat-busy").textContent = "";
+          const res = j && j.result, out = res && res.outcome === "COMPLETED" && res.observation && res.observation.output;
+          if (out) { chats[k] = { messages: out.conversation || [], note: out.reply ? "" : out.headline, err: null }; ta.value = ""; }
+          else chats[k] = Object.assign(chats[k] || {}, { err: res || null, note: "" });
+          render(); ta.focus();
+        };
+      }
+      // Load the saved conversation once, if that is allowed.
+      if (running && sub && can(hist, sub) && !chats[key]) { chats[key] = { messages: [], note: "Loading…" }; const lb2 = $("#chat-load"); if (lb2) lb2.click(); }
+    }
+  }
   async function loadDetails(ins) {
     try { const j = await api("GET", `/api/installations/${ins}/details`); j._at = Date.now(); details[ins] = j; render(); } catch (_) {}
   }
@@ -550,6 +698,15 @@
       try { const j = await api("GET", `/api/installations/${ds.copyact}/activity`); activity[ds.copyact] = j.text;
         try { await navigator.clipboard.writeText(j.text); toast("Activity copied — no keys, tickets, codes or private links.", "ok"); } catch (_) { toast("Shown below — select it and copy.", "ok"); }
         render(); } catch (e) { toast(e.message, "bad"); }
+    }
+    else if (ds.startall || ds.stopall) {
+      t.disabled = true;
+      for (const v of features(state).filter((x) => x.record.state === "INSTALLED")) {
+        const st = v.runtime.state;
+        if (ds.startall && st !== "RUNNING" && st !== "STARTING" && v.identity) await act(`/api/installations/${v.record.installation_id}/start`, {});
+        if (ds.stopall && (st === "RUNNING" || st === "STARTING")) await act(`/api/installations/${v.record.installation_id}/stop`, {});
+      }
+      t.disabled = false;
     }
     else if (ds.selftest) { t.disabled = true; await act(`/api/installations/${ds.selftest}/self-test`, {}); } // result is kept by Processor and shown in the run card
     else if (ds.revoke) { if (confirm("Revoke this grant? The next request is denied immediately.")) await act(`/api/installations/${sel.id}/grants/${ds.revoke}/revoke`, {}); }

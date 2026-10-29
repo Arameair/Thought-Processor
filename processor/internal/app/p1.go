@@ -676,14 +676,17 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 	t0 := time.Now()
 	defer func() {
 		res.LatencyMS = time.Since(t0).Milliseconds()
+		// Processor keeps the outcome of a request, never what the feature
+		// answered (for TASS that is a private conversation): the answer goes
+		// back to the caller only, and neither this list nor the log holds it.
+		lr := res
+		lr.Observation = nil
 		a.P1.mu.Lock()
-		a.P1.requests = append(a.P1.requests, res)
+		a.P1.requests = append(a.P1.requests, lr)
 		if len(a.P1.requests) > 200 {
 			a.P1.requests = a.P1.requests[len(a.P1.requests)-200:]
 		}
 		a.P1.mu.Unlock()
-		lr := res
-		lr.Observation = nil // the log keeps the outcome, not the data
 		if b, err := json.Marshal(lr); err == nil {
 			if f, err := os.OpenFile(a.requestLogPath(id), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600); err == nil {
 				f.Write(append(b, '\n'))
