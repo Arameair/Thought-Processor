@@ -481,6 +481,27 @@ def main():
     rec("TOGETHER", r["outcome"] == "COMPLETED" and worker_pids(TH) == [pid] and len(worker_pids(WK)) == 1,
         "the P1 worker runs and answers beside Thought; each is one process", r["outcome"])
 
+    # ---- failures: killed from outside, tampered installed file ----
+    os.kill(pid, signal.SIGKILL)
+    s = tp.until(lambda s: inst(s, TH)["runtime"]["state"] == "NEEDS_ATTENTION", 15, "crash noticed")
+    rec("ERRORS", inst(s, TH)["runtime"]["state"] == "NEEDS_ATTENTION" and worker_pids(TH) == [],
+        "Thought killed from outside: shown as Error, not silently restarted, nothing orphaned")
+    r = ask(tp, TH, TASS, READ, "")
+    rec("ERRORS", r["outcome"] == "NOT_RUNNING", "while it is down, requests say NOT RUNNING (nothing started behind your back)", r["outcome"])
+    pkg = W / "processor-profile" / "installations" / TH / "package" / "thought_feature.py"
+    orig = pkg.read_bytes()
+    os.chmod(pkg, 0o600)
+    pkg.write_bytes(orig + b"\n# tampered\n")
+    st, j = tp.post(f"/api/installations/{TH}/start")
+    rec("ERRORS", st == 409 and "FILES_CHANGED" in j.get("error", "") and worker_pids(TH) == [],
+        "installed Thought file changed: Start refused, nothing runs", safe(j.get("error", ""))[:60])
+    pkg.write_bytes(orig)
+    tp.post(f"/api/installations/{TH}/start")
+    s = tp.until(lambda s: inst(s, TH)["runtime"]["state"] == "RUNNING", 15, "running again")
+    pid = inst(s, TH)["runtime"]["pid"]
+    r = ask(tp, TH, TASS, READ, "")
+    rec("ERRORS", worker_pids(TH) == [pid] and len(out(r).get("thoughts") or []) == 1, "approved file restored: Start works, the saved Thought is still there")
+
     # ---- Identity outage ----
     stop("identity")
     tp.until(lambda s: not s["verified"], 30, "authority unavailable")
