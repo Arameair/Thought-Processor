@@ -158,3 +158,7 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .dev pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 12px/1.45 var(--mono); overflow: auto; max-height: 360px; }
 .log { font: 12px/1.5 var(--mono); }
 .log .warn { color: var(--warn); }
+.runcard { border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; }
+.runcard .rc-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.runcard .rc-state { font-size: 1.1em; }
+.runcard .row { margin-top: 10px; }

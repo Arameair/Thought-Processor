@@ -5,14 +5,17 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/p1-launcher-gpt6-20261028
+LAUNCH_BRANCH=experiment/p1-secure-worker-runtime-claude-20261029
 IDENTITY_SHA=64940b629a5ef52eaa143b2402726ec81d382002
 PROCESSOR_BASE_SHA=db31e4785d292925249a2f9f06e3c06bd78ba5b0
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
-WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-launcher}"
-ID_PORT="${P1_IDENTITY_PORT:-7792}"
-TP_PORT="${P1_PROCESSOR_PORT:-7862}"
+# Secure worker runtime trial: its OWN work folder and ports, so the owner's
+# existing P1 launcher trial (~/p1c/p1-launcher, ports 7792/7862) is never
+# reused, overwritten or contacted.
+WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-worker-runtime}"
+ID_PORT="${P1_IDENTITY_PORT:-7794}"
+TP_PORT="${P1_PROCESSOR_PORT:-7864}"
 id_pid= tp_pid= watch_pid= lock=
 INJECT="${P1_TEST_INJECT:-}"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -88,7 +91,7 @@ if [[ -n "$INJECT" && "$WORK" != *"/p1c/"* ]]; then die "Injection requires disp
 if [[ "$INJECT" == go-build ]]; then die "INJECTED: Go build failure (no children started)"; fi
 printf 'Building both source trees with Go...\n'
 (cd "$ID_SRC" && go build -ldflags "-X main.buildBranch=$BASE_BRANCH" -o "$WORK/bin/identity-p1" .) || die "Identity Go build failed"
-(cd "$ROOT/processor" && go build -ldflags "-X main.buildBranch=$BASE_BRANCH" -o "$WORK/bin/processor-p1" .) || die "Processor Go build failed"
+(cd "$ROOT/processor" && go build -ldflags "-X main.buildBranch=$LAUNCH_BRANCH" -o "$WORK/bin/processor-p1" .) || die "Processor Go build failed"
 printf 'Starting private P1 trial. Logs stay local in %s (DO NOT SHARE).\n' "$WORK"
 # Locator isolation ensures we do not discover unrelated Identity instances.
 export IDENTITY_LOCATOR_DIR="$WORK/locators"

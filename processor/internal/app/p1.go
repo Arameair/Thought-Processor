@@ -132,6 +132,31 @@ type p1 struct {
 	notes     []string
 	busy      map[string]bool
 	reconcile sync.Mutex
+	// installMu serializes install requests, so two clicks (or two tabs)
+	// can't both decide "nothing installed yet" and start two installs.
+	installMu sync.Mutex
+	selfTests map[string]SelfTestResult
+}
+
+// SelfTestResult is the last standalone self-test Processor ran for one
+// installation, exactly as the running feature answered it (launcher-signed).
+type SelfTestResult struct {
+	At            time.Time      `json:"at"`
+	Result        string         `json:"result"` // PASS | FAIL | ERROR
+	LaunchID      string         `json:"launch_id,omitempty"`
+	DataClass     string         `json:"data_class,omitempty"`
+	Input         string         `json:"input,omitempty"`
+	Output        map[string]any `json:"output,omitempty"`
+	ExternalCalls any            `json:"external_calls,omitempty"`
+	GrantsUsed    string         `json:"grants_used,omitempty"`
+	Error         string         `json:"error,omitempty"`
+}
+
+// InstallOutcome says what an install request actually did.
+type InstallOutcome struct {
+	Tx                Tx     // set when a new or in-progress install needs the Admin
+	ExistingID        string // set when this exact artifact is already installed here
+	AlreadyInProgress bool   // an install of this exact artifact was already waiting
 }
 
 func (a *App) insDir() string            { return filepath.Join(a.Prof.Dir, "installations") }
@@ -169,7 +194,7 @@ func (a *App) TrustFeatureDirs(dirs []string) {
 }
 
 func (a *App) initP1() {
-	a.P1 = &p1{userStop: map[string]bool{}, busy: map[string]bool{}}
+	a.P1 = &p1{userStop: map[string]bool{}, busy: map[string]bool{}, selfTests: map[string]SelfTestResult{}}
 	a.P1.pins, _ = featpkg.NewPins(nil)
 	os.MkdirAll(a.txDir(), 0o700)
 	if b, err := os.ReadFile(a.pendingPath()); err == nil {
@@ -364,18 +389,58 @@ func (a *App) findPackage(featureID string) (featpkg.Package, error) {
 
 // ---- install transaction ----
 
-func (a *App) requestInstall(ctx context.Context, featureID string) (Tx, error) {
+// requestInstall is idempotent by default: the same pinned artifact installed
+// into the same workspace (this Processor profile, paired with this Identity)
+// returns the existing installation, and an install of it that is already
+// waiting for the Admin is returned instead of starting a second one. Only an
+// explicit newCopy asks Identity for another installation identity. Nothing
+// existing is ever deleted here.
+func (a *App) requestInstall(ctx context.Context, featureID string, newCopy bool) (InstallOutcome, error) {
 	if !featpkg.FeatureIDRE.MatchString(featureID) {
-		return Tx{}, errors.New("unknown feature")
+		return InstallOutcome{}, errors.New("unknown feature")
 	}
 	cl, err := a.Conn.Require(ctx)
 	if err != nil {
-		return Tx{}, err
+		return InstallOutcome{}, err
 	}
+	a.P1.installMu.Lock()
+	defer a.P1.installMu.Unlock()
 	p, err := a.findPackage(featureID)
 	if err != nil {
-		return Tx{}, err
+		return InstallOutcome{}, err
 	}
+	if !newCopy {
+		// Ask Identity live, not a cached list: only an installation Identity
+		// still holds for this exact artifact counts as "already installed".
+		live, err := cl.Installations(ctx)
+		if err != nil {
+			return InstallOutcome{}, err
+		}
+		sys := a.Conn.Pairing().IdentitySystemID
+		for _, r := range a.records() {
+			if r.State != "INSTALLED" || r.FeatureID != featureID || r.ArtifactSHA256 != p.ArtifactSHA256 || r.IdentitySystemID != sys {
+				continue
+			}
+			for _, iv := range live {
+				in := iv.Installation
+				if in.ID == r.InstallationID && in.ArtifactSHA256 == p.ArtifactSHA256 && (in.State == "INSTALLED" || in.State == "PENDING_CONFIRM") {
+					a.note("info", "install.already_installed", featureID+" "+p.Manifest.Version+" (artifact "+p.ArtifactSHA256[:12]+"…) is already installed here as "+r.InstallationID+"; returned it, nothing new was registered")
+					return InstallOutcome{ExistingID: r.InstallationID}, nil
+				}
+			}
+		}
+		for _, t := range a.txs() {
+			if t.FeatureID == featureID && t.ArtifactSHA256 == p.ArtifactSHA256 && t.State != "FAILED" {
+				a.note("info", "install.already_in_progress", featureID+": an install of this exact artifact is already waiting ("+t.State+"); returned it instead of starting another")
+				return InstallOutcome{Tx: t, AlreadyInProgress: true}, nil
+			}
+		}
+	}
+	t, err := a.newInstallTx(ctx, cl, p, featureID)
+	return InstallOutcome{Tx: t}, err
+}
+
+func (a *App) newInstallTx(ctx context.Context, cl *idclient.Client, p featpkg.Package, featureID string) (Tx, error) {
 	key := store.RandHex(16)
 	t := Tx{Key: key, FeatureID: featureID, Name: p.Manifest.Name, Version: p.Manifest.Version, SourceDir: p.Dir,
 		ArtifactSHA256: p.ArtifactSHA256, State: "STAGED", CreatedAt: time.Now().UTC()}
@@ -570,8 +635,17 @@ func (a *App) specFor(id string) (supervisor.Spec, error) {
 	if a.P1.pins.Basis(r.ArtifactSHA256) == "" {
 		return supervisor.Spec{}, errors.New("UNTRUSTED_EXECUTION_BLOCKED: this installation's artifact " + r.ArtifactSHA256[:12] + "… is not pinned in this Processor; it will not be started")
 	}
-	if iv := a.Conn.installation(id); iv != nil && iv.Installation.State != "INSTALLED" {
+	// Fail closed: Identity (not Processor) must confirm, from its last signed
+	// answer on a verified connection, that this exact installation and
+	// artifact are INSTALLED. Unreachable or unconfirmed Identity => no start.
+	iv := a.Conn.installation(id)
+	switch {
+	case iv == nil:
+		return supervisor.Spec{}, errors.New("AUTHORITY_UNAVAILABLE: Identity can't confirm this installation right now, so it was not started; start it again once Identity is connected")
+	case iv.Installation.State != "INSTALLED":
 		return supervisor.Spec{}, errors.New("Identity lists this installation as " + iv.Installation.State + "; it can't be started")
+	case iv.Installation.ArtifactSHA256 != r.ArtifactSHA256:
+		return supervisor.Spec{}, errors.New("UNTRUSTED_EXECUTION_BLOCKED: Identity approved a different artifact for this installation than the one installed here; it will not be started")
 	}
 	pkg := filepath.Join(a.recDir(id), "package")
 	if err := featpkg.VerifyInstalled(pkg, r.ManifestSHA256, r.Files); err != nil {
@@ -805,6 +879,9 @@ func (a *App) reconcileOnce(ctx context.Context) {
 		a.P1.mu.Lock()
 		stopped := a.P1.userStop[r.InstallationID]
 		a.P1.mu.Unlock()
+		if a.Conn.installation(r.InstallationID) == nil {
+			continue // Identity hasn't confirmed it yet on this connection; try next round
+		}
 		if v := a.Sup.View(r.InstallationID); !stopped && (v.State == supervisor.Stopped) {
 			go a.Sup.Start(context.Background(), r.InstallationID, "always_running")
 		}
@@ -846,6 +923,10 @@ type InstView struct {
 	Requests []ActionResult             `json:"requests"`
 	Pending  []PendingOp                `json:"pending"`
 	DataDir  string                     `json:"data_dir"`
+	SelfTest *SelfTestResult            `json:"self_test,omitempty"` // last standalone self-test (this Processor run)
+	// SameArtifactCopies counts other INSTALLED installations of the same
+	// artifact in this workspace (e.g. made before installs became idempotent).
+	SameArtifactCopies int `json:"same_artifact_copies"`
 }
 
 func (a *App) p1State() map[string]any {
@@ -855,10 +936,27 @@ func (a *App) p1State() map[string]any {
 	reqs := append([]ActionResult(nil), a.P1.requests...)
 	notes := append([]string(nil), a.P1.notes...)
 	a.P1.mu.Unlock()
+	a.P1.mu.Lock()
+	selfTests := make(map[string]SelfTestResult, len(a.P1.selfTests))
+	for k, v := range a.P1.selfTests {
+		selfTests[k] = v
+	}
+	a.P1.mu.Unlock()
 	views := []InstView{}
-	for _, r := range a.records() {
+	recs := a.records()
+	for _, r := range recs {
 		v := InstView{Record: r, Runtime: a.Sup.View(r.InstallationID), Identity: a.Conn.installation(r.InstallationID),
 			Requests: []ActionResult{}, Pending: []PendingOp{}, DataDir: store.DisplayPath(filepath.Join(a.recDir(r.InstallationID), "data"))}
+		if st, ok := selfTests[r.InstallationID]; ok {
+			v.SelfTest = &st
+		}
+		if r.State == "INSTALLED" {
+			for _, o := range recs {
+				if o.InstallationID != r.InstallationID && o.State == "INSTALLED" && o.ArtifactSHA256 == r.ArtifactSHA256 {
+					v.SameArtifactCopies++
+				}
+			}
+		}
 		if r.State == "INSTALLED" {
 			if err := featpkg.VerifyInstalled(filepath.Join(a.recDir(r.InstallationID), "package"), r.ManifestSHA256, r.Files); err != nil {
 				v.Files = err.Error()
@@ -945,7 +1043,11 @@ func (a *App) p1Routes(m *http.ServeMux) {
 		writeJSON(w, 200, map[string]any{"approval_url": ar.ApprovalURL, "approval_id": ar.Approval.ID, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/library/{feature}/install", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
-		t, err := a.requestInstall(r.Context(), r.PathValue("feature"))
+		var b struct {
+			NewCopy bool `json:"new_copy"` // explicit: register ANOTHER installation of the same artifact
+		}
+		decode(r, &b)
+		out, err := a.requestInstall(r.Context(), r.PathValue("feature"), b.NewCopy)
 		if err != nil {
 			if idclient.KindOf(err) != "" {
 				a.failIdentity(w, err)
@@ -954,7 +1056,13 @@ func (a *App) p1Routes(m *http.ServeMux) {
 			a.fail(w, 409, err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]any{"approval_url": t.ApprovalURL, "approval_id": t.ApprovalID, "install_key": t.Key, "state": a.State()})
+		if out.ExistingID != "" {
+			writeJSON(w, 200, map[string]any{"already_installed": true, "installation_id": out.ExistingID, "state": a.State()})
+			return
+		}
+		t := out.Tx
+		writeJSON(w, 200, map[string]any{"approval_url": t.ApprovalURL, "approval_id": t.ApprovalID, "install_key": t.Key,
+			"already_in_progress": out.AlreadyInProgress, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/install-tx/{key}/cancel", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		if err := a.cancelTx(r.Context(), r.PathValue("key")); err != nil {
@@ -967,12 +1075,24 @@ func (a *App) p1Routes(m *http.ServeMux) {
 		a.P1.mu.Lock()
 		a.P1.userStop[id] = false
 		a.P1.mu.Unlock()
-		if err := a.Sup.Start(r.Context(), id, "manual start by the person"); err != nil {
+		if v := a.Sup.View(id); v.State == supervisor.Running {
+			// Repeated Start: the supervisor owns at most one process per
+			// installation; report the one that is running, start nothing.
+			a.note("info", "feature.start_ignored", fmt.Sprintf("%s: Start pressed while already RUNNING (pid %d, launch %s); no second process", id, v.PID, v.LaunchID))
+			writeJSON(w, 200, map[string]any{"already_running": true, "pid": v.PID, "launch_id": v.LaunchID, "state": a.State()})
+			return
+		}
+		// Detached from the browser request: closing the tab mid-start must not
+		// leave a half-started process; the supervisor finishes or cleans up.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.Sup.Start(ctx, id, "manual start by the person"); err != nil {
 			a.fail(w, 409, err.Error())
 			return
 		}
 		a.Sup.ArmIdle(id)
-		writeJSON(w, 200, a.State())
+		v := a.Sup.View(id)
+		writeJSON(w, 200, map[string]any{"already_running": false, "pid": v.PID, "launch_id": v.LaunchID, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/installations/{id}/stop", ins(func(w http.ResponseWriter, r *http.Request, id string) {
 		a.P1.mu.Lock()
@@ -982,14 +1102,39 @@ func (a *App) p1Routes(m *http.ServeMux) {
 		writeJSON(w, 200, a.State())
 	}))
 	m.HandleFunc("POST /api/installations/{id}/self-test", ins(func(w http.ResponseWriter, r *http.Request, id string) {
-		st, raw, err := a.Sup.Call(id, "POST", "/v1/self-test", []byte("{}"))
-		if err != nil || st != 200 {
-			a.fail(w, 409, "self-test needs the feature RUNNING ("+errString(err)+")")
+		v := a.Sup.View(id)
+		if v.State != supervisor.Running {
+			a.fail(w, 409, "NOT_RUNNING: the self-test runs inside the worker process — press Start first (it is "+v.State+")")
 			return
 		}
-		var res map[string]any
-		json.Unmarshal(raw, &res)
-		a.note("info", "feature.self_test", id+": standalone self-test "+fmt.Sprint(res["result"])+" (TEST DATA, no grant used)")
+		res := SelfTestResult{At: time.Now().UTC(), LaunchID: v.LaunchID}
+		// Launcher-signed call: the answer is verified as coming from THIS launch.
+		st, raw, err := a.Sup.Call(id, "POST", "/v1/self-test", []byte("{}"))
+		var m map[string]any
+		if err == nil {
+			err = json.Unmarshal(raw, &m)
+		}
+		switch {
+		case err != nil:
+			res.Result, res.Error = "ERROR", err.Error()
+		case st != 200:
+			res.Result, res.Error = "ERROR", fmt.Sprintf("the worker answered HTTP %d", st)
+		default:
+			res.Result, _ = m["result"].(string)
+			if res.Result != "PASS" {
+				res.Result = "FAIL"
+			}
+			res.DataClass, _ = m["data_class"].(string)
+			res.Input, _ = m["input"].(string)
+			res.Output, _ = m["output"].(map[string]any)
+			res.ExternalCalls = m["external_calls"]
+			res.GrantsUsed, _ = m["grants_used"].(string)
+		}
+		a.P1.mu.Lock()
+		a.P1.selfTests[id] = res
+		a.P1.mu.Unlock()
+		lvl := map[bool]string{true: "info", false: "warn"}[res.Result == "PASS"]
+		a.note(lvl, "feature.self_test", id+": standalone self-test "+res.Result+" (launch "+res.LaunchID+"; TEST DATA, no grant used)"+map[bool]string{true: "", false: " — " + res.Error}[res.Error == ""])
 		writeJSON(w, 200, map[string]any{"self_test": res, "state": a.State()})
 	}))
 	m.HandleFunc("POST /api/installations/{id}/policy", ins(func(w http.ResponseWriter, r *http.Request, id string) {
@@ -1162,6 +1307,9 @@ func tailFile(path string, n int) []string {
 	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
+	}
+	for i := range lines {
+		lines[i] = scrub(lines[i]) // a feature's own log is not trusted to be clean
 	}
 	return lines
 }
