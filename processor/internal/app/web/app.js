@@ -351,9 +351,12 @@
         <p class="small muted">Information sources: <strong>none</strong>. The Admin approves this exact request in Identity.</p><button class="btn primary" type="submit" ${opts ? "" : "disabled"}>Ask the Admin…</button>${opts ? "" : ` <span class="small muted">Add an identity first.</span>`}</form>`;
       $("#fx-action").innerHTML = gone ? "" : `<form class="frm" id="action-form"><h3>Try the protected capability</h3>
         <p class="small muted">Processor first asks Identity for a one-request ticket. No grant → nothing starts. With a grant, an on-demand feature is started, checks the ticket and asks Identity live before doing anything.</p>
-        <div class="frow"><label>For identity<select id="af-sub">${opts}</select></label><label>Capability<select id="af-cap">${copts}</select></label><label class="grow">Test input<input id="af-in" maxlength="1000" value="hello from P1"></label></div>
-        <button class="btn" type="submit" ${opts ? "" : "disabled"}>Send synthetic request</button></form>`;
+        <div class="frow"><label>For identity<select id="af-sub">${opts}</select></label><label>Capability<select id="af-cap">${copts}</select></label><label class="grow">Input<input id="af-in" maxlength="1000" value="${caps[0] && caps[0].id === "worker.test.synthetic" ? "hello from P1" : ""}"></label></div>
+        <p class="small muted" id="af-hint">${esc((caps[0] && caps[0].description) || "")}</p>
+        <button class="btn" type="submit" ${opts ? "" : "disabled"}>Send request</button></form>`;
       const f1 = $("#grant-form"), f2 = $("#action-form");
+      const afc = $("#af-cap");
+      if (afc) afc.onchange = () => { const c = caps.find((x) => x.id === afc.value); $("#af-hint").textContent = (c && c.description) || ""; $("#af-in").placeholder = (c && c.description) || ""; };
       if (f1) f1.onsubmit = async (e) => { e.preventDefault(); const j = await act(`/api/installations/${ins}/grants/request`, { subject: $("#gf-sub").value, capability: $("#gf-cap").value, ...($("#gf-exp").value === "forever" ? { until_revoked: true } : { expires_in_seconds: +$("#gf-exp").value }) }); if (j && j.approval_url) watch(j); };
       if (f2) f2.onsubmit = async (e) => { e.preventDefault(); const b = e.submitter; if (b) b.disabled = true; const j = await act(`/api/installations/${ins}/action`, { subject: $("#af-sub").value, capability: $("#af-cap").value, input: $("#af-in").value }); if (b) b.disabled = false; if (j && j.result) { lastAction[ins] = j.result; render(); } };
     }
