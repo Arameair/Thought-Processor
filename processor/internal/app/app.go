@@ -85,6 +85,8 @@ func (a *App) Run(ctx context.Context, ln net.Listener, ready func(link string))
 	link := fmt.Sprintf("http://127.0.0.1:%d/#code=%s", a.Port, a.Sess.Code())
 	if !a.NoLinkFile {
 		store.WriteFile(a.Prof.CodePath(), []byte(link+"\n"))
+	} else {
+		os.Remove(a.Prof.CodePath()) // a stale copy left by a killed earlier run
 	}
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	cctx, cancel := context.WithCancel(ctx)
@@ -281,7 +283,7 @@ func (a *App) Handler() http.Handler {
 		decode(r, &b)
 		t, ok, locked := a.Sess.MintTicket(b.Code)
 		if locked {
-			a.fail(w, 429, "too many wrong links; wait a minute")
+			a.fail(w, 429, "too many wrong codes or unused tickets; wait up to a minute")
 			return
 		}
 		if !ok {

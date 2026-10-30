@@ -221,7 +221,7 @@ func (a *App) fileContext(repo, path string) (map[string]any, error) {
 	if err != nil {
 		return nil, errors.New("could not read the file")
 	}
-	if strings.IndexByte(string(b[:min(len(b), 8192)]), 0) >= 0 || !utf8.Valid(b) {
+	if strings.IndexByte(string(b), 0) >= 0 || !utf8.Valid(b) {
 		return nil, errors.New("binary or non-UTF-8 file; TASS is only shown text")
 	}
 	sum := sha256.Sum256(b)

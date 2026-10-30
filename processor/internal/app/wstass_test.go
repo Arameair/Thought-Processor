@@ -56,3 +56,35 @@ func TestWorkstationTASSLockedWithoutIdentity(t *testing.T) {
 		}
 	}
 }
+
+// Independent-test findings (MEDIUM/LOW): links and hard links inside an
+// allowlisted repo must not expose secrets or .git, and a NUL anywhere makes
+// a file binary.
+func TestLinksToSecretsAndGitAreRefused(t *testing.T) {
+	ws, r, outside := wsTestRepo(t)
+	os.MkdirAll(filepath.Join(r.Dir, ".git"), 0o755)
+	os.WriteFile(filepath.Join(r.Dir, ".git", "config"), []byte("[remote]\nurl=https://user:TOKEN@x\n"), 0o600)
+	os.Symlink(".env", filepath.Join(r.Dir, "innocent.txt"))
+	os.Symlink("deploy.pem", filepath.Join(r.Dir, "notakey.txt"))
+	os.Symlink(".git/config", filepath.Join(r.Dir, "cfgl"))
+	os.Symlink(".git", filepath.Join(r.Dir, "gitdir"))
+	if err := os.Link(outside, filepath.Join(r.Dir, "hl.txt")); err != nil {
+		t.Skip("hard links unavailable")
+	}
+	late := append([]byte(strings.Repeat("a", 9000)), 0, 'b')
+	os.WriteFile(filepath.Join(r.Dir, "late_nul.txt"), late, 0o644)
+	a := &App{WS: ws}
+	for _, p := range []string{"innocent.txt", "notakey.txt", "cfgl", "gitdir/config", "gitdir", "hl.txt", ".GIT/config", "late_nul.txt"} {
+		if _, err := a.fileContext("demo", p); err == nil {
+			t.Errorf("%s reached TASS", p)
+		}
+		if p != "late_nul.txt" {
+			if _, err := ws.resolve(r, p); err == nil {
+				t.Errorf("%s readable in the viewer", p)
+			}
+		}
+	}
+	if _, err := a.fileContext("demo", "inside"); err != nil {
+		t.Errorf("an ordinary link to a normal file inside the repo was refused: %v", err)
+	}
+}

@@ -58,7 +58,7 @@ func (s *Sessions) MintTicket(code string) (ticket string, ok, locked bool) {
 		}
 	}
 	if len(s.tickets) >= MaxTickets {
-		return "", false, false
+		return "", false, true // busy, not a wrong code: wait for unused tickets to expire
 	}
 	ticket = store.RandHex(24)
 	s.tickets[ticket] = now.Add(TicketTTL)

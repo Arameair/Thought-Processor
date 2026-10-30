@@ -2,7 +2,13 @@
 
 package app
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
+
+// wsLinkCount: hard-link counts aren't checked on Windows in this slice.
+func wsLinkCount(fi os.FileInfo) uint64 { return 1 }
 
 func wsProcGroup(cmd *exec.Cmd) {}
 

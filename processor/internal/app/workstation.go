@@ -221,7 +221,7 @@ func (ws *Workstation) resolve(r wsRepo, rel string) (string, error) {
 		return "", errWSPath
 	}
 	for _, part := range strings.Split(rel, "/") {
-		if part == ".." || part == ".git" || wsSecretName.MatchString(part) {
+		if part == ".." || strings.EqualFold(part, ".git") || wsSecretName.MatchString(part) {
 			return "", errWSPath
 		}
 	}
@@ -231,6 +231,19 @@ func (ws *Workstation) resolve(r wsRepo, rel string) (string, error) {
 		return "", errWSPath
 	}
 	if real != r.Dir && !strings.HasPrefix(real, r.Dir+string(os.PathSeparator)) {
+		return "", errWSPath
+	}
+	// Judge where a link actually LEADS, not only the name asked for: a link
+	// inside the repo to .env, a key or .git/ is refused like the file itself.
+	if rel, err := filepath.Rel(r.Dir, real); err == nil && rel != "." {
+		for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+			if part == ".." || strings.EqualFold(part, ".git") || wsSecretName.MatchString(part) {
+				return "", errWSPath
+			}
+		}
+	}
+	// A hard link can make a file from outside the repo appear inside it.
+	if fi, err := os.Stat(real); err == nil && fi.Mode().IsRegular() && wsLinkCount(fi) > 1 {
 		return "", errWSPath
 	}
 	return real, nil
@@ -392,10 +405,8 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 			if e.Name() == ".git" || wsSecretName.MatchString(e.Name()) {
 				continue
 			}
-			if e.Type()&os.ModeSymlink != 0 {
-				if _, err := a.WS.resolve(rp, filepath.ToSlash(filepath.Join(rel, e.Name()))); err != nil {
-					continue // links that lead outside the repo are hidden
-				}
+			if _, err := a.WS.resolve(rp, filepath.ToSlash(filepath.Join(rel, e.Name()))); err != nil {
+				continue // links to secrets, .git or outside the repo, and hard-linked files, are hidden
 			}
 			info, err := e.Info()
 			if err != nil {
@@ -442,7 +453,7 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 			a.fail(w, 400, "could not read file")
 			return
 		}
-		if bytes.IndexByte(b[:min(len(b), 8192)], 0) >= 0 {
+		if bytes.IndexByte(b, 0) >= 0 {
 			writeJSON(w, 200, map[string]any{"size": st.Size(), "shown": false, "note": "binary file; not shown"})
 			return
 		}

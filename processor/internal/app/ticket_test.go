@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -90,6 +91,10 @@ func TestNoLinkFileKeepsLinkOffDisk(t *testing.T) {
 		}
 		a := New(prof, Build{Version: "test"})
 		a.NoLinkFile = noFile
+		if noFile { // a stale link left by a killed earlier run must be removed
+			os.MkdirAll(filepath.Dir(prof.CodePath()), 0o700)
+			os.WriteFile(prof.CodePath(), []byte("stale\n"), 0o600)
+		}
 		ln, _ := net.Listen("tcp", "127.0.0.1:0")
 		ctx, cancel := context.WithCancel(context.Background())
 		ready := make(chan string, 1)
