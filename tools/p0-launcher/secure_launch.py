@@ -550,12 +550,6 @@ def main(argv):
             existing = connect('status')
         except (OSError, ValueError):
             existing = None
-        if existing is None and owned_orphans():
-            # The previous supervisor died but its services kept running.
-            print(json.dumps({'launcher': 'FAILED', 'error': 'PREVIOUS_SERVICES_STILL_RUNNING',
-                              'error_detail': 'Identity/Processor from an earlier launcher session are still running '
-                                              'without a supervisor. Choose Stop, then Start.'}, sort_keys=True))
-            return 3
         if existing is not None:
             if existing.get('launcher') not in REPLACEABLE:
                 # RUNNING, STARTING or STOP_INCOMPLETE_PORT_BUSY: never start
@@ -570,6 +564,12 @@ def main(argv):
                 print(json.dumps({'launcher': 'FAILED', 'error': 'PREVIOUS_LAUNCHER_DID_NOT_EXIT',
                                   'previous': existing}, sort_keys=True))
                 return 3
+        if owned_orphans():
+            # An earlier supervisor died but its services kept running.
+            print(json.dumps({'launcher': 'FAILED', 'error': 'PREVIOUS_SERVICES_STILL_RUNNING',
+                              'error_detail': 'Identity/Processor from an earlier launcher session are still running '
+                                              'without a supervisor. Choose Stop, then Start.'}, sort_keys=True))
+            return 3
         safe_dir(WORK)
         safe_dir(RUNTIME)
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '_daemon'], cwd=str(ROOT),
@@ -588,8 +588,13 @@ def main(argv):
         return 3
     try:
         response = connect(cmd)
+        daemon_alive = True
     except (OSError, ValueError):
         response = {'launcher': 'STOPPED_OR_UNREACHABLE', 'result': 'NO_OWNED_SESSION'}
+        daemon_alive = False
+    if cmd == 'stop' and daemon_alive:
+        retire_daemon(timeout=5)  # the daemon exits after Stop; wait so leftovers are not its live children
+    if cmd == 'stop' or not daemon_alive:
         orphans = owned_orphans()
         if orphans and cmd == 'stop':
             clean = stop_orphans(orphans)

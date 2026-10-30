@@ -234,6 +234,7 @@ class TestLauncher(unittest.TestCase):
 
     def test_start_refuses_over_unsupervised_services(self):
         with patch.object(launcher, 'connect', side_effect=OSError), patch.object(launcher, 'owned_orphans', return_value=[123]), \
+             patch.object(launcher, 'retire_daemon', return_value=True), \
              patch.object(launcher.subprocess, 'Popen') as spawn, patch('builtins.print') as out:
             self.assertEqual(launcher.main(['start']), 3)
         spawn.assert_not_called()
