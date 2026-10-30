@@ -77,6 +77,24 @@ class TestLauncher(unittest.TestCase):
                 self.assertFalse((work / prof / 'runtime' / name).exists())
                 self.assertTrue((work / prof / 'runtime' / 'keep.lock').exists())
 
+    def test_pairing_copy_button_uses_explicit_click_and_private_stdin(self):
+        # This checks the PowerShell command contract, not a real Windows UI.
+        secret = 'ABCD-EFGH'
+        with patch.object(launcher, 'shutil_which', return_value=True), \
+             patch.object(launcher.subprocess, 'run', return_value=MagicMock(returncode=0)) as run:
+            self.assertEqual(launcher.open_edge(secret, pairing=True), 'OPEN_REQUESTED')
+        argv = run.call_args.args[0]
+        script = argv[-1]
+        self.assertIn('-Sta', argv)
+        self.assertIn("Copy code", script)
+        self.assertIn("$copy.Add_Click(", script)
+        self.assertIn("[System.Windows.Forms.Clipboard]::SetText($field.Text)", script)
+        self.assertIn("$field.ReadOnly=$true", script)
+        self.assertIn("GetNewClosure()", script)
+        self.assertNotIn(secret, ' '.join(argv))
+        self.assertEqual(run.call_args.kwargs['input'], secret)
+        self.assertEqual(run.call_args.kwargs['timeout'], 120)
+
     def test_pairing_single_use(self):
         o = launcher.Supervisor()
         o.pairing = 'ABCD-EFGH'
