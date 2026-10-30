@@ -450,7 +450,7 @@ class Supervisor:
             ticket_url = launch_ticket_url(link)
             if not ticket_url:
                 return {'result': 'NO_TICKET' if link else 'NOT_RUNNING'}
-            return {'result': open_edge(ticket_url), 'opens': 'WORKSTATION', 'ticket': 'SINGLE_USE_60S'}
+            return {'result': open_edge(ticket_url), 'opens': 'WORKSTATION', 'ticket': 'SINGLE_USE_30S'}
         if cmd == 'pairing':
             return {'result': open_edge(link, pairing=True) if link else 'NO_ACTIVE_CHALLENGE'}
         if cmd == 'stop':
