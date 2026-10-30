@@ -36,6 +36,7 @@ import (
 	"github.com/Arameair/Thought-Processor/processor/internal/idclient"
 	"github.com/Arameair/Thought-Processor/processor/internal/store"
 	"github.com/Arameair/Thought-Processor/processor/internal/supervisor"
+	"github.com/Arameair/Thought-Processor/processor/internal/update"
 )
 
 var (
@@ -72,6 +73,7 @@ type InstallRecord struct {
 	UninstalledAt    *time.Time           `json:"uninstalled_at,omitempty"`
 	DataKept         bool                 `json:"data_kept,omitempty"`
 	Policy           supervisor.Policy    `json:"policy"`
+	UpdatedAt        *time.Time           `json:"updated_at,omitempty"` // last in-place update (thought.feature-update/1)
 }
 
 // Tx is an install transaction in progress (<profile>/installations/.tx/<key>/tx.json).
@@ -137,6 +139,11 @@ type p1 struct {
 	// can't both decide "nothing installed yet" and start two installs.
 	installMu sync.Mutex
 	selfTests map[string]SelfTestResult
+	// updates: one transaction per installation; updStart lets ONLY the
+	// update engine start an installation while it is being updated.
+	updMu    sync.Mutex
+	applying map[string]bool
+	updStart map[string]bool
 }
 
 // SelfTestResult is the last standalone self-test Processor ran for one
@@ -195,7 +202,7 @@ func (a *App) TrustFeatureDirs(dirs []string) {
 }
 
 func (a *App) initP1() {
-	a.P1 = &p1{userStop: map[string]bool{}, busy: map[string]bool{}, selfTests: map[string]SelfTestResult{}}
+	a.P1 = &p1{userStop: map[string]bool{}, busy: map[string]bool{}, selfTests: map[string]SelfTestResult{}, applying: map[string]bool{}, updStart: map[string]bool{}}
 	a.P1.pins, _ = featpkg.NewPins(nil)
 	os.MkdirAll(a.txDir(), 0o700)
 	if b, err := os.ReadFile(a.pendingPath()); err == nil {
@@ -632,6 +639,16 @@ func (a *App) specFor(id string) (supervisor.Spec, error) {
 	if r.State != "INSTALLED" {
 		return supervisor.Spec{}, errors.New("not installed")
 	}
+	// While an update transaction owns this installation, only the update
+	// engine may start it (for its own verification).
+	if t, ok := a.loadUpdTx(id); ok && !update.Terminal(t.State) && t.Phase != phWaiting {
+		a.P1.mu.Lock()
+		allowed := a.P1.updStart[id]
+		a.P1.mu.Unlock()
+		if !allowed {
+			return supervisor.Spec{}, errors.New("UPDATING: this installation is being updated (" + t.State + "); it can't be started until the update finishes")
+		}
+	}
 	// Verified again before every start: still pinned, files still identical.
 	if a.P1.pins.Basis(r.ArtifactSHA256) == "" {
 		return supervisor.Spec{}, errors.New("UNTRUSTED_EXECUTION_BLOCKED: this installation's artifact " + r.ArtifactSHA256[:12] + "… is not pinned in this Processor; it will not be started")
@@ -858,6 +875,7 @@ func (a *App) reconcileOnce(ctx context.Context) {
 	for _, t := range a.txs() {
 		a.advanceTx(ctx, cl, t)
 	}
+	a.advanceUpdates(ctx, cl)
 	// Resume a confirm that failed after the folder was committed.
 	for _, r := range a.records() {
 		if iv := a.Conn.installation(r.InstallationID); r.State == "INSTALLED" && iv != nil && iv.Installation.State == "PENDING_CONFIRM" {

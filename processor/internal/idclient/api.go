@@ -26,6 +26,11 @@ type Status struct {
 	} `json:"lifecycle"`
 	GitHub         GitHub   `json:"github"`
 	NotImplemented []string `json:"not_implemented"`
+	Authority      struct {
+		// UpgradeAPI is set only by an Identity that can authorize in-place
+		// installation upgrades (identity.installation-upgrade/1).
+		UpgradeAPI string `json:"upgrade_api"`
+	} `json:"authority"`
 }
 
 type GitHub struct {

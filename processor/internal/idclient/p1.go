@@ -106,6 +106,14 @@ type Installation struct {
 	ConfirmedAt    *time.Time   `json:"confirmed_at,omitempty"`
 	EndedAt        *time.Time   `json:"ended_at,omitempty"`
 	CredentialGen  int          `json:"credential_generation"`
+	// Upgrades: Identity's record of in-place upgrades (identity.installation-upgrade/1).
+	Upgrades []struct {
+		ApprovalID   string     `json:"approval_id"`
+		At           time.Time  `json:"at"`
+		FromVersion  string     `json:"from_version"`
+		ToVersion    string     `json:"to_version"`
+		RolledBackAt *time.Time `json:"rolled_back_at,omitempty"`
+	} `json:"upgrades,omitempty"`
 }
 
 type Grant struct {
@@ -350,4 +358,39 @@ func ConfirmInstallation(ctx context.Context, baseURL string, cred Credential) (
 	}
 	err = json.Unmarshal(raw, &v)
 	return v.Installation, err
+}
+
+// ---- installation upgrade (identity.installation-upgrade/1, experimental) ----
+
+type UpgradeRequest struct {
+	FromArtifactSHA256 string         `json:"from_artifact_sha256"`
+	To                 InstallRequest `json:"to"`
+	DataMigration      string         `json:"data_migration"`
+	SecurityFix        bool           `json:"security_fix"`
+	Entitlement        string         `json:"entitlement,omitempty"`
+}
+
+type UpgradeCommit struct {
+	Installation  Installation `json:"installation"`
+	GrantsRevoked []string     `json:"grants_revoked"`
+}
+
+func (c *Client) RequestUpgrade(ctx context.Context, id string, r UpgradeRequest) (ApprovalRequest, error) {
+	var v ApprovalRequest
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/installations/"+url.PathEscape(id)+"/upgrade/requests", r)
+	return v, decodeSignedFor(c, raw, err, &v)
+}
+
+func (c *Client) CommitUpgrade(ctx context.Context, id, approvalID string) (UpgradeCommit, error) {
+	var v UpgradeCommit
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/installations/"+url.PathEscape(id)+"/upgrade", map[string]string{"approval_id": approvalID})
+	return v, decodeSigned(raw, err, &v)
+}
+
+func (c *Client) RollbackUpgrade(ctx context.Context, id, approvalID, reason string) (Installation, error) {
+	var v struct {
+		Installation Installation `json:"installation"`
+	}
+	_, raw, err := c.Call(ctx, "POST", "/api/v1/installations/"+url.PathEscape(id)+"/upgrade/rollback", map[string]string{"approval_id": approvalID, "reason": reason})
+	return v.Installation, decodeSigned(raw, err, &v)
 }

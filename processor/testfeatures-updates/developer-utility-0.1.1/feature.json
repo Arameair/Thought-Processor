@@ -1,0 +1,58 @@
+{
+  "schema": "thought.feature-manifest/1",
+  "feature_id": "developer-utility",
+  "name": "Developer Utility (developer entrance)",
+  "version": "0.1.1",
+  "description": "The secure Developer entrance into the Brain system. One read-only capability (developer.connection.check). No shell, no file access, no other services. Admitted only by its exact pinned digest plus the Admin's approval in Identity.",
+  "publisher": {
+    "name": "Arameair (Thought Processor)",
+    "proof": "none (claim only)"
+  },
+  "source": {
+    "repo": "Arameair/Thought-Processor",
+    "path": "processor/developer-utility"
+  },
+  "trust_class": "TRUSTED_LOCAL_TEST_FIXTURE",
+  "api": "thought.feature-api/1",
+  "runtime": {
+    "command": [
+      "python3",
+      "-I",
+      "{package}/utility_agent.py"
+    ],
+    "requires": [
+      "python3 (3.8 or newer) on PATH"
+    ],
+    "startup_modes": [
+      "manual"
+    ],
+    "default_startup": "manual",
+    "default_idle_seconds": 30,
+    "recovery": "manual"
+  },
+  "capabilities": [
+    {
+      "id": "developer.connection.check",
+      "description": "Read-only report of the Developer entrance: Processor link, Identity link (signed, fresh), grants it holds, who asked. Input: leave empty.",
+      "data_class": "DEVELOPER_STATUS",
+      "requires_grant": true
+    }
+  ],
+  "standalone": {
+    "health": true,
+    "self_test": true
+  },
+  "information_sources": [],
+  "files": [
+    {
+      "path": "utility_agent.py",
+      "sha256": "3a7c08da0529b047b8e8568ddd095b60f9d1f760411e63b56ec6cb76802f9bb1"
+    }
+  ],
+  "update": {
+    "contract": "thought.feature-update/1",
+    "data_migration": "none",
+    "notes": "Developer Utility 0.1.1: same single read-only capability; version bump to prove the update contract on a second feature.",
+    "min_from_version": "0.1.0"
+  }
+}

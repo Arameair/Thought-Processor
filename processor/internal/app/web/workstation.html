@@ -14,6 +14,8 @@
     <div class="chips">
       <span class="chip" id="ws-identity"><span class="dot"></span><span class="t">Identity: checking…</span></span>
       <span class="chip" id="ws-github"><span class="dot"></span><span class="t">GitHub: checking…</span></span>
+      <button class="chip link" type="button" id="ws-tab-work">Workspace</button>
+      <button class="chip link" type="button" id="ws-tab-upd">Updates</button>
       <a class="chip link" href="/" id="ws-back">Thought Processor</a>
     </div>
   </header>
@@ -43,6 +45,11 @@
       <div id="ws-runs"></div>
     </section>
   </main>
+  <section id="ws-updates" class="panel" hidden>
+    <div class="ws-viewhead"><h2>Updates</h2><button class="btn small" type="button" id="ws-check">Check Updates</button><span id="ws-checked" class="muted small"></span></div>
+    <p class="muted small">An update is offered only when a newer version is <b>reviewed</b> (its exact artifact is pinned), declares the update contract <span class="mono">thought.feature-update/1</span>, and Identity can authorize it. Identity's Admin approves every update. A result is PASS only after Identity, the installed files and a fresh launch of the new version all confirm it.</p>
+    <div id="ws-upd-list"></div>
+  </section>
   <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
 </div>
 </body>

@@ -97,6 +97,21 @@ type Manifest struct {
 	} `json:"standalone"`
 	Sources []string `json:"information_sources"`
 	Files   []File   `json:"files"`
+	// Update: present only if THIS version can be applied as an in-place
+	// upgrade of an existing installation (thought.feature-update/1).
+	Update *UpdateDecl `json:"update,omitempty"`
+}
+
+// UpdateContract is the versioned in-place update contract a package opts into.
+const UpdateContract = "thought.feature-update/1"
+
+// UpdateDecl is what a new version says about upgrading to it.
+type UpdateDecl struct {
+	Contract       string `json:"contract"`                   // thought.feature-update/1
+	MinFromVersion string `json:"min_from_version,omitempty"` // oldest installed version it can upgrade
+	DataMigration  string `json:"data_migration"`             // none | reversible | irreversible (refused)
+	SecurityFix    bool   `json:"security_fix,omitempty"`     // never subject to an entitlement
+	Notes          string `json:"notes,omitempty"`
 }
 
 // BuiltinFixturePins are the exact artifact digests of reviewed trusted
@@ -248,6 +263,18 @@ func (m *Manifest) Validate() error {
 	case "", "manual", "on_demand", "always_running":
 	default:
 		return errors.New("runtime.default_startup must be manual, on_demand or always_running")
+	}
+	if u := m.Update; u != nil {
+		switch {
+		case u.Contract != UpdateContract:
+			return fmt.Errorf("update.contract must be %s", UpdateContract)
+		case u.DataMigration != "none" && u.DataMigration != "reversible" && u.DataMigration != "irreversible":
+			return errors.New("update.data_migration must be none, reversible or irreversible")
+		case u.MinFromVersion != "" && !versionRE.MatchString(u.MinFromVersion):
+			return errors.New("update.min_from_version is not valid")
+		case len(u.Notes) > 400:
+			return errors.New("update.notes is too long")
+		}
 	}
 	return nil
 }

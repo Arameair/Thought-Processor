@@ -31,7 +31,7 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7797, 7867
-LAUNCH_BRANCH = 'experiment/p0-workstation-secure-open-20261030'
+LAUNCH_BRANCH = 'experiment/p0-universal-update-20261030'
 IDENTITY_BRANCH = 'experiment/p1-cleanup-claude-20261026'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.

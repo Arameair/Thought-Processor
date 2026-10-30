@@ -1,0 +1,59 @@
+{
+  "schema": "thought.feature-manifest/1",
+  "feature_id": "p1-deterministic-worker",
+  "name": "P1 Deterministic Worker (TEST FIXTURE)",
+  "version": "0.3.0",
+  "description": "Clearly labelled trusted local test feature for the P1 contract. Deterministic text transform; no AI provider; no external calls. NOT Fast AI Worker.",
+  "publisher": {
+    "name": "Arameair P1 test harness",
+    "proof": "none (claim only)"
+  },
+  "source": {
+    "repo": "Arameair/Thought-Processor",
+    "path": "processor/testfeatures/deterministic-worker"
+  },
+  "trust_class": "TRUSTED_LOCAL_TEST_FIXTURE",
+  "api": "thought.feature-api/1",
+  "runtime": {
+    "command": [
+      "python3",
+      "-I",
+      "{package}/worker.py"
+    ],
+    "requires": [
+      "python3 (3.8 or newer) on PATH"
+    ],
+    "startup_modes": [
+      "manual",
+      "on_demand",
+      "always_running"
+    ],
+    "default_startup": "manual",
+    "default_idle_seconds": 30,
+    "recovery": "manual"
+  },
+  "capabilities": [
+    {
+      "id": "worker.test.synthetic",
+      "description": "Deterministic text transform (upper / reversed / length / sha256) of a short test input. Output is SYNTHETIC TEST DATA.",
+      "data_class": "SYNTHETIC",
+      "requires_grant": true
+    }
+  ],
+  "standalone": {
+    "health": true,
+    "self_test": true
+  },
+  "information_sources": [],
+  "files": [
+    {
+      "path": "worker.py",
+      "sha256": "61a7cc95db0326596c74416a9570cc2e744095445069698f10a7008e59d37292"
+    }
+  ],
+  "update": {
+    "contract": "thought.feature-update/1",
+    "data_migration": "none",
+    "notes": "TEST FIXTURE update that is deliberately BROKEN: its self-test fails, so the update must recover 0.1.0/0.2.0."
+  }
+}

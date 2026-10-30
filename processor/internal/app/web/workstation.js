@@ -24,7 +24,7 @@
     return j;
   }
   function chip(el, text, cls) { el.className = "chip " + cls; el.querySelector(".t").textContent = text; }
-  function lock(msg) { $("#ws-main").hidden = true; $("#ws-locked").hidden = false; $("#ws-locked-msg").textContent = msg; }
+  function lock(msg) { $("#ws-main").hidden = true; $("#ws-updates").hidden = true; $("#ws-locked").hidden = false; $("#ws-locked-msg").textContent = msg; }
 
   async function refresh() {
     let s;
@@ -39,7 +39,7 @@
     chip($("#ws-github"), g.github_state === "VERIFIED" ? "GitHub: " + (g.github_login || "verified") + (g.github_mode && g.github_mode !== "real" ? " (TEST FIXTURE)" : "")
       : "GitHub: " + String(g.github_state || "unknown").toLowerCase().replace(/_/g, " "), g.ok ? "ok" : g.github_state === "WAITING" ? "warn" : "bad");
     if (!g.ok) { lock(g.detail || g.reason || "Locked"); return; }
-    $("#ws-locked").hidden = true; $("#ws-main").hidden = false;
+    $("#ws-locked").hidden = true; $("#ws-main").hidden = tab !== "work";
     renderRepos(s.repos || []); renderTests(s.tests || []); renderRuns(s.runs || []);
     if (!repo && s.repos && s.repos.length) open(s.repos[0].name, "");
   }
@@ -92,6 +92,51 @@
     } catch (e) { $("#ws-file").textContent = e.message; }
   }
 
+  // ---- Updates ----
+  let tab = "work", updTimer = 0;
+  function showTab(t) {
+    tab = t;
+    $("#ws-updates").hidden = t !== "upd";
+    if (state && state.gate && state.gate.ok) $("#ws-main").hidden = t !== "work";
+    if (t === "upd") loadUpdates();
+  }
+  const stateClass = (s) => ({ PASS: "ok", CURRENT: "ok", UPDATE_AVAILABLE: "warn", APPROVAL_REQUIRED: "warn", UPDATING: "warn", RESTARTING: "warn",
+    RECOVERED_PREVIOUS_VERSION: "warn" }[s] || "bad");
+  async function loadUpdates() {
+    clearTimeout(updTimer);
+    let j;
+    try { j = await api("GET", "/api/ws/updates"); } catch (e) { $("#ws-upd-list").innerHTML = `<p class="ws-warn small">${esc(e.message)}</p>`; return; }
+    $("#ws-checked").textContent = " checked " + new Date(j.checked_at).toLocaleTimeString() + " · Identity upgrade API: " + (j.identity_upgrade_api || "NONE");
+    let active = false;
+    $("#ws-upd-list").innerHTML = j.components.map((c) => {
+      const tx = c.tx, live = tx && !["PASS", "FAIL", "RECOVERED_PREVIOUS_VERSION", "NEEDS_ATTENTION", "DENIED_BY_ADMIN", "APPROVAL_EXPIRED", "CANCELLED", "BLOCKED"].includes(tx.state);
+      if (live) active = true;
+      const shown = live ? tx.state : (c.update_state || "");
+      let h = `<div class="ws-test"><div><b>${esc(c.name)}</b> <span class="muted small">${esc(c.kind)}</span> <span class="ws-badge ${stateClass(shown)}">${esc(shown.replace(/_/g, " "))}</span></div>
+        <div class="small">Installed <b>${esc(c.version)}</b> <span class="mono muted">${esc((c.revision || "").slice(0, 12))}</span> · status ${esc(c.status || "?")} · updates: ${esc(c.update_support)}</div>`;
+      if (c.candidate) h += `<div class="small">Candidate <b>${esc(c.candidate.version)}</b> <span class="mono muted">${esc(String(c.candidate.artifact).slice(0, 12))}</span> · ${c.candidate.reviewed ? "reviewed (pinned)" : "NOT reviewed"} · data migration ${esc(c.candidate.data_migration || "?")}${c.candidate.security_fix ? " · security fix" : ""}<br><span class="muted">${esc(c.candidate.notes || "")} — ${esc(c.candidate.source)}</span></div>`;
+      if (c.reason) h += `<div class="small muted">${esc(c.reason)}</div>`;
+      if (c.requires && c.requires.length && c.can_update) h += `<div class="small muted">Requires: ${esc(c.requires.join("; "))}</div>`;
+      if (c.can_update) h += `<button class="btn small" type="button" data-upd="${esc(c.id)}">Update to ${esc(c.candidate.version)}</button> `;
+      if (tx && tx.state === "APPROVAL_REQUIRED") h += `<a class="btn small" href="${esc(tx.approval_url)}" target="_blank" rel="noopener">Approve in Identity</a> <button class="btn ghost small" type="button" data-updcancel="${esc(c.id)}">Cancel</button>`;
+      if (tx) h += `<details${live ? " open" : ""}><summary class="small">Update ${esc(tx.from_version)} → ${esc(tx.to_version)}: <b>${esc(tx.state)}</b> ${esc(tx.result || "")}</summary><pre class="ws-pre">${esc(tx.steps.map((s) => s.at.slice(11, 19) + "  " + s.result.padEnd(5) + " " + s.step + (s.detail ? "  — " + s.detail : "")).join("\n"))}</pre></details>`;
+      return h + "</div>";
+    }).join("");
+    document.querySelectorAll("[data-upd]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await api("POST", "/api/ws/updates/" + encodeURIComponent(b.dataset.upd) + "/start", {}); } catch (e) { alert(e.message); }
+      loadUpdates();
+    });
+    document.querySelectorAll("[data-updcancel]").forEach((b) => b.onclick = async () => {
+      try { await api("POST", "/api/ws/updates/" + encodeURIComponent(b.dataset.updcancel) + "/cancel", {}); } catch (e) { alert(e.message); }
+      loadUpdates();
+    });
+    if (tab === "upd") updTimer = setTimeout(loadUpdates, active ? 1500 : 10000);
+  }
+
   async function loop() { clearTimeout(timer); await refresh(); timer = setTimeout(loop, (state && (state.runs || []).some((r) => r.state === "RUNNING")) ? 1500 : 4000); }
+  $("#ws-tab-work").onclick = () => showTab("work");
+  $("#ws-tab-upd").onclick = () => showTab("upd");
+  $("#ws-check").onclick = () => loadUpdates();
   signIn().then((ok) => { if (ok) loop(); });
 })();

@@ -21,6 +21,7 @@ import (
 	"github.com/Arameair/Thought-Processor/processor/internal/install"
 	"github.com/Arameair/Thought-Processor/processor/internal/store"
 	"github.com/Arameair/Thought-Processor/processor/internal/supervisor"
+	"github.com/Arameair/Thought-Processor/processor/internal/update"
 )
 
 const (
@@ -56,10 +57,12 @@ type App struct {
 	// then exists only in memory and on stdout (for a launcher's pipe).
 	NoLinkFile bool
 	// WS is the Development Workstation (operator-allowlisted repos and tests).
-	WS       *Workstation
-	stopOnce sync.Once
-	stopWhy  string
-	exitNote string
+	WS *Workstation
+	// Entitlements: future separately-authorized entitlement decisions (nil = nothing is ever charged).
+	Entitlements update.Entitlement
+	stopOnce     sync.Once
+	stopWhy      string
+	exitNote     string
 }
 
 func New(prof *store.Profile, b Build) *App {
