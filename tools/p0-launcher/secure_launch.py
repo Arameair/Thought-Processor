@@ -31,6 +31,11 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7797, 7867
+LAUNCH_BRANCH = 'experiment/p0-launcher-fresh-start-20261030'
+IDENTITY_BRANCH = 'experiment/p1-cleanup-claude-20261026'
+PREFLIGHT_TIMEOUT = 60
+# Replaceable without an explicit Stop: these daemons own no running service.
+REPLACEABLE = ('FAILED', 'STOPPED')
 PRIVATE_LINK = re.compile(r'^\s*open\s*:\s*(http://127\.0\.0\.1:7867/\S+)', re.I)
 PAIRING = re.compile(r'  \|          ([A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4})')
 REV = re.compile(r'^[0-9a-f]{40}$')
@@ -62,8 +67,8 @@ def pinned():
 
 
 def versions(remote=False):
-    refs = [('processor', ROOT, 'experiment/p0-windows-wsl-launcher-20261029'),
-            ('identity', IDENTITY, 'experiment/p1-cleanup-claude-20261026'),
+    refs = [('processor', ROOT, LAUNCH_BRANCH),
+            ('identity', IDENTITY, IDENTITY_BRANCH),
             ('tass', TASS, 'experiment/tass-companion-feature-claude-20261029')]
     result = {'update_apply': 'DISABLED_REQUIRES_OWNER_AND_IDENTITY_REVIEW', 'revisions': {}, 'pins': pinned()}
     for name, path, branch in refs:
@@ -89,13 +94,35 @@ def listener(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
-def redact_status(state, children, link, error, github='NOT_CHECKED'):
+def preflight_reason(stderr):
+    """Last `ERROR:` line of run-p1.sh preflight, safe to show the owner.
+
+    Preflight runs before any service exists, so it never sees a session link
+    or pairing code. It does print paths and Git origin URLs, so credentials
+    embedded in a URL are masked and the home folder is shortened to ~.
+    """
+    if not isinstance(stderr, (bytes, str)):
+        return ''
+    text = stderr.decode('utf-8', 'replace') if isinstance(stderr, bytes) else stderr
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith('ERROR:')]
+    if not lines:
+        return ''
+    reason = lines[-1][len('ERROR:'):].strip()
+    reason = re.sub(r'://[^/\s@]+@', '://***@', reason)
+    home = str(Path.home())
+    if home and home != '/':
+        reason = reason.replace(home, '~')
+    reason = ''.join(ch if ch.isprintable() else '?' for ch in reason)
+    return reason[:400]
+
+
+def redact_status(state, children, link, error, github='NOT_CHECKED', detail=''):
     return {'launcher': state, 'identity': 'RUNNING' if children.get('identity') and children['identity'].poll() is None else 'STOPPED',
             'processor': 'RUNNING' if children.get('processor') and children['processor'].poll() is None else 'STOPPED',
             'identity_port': 'LISTENING' if listener(ID_PORT) else 'CLOSED',
             'processor_port': 'LISTENING' if listener(TP_PORT) else 'CLOSED',
             'authenticated_open_available': bool(link), 'github': github,
-            'error': error}
+            'error': error, 'error_detail': detail}
 
 
 def open_edge(secret, *, pairing=False):
@@ -128,6 +155,7 @@ class Supervisor:
     def __init__(self):
         self.state = 'STARTING'
         self.error = ''
+        self.error_detail = ''
         self.children = {}
         self.link = None
         self.pairing = None
@@ -186,6 +214,11 @@ class Supervisor:
             try:
                 with opener.open(base + '/api/state', timeout=3) as response:
                     result = json.loads(response.read(262144))
+                if not result.get('verified'):
+                    # Processor only reports GitHub once it is paired with
+                    # and verified by Identity; say so instead of 'unknown'.
+                    self.github = 'IDENTITY_NOT_PAIRED'
+                    continue
                 state = (result.get('github') or {}).get('state')
                 valid = {'VERIFIED', 'WAITING', 'DENIED', 'EXPIRED', 'NOT_CONNECTED', 'SIGNED_OUT',
                          'AVAILABLE', 'ERROR', 'UNAVAILABLE'}
@@ -200,16 +233,20 @@ class Supervisor:
                        P1_PREFLIGHT_ONLY='1', P1_IDENTITY_PORT=str(ID_PORT), P1_PROCESSOR_PORT=str(TP_PORT))
             # Only the PRE-FLIGHT section runs: never invoke legacy runtime
             # that writes private links/challenges to persistent logs.
-            pre = subprocess.run(['bash', str(RUN)], env=env, capture_output=True, timeout=15)
+            try:
+                pre = subprocess.run(['bash', str(RUN)], env=env, capture_output=True, timeout=PREFLIGHT_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError('PREFLIGHT_TIMEOUT')
             if pre.returncode != 0 or b'PREFLIGHT OK' not in pre.stdout:
+                self.error_detail = preflight_reason(pre.stderr) or 'preflight gave no reason (exit %s)' % pre.returncode
                 raise RuntimeError('PREFLIGHT_REFUSED')
             if not (TASS / 'feature/feature.json').is_file():
                 raise RuntimeError('TASS_CHECKOUT_MISSING')
             safe_dir(WORK)
             for folder in ('bin', 'identity-profile', 'processor-profile', 'locators'):
                 safe_dir(WORK / folder)
-            for name, repo, sub, branch in [('identity', IDENTITY, '.', 'experiment/p1-cleanup-claude-20261026'),
-                                           ('processor', ROOT, 'processor', 'experiment/p0-windows-wsl-launcher-20261029')]:
+            for name, repo, sub, branch in [('identity', IDENTITY, '.', IDENTITY_BRANCH),
+                                           ('processor', ROOT, 'processor', LAUNCH_BRANCH)]:
                 dest = WORK / 'bin' / (name + '-p1')
                 proc = subprocess.run(['go', 'build', '-ldflags', '-X main.buildBranch=' + branch,
                                       '-o', str(dest), '.'], cwd=str(repo / sub), capture_output=True, timeout=150)
@@ -292,7 +329,7 @@ class Supervisor:
             if cmd == 'status':
                 if self.state == 'RUNNING' and any(p.poll() is not None for p in self.children.values()):
                     self.state, self.error = 'FAILED', 'OWNED_SERVICE_EXITED'
-                return redact_status(self.state, self.children, self.link, self.error, self.github)
+                return redact_status(self.state, self.children, self.link, self.error, self.github, self.error_detail)
             if cmd == 'open':
                 link = self.link
             elif cmd == 'pairing':
@@ -306,7 +343,7 @@ class Supervisor:
             return {'result': open_edge(link, pairing=True) if link else 'NO_ACTIVE_CHALLENGE'}
         if cmd == 'stop':
             self.stop()
-            return redact_status(self.state, self.children, None, self.error, self.github)
+            return redact_status(self.state, self.children, None, self.error, self.github, self.error_detail)
         return {'error': 'UNKNOWN_COMMAND'}
 
 
@@ -316,6 +353,31 @@ def connect(cmd):
         sock.connect(str(SOCK))
         sock.sendall((cmd + '\n').encode())
         return json.loads(sock.recv(16384))
+
+
+def lock_free():
+    try:
+        with LOCK.open('a+') as lf:
+            fcntl.flock(lf.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+            return True
+    except BlockingIOError:
+        return False
+    except OSError:
+        return False
+
+
+def retire_daemon(timeout=15):
+    try:
+        connect('stop')
+    except (OSError, ValueError):
+        pass
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not SOCK.exists() and lock_free():
+            return True
+        time.sleep(.1)
+    return False
 
 
 def daemon():
@@ -375,10 +437,22 @@ def main(argv):
     if cmd == 'start':
         try:
             existing = connect('status')
-            print(json.dumps(existing, sort_keys=True))
-            return 0 if existing.get('launcher') == 'RUNNING' else 3
         except (OSError, ValueError):
-            pass
+            existing = None
+        if existing is not None:
+            if existing.get('launcher') not in REPLACEABLE:
+                # RUNNING, STARTING or STOP_INCOMPLETE_PORT_BUSY: never start
+                # a second copy over a daemon that may still own services.
+                print(json.dumps(existing, sort_keys=True))
+                return 0 if existing.get('launcher') == 'RUNNING' else 3
+            # A FAILED/STOPPED daemon still holds the result (and environment)
+            # of an earlier attempt. Retire it through its own Stop, which
+            # only signals children it started, then start fresh so this
+            # Start re-runs preflight with the caller's current settings.
+            if not retire_daemon():
+                print(json.dumps({'launcher': 'FAILED', 'error': 'PREVIOUS_LAUNCHER_DID_NOT_EXIT',
+                                  'previous': existing}, sort_keys=True))
+                return 3
         safe_dir(WORK)
         safe_dir(RUNTIME)
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '_daemon'], cwd=str(ROOT),

@@ -114,5 +114,54 @@ class TestLauncher(unittest.TestCase):
         self.assertFalse(result['authenticated_open_available'])
         self.assertEqual(result['github'], 'NOT_CHECKED')
 
+    def test_preflight_reason_is_shown_masked(self):
+        err = (b'Identity P1 source: x\n'
+               b'ERROR: TASS: /home/u/p1c/t is a checkout of a different repository '
+               b'(origin: https://user:ghp_SECRET@github.com/x/y); expected Arameair/TASS.\n')
+        with patch.object(launcher.Path, 'home', return_value=Path('/home/u')):
+            reason = launcher.preflight_reason(err)
+        self.assertTrue(reason.startswith('TASS: ~/p1c/t is a checkout'))
+        self.assertNotIn('ghp_SECRET', reason)
+        self.assertNotIn('user:', reason)
+        self.assertEqual(launcher.preflight_reason(b'no error line'), '')
+        self.assertEqual(launcher.preflight_reason(None), '')
+
+    def test_start_failure_reports_preflight_reason(self):
+        o = launcher.Supervisor()
+        failure = MagicMock(returncode=1, stdout=b'', stderr=b'ERROR: Dirty working tree in /x. Commit first.\n')
+        with patch.object(launcher.subprocess, 'run', return_value=failure), patch.object(launcher, 'listener', return_value=False):
+            o.build_and_start()
+            status = o.handle('status')
+        self.assertEqual(status['error'], 'PREFLIGHT_REFUSED')
+        self.assertIn('Dirty working tree', status['error_detail'])
+
+    def test_start_replaces_failed_daemon_instead_of_echoing_it(self):
+        replies = iter([{'launcher': 'FAILED', 'error': 'PREFLIGHT_REFUSED'}, {'launcher': 'RUNNING'}])
+        with patch.object(launcher, 'connect', side_effect=lambda cmd: next(replies)), \
+             patch.object(launcher, 'retire_daemon', return_value=True) as retire, \
+             patch.object(launcher, 'safe_dir'), patch.object(launcher.time, 'sleep'), \
+             patch.object(launcher.subprocess, 'Popen') as spawn, patch('builtins.print'):
+            code = launcher.main(['start'])
+        retire.assert_called_once()
+        spawn.assert_called_once()
+        self.assertEqual(code, 0)
+
+    def test_start_never_replaces_running_or_busy_daemon(self):
+        for state, expected in (('RUNNING', 0), ('STARTING', 3), ('STOP_INCOMPLETE_PORT_BUSY', 3)):
+            with patch.object(launcher, 'connect', return_value={'launcher': state}), \
+                 patch.object(launcher, 'retire_daemon') as retire, \
+                 patch.object(launcher.subprocess, 'Popen') as spawn, patch('builtins.print'):
+                self.assertEqual(launcher.main(['start']), expected)
+            retire.assert_not_called()
+            spawn.assert_not_called()
+
+    def test_start_reports_when_old_daemon_will_not_exit(self):
+        with patch.object(launcher, 'connect', return_value={'launcher': 'FAILED'}), \
+             patch.object(launcher, 'retire_daemon', return_value=False), \
+             patch.object(launcher.subprocess, 'Popen') as spawn, patch('builtins.print') as out:
+            self.assertEqual(launcher.main(['start']), 3)
+        spawn.assert_not_called()
+        self.assertIn('PREVIOUS_LAUNCHER_DID_NOT_EXIT', out.call_args[0][0])
+
 if __name__ == '__main__':
     unittest.main()
