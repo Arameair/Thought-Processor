@@ -72,6 +72,10 @@ func main() {
 	port := flag.Int("port", 7860, "loopback port (0 = any free port)")
 	data := flag.String("data", defaultData(), "profile folder for this Processor")
 	noBrowser := flag.Bool("no-browser", false, "don't open the browser; just print the private link")
+	var wsRepos multiFlag
+	flag.Var(&wsRepos, "workstation-repo", "name=path of a local Git checkout the Development Workstation may show and test (repeatable; read-only)")
+	wsTestGitHub := flag.Bool("workstation-allow-test-github", false, "TEST ONLY: let the workstation accept Identity's GitHub TEST FIXTURE as verified. Never use outside tests")
+	noLinkFile := flag.Bool("no-link-file", false, "don't save the private link to runtime/operator-link.txt (for launchers that read it from stdout)")
 	version := flag.Bool("version", false, "print version and exit")
 	defURL := flag.String("identity-default-url", "", "well-known Identity address to probe before pairing (default http://127.0.0.1:7790; \"-\" = don't probe). Same as TP_IDENTITY_DEFAULT_URL")
 	var trusted, pins multiFlag
@@ -95,6 +99,14 @@ func main() {
 	}
 	defer prof.Close()
 	a := app.New(prof, b)
+	a.NoLinkFile = *noLinkFile
+	a.WS.AllowTestGitHub = *wsTestGitHub
+	for _, spec := range wsRepos {
+		if err := a.WS.AddRepo(spec); err != nil {
+			fmt.Fprintln(os.Stderr, "Thought Processor could not start:", err)
+			os.Exit(2)
+		}
+	}
 	a.TrustFeatureDirs(trusted)
 	if err := a.TrustArtifacts(pins); err != nil {
 		fmt.Fprintln(os.Stderr, "Thought Processor could not start:", err)

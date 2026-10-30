@@ -51,7 +51,12 @@ type App struct {
 	Started time.Time
 	Port    int
 
-	stop     chan struct{}
+	stop chan struct{}
+	// NoLinkFile: don't write runtime/operator-link.txt; the private link
+	// then exists only in memory and on stdout (for a launcher's pipe).
+	NoLinkFile bool
+	// WS is the Development Workstation (operator-allowlisted repos and tests).
+	WS       *Workstation
 	stopOnce sync.Once
 	stopWhy  string
 	exitNote string
@@ -60,7 +65,7 @@ type App struct {
 func New(prof *store.Profile, b Build) *App {
 	run := "run_" + store.RandHex(6)
 	lg := OpenLog(prof.Dir+string(os.PathSeparator)+"logs", run)
-	a := &App{Prof: prof, Log: lg, Sess: NewSessions(), Build: b, RunID: run, Started: time.Now(), stop: make(chan struct{})}
+	a := &App{Prof: prof, Log: lg, Sess: NewSessions(), WS: &Workstation{}, Build: b, RunID: run, Started: time.Now(), stop: make(chan struct{})}
 	a.Inst = install.New(prof.Dir, func(level, event, feature, detail string) { lg.Add(level, "install", event, feature+": "+detail) })
 	a.Conn = NewConn(prof, lg)
 	a.initP1()
@@ -78,7 +83,9 @@ func (a *App) Run(ctx context.Context, ln net.Listener, ready func(link string))
 	}
 	a.Port = ln.Addr().(*net.TCPAddr).Port
 	link := fmt.Sprintf("http://127.0.0.1:%d/#code=%s", a.Port, a.Sess.Code())
-	store.WriteFile(a.Prof.CodePath(), []byte(link+"\n"))
+	if !a.NoLinkFile {
+		store.WriteFile(a.Prof.CodePath(), []byte(link+"\n"))
+	}
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -267,6 +274,22 @@ func (a *App) Handler() http.Handler {
 		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		writeJSON(w, 200, map[string]string{"csrf": csrf})
 	}))
+	// A program that already holds this run's private code (the launcher)
+	// trades it for a one-time ticket to hand to the browser.
+	m.HandleFunc("POST /api/launch-ticket", a.wrap(bootstrap, func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ Code string }
+		decode(r, &b)
+		t, ok, locked := a.Sess.MintTicket(b.Code)
+		if locked {
+			a.fail(w, 429, "too many wrong links; wait a minute")
+			return
+		}
+		if !ok {
+			a.fail(w, 401, "That code isn't valid for this run of Processor.")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ticket": t, "expires_in_s": int(TicketTTL / time.Second), "single_use": true})
+	}))
 	m.HandleFunc("GET /api/state", a.wrap(private, func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, a.State()) }))
 
 	// Connection
@@ -407,6 +430,7 @@ func (a *App) Handler() http.Handler {
 	}))
 
 	a.p1Routes(m)
+	a.workstationRoutes(m)
 	m.HandleFunc("POST /api/devmode", a.wrap(mutate, func(w http.ResponseWriter, r *http.Request) {
 		var b struct{ On bool }
 		decode(r, &b)

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Development Workstation</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/workstation.js" defer></script>
+</head>
+<body>
+<div class="ws">
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true"></span><span>Development Workstation</span></div>
+    <div class="chips">
+      <span class="chip" id="ws-identity"><span class="dot"></span><span class="t">Identity: checking…</span></span>
+      <span class="chip" id="ws-github"><span class="dot"></span><span class="t">GitHub: checking…</span></span>
+      <a class="chip link" href="/" id="ws-back">Thought Processor</a>
+    </div>
+  </header>
+
+  <section id="ws-locked" class="panel ws-locked" hidden>
+    <h2>Workstation locked</h2>
+    <p id="ws-locked-msg"></p>
+    <p class="muted small">The workstation opens only when Identity's signed status says Thought Processor is paired and GitHub is <b>VERIFIED</b>. It re-checks every few seconds.</p>
+    <p><a class="btn" href="/">Open Thought Processor to pair / sign in</a></p>
+  </section>
+
+  <main id="ws-main" class="ws-grid" hidden>
+    <aside class="panel ws-side">
+      <h3>Repositories</h3>
+      <div id="ws-repos"></div>
+      <h3>Allowlisted tests</h3>
+      <div id="ws-tests"></div>
+    </aside>
+    <section class="panel ws-files">
+      <div class="ws-crumbs" id="ws-crumbs"></div>
+      <div id="ws-tree" class="ws-tree"></div>
+    </section>
+    <section class="panel ws-view">
+      <div class="ws-viewhead"><span id="ws-file-name" class="mono">Choose a file</span><span id="ws-file-meta" class="muted small"></span></div>
+      <pre id="ws-file" class="ws-pre"></pre>
+      <h3>Test runs</h3>
+      <div id="ws-runs"></div>
+    </section>
+  </main>
+  <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
+</div>
+</body>
+</html>

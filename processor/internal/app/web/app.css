@@ -189,3 +189,30 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .plat-tass h2 { margin: 10px 0 6px; }
 .tass-run { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .plat-tass .pending { margin: 6px 0; }
+
+/* Development Workstation (/workstation) */
+.ws { max-width: 1500px; margin: 0 auto; padding: 0 16px 24px; }
+.ws-grid { display: grid; grid-template-columns: 300px 280px 1fr; gap: 12px; align-items: start; }
+.ws-locked { max-width: 640px; margin: 40px auto; }
+.ws-side h3, .ws-view h3 { margin: 14px 0 6px; font-size: 14px; }
+.ws-repo { display: block; width: 100%; text-align: left; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 6px; cursor: pointer; font: inherit; }
+.ws-repo.on { border-color: var(--accent); }
+.ws-test { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 6px; }
+.ws-test .btn { margin-top: 6px; }
+.ws-crumbs { font-size: 13px; margin-bottom: 8px; word-break: break-all; }
+.ws-crumbs a, .ws-ent { color: var(--accent); text-decoration: none; }
+.ws-tree { max-height: 70vh; overflow: auto; }
+.ws-ent { display: block; padding: 2px 4px; font-family: var(--mono); font-size: 13px; border-radius: 4px; }
+.ws-ent:hover { background: var(--accent-soft); }
+.ws-ent.dir { font-weight: 600; }
+.ws-viewhead { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+.ws-pre { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; max-height: 55vh; overflow: auto; font-family: var(--mono); font-size: 12.5px; white-space: pre; margin: 0; }
+.ws-run { margin-bottom: 6px; }
+.ws-run summary { cursor: pointer; }
+.ws-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.ws-badge.ok { background: var(--ok-bg); color: var(--ok); }
+.ws-badge.warn { background: var(--warn-bg); color: var(--warn); }
+.ws-badge.bad { background: var(--bad-bg); color: var(--bad); }
+.ws-warn { color: var(--warn); }
+.ws-foot { margin-top: 12px; }
+@media (max-width: 1100px) { .ws-grid { grid-template-columns: 1fr; } }

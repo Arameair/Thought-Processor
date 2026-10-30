@@ -18,11 +18,52 @@ type Sessions struct {
 	sess     map[string]string // session id -> csrf
 	failures int
 	lockedTo time.Time
+	tickets  map[string]time.Time // one-time browser launch tickets -> expiry
 }
+
+// TicketTTL bounds how long an unused browser launch ticket stays valid.
+const TicketTTL = 60 * time.Second
+
+// MaxTickets bounds outstanding tickets so a caller can't grow memory.
+const MaxTickets = 8
 
 const cookieName = "tp_session"
 
-func NewSessions() *Sessions { return &Sessions{code: store.RandHex(24), sess: map[string]string{}} }
+func NewSessions() *Sessions {
+	return &Sessions{code: store.RandHex(24), sess: map[string]string{}, tickets: map[string]time.Time{}}
+}
+
+// MintTicket trades this run's private code for a one-time launch ticket.
+// The ticket opens exactly one browser session within TicketTTL, so a copy
+// left in a browser's process arguments or history is useless afterwards.
+// It grants nothing the private code doesn't already grant.
+func (s *Sessions) MintTicket(code string) (ticket string, ok, locked bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if time.Now().Before(s.lockedTo) {
+		return "", false, true
+	}
+	if subtle.ConstantTimeCompare([]byte(code), []byte(s.code)) != 1 {
+		s.failures++
+		if s.failures >= 10 {
+			s.lockedTo, s.failures = time.Now().Add(time.Minute), 0
+		}
+		return "", false, false
+	}
+	s.failures = 0
+	now := time.Now()
+	for t, exp := range s.tickets {
+		if now.After(exp) {
+			delete(s.tickets, t)
+		}
+	}
+	if len(s.tickets) >= MaxTickets {
+		return "", false, false
+	}
+	ticket = store.RandHex(24)
+	s.tickets[ticket] = now.Add(TicketTTL)
+	return ticket, true, false
+}
 
 func (s *Sessions) Code() string { return s.code }
 
@@ -32,7 +73,18 @@ func (s *Sessions) Exchange(code string) (id, csrf string, ok, locked bool) {
 	if time.Now().Before(s.lockedTo) {
 		return "", "", false, true
 	}
-	if subtle.ConstantTimeCompare([]byte(code), []byte(s.code)) != 1 {
+	valid := subtle.ConstantTimeCompare([]byte(code), []byte(s.code)) == 1
+	if !valid {
+		// A launch ticket works once, and only before it expires.
+		for t, exp := range s.tickets {
+			if subtle.ConstantTimeCompare([]byte(code), []byte(t)) == 1 {
+				delete(s.tickets, t)
+				valid = time.Now().Before(exp)
+				break
+			}
+		}
+	}
+	if !valid {
 		s.failures++
 		if s.failures >= 10 {
 			s.lockedTo, s.failures = time.Now().Add(time.Minute), 0

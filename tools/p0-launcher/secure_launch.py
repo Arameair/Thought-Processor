@@ -31,7 +31,7 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7797, 7867
-LAUNCH_BRANCH = 'experiment/p0-launcher-fresh-start-20261030'
+LAUNCH_BRANCH = 'experiment/p0-workstation-secure-open-20261030'
 IDENTITY_BRANCH = 'experiment/p1-cleanup-claude-20261026'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
@@ -94,6 +94,30 @@ def listener(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
+LINK_FILES = (('identity-profile', 'open-link.txt'), ('processor-profile', 'operator-link.txt'))
+
+
+def sweep_link_files():
+    """Delete private opening-link files in this launcher's own profiles.
+
+    Identity writes runtime/open-link.txt on every start and only deletes it
+    on a clean exit; nothing reads it back. Processor is started with
+    -no-link-file. A crash could leave either behind, so they are removed on
+    start, right after Identity comes up, and after Stop. Returns how many
+    were removed (the contents are never read).
+    """
+    removed = 0
+    for profile, name in LINK_FILES:
+        path = WORK / profile / 'runtime' / name
+        try:
+            if path.is_symlink() or path.is_file():
+                path.unlink()
+                removed += 1
+        except FileNotFoundError:
+            pass
+    return removed
+
+
 def preflight_reason(stderr):
     """Last `ERROR:` line of run-p1.sh preflight, safe to show the owner.
 
@@ -123,6 +147,27 @@ def redact_status(state, children, link, error, github='NOT_CHECKED', detail='')
             'processor_port': 'LISTENING' if listener(TP_PORT) else 'CLOSED',
             'authenticated_open_available': bool(link), 'github': github,
             'error': error, 'error_detail': detail}
+
+
+def launch_ticket_url(link):
+    """Trade the run's private code (RAM only) for a single-use, 60-second
+    ticket and return the workstation URL carrying the ticket. Only the
+    ticket can ever reach a browser's process arguments or history."""
+    code = re.search(r'[#&]code=([0-9a-f]{48})', link or '')
+    if not code:
+        return None
+    base = 'http://127.0.0.1:%d' % TP_PORT
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(base + '/api/launch-ticket', json.dumps({'code': code.group(1)}).encode(),
+                                 headers={'Content-Type': 'application/json', 'Origin': base}, method='POST')
+    try:
+        with opener.open(req, timeout=3) as response:
+            ticket = json.loads(response.read(4096)).get('ticket', '')
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+    if not re.fullmatch(r'[0-9a-f]{48}', ticket or '') or ticket == code.group(1):
+        return None
+    return base + '/workstation#code=' + ticket
 
 
 def open_edge(secret, *, pairing=False):
@@ -162,6 +207,7 @@ class Supervisor:
         self.github = 'NOT_CHECKED'
         self.lock = threading.Lock()
         self.stop_requested = threading.Event()
+        self.swept = 0
 
     def on_output(self, which, stream):
         try:
@@ -221,7 +267,7 @@ class Supervisor:
                     continue
                 state = (result.get('github') or {}).get('state')
                 valid = {'VERIFIED', 'WAITING', 'DENIED', 'EXPIRED', 'NOT_CONNECTED', 'SIGNED_OUT',
-                         'AVAILABLE', 'ERROR', 'UNAVAILABLE'}
+                         'AVAILABLE', 'ERROR', 'UNAVAILABLE', 'NOT_CONFIGURED'}
                 self.github = state if state in valid else 'NOT_VERIFIED_OR_UNKNOWN'
             except (OSError, ValueError, urllib.error.URLError):
                 self.github = 'STATE_UNAVAILABLE'
@@ -267,20 +313,28 @@ class Supervisor:
                                TP_IDENTITY_DEFAULT_URL='http://127.0.0.1:7797')
             if listener(ID_PORT) or listener(TP_PORT):
                 raise RuntimeError('PORTS_OCCUPIED_REFUSED')
+            self.swept = sweep_link_files()  # leftovers of a crashed earlier run
             if self.stop_requested.is_set():
                 return
             self.spawn('identity', [str(WORK / 'bin/identity-p1'), '-port', str(ID_PORT),
                                     '-data', str(WORK / 'identity-profile'), *id_flags], runtime_env)
-            time.sleep(.5)
+            for _ in range(50):
+                if (WORK / 'identity-profile/runtime/open-link.txt').exists() or self.children['identity'].poll() is not None:
+                    break
+                time.sleep(.1)
             if self.children['identity'].poll() is not None:
                 raise RuntimeError('IDENTITY_EXITED')
+            sweep_link_files()
             if self.stop_requested.is_set():
                 return
             self.spawn('processor', [str(WORK / 'bin/processor-p1'), '-port', str(TP_PORT),
                                      '-data', str(WORK / 'processor-profile'),
                                      '-identity-default-url', 'http://127.0.0.1:7797',
                                      '-trust-feature-dir', str(ROOT / 'processor/testfeatures'), *tp_flags,
-                                     '-no-browser'], runtime_env)
+                                     '-workstation-repo', 'processor=' + str(ROOT),
+                                     '-workstation-repo', 'identity=' + str(IDENTITY),
+                                     '-workstation-repo', 'tass=' + str(TASS),
+                                     '-no-link-file', '-no-browser'], runtime_env)
             for _ in range(120):
                 if self.stop_requested.is_set():
                     return
@@ -289,6 +343,7 @@ class Supervisor:
                 with self.lock:
                     ready = self.link is not None
                 if ready and listener(ID_PORT) and listener(TP_PORT):
+                    sweep_link_files()
                     self.state = 'RUNNING'
                     threading.Thread(target=self.poll_github, daemon=True).start()
                     return
@@ -317,6 +372,8 @@ class Supervisor:
                             pass
         self.link = None
         self.pairing = None
+        if all(p.poll() is not None for p in self.children.values()):
+            sweep_link_files()
         return not listener(ID_PORT) and not listener(TP_PORT)
 
     def stop(self):
@@ -338,7 +395,10 @@ class Supervisor:
             else:
                 link = None
         if cmd == 'open':
-            return {'result': open_edge(link)}
+            ticket_url = launch_ticket_url(link)
+            if not ticket_url:
+                return {'result': 'NO_TICKET' if link else 'NOT_RUNNING'}
+            return {'result': open_edge(ticket_url), 'opens': 'WORKSTATION', 'ticket': 'SINGLE_USE_60S'}
         if cmd == 'pairing':
             return {'result': open_edge(link, pairing=True) if link else 'NO_ACTIVE_CHALLENGE'}
         if cmd == 'stop':

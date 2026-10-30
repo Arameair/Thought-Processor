@@ -31,8 +31,51 @@ class TestLauncher(unittest.TestCase):
 
     def test_only_open_if_private_link_available(self):
         with patch.object(launcher, 'open_edge', return_value='UNAVAILABLE_WINDOWS_OPENER') as run:
-            self.assertEqual(launcher.Supervisor().handle('open')['result'], 'UNAVAILABLE_WINDOWS_OPENER')
-            run.assert_called_once_with(None)
+            self.assertEqual(launcher.Supervisor().handle('open')['result'], 'NOT_RUNNING')
+            run.assert_not_called()
+
+    def test_open_hands_browser_a_ticket_never_the_run_code(self):
+        code = 'c' * 48
+        o = launcher.Supervisor()
+        o.link = 'http://127.0.0.1:7867/#code=' + code
+        resp = MagicMock()
+        resp.__enter__.return_value.read.return_value = json.dumps({'ticket': 't' * 0 + 'a' * 48}).encode()
+        opener = MagicMock()
+        opener.open.return_value = resp
+        with patch.object(launcher.urllib.request, 'build_opener', return_value=opener), \
+             patch.object(launcher, 'open_edge', return_value='OPEN_REQUESTED') as edge:
+            out = o.handle('open')
+        url = edge.call_args[0][0]
+        self.assertEqual(url, 'http://127.0.0.1:7867/workstation#code=' + 'a' * 48)
+        self.assertNotIn(code, url)
+        self.assertNotIn(code, json.dumps(out))
+        sent = json.loads(opener.open.call_args[0][0].data)
+        self.assertEqual(sent, {'code': code})
+
+    def test_open_refuses_when_ticket_unavailable(self):
+        o = launcher.Supervisor()
+        o.link = 'http://127.0.0.1:7867/#code=' + 'c' * 48
+        opener = MagicMock()
+        opener.open.side_effect = OSError('refused')
+        with patch.object(launcher.urllib.request, 'build_opener', return_value=opener), \
+             patch.object(launcher, 'open_edge') as edge:
+            self.assertEqual(o.handle('open')['result'], 'NO_TICKET')
+        edge.assert_not_called()
+
+    def test_sweep_removes_only_link_files(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            for prof, name in launcher.LINK_FILES:
+                (work / prof / 'runtime').mkdir(parents=True)
+                (work / prof / 'runtime' / name).write_text('private')
+                (work / prof / 'runtime' / 'keep.lock').write_text('')
+            with patch.object(launcher, 'WORK', work):
+                self.assertEqual(launcher.sweep_link_files(), 2)
+                self.assertEqual(launcher.sweep_link_files(), 0)
+            for prof, name in launcher.LINK_FILES:
+                self.assertFalse((work / prof / 'runtime' / name).exists())
+                self.assertTrue((work / prof / 'runtime' / 'keep.lock').exists())
 
     def test_pairing_single_use(self):
         o = launcher.Supervisor()
