@@ -74,7 +74,7 @@ const (
 var wsRepoName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
 // Never shown even inside an allowlisted repository.
-var wsSecretName = regexp.MustCompile(`(?i)^(\.env.*|.*\.(pem|key|p12|pfx|kdbx)|id_(rsa|dsa|ecdsa|ed25519).*|identity-pairing\.json|\.netrc|\.git-credentials|operator-link\.txt|open-link\.txt)$`)
+var wsSecretName = regexp.MustCompile(`(?i)^(\.env.*|.*\.(pem|key|p12|pfx|kdbx|keystore|jks)|id_(rsa|dsa|ecdsa|ed25519).*|identity-pairing\.json|credential\.json|credentials(\..*)?|secrets?(\..*)?|\.netrc|\.npmrc|\.pypirc|\.git-credentials|\.aws|\.ssh|\.gnupg|\.docker|operator-link\.txt|open-link\.txt)$`)
 
 // catalog: the ONLY commands the workstation can run. Argv is fixed here;
 // the browser chooses an id, never a command.

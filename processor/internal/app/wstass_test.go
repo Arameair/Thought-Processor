@@ -88,3 +88,16 @@ func TestLinksToSecretsAndGitAreRefused(t *testing.T) {
 		t.Errorf("an ordinary link to a normal file inside the repo was refused: %v", err)
 	}
 }
+
+func TestCommonCredentialFilesAreRefused(t *testing.T) {
+	for _, n := range []string{"credentials.json", "credentials", ".npmrc", ".pypirc", ".aws", ".ssh", "secrets.yaml", "secret.json", "app.keystore", "credential.json"} {
+		if !wsSecretName.MatchString(n) {
+			t.Errorf("%s not treated as secret", n)
+		}
+	}
+	for _, n := range []string{"main.go", "README.md", "secret_sauce.go", "keys.go", "credentials_test.go"} {
+		if wsSecretName.MatchString(n) {
+			t.Errorf("%s wrongly hidden", n)
+		}
+	}
+}
