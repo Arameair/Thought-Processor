@@ -1,5 +1,31 @@
 # P0 Windows/WSL Workbench Launcher — isolated engineering prototype
 
+**Branch `experiment/p0-workstation-secure-open-20261030`.** Builds on the owner-verified Start/Status/Stop baseline `ebabf13` and adds: secure browser Open (one-time ticket), no private link files, daemon-crash recovery, and the first Development Workstation slice (#31). Owner Windows/Edge/real-GitHub run: **NOT RUN** until Dustin does it.
+
+## What changed on this branch (owner-relevant)
+
+| Area | Behaviour |
+| --- | --- |
+| **Open** | The launcher trades the run's private code (held in RAM) for a **single-use, 60-second ticket** and hands Edge InPrivate only `http://127.0.0.1:7867/workstation#code=<ticket>`. The page uses it once and removes it from the address bar. A copy in Edge's process arguments or history is useless afterwards. Each Open mints a fresh ticket. |
+| **Link files** | Processor runs with `-no-link-file` (no `operator-link.txt`). Identity (unchanged, pinned) still writes `runtime/open-link.txt` at start; it never reads it back, so the launcher deletes it as soon as Identity is up, and sweeps both names on Start and Stop (crash leftovers). |
+| **Crash** | If a service dies, Status says `FAILED / OWNED_SERVICE_EXITED`; Start replaces it. If the launcher daemon itself dies, Status reports `orphaned_owned_services`, Start refuses with `PREVIOUS_SERVICES_STILL_RUNNING`, and **Stop** ends only same-user processes running the two binaries this launcher built in its own work folder. |
+| **Development Workstation** | `/workstation` in Processor (Go). Locked until Identity's **signed** status says Processor is paired and GitHub is **VERIFIED** (real GitHub). Then: repo HEAD/branch/origin/changes for Processor, Identity, TASS; read-only file tree and viewer; and three allowlisted tests (Processor Go app tests, Identity GitHub tests, TASS unit tests) with real output. No shell, no writes, no command from the browser. |
+| **GitHub status** | `IDENTITY_NOT_PAIRED` before pairing; then Identity's own `SIGNED_OUT / WAITING / VERIFIED / DENIED / EXPIRED / NOT_CONFIGURED`. |
+
+## Tests on this branch
+
+```bash
+python3 -m unittest discover -s tools/p0-launcher -p 'test_*.py' -v                 # launcher unit tests
+(cd processor && go vet ./... && go test ./...)                                        # Go
+python3 -I processor/acceptance/p0_workstation.py --identity-src ~/p1c/identity --tass-src ~/p1c/tass-companion --work /tmp/p0-ws
+```
+The last one uses real Identity + Processor processes with a labelled TEST FIXTURE GitHub to force WAITING / DENIED / EXPIRED / VERIFIED; it is not real GitHub.
+
+---
+
+## Earlier notes (baseline 93cafa4 / ebabf13)
+
+
 **Status: LOCAL UNIT TESTS PASS; OWNER WINDOWS/WSL TEST NOT RUN.** This is not a release or a fully verified workstation. It is the #32 Start / Stop / Open / Versions / Check Updates READ-ONLY slice. **Apply Update is disabled.** #31 real repo/file/test workstation is a separate unfinished milestone.
 
 ## Exact reviewed inputs

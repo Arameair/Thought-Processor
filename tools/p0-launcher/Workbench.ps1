@@ -17,7 +17,7 @@ while ($true) {
     Write-Host ""
     Write-Host "TASS Workbench (isolated experiment, Windows / WSL)" -ForegroundColor Cyan
     Write-Host "Profile: ~/p1c/p1-tass-fresh | Identity 7797 | Processor 7867"
-    Write-Host "1  Start         2  Stop          3  Open Edge InPrivate"
+    Write-Host "1  Start         2  Stop          3  Open Development Workstation (Edge InPrivate)"
     Write-Host "4  Status        5  Versions      6  Check Updates (read-only)"
     Write-Host "7  Show private pairing challenge       8  Apply Update (disabled)"
     Write-Host "0  Exit menu (does not stop running services)"
