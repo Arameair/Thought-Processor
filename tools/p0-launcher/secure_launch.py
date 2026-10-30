@@ -23,16 +23,16 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-fresh'))).expanduser()
-IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity'))).expanduser()
-TASS = Path(os.environ.get('P1_TASS_SRC', str(Path.home() / 'p1c/tass-companion'))).expanduser()
+IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity-ws'))).expanduser()
+TASS = Path(os.environ.get('P1_TASS_SRC', str(Path.home() / 'p1c/tass-ws'))).expanduser()
 THOUGHT = Path(os.environ.get('P1_THOUGHT_SRC', str(ROOT.parent / 'thought'))).expanduser()
 RUN = ROOT / 'run-p1.sh'
 RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7797, 7867
-LAUNCH_BRANCH = 'experiment/p0-workstation-secure-open-20261030'
-IDENTITY_BRANCH = 'experiment/p1-cleanup-claude-20261026'
+LAUNCH_BRANCH = 'experiment/p0-workstation-tass-20261030'
+IDENTITY_BRANCH = 'experiment/no-open-link-file-claude-20261030'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
 REPLACEABLE = ('FAILED', 'STOPPED')
@@ -56,7 +56,7 @@ def git_rev(repo):
 
 def pinned():
     source = RUN.read_text()
-    names = ('TASS_ARTIFACT', 'DEV_ARTIFACT', 'THOUGHT_ARTIFACT', 'IDENTITY_SHA')
+    names = ('TASS_ARTIFACT', 'TASS_PREVIOUS_ARTIFACT', 'DEV_ARTIFACT', 'THOUGHT_ARTIFACT', 'IDENTITY_SHA')
     values = {}
     for name in names:
         m = re.search(r'^' + name + r'=([a-f0-9]{40,64})$', source, re.M)
@@ -69,7 +69,7 @@ def pinned():
 def versions(remote=False):
     refs = [('processor', ROOT, LAUNCH_BRANCH),
             ('identity', IDENTITY, IDENTITY_BRANCH),
-            ('tass', TASS, 'experiment/tass-companion-feature-claude-20261029')]
+            ('tass', TASS, 'experiment/tass-workstation-file-claude-20261030')]
     result = {'update_apply': 'DISABLED_REQUIRES_OWNER_AND_IDENTITY_REVIEW', 'revisions': {}, 'pins': pinned()}
     for name, path, branch in refs:
         current = git_rev(path)
@@ -351,10 +351,11 @@ class Supervisor:
                     raise RuntimeError(name.upper() + '_BUILD_FAILED')
             pin = pinned()
             thought = THOUGHT / 'feature'
-            id_flags = ['-trust-fixture-artifact', pin['DEV_ARTIFACT'], '-trust-fixture-artifact', pin['TASS_ARTIFACT']]
+            id_flags = ['-trust-fixture-artifact', pin['DEV_ARTIFACT'], '-trust-fixture-artifact', pin['TASS_ARTIFACT'],
+                        '-trust-fixture-artifact', pin['TASS_PREVIOUS_ARTIFACT']]
             tp_flags = ['-trust-feature-dir', str(ROOT / 'processor/developer-utility'),
                         '-trust-feature-artifact', pin['DEV_ARTIFACT'], '-trust-feature-dir', str(TASS / 'feature'),
-                        '-trust-feature-artifact', pin['TASS_ARTIFACT']]
+                        '-trust-feature-artifact', pin['TASS_ARTIFACT'], '-trust-feature-artifact', pin['TASS_PREVIOUS_ARTIFACT']]
             if thought.is_dir() and os.environ.get('P1_THOUGHT', 'on') != 'off':
                 id_flags += ['-trust-fixture-artifact', pin['THOUGHT_ARTIFACT']]
                 tp_flags += ['-trust-feature-dir', str(thought), '-trust-feature-artifact', pin['THOUGHT_ARTIFACT']]
@@ -368,7 +369,7 @@ class Supervisor:
             if self.stop_requested.is_set():
                 return
             self.spawn('identity', [str(WORK / 'bin/identity-p1'), '-port', str(ID_PORT),
-                                    '-data', str(WORK / 'identity-profile'), *id_flags], runtime_env)
+                                    '-data', str(WORK / 'identity-profile'), '-no-open-link-file', *id_flags], runtime_env)
             for _ in range(50):
                 if (WORK / 'identity-profile/runtime/open-link.txt').exists() or self.children['identity'].poll() is not None:
                     break

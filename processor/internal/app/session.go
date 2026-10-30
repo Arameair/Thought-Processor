@@ -22,7 +22,7 @@ type Sessions struct {
 }
 
 // TicketTTL bounds how long an unused browser launch ticket stays valid.
-const TicketTTL = 60 * time.Second
+const TicketTTL = 30 * time.Second
 
 // MaxTickets bounds outstanding tickets so a caller can't grow memory.
 const MaxTickets = 8

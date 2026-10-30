@@ -216,3 +216,12 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .ws-warn { color: var(--warn); }
 .ws-foot { margin-top: 12px; }
 @media (max-width: 1100px) { .ws-grid { grid-template-columns: 1fr; } }
+.ws-grid { grid-template-columns: 260px 240px minmax(0, 1fr) 380px; }
+.ws-tass textarea { width: 100%; box-sizing: border-box; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; margin: 6px 0; }
+.ws-tass input { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
+.ws-tasslog { max-height: 55vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.ws-msg { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.ws-msg.tass { background: var(--accent-soft); }
+.ws-msgtext { white-space: pre-wrap; word-break: break-word; }
+.ws-tass-file { display: block; margin-top: 6px; }
+@media (max-width: 1400px) { .ws-grid { grid-template-columns: 260px minmax(0, 1fr); } }

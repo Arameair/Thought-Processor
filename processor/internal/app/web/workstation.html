@@ -42,6 +42,17 @@
       <h3>Test runs</h3>
       <div id="ws-runs"></div>
     </section>
+    <section class="panel ws-tass" id="ws-tass">
+      <div class="ws-viewhead"><h3>TASS</h3><span id="ws-tass-chips" class="small"></span></div>
+      <div id="ws-tass-setup"></div>
+      <div id="ws-tass-chat" hidden>
+        <div id="ws-tass-log" class="ws-tasslog" aria-live="polite"></div>
+        <label class="small ws-tass-file"><input type="checkbox" id="ws-tass-usefile" checked> Show TASS the file I'm viewing: <span id="ws-tass-cur" class="mono">none open</span></label>
+        <textarea id="ws-tass-q" rows="3" maxlength="1000" placeholder="Ask TASS about this file…"></textarea>
+        <div><button class="btn small" type="button" id="ws-tass-send">Ask TASS</button> <span id="ws-tass-busy" class="muted small"></span></div>
+        <p class="muted small">TASS answers with your local model. For each question it is shown the file's text read-only; only the file's name and fingerprint are kept in TASS's conversation. Identity checks every message.</p>
+      </div>
+    </section>
   </main>
   <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
 </div>

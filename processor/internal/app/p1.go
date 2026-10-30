@@ -712,6 +712,17 @@ func checkAttachment(at *Attachment) error {
 }
 
 func (a *App) runAction(ctx context.Context, id, subject, capability, input string, att ...*Attachment) (res ActionResult) {
+	var extra map[string]any
+	if len(att) > 0 && att[0] != nil {
+		extra = map[string]any{"attachment": att[0]}
+	}
+	return a.runActionWith(ctx, id, subject, capability, input, extra, 30*time.Second)
+}
+
+// runActionWith sends one ticketed request whose body carries extra fields
+// (e.g. TASS's read-only file context). The whole body — extras included —
+// is what Identity's ticket binds by SHA-256.
+func (a *App) runActionWith(ctx context.Context, id, subject, capability, input string, extra map[string]any, timeout time.Duration) (res ActionResult) {
 	res = ActionResult{RequestID: "req_" + store.RandHex(8), InstallationID: id, Capability: capability, Subject: subject, At: time.Now().UTC()}
 	t0 := time.Now()
 	defer func() {
@@ -741,8 +752,8 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 		return res
 	}
 	reqBody := map[string]any{"request_id": res.RequestID, "input": input}
-	if len(att) > 0 && att[0] != nil {
-		reqBody["attachment"] = att[0]
+	for k, v := range extra {
+		reqBody[k] = v
 	}
 	body, _ := json.Marshal(reqBody)
 	cl, err := a.Conn.Require(ctx)
@@ -779,7 +790,7 @@ func (a *App) runAction(ctx context.Context, id, subject, capability, input stri
 	req.Header.Set("X-TF-Ticket", tk.Ticket)
 	nonce := supervisor.ActionNonce()
 	req.Header.Set("X-TF-Nonce", nonce)
-	resp, err := (&http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
+	resp, err := (&http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}}).Do(req)
 	if err != nil {
 		res.Outcome, res.Detail = "REQUEST_UNCERTAIN", "the connection to the feature broke before an answer ("+err.Error()+"). It is NOT resent automatically; it may or may not have been processed."
 		return res

@@ -44,6 +44,10 @@ type Settings struct {
 	DeveloperMode    bool   `json:"developer_mode,omitempty"`
 	IdentityURL      string `json:"identity_url,omitempty"` // last address the person chose (before pairing)
 	Theme            string `json:"theme,omitempty"`        // system | light | dark (display only)
+	// OwnerSubject: the ONE person identity the Development Workstation acts
+	// for (reused if it exists, created once otherwise). Grants for it are
+	// still approved by the Admin in Identity.
+	OwnerSubject string `json:"owner_subject,omitempty"`
 }
 
 type Profile struct {

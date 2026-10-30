@@ -349,6 +349,7 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 			h(w, r, g)
 		})
 	}
+	a.tassRoutes(m, gated)
 	m.HandleFunc("GET /api/ws/state", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
 		g := a.wsGate(r.Context())
 		out := map[string]any{"gate": g, "processor_version": a.Build.Version}

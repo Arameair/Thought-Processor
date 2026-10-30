@@ -2,7 +2,7 @@
 (() => {
   const $ = (q) => document.querySelector(q);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  let csrf = "", repo = "", dir = "", state = null, timer = 0;
+  let csrf = "", repo = "", dir = "", state = null, timer = 0, curFile = null, tassBusy = false, tassLog = [];
 
   async function signIn() {
     const m = location.hash.match(/code=([0-9a-f]+)/);
@@ -41,6 +41,7 @@
     if (!g.ok) { lock(g.detail || g.reason || "Locked"); return; }
     $("#ws-locked").hidden = true; $("#ws-main").hidden = false;
     renderRepos(s.repos || []); renderTests(s.tests || []); renderRuns(s.runs || []);
+    refreshTass();
     if (!repo && s.repos && s.repos.length) open(s.repos[0].name, "");
   }
 
@@ -84,13 +85,86 @@
     } catch (e) { $("#ws-tree").innerHTML = `<p class="ws-warn small">${esc(e.message)}</p>`; }
   }
   async function view(p) {
+    curFile = { repo, path: p }; $("#ws-tass-cur").textContent = repo + "/" + p;
     $("#ws-file-name").textContent = repo + "/" + p; $("#ws-file-meta").textContent = "";
     try {
       const j = await api("GET", "/api/ws/file?repo=" + encodeURIComponent(repo) + "&path=" + encodeURIComponent(p));
       $("#ws-file-meta").textContent = " · " + j.size + " bytes";
       $("#ws-file").textContent = j.shown ? j.text : j.note;
+      if (!tassLog.length) renderTassLog();
     } catch (e) { $("#ws-file").textContent = e.message; }
   }
+
+  // ---- TASS ----
+  const STEP = {
+    INSTALL: ["TASS isn't installed for the workstation yet.", "Install TASS", "/api/ws/tass/install"],
+    START: ["TASS is installed but not running.", "Start TASS", "/api/ws/tass/start"],
+    OWNER: ["Setting who TASS talks to (your one person identity)…", "", "/api/ws/tass/owner"],
+    ALLOW_CHAT: ["You need permission to talk to TASS (12 hours, approved by the Admin in Identity).", "Ask the Admin for permission", "/api/ws/tass/allow", { what: "chat" }],
+    ALLOW_MODEL: ["TASS has no local model yet. You need permission to choose one (approved by the Admin).", "Ask the Admin for permission", "/api/ws/tass/allow", { what: "model" }],
+    SET_MODEL: ["Choose TASS's local model (Ollama must be running in WSL).", "Use this model", "/api/ws/tass/model"],
+  };
+  let ownerAsked = false;
+  async function refreshTass() {
+    let t;
+    try { t = await api("GET", "/api/ws/tass"); } catch (_) { return; }
+    const m = t.model || {};
+    $("#ws-tass-chips").innerHTML = t.installation_id ? `<span class="ws-badge ${t.runtime === "RUNNING" ? "ok" : "warn"}">${esc(t.version)} ${esc(t.runtime)}</span> <span class="ws-badge ${m.state === "REACHABLE" ? "ok" : "warn"}">MODEL ${esc(String(m.state || "?").replace(/_/g, " "))}${m.name ? " · " + esc(m.name) : ""}</span>` + (t.owner ? ` <span class="muted">for ${esc(t.owner.name)}</span>` : "") : "";
+    const ready = t.step === "READY";
+    $("#ws-tass-chat").hidden = !ready;
+    let h = "";
+    if (t.older_tass) h += `<p class="muted small">${esc(t.older_tass.note)}</p>`;
+    if (!ready) {
+      const [msg, label, path, body] = STEP[t.step] || ["", "", ""];
+      h += `<p class="small">${esc(msg)}</p>`;
+      const pend = t.step === "INSTALL" ? t.install_pending : t.step === "ALLOW_CHAT" ? t.chat_grant : t.step === "ALLOW_MODEL" ? t.model_grant : null;
+      if (pend && pend.approval_url) h += `<p><a class="btn small" href="${esc(pend.approval_url)}" target="_blank" rel="noopener">Approve in Identity</a> <span class="muted small">then come back; this updates by itself</span></p>`;
+      else if (t.step === "SET_MODEL") h += `<input id="ws-tass-model" value="${esc(t.default_model)}"> <button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
+      else if (label) h += `<button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
+      if (t.step === "OWNER" && !ownerAsked) { ownerAsked = true; tassStep(path, {}); }
+      if (t.step === "SET_MODEL" && m.detail) h += `<p class="muted small">${esc(m.detail)}</p>`;
+    }
+    $("#ws-tass-setup").innerHTML = h + `<div id="ws-tass-msg" class="small ws-warn"></div>`;
+    const b = $("#ws-tass-step");
+    if (b) b.onclick = () => {
+      const [, , path, body] = STEP[t.step];
+      tassStep(path, t.step === "SET_MODEL" ? { model: $("#ws-tass-model").value.trim() } : (body || {}));
+    };
+  }
+  async function tassStep(path, body) {
+    try {
+      const j = await api("POST", path, body);
+      if (j.approval_url) window.open(j.approval_url, "_blank", "noopener");
+      if (j.grant && j.grant.approval_url) window.open(j.grant.approval_url, "_blank", "noopener");
+      if (j.result && j.result.outcome !== "COMPLETED") $("#ws-tass-msg").textContent = j.result.outcome + ": " + j.result.detail;
+    } catch (e) {
+      const el = $("#ws-tass-msg");
+      if (el) el.textContent = e.message;
+    }
+    refreshTass();
+  }
+  function renderTassLog() {
+    $("#ws-tass-log").innerHTML = tassLog.map((m) => `<div class="ws-msg ${m.role}"><div class="small muted">${m.role === "you" ? "You" : "TASS"}${m.about ? " · about " + esc(m.about.repo + "/" + m.about.path) + (m.about.truncated ? " (first part only)" : "") : ""}${m.by ? " · " + esc(m.by) : ""}</div><div class="ws-msgtext">${esc(m.text)}</div></div>`).join("") || `<p class="muted small">Open a file, then ask TASS about it.</p>`;
+    const l = $("#ws-tass-log"); l.scrollTop = l.scrollHeight;
+  }
+  async function askTass() {
+    const q = $("#ws-tass-q").value.trim();
+    if (!q || tassBusy) return;
+    const useFile = $("#ws-tass-usefile").checked && curFile;
+    tassBusy = true; $("#ws-tass-send").disabled = true; $("#ws-tass-busy").textContent = "TASS is thinking with your local model (a file question can take up to 2 minutes)…";
+    tassLog.push({ role: "you", text: q, about: useFile ? curFile : null }); renderTassLog();
+    try {
+      const j = await api("POST", "/api/ws/tass/ask", { question: q, repo: useFile ? curFile.repo : "", path: useFile ? curFile.path : "" });
+      if (j.outcome === "COMPLETED" && j.tass) {
+        tassLog.push({ role: "tass", text: j.tass.reply || j.tass.headline, by: j.tass.answered_by });
+        $("#ws-tass-q").value = "";
+      } else tassLog.push({ role: "tass", text: "Not answered — " + j.outcome + ": " + j.detail, by: "nothing was saved" });
+    } catch (e) { tassLog.push({ role: "tass", text: "Not answered — " + e.message, by: "" }); }
+    tassBusy = false; $("#ws-tass-send").disabled = false; $("#ws-tass-busy").textContent = "";
+    renderTassLog();
+  }
+  $("#ws-tass-send").onclick = askTass;
+  $("#ws-tass-q").onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) askTass(); };
 
   async function loop() { clearTimeout(timer); await refresh(); timer = setTimeout(loop, (state && (state.runs || []).some((r) => r.state === "RUNNING")) ? 1500 : 4000); }
   signIn().then((ok) => { if (ok) loop(); });

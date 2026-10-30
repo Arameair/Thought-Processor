@@ -4,13 +4,16 @@
 set +x
 set -Eeuo pipefail
 umask 077
-BASE_BRANCH=experiment/p1-cleanup-claude-20261026
-LAUNCH_BRANCH=experiment/p0-workstation-secure-open-20261030
+BASE_BRANCH=experiment/no-open-link-file-claude-20261030
+LAUNCH_BRANCH=experiment/p0-workstation-tass-20261030
 # TASS (private companion) feature: the exact reviewed package digest, pinned
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.
-TASS_BRANCH=experiment/tass-companion-feature-claude-20261029
-TASS_ARTIFACT=985027bbaebfd99bb07926285ceac218726ddca3fca0dff421bf665e2781abef
+TASS_BRANCH=experiment/tass-workstation-file-claude-20261030
+TASS_ARTIFACT=543611f8bfcae3cda90b01fd5f733cbd8a408df1060417c8f6828c33858a7a73
+# TASS 0.1.0 (the previous reviewed package): RUN-ONLY pin so an already
+# installed TASS 0.1.0 keeps starting. It is never offered for installation.
+TASS_PREVIOUS_ARTIFACT=985027bbaebfd99bb07926285ceac218726ddca3fca0dff421bf665e2781abef
 TASS_BASE_SHA=ecace8fdffa72fc40f8a0a83465194a8c51e4053
 # Developer Utility (the Developer entrance): exact reviewed package digest,
 # pinned in Processor (-trust-feature-artifact) and Identity
@@ -22,7 +25,8 @@ DEV_ARTIFACT=9d33ed8bfccff317aeec1914718e32c3691845a5a2dac33b57d344487001b39d
 THOUGHT_BRANCH=experiment/thought-feature-p1-claude-20261029
 THOUGHT_ARTIFACT=8f92ee685c99851128f322c9063ff151e28d7ccf48709315d8857fc56e8079ec
 THOUGHT_BASE_SHA=772200b5bc29efce6da3b0e064fb6714570da1d4
-IDENTITY_SHA=64940b629a5ef52eaa143b2402726ec81d382002
+# Identity = pinned P1 cleanup 64940b6 + ONE opt-in flag (-no-open-link-file).
+IDENTITY_SHA=a582f8ea595eb12145c4116e67e30de46cb470c8
 PROCESSOR_BASE_SHA=db31e4785d292925249a2f9f06e3c06bd78ba5b0
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ID_SRC="${P1_IDENTITY_SRC:-$(dirname "$ROOT")/identity}"
@@ -144,8 +148,8 @@ if [[ "${P1_TASS:-on}" != off && -e "$TASS_SRC" ]]; then
 else
   printf 'TASS feature: not offered (no checkout at %s, or P1_TASS=off).\n' "$TASS_SRC"
 fi
-TP_EXTRA+=(-trust-feature-dir "$DEV_PKG" -trust-feature-artifact "$DEV_ARTIFACT")
-ID_EXTRA+=(-trust-fixture-artifact "$DEV_ARTIFACT")
+TP_EXTRA+=(-trust-feature-dir "$DEV_PKG" -trust-feature-artifact "$DEV_ARTIFACT" -trust-feature-artifact "$TASS_PREVIOUS_ARTIFACT")
+ID_EXTRA+=(-trust-fixture-artifact "$DEV_ARTIFACT" -trust-fixture-artifact "$TASS_PREVIOUS_ARTIFACT")
 python3 - "$ID_PORT" "$TP_PORT" <<'PY'
 import socket,sys
 try:
@@ -198,7 +202,7 @@ mkdir -p "$IDENTITY_LOCATOR_DIR"
 if [[ "$INJECT" == identity-start ]]; then
   (exit 42) >"$WORK/identity-private.log" 2>&1 &
 else
-  "$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" ${ID_EXTRA[@]+"${ID_EXTRA[@]}"} >"$WORK/identity-private.log" 2>&1 &
+  "$WORK/bin/identity-p1" -port "$ID_PORT" -data "$WORK/identity-profile" -no-open-link-file ${ID_EXTRA[@]+"${ID_EXTRA[@]}"} >"$WORK/identity-private.log" 2>&1 &
 fi
 id_pid=$!
 sleep 0.5
