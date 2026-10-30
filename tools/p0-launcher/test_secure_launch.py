@@ -206,5 +206,38 @@ class TestLauncher(unittest.TestCase):
         spawn.assert_not_called()
         self.assertIn('PREVIOUS_LAUNCHER_DID_NOT_EXIT', out.call_args[0][0])
 
+    def test_orphans_are_found_by_owned_binary_and_stopped(self):
+        import shutil, subprocess, tempfile
+        sleep = shutil.which('sleep')
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            (work / 'bin').mkdir()
+            own = work / 'bin' / 'identity-p1'
+            shutil.copy(sleep, own)
+            foreign = work / 'other-sleep'
+            shutil.copy(sleep, foreign)
+            mine = subprocess.Popen([str(own), '60'])
+            theirs = subprocess.Popen([str(foreign), '60'])
+            try:
+                with patch.object(launcher, 'WORK', work):
+                    found = launcher.owned_orphans()
+                    self.assertIn(mine.pid, found)
+                    self.assertNotIn(theirs.pid, found)
+                    self.assertTrue(launcher.stop_orphans(found, grace=3))
+                mine.wait(timeout=5)
+                self.assertIsNone(theirs.poll())
+            finally:
+                for p in (mine, theirs):
+                    if p.poll() is None:
+                        p.kill()
+                        p.wait(timeout=5)
+
+    def test_start_refuses_over_unsupervised_services(self):
+        with patch.object(launcher, 'connect', side_effect=OSError), patch.object(launcher, 'owned_orphans', return_value=[123]), \
+             patch.object(launcher.subprocess, 'Popen') as spawn, patch('builtins.print') as out:
+            self.assertEqual(launcher.main(['start']), 3)
+        spawn.assert_not_called()
+        self.assertIn('PREVIOUS_SERVICES_STILL_RUNNING', out.call_args[0][0])
+
 if __name__ == '__main__':
     unittest.main()

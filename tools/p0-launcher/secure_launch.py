@@ -118,6 +118,57 @@ def sweep_link_files():
     return removed
 
 
+OWNED_BINARIES = ('identity-p1', 'processor-p1')
+
+
+def owned_orphans():
+    """PIDs of services this launcher built and started whose supervisor is gone.
+
+    Ownership is proven by the executable itself: same Unix user, and
+    /proc/PID/exe is one of the two binaries this launcher compiles into its
+    own 0700 work folder (shown as '(deleted)' after a rebuild). No PID file,
+    no port owner lookup, no name matching.
+    """
+    targets = {str((WORK / 'bin' / name).resolve()) for name in OWNED_BINARIES}
+    found = []
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            if entry.stat().st_uid != os.getuid():
+                continue
+            exe = os.readlink(entry / 'exe')
+        except OSError:
+            continue
+        if exe.endswith(' (deleted)'):
+            exe = exe[:-len(' (deleted)')]
+        if exe in targets:
+            found.append(int(entry.name))
+    return sorted(found)
+
+
+def stop_orphans(pids, grace=8):
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + (grace if sig == signal.SIGTERM else 3)
+        while time.monotonic() < deadline:
+            if not [p for p in pids if Path('/proc/%d' % p).exists() and not _zombie(p)]:
+                return True
+            time.sleep(.1)
+    return not [p for p in pids if Path('/proc/%d' % p).exists() and not _zombie(p)]
+
+
+def _zombie(pid):
+    try:
+        return ') Z ' in Path('/proc/%d/stat' % pid).read_text()
+    except OSError:
+        return True
+
+
 def preflight_reason(stderr):
     """Last `ERROR:` line of run-p1.sh preflight, safe to show the owner.
 
@@ -499,6 +550,12 @@ def main(argv):
             existing = connect('status')
         except (OSError, ValueError):
             existing = None
+        if existing is None and owned_orphans():
+            # The previous supervisor died but its services kept running.
+            print(json.dumps({'launcher': 'FAILED', 'error': 'PREVIOUS_SERVICES_STILL_RUNNING',
+                              'error_detail': 'Identity/Processor from an earlier launcher session are still running '
+                                              'without a supervisor. Choose Stop, then Start.'}, sort_keys=True))
+            return 3
         if existing is not None:
             if existing.get('launcher') not in REPLACEABLE:
                 # RUNNING, STARTING or STOP_INCOMPLETE_PORT_BUSY: never start
@@ -533,6 +590,18 @@ def main(argv):
         response = connect(cmd)
     except (OSError, ValueError):
         response = {'launcher': 'STOPPED_OR_UNREACHABLE', 'result': 'NO_OWNED_SESSION'}
+        orphans = owned_orphans()
+        if orphans and cmd == 'stop':
+            clean = stop_orphans(orphans)
+            sweep_link_files()
+            busy = listener(ID_PORT) or listener(TP_PORT)
+            response = {'launcher': 'STOPPED' if clean and not busy else 'STOP_INCOMPLETE_PORT_BUSY',
+                        'result': 'STOPPED_%d_UNSUPERVISED_OWNED_SERVICES' % len(orphans),
+                        'identity_port': 'LISTENING' if listener(ID_PORT) else 'CLOSED',
+                        'processor_port': 'LISTENING' if listener(TP_PORT) else 'CLOSED'}
+        elif orphans:
+            response['orphaned_owned_services'] = len(orphans)
+            response['next_step'] = 'Choose Stop to end them.'
     print(json.dumps(response, sort_keys=True))
     return 0 if response.get('launcher') not in ('STOP_INCOMPLETE_PORT_BUSY',) else 3
 
