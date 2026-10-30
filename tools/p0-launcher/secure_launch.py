@@ -22,21 +22,21 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
-WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-fresh'))).expanduser()
-IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity-ws'))).expanduser()
-TASS = Path(os.environ.get('P1_TASS_SRC', str(Path.home() / 'p1c/tass-ws'))).expanduser()
-THOUGHT = Path(os.environ.get('P1_THOUGHT_SRC', str(ROOT.parent / 'thought'))).expanduser()
+WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-alpha'))).expanduser()
+IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity'))).expanduser()
+TASS = Path(os.environ.get('P1_TASS_SRC', str(ROOT.parent / 'TASS'))).expanduser()
+THOUGHT = Path(os.environ.get('P1_THOUGHT_SRC', str(ROOT.parent / 'Thought'))).expanduser()
 RUN = ROOT / 'run-p1.sh'
 RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
-ID_PORT, TP_PORT = 7797, 7867
-LAUNCH_BRANCH = 'experiment/p0-workstation-tass-20261030'
-IDENTITY_BRANCH = 'experiment/no-open-link-file-claude-20261030'
+ID_PORT, TP_PORT = 7798, 7868
+LAUNCH_BRANCH = 'alpha'
+IDENTITY_BRANCH = 'alpha'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
 REPLACEABLE = ('FAILED', 'STOPPED')
-PRIVATE_LINK = re.compile(r'^\s*open\s*:\s*(http://127\.0\.0\.1:7867/\S+)', re.I)
+PRIVATE_LINK = re.compile(r'^\s*open\s*:\s*(http://127\.0\.0\.1:7868/\S+)', re.I)
 PAIRING = re.compile(r'  \|          ([A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4})')
 REV = re.compile(r'^[0-9a-f]{40}$')
 MAX_EVENT = 4096
@@ -69,7 +69,7 @@ def pinned():
 def versions(remote=False):
     refs = [('processor', ROOT, LAUNCH_BRANCH),
             ('identity', IDENTITY, IDENTITY_BRANCH),
-            ('tass', TASS, 'experiment/tass-workstation-file-claude-20261030')]
+            ('tass', TASS, 'alpha')]
     result = {'update_apply': 'DISABLED_REQUIRES_OWNER_AND_IDENTITY_REVIEW', 'revisions': {}, 'pins': pinned()}
     for name, path, branch in refs:
         current = git_rev(path)
@@ -260,7 +260,7 @@ def open_edge(secret, *, pairing=False):
             "$f.Controls.Add($close); "
             "[void]$f.ShowDialog(); $f.Dispose()") if pairing else (
             "$u=[Console]::In.ReadToEnd(); "
-            "if(-not $u.StartsWith('http://127.0.0.1:7867/')){exit 2}; "
+            "if(-not $u.StartsWith('http://127.0.0.1:7868/')){exit 2}; "
             "$edge=Join-Path ${env:ProgramFiles(x86)} 'Microsoft\\Edge\\Application\\msedge.exe'; "
             "if(-not (Test-Path $edge)){$edge=Join-Path $env:ProgramFiles 'Microsoft\\Edge\\Application\\msedge.exe'}; "
             "if(-not (Test-Path $edge)){exit 3}; Start-Process -FilePath $edge -ArgumentList @('--inprivate',$u)")
@@ -328,7 +328,7 @@ class Supervisor:
         jar = http.cookiejar.CookieJar()
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar),
                                              urllib.request.ProxyHandler({}))
-        base = 'http://127.0.0.1:7867'
+        base = 'http://127.0.0.1:7868'
         req = urllib.request.Request(base + '/api/session',
                                      json.dumps({'code': code.group(1)}).encode(),
                                      headers={'Content-Type': 'application/json', 'Origin': base}, method='POST')
@@ -392,7 +392,7 @@ class Supervisor:
             keep = ('PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'USER', 'WSL_DISTRO_NAME', 'WSL_INTEROP')
             runtime_env = {k: os.environ[k] for k in keep if k in os.environ}
             runtime_env.update(IDENTITY_LOCATOR_DIR=str(WORK / 'locators'),
-                               TP_IDENTITY_DEFAULT_URL='http://127.0.0.1:7797')
+                               TP_IDENTITY_DEFAULT_URL='http://127.0.0.1:7798')
             if listener(ID_PORT) or listener(TP_PORT):
                 raise RuntimeError('PORTS_OCCUPIED_REFUSED')
             self.swept = sweep_link_files()  # leftovers of a crashed earlier run
@@ -411,7 +411,7 @@ class Supervisor:
                 return
             self.spawn('processor', [str(WORK / 'bin/processor-p1'), '-port', str(TP_PORT),
                                      '-data', str(WORK / 'processor-profile'),
-                                     '-identity-default-url', 'http://127.0.0.1:7797',
+                                     '-identity-default-url', 'http://127.0.0.1:7798',
                                      '-trust-feature-dir', str(ROOT / 'processor/testfeatures'), *tp_flags,
                                      '-workstation-repo', 'processor=' + str(ROOT),
                                      '-workstation-repo', 'identity=' + str(IDENTITY),

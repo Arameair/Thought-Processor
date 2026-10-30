@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -316,6 +317,8 @@ func (a *App) tassRoutes(m *http.ServeMux, gated func(level, func(http.ResponseW
 	m.HandleFunc("POST /api/ws/tass/model", gated(mutate, func(w http.ResponseWriter, r *http.Request, g wsGate) {
 		var b struct {
 			Model string `json:"model"`
+			Kind  string `json:"kind"`
+			URL   string `json:"url"`
 		}
 		decode(r, &b)
 		if b.Model == "" {
@@ -327,7 +330,17 @@ func (a *App) tassRoutes(m *http.ServeMux, gated func(level, func(http.ResponseW
 			a.fail(w, 400, "choose a model name like qwen3.5:4b")
 			return
 		}
-		res := a.runAction(r.Context(), rec.InstallationID, e.ID, capModel, b.Model)
+		input := b.Model
+		if b.Kind != "" || b.URL != "" {
+			if b.Kind != "ollama" && b.Kind != "openai-compatible" {
+				a.fail(w, 400, "choose Ollama or a local OpenAI-compatible server")
+				return
+			}
+			config, _ := json.Marshal(map[string]any{"kind": b.Kind, "url": b.URL, "model": b.Model, "chat_think": false})
+			input = string(config)
+		}
+		// TASS validates the loopback URL and Identity authorizes tass.model.set.
+		res := a.runAction(r.Context(), rec.InstallationID, e.ID, capModel, input)
 		writeJSON(w, 200, map[string]any{"result": res})
 	}))
 	m.HandleFunc("POST /api/ws/tass/ask", gated(mutate, func(w http.ResponseWriter, r *http.Request, g wsGate) {

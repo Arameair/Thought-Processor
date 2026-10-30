@@ -4,12 +4,12 @@
 set +x
 set -Eeuo pipefail
 umask 077
-BASE_BRANCH=experiment/no-open-link-file-claude-20261030
-LAUNCH_BRANCH=experiment/p0-workstation-tass-20261030
+BASE_BRANCH=alpha
+LAUNCH_BRANCH=alpha
 # TASS (private companion) feature: the exact reviewed package digest, pinned
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.
-TASS_BRANCH=experiment/tass-workstation-file-claude-20261030
+TASS_BRANCH=alpha
 TASS_ARTIFACT=543611f8bfcae3cda90b01fd5f733cbd8a408df1060417c8f6828c33858a7a73
 # TASS 0.1.0 (the previous reviewed package): RUN-ONLY pin so an already
 # installed TASS 0.1.0 keeps starting. It is never offered for installation.
@@ -22,7 +22,7 @@ DEV_ARTIFACT=9d33ed8bfccff317aeec1914718e32c3691845a5a2dac33b57d344487001b39d
 # Thought (Spark → Trace → Thought) feature: the exact reviewed package digest.
 # Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact)
 # both pin it; any other content stays BLOCKED in both.
-THOUGHT_BRANCH=experiment/thought-feature-p1-claude-20261029
+THOUGHT_BRANCH=alpha
 THOUGHT_ARTIFACT=8f92ee685c99851128f322c9063ff151e28d7ccf48709315d8857fc56e8079ec
 THOUGHT_BASE_SHA=772200b5bc29efce6da3b0e064fb6714570da1d4
 # Identity = pinned P1 cleanup 64940b6 + ONE opt-in flag (-no-open-link-file).
@@ -37,9 +37,9 @@ TASS_SRC="${P1_TASS_SRC:-$(dirname "$ROOT")/tass}"
 # TASS trial: its OWN work folder and ports. The owner's other trials
 # (~/p1c/p1-launcher 7792/7862, ~/p1c/p1-worker-runtime 7794/7864,
 # ~/p1c/p1-developer-entrance 7796/7866) are never reused, overwritten or contacted.
-WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-tass}"
-ID_PORT="${P1_IDENTITY_PORT:-7797}"
-TP_PORT="${P1_PROCESSOR_PORT:-7867}"
+WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-tass-alpha}"
+ID_PORT="${P1_IDENTITY_PORT:-7798}"
+TP_PORT="${P1_PROCESSOR_PORT:-7868}"
 id_pid= tp_pid= watch_pid= lock=
 INJECT="${P1_TEST_INJECT:-}"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }

@@ -102,7 +102,7 @@
     OWNER: ["Setting who TASS talks to (your one person identity)…", "", "/api/ws/tass/owner"],
     ALLOW_CHAT: ["You need permission to talk to TASS (12 hours, approved by the Admin in Identity).", "Ask the Admin for permission", "/api/ws/tass/allow", { what: "chat" }],
     ALLOW_MODEL: ["TASS has no local model yet. You need permission to choose one (approved by the Admin).", "Ask the Admin for permission", "/api/ws/tass/allow", { what: "model" }],
-    SET_MODEL: ["Choose TASS's local model (Ollama must be running in WSL).", "Use this model", "/api/ws/tass/model"],
+    SET_MODEL: ["Choose TASS's local model server in WSL.", "Use this model", "/api/ws/tass/model"],
   };
   let ownerAsked = false;
   async function refreshTass() {
@@ -119,16 +119,26 @@
       h += `<p class="small">${esc(msg)}</p>`;
       const pend = t.step === "INSTALL" ? t.install_pending : t.step === "ALLOW_CHAT" ? t.chat_grant : t.step === "ALLOW_MODEL" ? t.model_grant : null;
       if (pend && pend.approval_url) h += `<p><a class="btn small" href="${esc(pend.approval_url)}" target="_blank" rel="noopener">Approve in Identity</a> <span class="muted small">then come back; this updates by itself</span></p>`;
-      else if (t.step === "SET_MODEL") h += `<input id="ws-tass-model" value="${esc(t.default_model)}"> <button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
+      else if (t.step === "SET_MODEL") h += `<label>Server <select id="ws-tass-kind"><option value="ollama">Ollama</option><option value="openai-compatible">llama.cpp / OpenAI-compatible</option></select></label> <label>Address <input id="ws-tass-url" value="http://127.0.0.1:11434"></label> <label>Model <input id="ws-tass-model" value="${esc(t.default_model)}"></label> <button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
       else if (label) h += `<button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
       if (t.step === "OWNER" && !ownerAsked) { ownerAsked = true; tassStep(path, {}); }
       if (t.step === "SET_MODEL" && m.detail) h += `<p class="muted small">${esc(m.detail)}</p>`;
     }
+    const editing = $("#ws-tass-kind") ? [$("#ws-tass-kind").value, $("#ws-tass-url").value, $("#ws-tass-model").value] : null;
     $("#ws-tass-setup").innerHTML = h + `<div id="ws-tass-msg" class="small ws-warn"></div>`;
+    const kind = $("#ws-tass-kind");
+    if (kind && editing) {
+      kind.value = editing[0]; $("#ws-tass-url").value = editing[1]; $("#ws-tass-model").value = editing[2];
+    }
+    if (kind) kind.onchange = () => {
+      const granite = kind.value === "openai-compatible";
+      $("#ws-tass-url").value = granite ? "http://127.0.0.1:8080" : "http://127.0.0.1:11434";
+      $("#ws-tass-model").value = granite ? "ibm-research/granite-vision-3.2-2b-GGUF:Q4_K_M" : t.default_model;
+    };
     const b = $("#ws-tass-step");
     if (b) b.onclick = () => {
       const [, , path, body] = STEP[t.step];
-      tassStep(path, t.step === "SET_MODEL" ? { model: $("#ws-tass-model").value.trim() } : (body || {}));
+      tassStep(path, t.step === "SET_MODEL" ? { model: $("#ws-tass-model").value.trim(), kind: $("#ws-tass-kind").value, url: $("#ws-tass-url").value.trim() } : (body || {}));
     };
   }
   async function tassStep(path, body) {

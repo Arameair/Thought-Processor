@@ -37,7 +37,7 @@ def free_port():
         return s.getsockname()[1]
 
 
-IP, TPP, FX, MODEL_PORT = free_port(), free_port(), free_port(), 11434
+IP, TPP, FX, MODEL_PORT = free_port(), free_port(), free_port(), free_port()
 IDENTITY, PROCESSOR = f"http://127.0.0.1:{IP}", f"http://127.0.0.1:{TPP}"
 NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 ENV = {k: v for k, v in os.environ.items() if not k.lower().endswith("_proxy")}
@@ -87,6 +87,8 @@ class Model(Quiet):
     """TEST STAND-IN for Ollama. Answers from what it was actually shown."""
 
     def do_GET(self):
+        if self.path == "/v1/models":
+            return self.send(200, {"data": [{"id": "granite-test"}]})
         if self.path == "/api/tags":
             return self.send(200, {"models": [{"name": "qwen3.5:4b"}]})
         if self.path == "/api/version":
@@ -97,6 +99,9 @@ class Model(Quiet):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         if self.path == "/api/show":
             return self.send(200, {"capabilities": ["completion", "vision", "thinking"]})
+        if self.path == "/v1/chat/completions":
+            MODEL_SEEN.append(body)
+            return self.send(200, {"choices": [{"message": {"role": "assistant", "content": "STAND-IN OPENAI: authorized local model answered"}}]})
         if self.path != "/api/chat":
             return self.send(404, {})
         MODEL_SEEN.append(body)
@@ -345,10 +350,10 @@ def main():
     st, j = b.req("POST", "/api/ws/tass/allow", {"what": "model"})
     approve(j["grant"]["approval_url"])
     t = b.until("/api/ws/tass", lambda t: t["step"] == "SET_MODEL", 30)
-    st, j = b.req("POST", "/api/ws/tass/model", {"model": "qwen3.5:4b"})
+    st, j = b.req("POST", "/api/ws/tass/model", {"model": "qwen3.5:4b", "kind": "ollama", "url": f"http://127.0.0.1:{MODEL_PORT}"})
     t = b.until("/api/ws/tass", lambda t: t["step"] == "READY", 40)
     rec(j["result"]["outcome"] == "COMPLETED" and t["step"] == "READY" and t["model"].get("state") == "REACHABLE",
-        "T4 model set to qwen3.5:4b (stand-in on 127.0.0.1:11434): READY", json.dumps(t["model"])[:100])
+        "T4 model set to qwen3.5:4b (stand-in on an isolated loopback port): READY", json.dumps(t["model"])[:100])
 
     # ---- the milestone ----
     st, f = b.req("GET", "/api/ws/file?repo=processor&path=processor/main.go")
@@ -392,6 +397,13 @@ def main():
     approve(j["grant"]["approval_url"])
     b.until("/api/ws/tass", lambda t: t["step"] == "READY", 30)
     shot("workstation-tass-file")
+    st, j = b.req("POST", "/api/ws/tass/model", {"kind": "openai-compatible", "url": f"http://127.0.0.1:{MODEL_PORT}", "model": "granite-test"})
+    rec(st == 200 and j["result"]["outcome"] == "COMPLETED", "G1 local OpenAI-compatible configuration uses the Identity-authorized model action")
+    b.until("/api/ws/tass", lambda t: t["step"] == "READY", 30)
+    st, j = b.req("POST", "/api/ws/tass/ask", {"question": "hello local model"})
+    rec(st == 200 and "STAND-IN OPENAI" in str(j), "G2 OpenAI-compatible chat completion returns through TASS")
+    st, j = b.req("POST", "/api/ws/tass/model", {"kind": "openai-compatible", "url": "http://192.0.2.1:8080", "model": "granite-test"})
+    rec(j.get("result", {}).get("outcome") != "COMPLETED", "G3 TASS refuses a non-loopback model address")
     # owner reuse after Processor forgets its setting
     stop("processor")
     sp = W / "processor-profile/settings.json"

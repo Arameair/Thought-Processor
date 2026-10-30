@@ -1,5 +1,7 @@
 # Thought Processor
 
+For the fresh TASS alpha, launcher, private-key boundary, and IBM Granite setup, see [the alpha guide](docs/ALPHA.md).
+
 ## P1 experimental quick start — WSL/Linux (not Alpha)
 
 **P1 cleanup experiment only.** This is a source-built local trial, not Alpha, an installer, or an accepted release. The launcher builds both matching P1 components and keeps GitHub sign-in, Identity pairing, and approval **manual**. It does **not** automatically approve GitHub access.

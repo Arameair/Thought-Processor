@@ -10,14 +10,14 @@ s.loader.exec_module(launcher)
 
 class TestLauncher(unittest.TestCase):
     def test_real_status_does_not_infer_github_verified(self):
-        d = launcher.redact_status('RUNNING', {}, 'http://127.0.0.1:7867/#code=PRIVATE', '', 'WAITING')
+        d = launcher.redact_status('RUNNING', {}, 'http://127.0.0.1:7868/#code=PRIVATE', '', 'WAITING')
         self.assertEqual(d['github'], 'WAITING')
         self.assertNotIn('PRIVATE', json.dumps(d))
         self.assertNotIn('link', str(d).lower().replace('authenticated_open_available', ''))
 
     def test_no_link_or_challenge_in_status(self):
         o = launcher.Supervisor()
-        o.link = 'http://127.0.0.1:7867/#code=secret'
+        o.link = 'http://127.0.0.1:7868/#code=secret'
         o.pairing = 'ABCD-EFGH'
         o.github = 'WAITING'
         with patch.object(launcher, 'listener', return_value=False):
@@ -37,7 +37,7 @@ class TestLauncher(unittest.TestCase):
     def test_open_hands_browser_a_ticket_never_the_run_code(self):
         code = 'c' * 48
         o = launcher.Supervisor()
-        o.link = 'http://127.0.0.1:7867/#code=' + code
+        o.link = 'http://127.0.0.1:7868/#code=' + code
         resp = MagicMock()
         resp.__enter__.return_value.read.return_value = json.dumps({'ticket': 't' * 0 + 'a' * 48}).encode()
         opener = MagicMock()
@@ -46,7 +46,7 @@ class TestLauncher(unittest.TestCase):
              patch.object(launcher, 'open_edge', return_value='OPEN_REQUESTED') as edge:
             out = o.handle('open')
         url = edge.call_args[0][0]
-        self.assertEqual(url, 'http://127.0.0.1:7867/workstation#code=' + 'a' * 48)
+        self.assertEqual(url, 'http://127.0.0.1:7868/workstation#code=' + 'a' * 48)
         self.assertNotIn(code, url)
         self.assertNotIn(code, json.dumps(out))
         sent = json.loads(opener.open.call_args[0][0].data)
@@ -54,7 +54,7 @@ class TestLauncher(unittest.TestCase):
 
     def test_open_refuses_when_ticket_unavailable(self):
         o = launcher.Supervisor()
-        o.link = 'http://127.0.0.1:7867/#code=' + 'c' * 48
+        o.link = 'http://127.0.0.1:7868/#code=' + 'c' * 48
         opener = MagicMock()
         opener.open.side_effect = OSError('refused')
         with patch.object(launcher.urllib.request, 'build_opener', return_value=opener), \
