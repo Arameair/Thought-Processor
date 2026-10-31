@@ -143,6 +143,7 @@ def start_processor():
     if f.exists():
         f.unlink()
     start("processor", [str(W / "thought-processor"), "-port", str(PP), "-data", str(W / "processor-profile"), "-no-browser",
+                        "-workstation-allow-test-github",  # TEST ONLY: this run's GitHub is Identity's labelled fixture
                         "-trust-feature-dir", str(FEATURES), "-trust-feature-dir", str(THOUGHT_PKG),
                         "-trust-feature-dir", str(W / "tampered"), "-trust-feature-artifact", PINS["thought"],
                         "-trust-feature-dir", str(DEV_PKG), "-trust-feature-artifact", PINS["dev"],
@@ -573,7 +574,16 @@ def ui_check(link, ti, me_name):
         page.screenshot(path=str(shots / "tass-03-pulse.png"), full_page=True)
         # Development Workstation → Thoughts panel (same tab, same session)
         page.click("#chip-workstation")
-        page.wait_for_selector("#ws-main:not([hidden])", timeout=20000)
+        for _ in range(100):
+            if page.is_visible("#ws-main") or page.is_visible("#ws-locked"):
+                if page.is_visible("#ws-main"):
+                    break
+            page.wait_for_timeout(200)
+        if not page.is_visible("#ws-main"):
+            rec("THOUGHTS", False, "Development Workstation opens (needed for the Thoughts panel)", page.inner_text("#ws-locked-msg")[:160] if page.is_visible("#ws-locked") else "neither main nor lock shown")
+            page.screenshot(path=str(shots / "tass-04-workstation-locked.png"), full_page=True)
+            b.close()
+            return
         page.click("#ws-th-refresh")
         for _ in range(150):
             if page.inner_text("#ws-th-status").startswith(("Updated", "Couldn't")):
