@@ -2,7 +2,7 @@
 # No private link, pairing code or token is printed or stored here.
 # This only invokes the WSL supervisor's bounded commands.
 $ErrorActionPreference = 'Stop'
-$Script = 'exec python3 "$HOME/p1c/alpha/Thought-Processor/tools/p0-launcher/secure_launch.py" "$1"'
+$Script = 'exec python3 "$HOME/p1c/team/Thought-Processor/tools/p0-launcher/secure_launch.py" "$1"'
 function Invoke-Workbench([string]$Action) {
     & wsl.exe -e bash -lc $Script -- $Action
     if ($LASTEXITCODE -ne 0) {
@@ -15,7 +15,7 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
 }
 while ($true) {
     Write-Host ""
-    Write-Host "TASS Workbench (alpha, Windows / WSL)" -ForegroundColor Cyan
+    Write-Host "TASS Workbench (Core Team experiment, Windows / WSL)" -ForegroundColor Cyan
     Write-Host "Profile: ~/p1c/p1-tass-team (TASS Core Team experiment) | Identity 7798 | Processor 7868"
     Write-Host "1  Start         2  Stop          3  Open Development Workstation (Edge InPrivate)"
     Write-Host "4  Status        5  Versions      6  Check Updates (read-only)"

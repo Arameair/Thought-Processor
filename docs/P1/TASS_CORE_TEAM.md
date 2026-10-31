@@ -10,6 +10,7 @@ This branch changes **only the launcher pins**, so Processor can start TASS 0.3.
 | `TASS_BRANCH` | `alpha` | `experiment/tass-core-team-claude-20261031` (Arameair/TASS @ `6c3ff01`) |
 | `TASS_ARTIFACT` | `543611f8…` (0.2.0) | `f8b76df4104d9f9d0b6129c4836fbad24a7f4fa7cfa6b92c02d83865e52e86c4` (0.3.0) |
 | `TASS_PREVIOUS_ARTIFACT` (run-only) | `985027bb…` (0.1.0) | `543611f8…` (0.2.0) |
+| Windows menu (`Workbench.ps1`) runs | `~/p1c/alpha/Thought-Processor/…` | `~/p1c/team/Thought-Processor/…` |
 | Profile folder | `~/p1c/p1-tass-alpha` | `~/p1c/p1-tass-team`: a **separate fresh profile**; the alpha profile is never touched |
 
 Identity (`alpha` @ `a582f8e`) and Thought (`alpha` @ `772200b`) are unchanged.
