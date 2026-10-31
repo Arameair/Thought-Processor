@@ -14,6 +14,8 @@ Each repository in Dustin's Brain system has a team. This folder holds **that re
 | `TEAM_OPERATING_MODEL.md` | Shared rules: five roles, `WORKING` / `DONE` / `BLOCKED`, alerts, handoffs, Ground Truth First, pulse |
 | `TEAM_LIAISON.md` | Shared charter for the Liaison role every team has |
 | `TEAM_ENGINEER.md` | Shared Engineer role spec v1.0: per-task specialty lock, work lifecycle, evidence rules, acceptance tests |
+| `TEAM_UX_ARCHITECT.md` | Shared UX Architect role spec v1.0: workflows and design packages, PROPOSED / IMPLEMENTED / TESTED / VERIFIED, implementation review |
+| `TEAM_TEST_ARCHITECT.md` | Shared Test Architect role spec v1.0: security-first independent verification, P0–P3 priorities, coverage record, test report format |
 | `<NAME>_TEAM.md` | **This repository's own team identity** |
 
 ## The five teams

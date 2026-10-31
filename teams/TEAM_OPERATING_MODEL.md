@@ -24,7 +24,9 @@ Every team has the same five roles and speaks the same small protocol. Each work
 
 The Project Lead owns **tasks**. The Liaison owns **communication tracking**. Neither one can grant a permission just because a worker asks.
 
-**Full role specifications:** [TEAM_LIAISON.md](TEAM_LIAISON.md) · [TEAM_ENGINEER.md](TEAM_ENGINEER.md). Project Lead, Test Architect and UX Architect specs are still to come.
+**Full role specifications:** [TEAM_LIAISON.md](TEAM_LIAISON.md) · [TEAM_ENGINEER.md](TEAM_ENGINEER.md) · [TEAM_UX_ARCHITECT.md](TEAM_UX_ARCHITECT.md) · [TEAM_TEST_ARCHITECT.md](TEAM_TEST_ARCHITECT.md). The Project Lead spec is still in design (v0.2), waiting on the reassignment-authority decision.
+
+**Two things from the Test Architect spec that apply to everyone:** a confirmed **P0 (critical security)** finding blocks the affected delivery, and no worker can waive that gate. An urgent security escalation is never held back by the normal nudge limits or by waiting for the next pulse.
 
 **Engineer specialty (from TEAM_ENGINEER.md):** for each task, the Project Lead picks the Engineer's specialty (software, systems integration, hardware, diagnostics, data, automation, or custom). It is **locked** once the Engineer sends `WORKING`. If the task needs a different specialty, the Engineer reports `BLOCKED`, the assignment is closed or cancelled, and a new one is created and authorized.
 
