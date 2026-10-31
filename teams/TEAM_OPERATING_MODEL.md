@@ -22,7 +22,11 @@ Every team has the same five roles and speaks the same small protocol. Each work
 | **UX Architect** | What the person sees and understands | Designs, usability findings, acceptance findings | Product behavior or a user decision is unclear |
 | **Team Liaison** | Communication: who was told what, who acknowledged, what evidence exists, what is stuck | Overall communication state, unresolved handoffs, nudge recommendations | Supervisory intervention is needed |
 
-The Project Lead owns **tasks**. The Liaison owns **communication tracking**. Neither one can grant a permission just because a worker asks. Full Liaison charter: [TEAM_LIAISON.md](TEAM_LIAISON.md).
+The Project Lead owns **tasks**. The Liaison owns **communication tracking**. Neither one can grant a permission just because a worker asks.
+
+**Full role specifications:** [TEAM_LIAISON.md](TEAM_LIAISON.md) · [TEAM_ENGINEER.md](TEAM_ENGINEER.md). Project Lead, Test Architect and UX Architect specs are still to come.
+
+**Engineer specialty (from TEAM_ENGINEER.md):** for each task, the Project Lead picks the Engineer's specialty (software, systems integration, hardware, diagnostics, data, automation, or custom). It is **locked** once the Engineer sends `WORKING`. If the task needs a different specialty, the Engineer reports `BLOCKED`, the assignment is closed or cancelled, and a new one is created and authorized.
 
 ## 3. The three-message protocol
 
@@ -32,7 +36,7 @@ Every assignment, inside a team or between teams, goes through three stages.
 | --- | --- | --- | --- |
 | **A. Dispatch** | Project Lead or Liaison | Task ID, immediate action, permissions that apply, acceptance criteria, how to report | Only that the message was handed to a channel |
 | **B. Working** | The receiving worker | `WORKING: <task ID> — <immediate action>` | The worker acknowledged it. **Not** that it is succeeding. |
-| **C. Result** | The receiving worker | `DONE: <result> — evidence: <repo, branch, full SHA, test output or link>` or `BLOCKED: <reason> — needs: <next action and who>` | `DONE` is a **claim**. The Liaison checks the evidence before marking it VERIFIED. |
+| **C. Result** | The receiving worker | `DONE: <result> — evidence: <repo, branch, full SHA, test output or link> — limits: <what's left>` or `BLOCKED: <verified obstacle> — evidence: <…> — needs: <next action and who>` | `DONE` is a **claim**. The Liaison checks the evidence before marking it VERIFIED. It does not mean independent review passed, Dustin accepted it, or it was released. The Project Lead formally closes the assignment. |
 
 Three things are never the same thing:
 
@@ -87,7 +91,15 @@ No one on any team may claim:
 - a GitHub change exists without naming the repository, branch and full commit SHA;
 - someone approved something without an authorization record (for permissions, that record lives in Identity).
 
-Label claims with **[KNOW]** (seen directly), **[INFER]** (reasoned from evidence) or **[GUESS]**. Use the states **VERIFIED · UNVERIFIED · BLOCKED · CONFLICT · UNKNOWN**. When evidence is missing, say it is missing. A test fixture is not real AI. A reachable port is not authorization.
+Label claims with **[KNOW]** (seen directly), **[INFER]** (reasoned from evidence) or **[GUESS]**.
+
+| Kind of state | Values |
+| --- | --- |
+| **Evidence** (is the claim proven?) | **VERIFIED** (passed a named check) · **UNVERIFIED** (claimed, not checked) · **FAILED** (the check ran and failed) · **CONFLICT** (evidence contradicts the claim) |
+| **Test result** (per check) | **PASS** · **FAIL** · **NOT RUN** · **BLOCKED** (couldn't run, obstacle documented) |
+| **Delivery / communication** | sent · acknowledged · **UNKNOWN** (uncertain, don't resend) · **BLOCKED** · unavailable |
+
+Activity and evidence are tracked separately: a worker can be `WORKING` while its result is UNVERIFIED. Every significant evidence record names its source, when it was observed, and how it was verified. A previous PASS is not proof for the current version. When evidence is missing, say it is missing. A test fixture is not real AI. A reachable port is not authorization.
 
 This matches the rule already in every repo: **discovered ≠ paired ≠ installed ≠ authorized ≠ running.**
 

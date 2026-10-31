@@ -13,6 +13,7 @@ Each repository in Dustin's Brain system has a team. This folder holds **that re
 | `README.md` | This page: the directory of all teams |
 | `TEAM_OPERATING_MODEL.md` | Shared rules: five roles, `WORKING` / `DONE` / `BLOCKED`, alerts, handoffs, Ground Truth First, pulse |
 | `TEAM_LIAISON.md` | Shared charter for the Liaison role every team has |
+| `TEAM_ENGINEER.md` | Shared Engineer role spec v1.0: per-task specialty lock, work lifecycle, evidence rules, acceptance tests |
 | `<NAME>_TEAM.md` | **This repository's own team identity** |
 
 ## The five teams
