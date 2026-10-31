@@ -24,7 +24,19 @@ Every team has the same five roles and speaks the same small protocol. Each work
 
 The Project Lead owns **tasks**. The Liaison owns **communication tracking**. Neither one can grant a permission just because a worker asks.
 
-**Full role specifications:** [TEAM_LIAISON.md](TEAM_LIAISON.md) · [TEAM_ENGINEER.md](TEAM_ENGINEER.md) · [TEAM_UX_ARCHITECT.md](TEAM_UX_ARCHITECT.md) · [TEAM_TEST_ARCHITECT.md](TEAM_TEST_ARCHITECT.md). The Project Lead spec is still in design (v0.2), waiting on the reassignment-authority decision.
+**Full role specifications:** [TEAM_PROJECT_LEAD.md](TEAM_PROJECT_LEAD.md) · [TEAM_LIAISON.md](TEAM_LIAISON.md) · [TEAM_ENGINEER.md](TEAM_ENGINEER.md) · [TEAM_UX_ARCHITECT.md](TEAM_UX_ARCHITECT.md) · [TEAM_TEST_ARCHITECT.md](TEAM_TEST_ARCHITECT.md).
+
+**Who checks which evidence** (Project Lead spec, section 10):
+
+| Role | Confirms |
+| --- | --- |
+| Team Liaison | Messages were received, and the artifacts referenced actually exist |
+| Test Architect | The evidence supports technical correctness and security |
+| Project Lead | Every required deliverable, verification gate and acceptance decision is accounted for, using existing verified records rather than retesting |
+
+**Reassignment** (Project Lead spec, section 8): bounded. The Project Lead may reassign within approved scope and existing grants, recording the reason and keeping all evidence. After **two** reassignments of the same task it must escalate to the owner. Testing is **never** reassigned to get a different result. A stalled Project Lead can be escalated by the Liaison straight to the identity or owner.
+
+**Task lifecycle** (Project Lead spec, section 9): Proposed → Approved → Authorized → Assigned → Acknowledged (`WORKING`) → Executing → Reported complete (`DONE`) → Verified → Accepted → Closed. Other states: BLOCKED, PAUSED, FAILED VERIFICATION, REJECTED, CANCELLED, AWAITING APPROVAL, AWAITING EVIDENCE. A task never jumps from `DONE` to Accepted without the gates in between.
 
 **Two things from the Test Architect spec that apply to everyone:** a confirmed **P0 (critical security)** finding blocks the affected delivery, and no worker can waive that gate. An urgent security escalation is never held back by the normal nudge limits or by waiting for the next pulse.
 
@@ -145,12 +157,25 @@ CONTACT IF BLOCKED: <role>
 
 ## 9. The pulse (proposal, not running)
 
-| Check | Default | Does |
-| --- | --- | --- |
-| Communication check | every 5 min | Reads receipts, pending requests and overdue checkpoints. **Sends nothing.** |
-| Team pulse | every 20 min | The decision-maker compares what it expected with the evidence and decides what to do. At most 5 outgoing nudges per pulse. |
+**Latest direction:** the Project Lead spec v1.0 (`TEAM_PROJECT_LEAD.md`) sets a **local 30-second heartbeat** as the system pulse. The Engineer, UX Architect and Test Architect specs (all v1.0, written earlier) still say a provisional **20 minutes**. Those files are Dustin's text and aren't edited here. **Until Dustin confirms, treat the 30-second heartbeat as the current direction.**
 
-Each pulse: **Wake → Predict → Collect → Interpret → Deliver → Remember.** If the team is on track, the pulse sends nothing. An uncertain delivery is recorded as UNKNOWN and investigated, never blindly resent. The pulse must stay observable even if the Liaison is down, because the Liaison can't be the only thing that notices its own failure.
+What the 30-second heartbeat means (from the Project Lead spec):
+
+- It is a **scheduling opportunity**, not a deadline. Nobody has to finish anything in 30 seconds.
+- Each tick advances the **rotating thought**: the five specialist perspectives add to one shared thought record (sections 5–6 of the Project Lead spec), along with a **Prediction Model** and an **Outcome Analyst**. Neither of those gets any execution authority.
+- A tick must **not**: duplicate a protected action already running, replace current evidence with stale information, reopen finished tasks, create an assignment just because time passed, or interrupt legitimate work. If a model is still busy, the tick records that instead of starting another identical run.
+- Thinking, execution and communication are three different activities. They can overlap but must not be confused.
+
+[INFER] Proposed reconciliation, **for Dustin to confirm:**
+
+| Activity | Cadence | Notes |
+| --- | --- | --- |
+| Heartbeat / thinking rotation | every 30 s, local | Advances the shared thought; mostly no-ops when nothing changed |
+| Communication check | on events, plus a slow sweep | Reads receipts, overdue checkpoints, requested nudges. Sends nothing by itself. |
+| Worker nudges | rate-limited by time, not per tick | The old "at most 5 per pulse" was written for a 20-minute pulse. At 30 seconds that would allow up to 600 an hour, so the cap should be per time window (for example, 5 per 20 minutes). |
+| Security-critical escalation | immediately | Never held by rate limits or ticks (Test Architect spec, section 11) |
+
+Each cycle: **Wake → Predict → Collect → Interpret → Deliver → Remember.** If the team is on track, nothing is sent. An uncertain delivery is recorded as UNKNOWN and investigated, never blindly resent. The pulse must stay observable even if the Liaison is down, because the Liaison can't be the only thing that notices its own failure. Task and thought state persist across ticks and restarts.
 
 ## 10. What every team shares, no matter what
 

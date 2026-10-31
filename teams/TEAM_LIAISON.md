@@ -71,4 +71,6 @@ When Identity, GitHub or a worker's channel is down, it fails safe: it records w
 
 Before any automatic nudges: **a durable communication record** that survives restarts and ties every message to its task and its authorization. Without it, the system can forget it already sent a nudge and send duplicate instructions.
 
+The Project Lead spec adds that the Liaison may escalate an unresponsive or repeatedly ineffective Project Lead straight to the identity or owner, and that the Liaison confirms receipts and that referenced artifacts exist (the Test Architect judges correctness).
+
 Smallest useful test: one worker sends `REQUEST_NUDGE`, the Liaison acknowledges it, the decision-maker approves it, one nudge is delivered, and the receipt shows up in the record.
