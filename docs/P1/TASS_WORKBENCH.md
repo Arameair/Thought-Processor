@@ -60,5 +60,5 @@ python3 $L start
 | `go test ./...` (adds `TestPipelineRequestsEndpoint`, `TestSessionCSRFRecovery`) | PASS |
 | Launcher unit tests (8 new Update tests on real temporary git repos: fast-forward, up to date, failed pre-flight → rollback, failed start → rollback, local changes refused, rewritten history refused, other branch refused, private history file) | 30/30 PASS |
 | `processor/acceptance/p1_tass.py`: real Identity + Processor + TASS 0.2.0, with a real browser, a labelled test GitHub and a labelled test-stand-in model; includes 3 Pipeline checks | 81/81 PASS |
-| Real launcher on this branch with a disposable profile: Start, Status, Open (single-use ticket), no private link saved; then a real **Update** from GitHub, restart and Open again | see the commit that adds this file |
+| Real launcher on this branch with a disposable profile: Start, Status, Open (single-use ticket), no private link saved; Update refused with a local change; real **Update** from GitHub `e134c76` → `4b3f60c` (restart RUNNING, Open works again); second Update says UP_TO_DATE; history file mode 600 with no secrets | PASS |
 | On your PC: your real Granite model, real GitHub, Windows Edge | **NOT RUN.** That's your acceptance run. |
