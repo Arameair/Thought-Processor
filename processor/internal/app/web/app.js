@@ -18,12 +18,25 @@
 
   function choose(s) { sel = s; sessionStorage.setItem("tp_sel", JSON.stringify(s)); render(); if (s && s.type === "entity") act("/api/identities/select", { id: s.id }); }
 
-  async function api(method, path, body) {
+  // #33: this tab's token belongs to the session its cookie names. A tab that
+  // has none (opened by hand, restored) or an older one (Open was used again)
+  // asks Processor for the current session's token; changes still need it.
+  async function refreshCsrf() {
+    try {
+      const r = await fetch("/api/session/csrf", { headers: { "X-TP-Want-CSRF": "1" } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.csrf) { csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf); return true; }
+    } catch (_) {}
+    return false;
+  }
+  async function api(method, path, body, retried) {
     const opt = { method, headers: {} };
     if (method === "POST") { opt.headers["Content-Type"] = "application/json"; opt.headers["X-TP-CSRF"] = csrf; opt.body = JSON.stringify(body || {}); }
     const r = await fetch(path, opt);
     let j = {};
     try { j = await r.json(); } catch (_) {}
+    // Refused before anything ran (the token is checked first), so one retry with the current token is safe.
+    if (method === "POST" && r.status === 403 && j.error === "missing or wrong anti-forgery token" && !retried && await refreshCsrf()) return api(method, path, body, true);
     if (r.status === 401 && path.startsWith("/api/state")) { showGate(j.error); throw new Error(j.error || "not signed in"); }
     if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
     return j;
@@ -38,7 +51,10 @@
         if (r.ok) { csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf); } else { showGate(j.error); return false; }
       } catch (_) { showGate(); return false; }
       history.replaceState(null, "", "/");
-    } else csrf = sessionStorage.getItem("tp_csrf") || "";
+    } else {
+      csrf = sessionStorage.getItem("tp_csrf") || "";
+      if (!csrf) await refreshCsrf();
+    }
     return true;
   }
   async function refresh() {

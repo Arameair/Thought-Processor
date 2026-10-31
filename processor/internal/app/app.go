@@ -276,6 +276,27 @@ func (a *App) Handler() http.Handler {
 		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		writeJSON(w, 200, map[string]string{"csrf": csrf})
 	}))
+	// #33: a window that is signed in (its cookie names a live session) but
+	// whose tab has no anti-forgery token, or the token of an older session
+	// (a second tab, a restored tab, or an older tab after the launcher's Open
+	// replaced the cookie), asks for the token of the session its cookie names.
+	// Every change still needs that token (wrap, level mutate). A cross-site
+	// page cannot get it: the cookie is SameSite=Strict, so it is never sent
+	// cross-site; the custom header forces a CORS preflight that Processor
+	// never allows; the browser must say Sec-Fetch-Site: same-origin; and only
+	// same-origin script can read the answer.
+	m.HandleFunc("GET /api/session/csrf", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-TP-Want-CSRF") != "1" || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+			a.fail(w, 403, "request did not come from this Processor window")
+			return
+		}
+		csrf, ok := a.Sess.Lookup(r)
+		if !ok {
+			a.fail(w, 401, "This window isn't signed in. Use Open in the launcher.")
+			return
+		}
+		writeJSON(w, 200, map[string]string{"csrf": csrf})
+	}))
 	// A program that already holds this run's private code (the launcher)
 	// trades it for a one-time ticket to hand to the browser.
 	m.HandleFunc("POST /api/launch-ticket", a.wrap(bootstrap, func(w http.ResponseWriter, r *http.Request) {
