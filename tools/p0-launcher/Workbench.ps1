@@ -16,7 +16,7 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
 while ($true) {
     Write-Host ""
     Write-Host "TASS Workbench (alpha, Windows / WSL)" -ForegroundColor Cyan
-    Write-Host "Profile: ~/p1c/p1-tass-alpha | Identity 7798 | Processor 7868"
+    Write-Host "Profile: ~/p1c/p1-tass-team (TASS Core Team experiment) | Identity 7798 | Processor 7868"
     Write-Host "1  Start         2  Stop          3  Open Development Workstation (Edge InPrivate)"
     Write-Host "4  Status        5  Versions      6  Check Updates (read-only)"
     Write-Host "7  Show private pairing challenge       8  Apply Update (disabled)"

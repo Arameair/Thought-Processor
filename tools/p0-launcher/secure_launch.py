@@ -22,7 +22,8 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
-WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-alpha'))).expanduser()
+# EXPERIMENT: a separate fresh profile so the alpha profile (p1c/p1-tass-alpha) is never touched.
+WORK = Path(os.environ.get('P1_LAUNCH_WORK', str(Path.home() / 'p1c/p1-tass-team'))).expanduser()
 IDENTITY = Path(os.environ.get('P1_IDENTITY_SRC', str(ROOT.parent / 'identity'))).expanduser()
 TASS = Path(os.environ.get('P1_TASS_SRC', str(ROOT.parent / 'TASS'))).expanduser()
 THOUGHT = Path(os.environ.get('P1_THOUGHT_SRC', str(ROOT.parent / 'Thought'))).expanduser()
@@ -31,7 +32,7 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7798, 7868
-LAUNCH_BRANCH = 'alpha'
+LAUNCH_BRANCH = 'experiment/tass-core-team-claude-20261031'
 IDENTITY_BRANCH = 'alpha'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
@@ -69,7 +70,7 @@ def pinned():
 def versions(remote=False):
     refs = [('processor', ROOT, LAUNCH_BRANCH),
             ('identity', IDENTITY, IDENTITY_BRANCH),
-            ('tass', TASS, 'alpha')]
+            ('tass', TASS, 'experiment/tass-core-team-claude-20261031')]
     result = {'update_apply': 'DISABLED_REQUIRES_OWNER_AND_IDENTITY_REVIEW', 'revisions': {}, 'pins': pinned()}
     for name, path, branch in refs:
         current = git_rev(path)

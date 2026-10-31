@@ -5,15 +5,17 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=alpha
-LAUNCH_BRANCH=alpha
+LAUNCH_BRANCH=experiment/tass-core-team-claude-20261031
 # TASS (private companion) feature: the exact reviewed package digest, pinned
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.
-TASS_BRANCH=alpha
-TASS_ARTIFACT=543611f8bfcae3cda90b01fd5f733cbd8a408df1060417c8f6828c33858a7a73
-# TASS 0.1.0 (the previous reviewed package): RUN-ONLY pin so an already
-# installed TASS 0.1.0 keeps starting. It is never offered for installation.
-TASS_PREVIOUS_ARTIFACT=985027bbaebfd99bb07926285ceac218726ddca3fca0dff421bf665e2781abef
+# EXPERIMENT (2026-10-31): TASS 0.3.0 with the Core Team thought cycle,
+# Arameair/TASS experiment/tass-core-team-claude-20261031 @ 6c3ff01.
+TASS_BRANCH=experiment/tass-core-team-claude-20261031
+TASS_ARTIFACT=f8b76df4104d9f9d0b6129c4836fbad24a7f4fa7cfa6b92c02d83865e52e86c4
+# TASS 0.2.0 (alpha's reviewed package): RUN-ONLY pin so an already installed
+# TASS 0.2.0 keeps starting. It is never offered for installation.
+TASS_PREVIOUS_ARTIFACT=543611f8bfcae3cda90b01fd5f733cbd8a408df1060417c8f6828c33858a7a73
 TASS_BASE_SHA=ecace8fdffa72fc40f8a0a83465194a8c51e4053
 # Developer Utility (the Developer entrance): exact reviewed package digest,
 # pinned in Processor (-trust-feature-artifact) and Identity
@@ -37,7 +39,7 @@ TASS_SRC="${P1_TASS_SRC:-$(dirname "$ROOT")/tass}"
 # TASS trial: its OWN work folder and ports. The owner's other trials
 # (~/p1c/p1-launcher 7792/7862, ~/p1c/p1-worker-runtime 7794/7864,
 # ~/p1c/p1-developer-entrance 7796/7866) are never reused, overwritten or contacted.
-WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-tass-alpha}"
+WORK="${P1_LAUNCH_WORK:-$HOME/p1c/p1-tass-team}"
 ID_PORT="${P1_IDENTITY_PORT:-7798}"
 TP_PORT="${P1_PROCESSOR_PORT:-7868}"
 id_pid= tp_pid= watch_pid= lock=
