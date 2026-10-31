@@ -738,8 +738,8 @@ def main():
     # ---- discoverable, pinned; tampered/unknown denied ----
     lib = {x.get("feature_id"): x for x in s["library"]}
     d = lib.get(TASS) or {}
-    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR, SELF, MODEL]),
-        "TASS is in Processor's library as a reviewed, pinned package with exactly its 5 capabilities (3 chat, its own pulse, choosing its model)", d.get("trust_basis") or d.get("blocked") or "missing")
+    rec("TRUST", d and not d.get("blocked") and "operator pin" in (d.get("trust_basis") or "") and sorted(c["id"] for c in d.get("capabilities") or []) == sorted([SEND, HIST, CLEAR, SELF, MODEL, "tass.team.set", "tass.team.think", "tass.team.read"]),
+        "TASS is in Processor's library as a reviewed, pinned package with exactly its 8 capabilities (3 chat, its own pulse, choosing its model, 3 Core Team)", d.get("trust_basis") or d.get("blocked") or "missing")
     t = lib.get("tass-tampered") or {}
     st, j = tp.post("/api/library/tass-tampered/install")
     rec("TRUST", bool(t.get("blocked")) and st == 409, "a changed copy (one that would allow a non-local model) is BLOCKED and can't be installed", (t.get("blocked") or "")[:50])
