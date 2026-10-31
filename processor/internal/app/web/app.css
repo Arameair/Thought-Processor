@@ -225,3 +225,11 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .ws-msgtext { white-space: pre-wrap; word-break: break-word; }
 .ws-tass-file { display: block; margin-top: 6px; }
 @media (max-width: 1400px) { .ws-grid { grid-template-columns: 260px minmax(0, 1fr); } }
+
+.ws-thoughts { grid-column: 1 / -1; }
+.ws-thoughts h4 { margin: 16px 0 6px; font-size: 14px; }
+.ws-th-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: var(--panel2); }
+.ws-th-item p { margin: 4px 0; white-space: pre-wrap; }
+.ws-th-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ws-th-final { border-color: var(--violet); }
+.ws-th-fold summary { cursor: pointer; font-size: 12px; color: var(--muted, inherit); }

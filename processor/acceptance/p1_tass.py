@@ -571,8 +571,26 @@ def ui_check(link, ti, me_name):
         rec("UI", all(w in sv for w in ("I am", "What am I?", "Born", "Thinking")) and MARK not in sv,
             "TASS's pulse panel shows its first thoughts, its birth and its reflection, with the thinking under a fold-out")
         page.screenshot(path=str(shots / "tass-03-pulse.png"), full_page=True)
+        # Development Workstation → Thoughts panel (same tab, same session)
+        page.click("#chip-workstation")
+        page.wait_for_selector("#ws-main:not([hidden])", timeout=20000)
+        page.click("#ws-th-refresh")
+        for _ in range(150):
+            if page.inner_text("#ws-th-status").startswith(("Updated", "Couldn't")):
+                break
+            page.wait_for_timeout(200)
+        th = page.inner_text("#ws-th-list")
+        badges = page.locator("#ws-th-list .badge.info").all_inner_texts()
+        rec("THOUGHTS", page.inner_text("#ws-th-status").startswith("Updated") and "its own pulse" in th and "I am" in th
+            and any(" at http://127.0.0.1:" in x for x in badges) and page.locator("#ws-th-list details.ws-th-fold").count() >= 1,
+            "Workstation Thoughts panel: TASS's reflection is shown with the model that wrote it (model, kind, 127.0.0.1 address) and its reasoning under a fold-out",
+            (badges or ["no model badge"])[0][:90])
+        rec("THOUGHTS", "Needs the thought.thoughts.read permission" in th or "Thoughts" in th,
+            "Workstation Thoughts panel: a feature without an approved read permission is shown as needing it, not read")
+        rec("THOUGHTS", MARK not in th, "Workstation Thoughts panel shows no conversation text")
+        page.screenshot(path=str(shots / "tass-04-workstation-thoughts.png"), full_page=True)
         b.close()
-    rec("UI", not errors, "no JavaScript errors on the TASS screen", "; ".join(errors)[:120])
+    rec("UI", not errors, "no JavaScript errors on the TASS screen or the workstation", "; ".join(errors)[:120])
 
 
 def ui_platform(link, svc_ids, tp=None, ti=None, other=None):

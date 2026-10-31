@@ -191,4 +191,84 @@
 
   async function loop() { clearTimeout(timer); await refresh(); timer = setTimeout(loop, (state && (state.runs || []).some((r) => r.state === "RUNNING")) ? 1500 : 4000); }
   signIn().then((ok) => { if (ok) loop(); });
+
+  // ---- Thoughts: what each feature has thought, and which model wrote it ----
+  // Read-only. Every read is a normal Processor request: Identity ticket + live
+  // check, using a permission the Admin already approved. Nothing is changed.
+  const thMono = (s) => `<span class="mono">${esc(s)}</span>`;
+  const thWhen = (t) => { if (!t) return ""; const d = new Date(t); return isNaN(d) ? esc(t) : esc(d.toLocaleString()); };
+  const thModel = (m) => `<span class="badge info" title="which model wrote this">${esc(m || "model not recorded")}</span>`;
+  const thFold = (label, text) => text ? `<details class="ws-th-fold"><summary>${esc(label)}</summary><pre class="ws-pre">${esc(text)}</pre></details>` : "";
+  const TH_SOURCES = [
+    { rx: /\.self\.read$/, kind: "pulse", title: "its own pulse" },
+    { rx: /\.team\.read$/, kind: "team", title: "Core Team thought cycles" },
+    { rx: /\.thoughts\.read$/, kind: "thoughts", title: "Thoughts" },
+  ];
+  function thPulse(o) {
+    const refl = (o.reflections || []).slice().reverse();
+    let h = `<p class="small">${esc(o.headline || "")}${o.pulse && o.pulse.stage ? ` · stage <b>${esc(o.pulse.stage)}</b>` : ""}${o.pulse && o.pulse.next_thought_in_s != null ? ` · next chance to think in ${esc(o.pulse.next_thought_in_s)} s` : ""}</p>`;
+    if (o.seeds && o.seeds.length) h += `<div class="ws-th-item"><div class="ws-th-meta"><span class="badge">seed — written by Dustin, not a model</span></div><p>${o.seeds.map((x) => esc(x.text)).join(" · ")}</p></div>`;
+    if (!refl.length) h += `<p class="muted small">No reflections yet. It thinks only when something about it changed, at most once a minute, and only with a local model set up.</p>`;
+    h += refl.map((r) => `<div class="ws-th-item"><div class="ws-th-meta">${thModel(r.model)} <span class="muted small">${thWhen(r.at)}${r.took_s != null ? " · took " + esc(r.took_s) + " s" : ""}</span></div>
+      <p><b>${esc(r.question || "")}</b></p><p>${esc(r.answer || "")}</p>${thFold("the model's reasoning — not a fact", r.thinking)}</div>`).join("");
+    return h + (o.honesty ? `<p class="muted small">${esc(o.honesty)}</p>` : "");
+  }
+  function thTeam(o) {
+    const c = o.latest;
+    if (!c) return `<p class="muted small">No thought cycles yet.</p>`;
+    let h = `<p class="small">Latest cycle ${thMono(c.id)} · <b>${esc(c.state)}</b> · ${thWhen(c.started_at)}</p><p><b>Topic:</b> ${esc(c.topic)}</p>`;
+    h += (c.members || []).map((m) => `<div class="ws-th-item"><div class="ws-th-meta"><b>${esc(m.label)}</b> ${thModel(m.by)} <span class="badge ${m.state === "DONE" ? "ok" : "warn"}">${esc(m.state)}</span></div><p>${esc(m.text || m.detail || "")}</p></div>`).join("");
+    if (c.thinker) h += `<div class="ws-th-item"><div class="ws-th-meta"><b>Thinker</b> ${thModel(c.thinker.by)} <span class="badge ${c.thinker.state === "DONE" ? "ok" : "warn"}">${esc(c.thinker.state)}</span></div><p>${esc(c.thinker.answer || c.thinker.detail || "")}</p>${thFold("the model's reasoning — not a fact", c.thinker.thinking)}</div>`;
+    if (c.evaluator) h += `<div class="ws-th-item"><div class="ws-th-meta"><b>Evaluator</b> ${thModel(c.evaluator.by)} <span class="badge ${c.evaluator.state === "DONE" ? "ok" : "warn"}">${esc(c.evaluator.state)}</span></div><p>${esc(c.evaluator.text || c.evaluator.detail || "")}</p></div>`;
+    if (c.thought) h += `<div class="ws-th-item ws-th-final"><div class="ws-th-meta"><b>Thought</b> ${thModel(c.thought.produced_by)} <span class="badge warn">${esc(c.thought.status || "UNVERIFIED")}</span></div><p>${esc(c.thought.text)}</p></div>`;
+    return h + ((c.problems || []).length ? `<p class="problem small">${c.problems.map(esc).join("<br>")}</p>` : "");
+  }
+  function thThoughts(o) {
+    const list = o.thoughts || [];
+    let h = `<p class="small muted">${o.counts ? `active ${esc(o.counts.active)} · sleeping ${esc(o.counts.sleeping)} · resolved ${esc(o.counts.resolved)}` : ""}</p>`;
+    if (!list.length) h += `<p class="muted small">No Thoughts yet.</p>`;
+    h += list.map((t) => `<div class="ws-th-item"><div class="ws-th-meta"><span class="badge">rules — no AI model</span> <span class="badge ${t.state === "active" ? "ok" : ""}">${esc(t.state)}</span> <span class="muted small">${thWhen(t.updated_at || t.created_at)}</span></div>
+      <p><b>${esc(t.question || t.topic)}</b></p><p class="small">${esc(t.why_it_formed || "")} · ${esc(t.evidence_count)} piece(s) of evidence</p></div>`).join("");
+    return h;
+  }
+  let thBusy = false, thTimer = 0;
+  async function loadThoughts() {
+    if (thBusy || $("#ws-main").hidden) return;
+    thBusy = true; $("#ws-th-status").textContent = "Reading…";
+    try {
+      const s = await api("GET", "/api/state");
+      const out = [];
+      for (const v of (s.installations || [])) {
+        const r = v.record || {}, caps = r.capabilities || [];
+        if (r.state !== "INSTALLED") continue;
+        const name = (r.name || r.feature_id || "feature").split(" (")[0];
+        for (const src of TH_SOURCES) {
+          const cap = caps.find((c) => src.rx.test(c.id));
+          if (!cap) continue;
+          const head = `<h4>${esc(name)} · ${esc(src.title)} <span class="muted small">${thMono(cap.id)}</span></h4>`;
+          if (!v.runtime || v.runtime.state !== "RUNNING") { out.push(head + `<p class="muted small">${esc(name)} isn't running. Start it on the Thought Processor page.</p>`); continue; }
+          const g = ((v.identity && v.identity.grants) || []).find((x) => x.status === "ACTIVE" && x.grant.capability === cap.id);
+          if (!g) { out.push(head + `<p class="muted small">Needs the ${thMono(cap.id)} permission. Ask the Admin on the Thought Processor page (Get TASS ready for this person).</p>`); continue; }
+          let res = null;
+          try { const j = await api("POST", `/api/installations/${encodeURIComponent(r.installation_id)}/action`, { subject: g.grant.subject_identity_id, capability: cap.id, input: "" }); res = j && j.result; }
+          catch (e) { out.push(head + `<p class="problem small">${esc(e.message)}</p>`); continue; }
+          const o = res && res.observation && res.observation.output;
+          if (!o) { out.push(head + `<p class="problem small">${esc(String((res && res.outcome) || "no answer").replace(/_/g, " "))}${res && res.detail ? " — " + esc(res.detail) : ""}</p>`); continue; }
+          out.push(head + (src.kind === "pulse" ? thPulse(o) : src.kind === "team" ? thTeam(o) : thThoughts(o)));
+        }
+      }
+      $("#ws-th-list").innerHTML = out.join("") || `<p class="muted small">No installed feature shares its thoughts yet.</p>`;
+      $("#ws-th-status").textContent = "Updated " + new Date().toLocaleTimeString();
+    } catch (e) { $("#ws-th-status").textContent = "Couldn't read: " + e.message; }
+    finally { thBusy = false; }
+  }
+  function thSchedule() {
+    clearInterval(thTimer);
+    if ($("#ws-th-auto").checked) thTimer = setInterval(() => { if (!document.hidden) loadThoughts(); }, 30000);
+  }
+  $("#ws-th-refresh").onclick = () => loadThoughts();
+  $("#ws-th-auto").checked = sessionStorage.getItem("ws_th_auto") === "1";
+  $("#ws-th-auto").onchange = () => { sessionStorage.setItem("ws_th_auto", $("#ws-th-auto").checked ? "1" : "0"); thSchedule(); };
+  thSchedule();
+  setTimeout(loadThoughts, 2000); // once, after the workstation has unlocked
 })();

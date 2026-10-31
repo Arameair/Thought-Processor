@@ -31,7 +31,7 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7798, 7868
-LAUNCH_BRANCH = 'alpha'
+LAUNCH_BRANCH = 'experiment/workstation-thoughts-claude-20261031'
 IDENTITY_BRANCH = 'alpha'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
