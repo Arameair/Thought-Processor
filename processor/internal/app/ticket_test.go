@@ -188,3 +188,49 @@ func TestSessionCSRFRecovery(t *testing.T) {
 		t.Fatalf("fresh token refused: %d", st)
 	}
 }
+
+// Pipeline: the requests endpoint returns outcomes for one capability only,
+// needs a signed-in window, and never carries what a feature answered.
+func TestPipelineRequestsEndpoint(t *testing.T) {
+	x := start(t)
+	id := "ins_0123456789abcdef0123"
+	x.a.P1.mu.Lock()
+	x.a.P1.requests = append(x.a.P1.requests,
+		ActionResult{RequestID: "req_a", InstallationID: id, Capability: "tass.chat.send", Outcome: "COMPLETED", Observation: map[string]any{"output": "SECRET WORDS"}},
+		ActionResult{RequestID: "req_b", InstallationID: id, Capability: "tass.chat.history", Outcome: "COMPLETED"},
+		ActionResult{RequestID: "req_c", InstallationID: id, Capability: "tass.chat.send", Outcome: "DENIED_BY_IDENTITY"})
+	x.a.P1.mu.Unlock()
+	get := func(c *http.Client, q string) (int, string) {
+		resp, err := c.Get(x.base + "/api/installations/" + id + "/requests?" + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b := new(strings.Builder)
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			b.Write(buf[:n])
+			if err != nil {
+				break
+			}
+		}
+		return resp.StatusCode, b.String()
+	}
+	st, body := get(x.c, "capability=tass.chat.send")
+	if st != 200 || !strings.Contains(body, "req_c") || !strings.Contains(body, "req_a") || strings.Contains(body, "req_b") {
+		t.Fatalf("wrong requests: %d %s", st, body)
+	}
+	if strings.Index(body, "req_c") > strings.Index(body, "req_a") {
+		t.Fatalf("not newest first: %s", body)
+	}
+	if strings.Contains(body, "SECRET WORDS") {
+		t.Fatal("a feature's answer leaked into the requests list")
+	}
+	if st, _ := get(x.c, "capability=Bad Cap"); st != 400 {
+		t.Fatalf("bad capability accepted: %d", st)
+	}
+	if st, _ := get(&http.Client{}, "capability=tass.chat.send"); st != 401 {
+		t.Fatalf("no session accepted: %d", st)
+	}
+}

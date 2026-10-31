@@ -572,35 +572,32 @@ def ui_check(link, ti, me_name):
         rec("UI", all(w in sv for w in ("I am", "What am I?", "Born", "Thinking")) and MARK not in sv,
             "TASS's pulse panel shows its first thoughts, its birth and its reflection, with the thinking under a fold-out")
         page.screenshot(path=str(shots / "tass-03-pulse.png"), full_page=True)
-        # Development Workstation → Thoughts panel (same tab, same session)
-        page.click("#chip-workstation")
-        for _ in range(100):
-            if page.is_visible("#ws-main") or page.is_visible("#ws-locked"):
-                if page.is_visible("#ws-main"):
-                    break
-            page.wait_for_timeout(200)
-        if not page.is_visible("#ws-main"):
-            rec("THOUGHTS", False, "Development Workstation opens (needed for the Thoughts panel)", page.inner_text("#ws-locked-msg")[:160] if page.is_visible("#ws-locked") else "neither main nor lock shown")
-            page.screenshot(path=str(shots / "tass-04-workstation-locked.png"), full_page=True)
-            b.close()
-            return
-        page.click("#ws-th-refresh")
+        # Pipeline page (same tab, same session): the message just sent, step by step
+        page.click("#chip-pipeline")
         for _ in range(150):
-            if page.inner_text("#ws-th-status").startswith(("Updated", "Couldn't")):
+            if page.is_visible("#pl-status") and page.inner_text("#pl-status").startswith(("Updated", "Couldn't")):
                 break
             page.wait_for_timeout(200)
-        th = page.inner_text("#ws-th-list")
-        badges = page.locator("#ws-th-list .badge.info").all_inner_texts()
-        rec("THOUGHTS", page.inner_text("#ws-th-status").startswith("Updated") and "its own pulse" in th and "I am" in th
-            and any(" at http://127.0.0.1:" in x for x in badges) and page.locator("#ws-th-list details.ws-th-fold").count() >= 1,
-            "Workstation Thoughts panel: TASS's reflection is shown with the model that wrote it (model, kind, 127.0.0.1 address) and its reasoning under a fold-out",
-            (badges or ["no model badge"])[0][:90])
-        rec("THOUGHTS", "Needs the thought.thoughts.read permission" in th or "Thoughts" in th,
-            "Workstation Thoughts panel: a feature without an approved read permission is shown as needing it, not read")
-        rec("THOUGHTS", MARK not in th, "Workstation Thoughts panel shows no conversation text")
-        page.screenshot(path=str(shots / "tass-04-workstation-thoughts.png"), full_page=True)
+        rows = page.locator(".pl-row")
+        hit = None
+        for i in range(rows.count()):
+            t = rows.nth(i).inner_text()
+            if "hello from the screen" in t and "I heard: hello from the screen" in t:
+                hit = rows.nth(i)
+                break
+        txt = hit.inner_text() if hit else ""
+        badge = hit.locator(".badge.info").all_inner_texts() if hit else []
+        rec("PIPELINE", page.inner_text("#pl-status").startswith("Updated") and hit is not None and "allowed" in txt and "COMPLETED" in txt
+            and any(" at http://127.0.0.1:" in x for x in badge),
+            "Pipeline: the message sent from the screen shows You → Processor → Identity allowed → TASS → the model that answered (name, kind, 127.0.0.1) → its reply",
+            (badge or ["no matching row"])[0][:90])
+        denied = [rows.nth(i).inner_text() for i in range(rows.count()) if "DENIED BY IDENTITY" in rows.nth(i).inner_text()]
+        rec("PIPELINE", bool(denied) and all("nothing was saved for a refused request" in d for d in denied),
+            "Pipeline: a request Identity refused stops at Identity and shows no words", "%d refused row(s)" % len(denied))
+        rec("PIPELINE", page.locator(".pl-row").count() >= 2, "Pipeline lists each message to TASS as its own row", "%d rows" % page.locator(".pl-row").count())
+        page.screenshot(path=str(shots / "tass-04-pipeline.png"), full_page=True)
         b.close()
-    rec("UI", not errors, "no JavaScript errors on the TASS screen or the workstation", "; ".join(errors)[:120])
+    rec("UI", not errors, "no JavaScript errors on the TASS screen or the Pipeline page", "; ".join(errors)[:120])
 
 
 def ui_platform(link, svc_ids, tp=None, ti=None, other=None):

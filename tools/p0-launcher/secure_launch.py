@@ -31,7 +31,7 @@ RUNTIME = WORK / 'launcher-control'
 SOCK = RUNTIME / 'control.sock'
 LOCK = RUNTIME / 'owner.lock'
 ID_PORT, TP_PORT = 7798, 7868
-LAUNCH_BRANCH = 'experiment/workstation-thoughts-claude-20261031'
+LAUNCH_BRANCH = 'experiment/tass-workbench-claude-20261031'
 IDENTITY_BRANCH = 'alpha'
 PREFLIGHT_TIMEOUT = 60
 # Replaceable without an explicit Stop: these daemons own no running service.
@@ -70,7 +70,8 @@ def versions(remote=False):
     refs = [('processor', ROOT, LAUNCH_BRANCH),
             ('identity', IDENTITY, IDENTITY_BRANCH),
             ('tass', TASS, 'alpha')]
-    result = {'update_apply': 'DISABLED_REQUIRES_OWNER_AND_IDENTITY_REVIEW', 'revisions': {}, 'pins': pinned()}
+    result = {'update_apply': 'OWNER_PRESSES_UPDATE: Processor checkout only, fast-forward on its own branch, pre-flight verified, rolls back on failure',
+              'revisions': {}, 'pins': pinned()}
     for name, path, branch in refs:
         current = git_rev(path)
         value = {'current_sha': current, 'reviewed_release': False, 'branch': branch}
@@ -566,13 +567,110 @@ def daemon():
     return 0
 
 
+# ---- Update (menu 8): owner-pressed, verified, rollback-safe ----
+UPDATE_LOG = 'update-history.jsonl'
+
+
+def git(*args, timeout=30):
+    return subprocess.run(['git', '-C', str(ROOT), *args], capture_output=True, text=True, timeout=timeout,
+                          env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+
+
+def run_preflight():
+    """The same pre-flight Start runs: pins, exact Identity SHA, feature digests."""
+    env = os.environ.copy()
+    env.update(P1_LAUNCH_WORK=str(WORK), P1_TASS_SRC=str(TASS), P1_IDENTITY_SRC=str(IDENTITY),
+               P1_PREFLIGHT_ONLY='1', P1_IDENTITY_PORT=str(ID_PORT), P1_PROCESSOR_PORT=str(TP_PORT))
+    try:
+        pre = subprocess.run(['bash', str(RUN)], env=env, capture_output=True, timeout=PREFLIGHT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False, 'preflight timed out'
+    if pre.returncode != 0 or b'PREFLIGHT OK' not in pre.stdout:
+        return False, preflight_reason(pre.stderr) or 'preflight refused (exit %s)' % pre.returncode
+    return True, ''
+
+
+def _self(cmd):
+    """Run this launcher's own start/stop (the file on disk: after an update, the new one)."""
+    p = subprocess.run([sys.executable, str(Path(__file__).resolve()), cmd], capture_output=True, text=True, timeout=700)
+    lines = [ln for ln in p.stdout.splitlines() if ln.strip().startswith('{')]
+    try:
+        return json.loads(lines[-1]) if lines else {}
+    except ValueError:
+        return {}
+
+
+def _record(entry):
+    try:
+        safe_dir(RUNTIME)
+        fd = os.open(str(RUNTIME / UPDATE_LOG), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, 'a') as f:
+            f.write(json.dumps(entry, sort_keys=True) + '\n')
+    except OSError:
+        pass
+
+
+def update(run=_self, preflight=run_preflight):
+    """Move THIS Processor checkout forward to the newest commit of its own
+    branch, verify it and restart. Only a fast-forward of LAUNCH_BRANCH;
+    Identity, TASS and Thought checkouts, every profile, identity, grant and
+    conversation are untouched. The new commit must pass the same pre-flight as
+    Start (exact Identity SHA, pinned feature digests): a commit that would trust
+    a different TASS package than the one checked out is refused. Any failure
+    puts back the exact previous commit and starts that again."""
+    out = {'command': 'update', 'branch': LAUNCH_BRANCH, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+
+    def done(result, **kw):
+        out.update(result=result, **kw)
+        _record({k: out[k] for k in out if k != 'changes'})
+        return out
+    if git('branch', '--show-current').stdout.strip() != LAUNCH_BRANCH:
+        return done('REFUSED', reason='this checkout is not on %s; nothing changed' % LAUNCH_BRANCH)
+    if git('status', '--porcelain', '--untracked-files=normal').stdout.strip():
+        return done('REFUSED', reason='this checkout has local changes; nothing changed')
+    cur = git('rev-parse', 'HEAD').stdout.strip()
+    f = git('fetch', '--quiet', 'origin', LAUNCH_BRANCH, timeout=90)
+    if f.returncode != 0:
+        return done('REFUSED', reason='could not reach GitHub to check for a new version; nothing changed', current=cur)
+    new = git('rev-parse', 'FETCH_HEAD').stdout.strip()
+    out.update(previous=cur, available=new)
+    if not REV.fullmatch(cur) or not REV.fullmatch(new):
+        return done('REFUSED', reason='could not read the version; nothing changed')
+    if new == cur:
+        return done('UP_TO_DATE')
+    if git('merge-base', '--is-ancestor', cur, new).returncode != 0:
+        return done('REFUSED', reason='the new version does not build on this one (not a fast-forward); nothing changed')
+    out['changes'] = git('log', '--oneline', '--no-decorate', '-20', '%s..%s' % (cur, new)).stdout.splitlines()
+    run('stop')
+    if git('merge', '--ff-only', '--quiet', new).returncode != 0:
+        run('start')
+        return done('REFUSED', reason='could not move to the new version; still on the previous one')
+
+    def rollback(why):
+        git('reset', '--hard', '--quiet', cur)  # the tree was clean, so this only undoes the update
+        st = run('start')
+        return done('ROLLED_BACK', reason=why, now_running=cur, launcher=st.get('launcher', 'UNKNOWN'))
+    ok, why = preflight()
+    if not ok:
+        return rollback('the new version failed its pre-flight checks: ' + why)
+    st = run('start')
+    if st.get('launcher') != 'RUNNING':
+        run('stop')
+        return rollback('the new version did not start (%s %s)' % (st.get('launcher'), st.get('error') or ''))
+    return done('UPDATED', now_running=new, launcher='RUNNING', next_step='Choose Open (3): every Open makes a fresh sign-in ticket.')
+
+
 def main(argv):
-    if len(argv) != 1 or argv[0] not in ('start', 'stop', 'status', 'open', 'pairing', 'versions', 'check', '_daemon'):
-        print('Usage: secure_launch.py start|stop|status|open|pairing|versions|check')
+    if len(argv) != 1 or argv[0] not in ('start', 'stop', 'status', 'open', 'pairing', 'versions', 'check', 'update', '_daemon'):
+        print('Usage: secure_launch.py start|stop|status|open|pairing|versions|check|update')
         return 2
     cmd = argv[0]
     if cmd == '_daemon':
         return daemon()
+    if cmd == 'update':
+        r = update()
+        print(json.dumps(r, sort_keys=True))
+        return 0 if r['result'] in ('UPDATED', 'UP_TO_DATE') else 3
     if cmd in ('versions', 'check'):
         print(json.dumps(versions(remote=(cmd == 'check')), sort_keys=True))
         return 0

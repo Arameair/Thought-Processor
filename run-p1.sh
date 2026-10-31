@@ -5,7 +5,7 @@ set +x
 set -Eeuo pipefail
 umask 077
 BASE_BRANCH=alpha
-LAUNCH_BRANCH=experiment/workstation-thoughts-claude-20261031
+LAUNCH_BRANCH=experiment/tass-workbench-claude-20261031
 # TASS (private companion) feature: the exact reviewed package digest, pinned
 # in Processor (-trust-feature-artifact) and Identity (-trust-fixture-artifact).
 # Any other content is refused before anything starts.

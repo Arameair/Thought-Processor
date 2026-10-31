@@ -258,6 +258,11 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /{$}", a.wrap(public, static("index.html", "text/html; charset=utf-8")))
 	m.HandleFunc("GET /app.js", a.wrap(public, static("app.js", "text/javascript; charset=utf-8")))
 	m.HandleFunc("GET /app.css", a.wrap(public, static("app.css", "text/css; charset=utf-8")))
+	// Pipeline: every message to TASS and what happened to it at each step.
+	// The page is static; its data comes from the signed-in session's own
+	// /api/state and Identity-checked feature reads.
+	m.HandleFunc("GET /pipeline", a.wrap(public, static("pipeline.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /pipeline.js", a.wrap(public, static("pipeline.js", "text/javascript; charset=utf-8")))
 	m.HandleFunc("GET /api/health", a.wrap(public, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"app": Product, "version": a.Build.Version, "protocol": Protocol, "note": "self-reported; not authentication"})
 	}))

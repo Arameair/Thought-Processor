@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline — Thought Processor</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/pipeline.js" defer></script>
+</head>
+<body>
+<div class="ws pl-page">
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true"></span><span>Pipeline</span></div>
+    <div class="chips">
+      <a class="chip link" href="/workstation" id="pl-ws">Development Workstation</a>
+      <a class="chip link" href="/" id="pl-back">Thought Processor</a>
+    </div>
+  </header>
+  <section class="panel">
+    <div class="row"><button class="btn small" type="button" id="pl-refresh">Refresh</button>
+      <label class="small"><input type="checkbox" id="pl-auto" checked> refresh every 10 s</label>
+      <span id="pl-status" class="muted small"></span></div>
+    <p class="muted small">Every message to TASS, newest first, and what happened to it at each step:
+      <b>You</b> → <b>Thought Processor</b> → <b>Identity</b> (allowed or refused) → <b>TASS</b> → <b>model</b> → <b>reply</b>.
+      Steps and timings are Processor's own records. The words come from TASS's saved conversation, read live with your
+      <span class="mono">tass.chat.history</span> permission; Processor keeps no copy.</p>
+  </section>
+  <div id="pl-list"></div>
+</div>
+</body>
+</html>

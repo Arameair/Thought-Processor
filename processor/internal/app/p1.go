@@ -1340,6 +1340,26 @@ func (a *App) p1Routes(m *http.ServeMux) {
 			ApprovalURL: ar.ApprovalURL, Summary: ar.Approval.Summary, CreatedAt: ar.Approval.CreatedAt, ExpiresAt: ar.Approval.ExpiresAt, State: "PENDING"})
 		writeJSON(w, 200, map[string]any{"approval_url": ar.ApprovalURL, "approval_id": ar.Approval.ID, "state": a.State()})
 	}))
+	// Pipeline: Processor's own outcome records for one capability of one
+	// installation, newest first (at most 50 of the last 200 kept in memory).
+	// Outcomes only: Processor never keeps what a feature answered.
+	m.HandleFunc("GET /api/installations/{id}/requests", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
+		id, capability := r.PathValue("id"), r.URL.Query().Get("capability")
+		if !insIDRE.MatchString(id) || !capIDRE.MatchString(capability) {
+			a.fail(w, 400, "give an installation and a capability")
+			return
+		}
+		a.P1.mu.Lock()
+		out := []ActionResult{}
+		for i := len(a.P1.requests) - 1; i >= 0 && len(out) < 50; i-- {
+			if q := a.P1.requests[i]; q.InstallationID == id && q.Capability == capability {
+				q.Observation = nil
+				out = append(out, q)
+			}
+		}
+		a.P1.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"requests": out})
+	}))
 	// Copyable activity for one installation: Processor's own records about it
 	// (lifecycle, decisions, request outcomes), scrubbed, as plain text.
 	m.HandleFunc("GET /api/installations/{id}/activity", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {

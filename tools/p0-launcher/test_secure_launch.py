@@ -159,7 +159,7 @@ class TestLauncher(unittest.TestCase):
     def test_versions_refuses_to_apply(self):
         with patch.object(launcher, 'git_rev', return_value='UNAVAILABLE'), patch.object(launcher, 'pinned', return_value={'TASS_ARTIFACT': 'test'}):
             v = launcher.versions()
-        self.assertTrue(v['update_apply'].startswith('DISABLED'))
+        self.assertTrue(v['update_apply'].startswith('OWNER_PRESSES_UPDATE'))
         self.assertTrue(all(x['current_sha'] == 'UNAVAILABLE' for x in v['revisions'].values()))
 
     def test_remote_head_change_is_not_approved_update(self):
@@ -167,7 +167,7 @@ class TestLauncher(unittest.TestCase):
         with patch.object(launcher, 'git_rev', return_value='b'*40), patch.object(launcher, 'pinned', return_value={}), patch.object(launcher.subprocess, 'run', return_value=fake):
             v = launcher.versions(remote=True)
         self.assertEqual({x['check'] for x in v['revisions'].values()}, {'UNVERIFIED_REMOTE_CHANGE'})
-        self.assertIn('DISABLED', v['update_apply'])
+        self.assertIn('OWNER_PRESSES_UPDATE', v['update_apply'])  # a remote change is only reported; nothing applies it but the owner's Update
 
     def test_anonymous_port_is_not_session(self):
         with patch.object(launcher, 'listener', return_value=True):
@@ -257,6 +257,117 @@ class TestLauncher(unittest.TestCase):
             self.assertEqual(launcher.main(['start']), 3)
         spawn.assert_not_called()
         self.assertIn('PREVIOUS_SERVICES_STILL_RUNNING', out.call_args[0][0])
+
+class TestUpdate(unittest.TestCase):
+    """Update against real temporary git repositories (origin + checkout)."""
+
+    def setUp(self):
+        import subprocess, tempfile
+        self.sp = subprocess
+        self.tmp = Path(tempfile.mkdtemp())
+        g = lambda *a, cwd=None: subprocess.run(['git', *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+        self.g = g
+        g('init', '--bare', '-q', '-b', launcher.LAUNCH_BRANCH, str(self.tmp / 'origin.git'))
+        g('clone', '-q', str(self.tmp / 'origin.git'), str(self.tmp / 'co'))
+        co = self.tmp / 'co'
+        for k, v in (('user.email', 't@t'), ('user.name', 't')):
+            g('config', k, v, cwd=co)
+        g('checkout', '-q', '-b', launcher.LAUNCH_BRANCH, cwd=co)
+        (co / 'f.txt').write_text('v1\n')
+        g('add', '.', cwd=co); g('commit', '-q', '-m', 'v1', cwd=co); g('push', '-q', 'origin', launcher.LAUNCH_BRANCH, cwd=co)
+        self.v1 = g('rev-parse', 'HEAD', cwd=co)
+        # a second clone publishes v2 the way GitHub would
+        g('clone', '-q', '-b', launcher.LAUNCH_BRANCH, str(self.tmp / 'origin.git'), str(self.tmp / 'pub'))
+        pub = self.tmp / 'pub'
+        for k, v in (('user.email', 't@t'), ('user.name', 't')):
+            g('config', k, v, cwd=pub)
+        (pub / 'f.txt').write_text('v2\n')
+        g('commit', '-q', '-am', 'v2: new screen', cwd=pub); g('push', '-q', 'origin', launcher.LAUNCH_BRANCH, cwd=pub)
+        self.v2 = g('rev-parse', 'HEAD', cwd=pub)
+        self.co = co
+        self.calls = []
+        self.patches = [patch.object(launcher, 'ROOT', co), patch.object(launcher, 'RUNTIME', self.tmp / 'control'),
+                        patch.object(launcher, 'WORK', self.tmp)]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_stub(self, starts=('RUNNING',)):
+        seq = list(starts)
+        def run(cmd):
+            self.calls.append(cmd)
+            if cmd == 'start':
+                return {'launcher': seq.pop(0) if seq else 'RUNNING'}
+            return {'launcher': 'STOPPED'}
+        return run
+
+    def head(self):
+        return self.g('rev-parse', 'HEAD', cwd=self.co)
+
+    def test_fast_forward_update_verifies_then_starts(self):
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.assertEqual((r['result'], r['previous'], r['now_running']), ('UPDATED', self.v1, self.v2))
+        self.assertEqual(self.head(), self.v2)
+        self.assertEqual(self.calls, ['stop', 'start'])
+        self.assertIn('v2: new screen', ' '.join(r['changes']))
+
+    def test_up_to_date_changes_nothing(self):
+        launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.calls.clear()
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.assertEqual(r['result'], 'UP_TO_DATE')
+        self.assertEqual(self.calls, [])
+
+    def test_failed_preflight_rolls_back_to_exact_previous_commit(self):
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (False, 'TASS package is not the pinned artifact'))
+        self.assertEqual(r['result'], 'ROLLED_BACK')
+        self.assertIn('pinned artifact', r['reason'])
+        self.assertEqual(self.head(), self.v1)
+        self.assertEqual(self.calls, ['stop', 'start'])
+
+    def test_new_version_that_will_not_start_rolls_back(self):
+        r = launcher.update(run=self.run_stub(starts=('FAILED', 'RUNNING')), preflight=lambda: (True, ''))
+        self.assertEqual((r['result'], r['launcher']), ('ROLLED_BACK', 'RUNNING'))
+        self.assertEqual(self.head(), self.v1)
+        self.assertEqual(self.calls, ['stop', 'start', 'stop', 'start'])
+
+    def test_local_changes_refuse_and_touch_nothing(self):
+        (self.co / 'f.txt').write_text('my edit\n')
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.assertEqual(r['result'], 'REFUSED')
+        self.assertEqual((self.head(), (self.co / 'f.txt').read_text(), self.calls), (self.v1, 'my edit\n', []))
+
+    def test_rewritten_history_is_refused(self):
+        pub = self.tmp / 'pub'
+        self.g('reset', '-q', '--hard', 'HEAD~1', cwd=pub)
+        (pub / 'other.txt').write_text('x')
+        self.g('add', '.', cwd=pub); self.g('commit', '-q', '-m', 'divergent', cwd=pub)
+        self.g('push', '-q', '-f', 'origin', launcher.LAUNCH_BRANCH, cwd=pub)
+        self.g('commit', '-q', '--allow-empty', '-m', 'local only', cwd=self.co)
+        before = self.head()
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.assertEqual(r['result'], 'REFUSED')
+        self.assertIn('fast-forward', r['reason'])
+        self.assertEqual((self.head(), self.calls), (before, []))
+
+    def test_other_branch_is_refused(self):
+        self.g('checkout', '-q', '-b', 'something-else', cwd=self.co)
+        r = launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        self.assertEqual((r['result'], self.calls), ('REFUSED', []))
+
+    def test_history_is_private_and_holds_no_secrets(self):
+        launcher.update(run=self.run_stub(), preflight=lambda: (True, ''))
+        f = self.tmp / 'control' / launcher.UPDATE_LOG
+        self.assertEqual(f.stat().st_mode & 0o777, 0o600)
+        line = json.loads(f.read_text().splitlines()[-1])
+        self.assertEqual((line['result'], line['previous'], line['now_running']), ('UPDATED', self.v1, self.v2))
+        self.assertNotIn('code=', f.read_text())
+
 
 if __name__ == '__main__':
     unittest.main()

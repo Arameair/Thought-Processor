@@ -15,11 +15,11 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
 }
 while ($true) {
     Write-Host ""
-    Write-Host "TASS Workbench (alpha, Windows / WSL)" -ForegroundColor Cyan
+    Write-Host "TASS Workbench (TASS workbench experiment, Windows / WSL)" -ForegroundColor Cyan
     Write-Host "Profile: ~/p1c/p1-tass-alpha | Identity 7798 | Processor 7868"
     Write-Host "1  Start         2  Stop          3  Open Development Workstation (Edge InPrivate)"
     Write-Host "4  Status        5  Versions      6  Check Updates (read-only)"
-    Write-Host "7  Show private pairing challenge       8  Apply Update (disabled)"
+    Write-Host "7  Show private pairing challenge       8  Update to the newest version"
     Write-Host "0  Exit menu (does not stop running services)"
     switch ((Read-Host "Choose").Trim()) {
         '1' { Invoke-Workbench 'start' }
@@ -29,7 +29,7 @@ while ($true) {
         '5' { Invoke-Workbench 'versions' }
         '6' { Invoke-Workbench 'check' }
         '7' { Invoke-Workbench 'pairing' }
-        '8' { Write-Host "BLOCKED: requires reviewed compatible pins and Identity approval." -ForegroundColor Yellow }
+        '8' { Invoke-Workbench 'update' }
         '0' { exit 0 }
         default { Write-Host "Unknown choice." -ForegroundColor Yellow }
     }

@@ -233,3 +233,16 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .ws-th-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ws-th-final { border-color: var(--violet); }
 .ws-th-fold summary { cursor: pointer; font-size: 12px; color: var(--muted, inherit); }
+.pl-row { margin-top: 10px; }
+.pl-flow { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.pl-stage { flex: 0 0 210px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel2); }
+.pl-stage.ok { border-color: var(--ok); }
+.pl-stage.bad { border-color: var(--bad); }
+.pl-stage.idle { opacity: .45; }
+.pl-n { font-size: 11px; opacity: .7; }
+.pl-t { font-weight: 600; margin-bottom: 4px; }
+.pl-b p { margin: 3px 0; white-space: pre-wrap; word-break: break-word; }
+.pl-page .panel { max-width: none; }
+.pl-flow { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); overflow-x: auto; }
+.pl-stage { flex: none; min-width: 0; }
+.pl-stage .badge { white-space: normal; word-break: break-all; display: inline-block; }
