@@ -12,14 +12,27 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { lock(j.error || "This opening link was already used or expired. Use Open in the launcher again."); return false; }
       csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf);
-    } else csrf = sessionStorage.getItem("tp_csrf") || "";
+    } else {
+      csrf = sessionStorage.getItem("tp_csrf") || "";
+      if (!csrf) await refreshCsrf();
+    }
     return true;
   }
-  async function api(method, path, body) {
+  // #33: see app.js refreshCsrf — the token of the session this window's cookie names.
+  async function refreshCsrf() {
+    try {
+      const r = await fetch("/api/session/csrf", { headers: { "X-TP-Want-CSRF": "1" } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.csrf) { csrf = j.csrf; sessionStorage.setItem("tp_csrf", csrf); return true; }
+    } catch (_) {}
+    return false;
+  }
+  async function api(method, path, body, retried) {
     const h = {};
     if (body !== undefined) { h["Content-Type"] = "application/json"; h["X-TP-CSRF"] = csrf; }
     const r = await fetch(path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
+    if (body !== undefined && r.status === 403 && j.error === "missing or wrong anti-forgery token" && !retried && await refreshCsrf()) return api(method, path, body, true);
     if (!r.ok) { const e = new Error(j.error || "HTTP " + r.status); e.status = r.status; e.gate = j.gate; throw e; }
     return j;
   }

@@ -116,3 +116,75 @@ func TestNoLinkFileKeepsLinkOffDisk(t *testing.T) {
 		prof.Close()
 	}
 }
+
+// #33: a signed-in window whose tab has no token, or an older session's
+// token, gets the token of the session its cookie names — only same-origin,
+// only with the custom header — and every change still needs that token.
+func TestSessionCSRFRecovery(t *testing.T) {
+	x := start(t)
+	get := func(hdr map[string]string, jar http.CookieJar) (int, string) {
+		req, _ := http.NewRequest("GET", x.base+"/api/session/csrf", nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		c := &http.Client{Jar: jar}
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var m map[string]string
+		json.NewDecoder(resp.Body).Decode(&m)
+		return resp.StatusCode, m["csrf"]
+	}
+	ok := map[string]string{"X-TP-Want-CSRF": "1", "Sec-Fetch-Site": "same-origin"}
+	if st, tok := get(ok, x.c.Jar); st != 200 || tok != x.csrf {
+		t.Fatalf("same-origin recovery: %d %q", st, tok)
+	}
+	for name, hdr := range map[string]map[string]string{
+		"no custom header":  {"Sec-Fetch-Site": "same-origin"},
+		"cross-site":        {"X-TP-Want-CSRF": "1", "Sec-Fetch-Site": "cross-site"},
+		"same-site":         {"X-TP-Want-CSRF": "1", "Sec-Fetch-Site": "same-site"},
+		"no fetch metadata": {"X-TP-Want-CSRF": "1"},
+	} {
+		if st, tok := get(hdr, x.c.Jar); st != 403 || tok != "" {
+			t.Fatalf("%s: got %d %q, want 403 and no token", name, st, tok)
+		}
+	}
+	empty, _ := cookiejar.New(nil)
+	if st, tok := get(ok, empty); st != 401 || tok != "" {
+		t.Fatalf("no session cookie: %d %q", st, tok)
+	}
+	// Changes still need the token: none → refused; wrong → refused.
+	saved := x.csrf
+	x.csrf = ""
+	if st, _ := x.post("/api/theme", `{"theme":"dark"}`, nil); st != 403 {
+		t.Fatalf("change without token accepted: %d", st)
+	}
+	x.csrf = "0000000000000000000000000000000000000000000000000000000000000000"
+	if st, _ := x.post("/api/theme", `{"theme":"dark"}`, nil); st != 403 {
+		t.Fatalf("change with wrong token accepted: %d", st)
+	}
+	x.csrf = saved
+	if st, b := x.post("/api/theme", `{"theme":"dark"}`, nil); st != 200 {
+		t.Fatalf("change with recovered token refused: %d %s", st, b)
+	}
+	// After a second Open replaces the cookie, recovery returns the NEW session's
+	// token and the old token no longer works.
+	tk, _, _ := x.a.Sess.MintTicket(x.a.Sess.Code())
+	if st, b := x.post("/api/session", `{"code":"`+tk+`"}`, nil); st != 200 {
+		t.Fatalf("second open: %d %s", st, b)
+	}
+	st, fresh := get(ok, x.c.Jar)
+	if st != 200 || fresh == "" || fresh == saved {
+		t.Fatalf("recovery after reopen: %d same=%v", st, fresh == saved)
+	}
+	x.csrf = saved
+	if st, _ := x.post("/api/theme", `{"theme":"light"}`, nil); st != 403 {
+		t.Fatalf("older session token accepted after reopen: %d", st)
+	}
+	x.csrf = fresh
+	if st, _ := x.post("/api/theme", `{"theme":"light"}`, nil); st != 200 {
+		t.Fatalf("fresh token refused: %d", st)
+	}
+}
