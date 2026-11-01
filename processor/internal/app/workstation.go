@@ -363,6 +363,12 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 		})
 	}
 	a.tassRoutes(m, gated)
+	// Brain Workstation: sanitized Processor events only. Uses the same browser
+	// session AND Identity + real-GitHub gate as the repository workstation.
+	// The log is scrubbed when recorded; never return raw feature logs here.
+	m.HandleFunc("GET /api/ws/diagnostics", gated(private, func(w http.ResponseWriter, r *http.Request, g wsGate) {
+		writeJSON(w, 200, map[string]any{"events": a.Log.Recent(120), "source": "processor", "sanitized": true})
+	}))
 	m.HandleFunc("GET /api/ws/state", a.wrap(private, func(w http.ResponseWriter, r *http.Request) {
 		g := a.wsGate(r.Context())
 		out := map[string]any{"gate": g, "processor_version": a.Build.Version}
