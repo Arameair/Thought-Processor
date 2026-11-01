@@ -9,6 +9,16 @@ launcher = importlib.util.module_from_spec(s)
 s.loader.exec_module(launcher)
 
 class TestLauncher(unittest.TestCase):
+    def test_launcher_and_preflight_require_same_experiment_branch(self):
+        # Prevent branch rename regressions: preflight must continue to enforce
+        # the exact approved launcher branch, not accept arbitrary checkouts.
+        import re
+        script = launcher.RUN.read_text()
+        match = re.search(r"(?m)^LAUNCH_BRANCH=([^\\s#]+)$", script)
+        self.assertIsNotNone(match, "missing P1 branch preflight requirement")
+        self.assertEqual(match.group(1), launcher.LAUNCH_BRANCH)
+        self.assertEqual(launcher.LAUNCH_BRANCH, "experiment/brain-workstation-controls-20261031")
+
     def test_real_status_does_not_infer_github_verified(self):
         d = launcher.redact_status('RUNNING', {}, 'http://127.0.0.1:7868/#code=PRIVATE', '', 'WAITING')
         self.assertEqual(d['github'], 'WAITING')
