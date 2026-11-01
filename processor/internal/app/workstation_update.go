@@ -40,6 +40,13 @@ func (a *App) wsUpdateLauncher() (string, string, error) {
     return rp.Dir, real, nil
 }
 
+func (a *App) wsUpdateEnv() []string {
+    env := append(wsEnv(), "GIT_TERMINAL_PROMPT=0", "P1_LAUNCH_WORK="+filepath.Dir(a.Prof.Dir))
+    if rp, ok := a.WS.repo("identity"); ok { env = append(env, "P1_IDENTITY_SRC="+rp.Dir) }
+    if rp, ok := a.WS.repo("tass"); ok { env = append(env, "P1_TASS_SRC="+rp.Dir) }
+    return env
+}
+
 // The first trial is explicitly restricted to the owner's verified GitHub
 // identity. This is NOT an arbitrary browser user's feature-update grant.
 func wsUpdateOwner(g wsGate) bool {
@@ -83,8 +90,7 @@ func (a *App) wsUpdateCheck(ctx context.Context) (map[string]any, error) {
     defer cancel()
     cmd := exec.CommandContext(ctx, "python3", script, "check")
     cmd.Dir = dir
-    cmd.Env = wsEnv()
-    cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
+    cmd.Env = a.wsUpdateEnv()
     b, err := cmd.Output()
     if err != nil { return nil, errors.New("update check could not complete") }
     var data map[string]any
@@ -132,7 +138,7 @@ func (a *App) workstationUpdateRoutes(m *http.ServeMux,
         if err != nil { a.fail(w, 409, err.Error());return }
         // Detach from the Processor's process group. The launcher stops
         // and restarts Processor during Apply; the updater must survive that.
-        if err := wsLaunchDetachedUpdater(dir, script); err != nil {
+        if err := wsLaunchDetachedUpdater(dir, script, a.wsUpdateEnv()); err != nil {
             a.fail(w, 503, "could not start the trusted Workbench updater")
             return
         }
