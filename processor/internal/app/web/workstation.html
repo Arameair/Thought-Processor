@@ -59,6 +59,7 @@
   <button id="brain-connect" class="btn small" aria-pressed="false" type="button">Draw link</button><button id="brain-remove" class="btn small" aria-pressed="false" type="button">Remove link</button>
   <button id="brain-reset" class="btn small" type="button">Reset layout</button></div></div>
 
+  <p id="brain-summary" class="muted small" role="status">Discovering installed features…</p>
   <div class="brain-grid"><div id="brain-canvas"><svg id="brain-lines"></svg><div id="brain-nodes"></div></div>
   <div id="brain-inspector"><h3>Selected feature</h3><div id="brain-detail">Select a node.</div><h3>Suggested connections</h3><div id="brain-proposals">None</div><p class="muted small">Drawing is not activation. Identity authorization and compatibility validation are required for live wiring.</p></div></div>
   <details id="brain-logs" open class="brain-logs"><summary><b>Diagnostics</b> <span id="brain-log-count" class="muted small">No telemetry</span></summary>
@@ -96,7 +97,7 @@
       <div id="ws-th-list"></div>
     </section>
 </main></section></div>
-  <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
+  <p class="muted small ws-foot">Project files are read-only. Tests use fixed allowlisted commands; feature Start/Stop and Workbench Update are explicit operator actions. Proposed brain connections do not activate services or grant permissions.</p>
 </div>
 </body>
 </html>
