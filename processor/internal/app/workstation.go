@@ -379,6 +379,23 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 		}
 		writeJSON(w, 200, out)
 	}))
+	m.HandleFunc("GET /api/ws/diagnostics", gated(private, func(w http.ResponseWriter, r *http.Request, g wsGate) {
+        // Processor ring entries have already passed the established scrub().
+        // Re-scrub test output, which comes from external test processes.
+        runs := a.WS.snapshotRuns()
+        receipts := make([]map[string]any, 0, len(runs))
+        for _, run := range runs {
+            receipts = append(receipts, map[string]any{
+                "id": run.ID, "label": scrub(run.Label), "state": run.State,
+                "started": run.Started, "output": scrub(run.Output),
+                "output_truncated": run.Truncate,
+            })
+        }
+        writeJSON(w, 200, map[string]any{
+            "processor": a.Log.Recent(100), "tests": receipts,
+            "coverage": "Processor activity and allowlisted Workstation tests only; no Identity audit or feature stdout",
+        })
+    }))
 	m.HandleFunc("GET /api/ws/tree", gated(private, func(w http.ResponseWriter, r *http.Request, g wsGate) {
 		rp, ok := a.WS.repo(r.URL.Query().Get("repo"))
 		if !ok {
