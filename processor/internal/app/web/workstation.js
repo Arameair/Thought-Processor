@@ -518,6 +518,11 @@
     }
     brainReceiptTimer=setTimeout(()=>watchUpdateReceipt(before,attempts+1),1500);
   }
+  $("#brain-update-copy").onclick=async()=>{
+    const label=$("#brain-update-status").textContent;
+    try{await navigator.clipboard.writeText(label);$("#brain-update-status").textContent=label+" | Copied.";}
+    catch(_){$("#brain-update-status").textContent=label+" | Clipboard unavailable; select the status text to copy.";}
+  };
   $("#brain-update-check").onclick=()=>brainUpdateStatus(true);
   $("#brain-update-apply").onclick=async()=>{
     if(!brainUpdateReady||brainUpdating)return;
