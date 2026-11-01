@@ -32,6 +32,9 @@
 .bw-node.hub .bw-node-icon{font-size:31px}
 .bw-node strong{display:block;font-size:13px;overflow-wrap:anywhere}
 .bw-node small{display:block;font-size:10px;color:#b8cce6;margin-top:4px}
+.bw-node .bw-port{position:absolute;right:-11px;top:calc(50% - 10px);width:20px;height:20px;border-radius:50%;border:3px solid #85cbff;background:#14335a;box-shadow:0 0 14px #4dbbff88;cursor:crosshair;z-index:2}
+.bw-node.hub .bw-port{border-color:#c4aaff;background:#49336c}
+.bw-node .bw-port:hover{transform:scale(1.2)}
 .bw-node .bw-lamp{position:absolute;right:10px;top:11px;width:9px;height:9px;border-radius:50%;background:#708297;box-shadow:0 0 4px #45566a}
 .bw-node .bw-lamp.ok{background:#54dda6;box-shadow:0 0 8px #44d9a3}
 .bw-node .bw-lamp.warn{background:#efbd72}
