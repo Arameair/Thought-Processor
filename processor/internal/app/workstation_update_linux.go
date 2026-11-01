@@ -3,7 +3,6 @@
 package app
 
 import (
-    "os"
     "os/exec"
     "syscall"
 )
