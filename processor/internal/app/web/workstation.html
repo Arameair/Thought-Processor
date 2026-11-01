@@ -28,23 +28,48 @@
   </section>
 
   <div id="ws-main" hidden>
-<section class="panel" id="brain-workspace" >
-  <div class="brain-head"><div><h2 >Brain Workbench</h2><p class="muted small">Live installed features · No simulated connections</p></div><div class="brain-actions">
-  <button id="brain-refresh" class="btn small" type="button">Refresh</button>
+  <nav class="ws-workbar panel" aria-label="Workbench tools">
+    <div class="ws-workbar-primary"><div><div class="ws-eyebrow">TASS / DEVELOPMENT</div><h1>Workbench</h1><p class="muted small">Talk to TASS, work with a real project file, and inspect connected features.</p></div>
+      <div class="ws-workbar-links"><a href="#ws-tass">TASS chat</a><a href="#ws-tools">Project files & tests</a><a href="#brain-workspace">Brain map</a><a href="#brain-logs">Copy logs</a><a href="#ws-thoughts">Thoughts</a></div>
+    </div>
+    <div class="ws-update-controls" aria-label="Workbench updates">
+      <div class="ws-update-buttons">
   <button id="brain-update-check" class="btn small" type="button">Check Updates</button>
-  <button id="brain-update-apply" class="btn small" type="button">⬆ Update Workbench</button><button id="brain-move" class="btn small" aria-pressed="true">Move</button>
-  <button id="brain-connect" class="btn small" aria-pressed="false">Connect proposal</button><button id="brain-remove" class="btn small" aria-pressed="false">Remove line</button>
-  <button id="brain-reset" class="btn small">Reset layout</button></div></div>
+  <button id="brain-update-apply" class="btn small" type="button">⬆ Update Workbench</button>
+      </div>
   <div id="brain-update-status" class="muted small" role="status">Updates: not checked.</div>
+    </div>
+  </nav>
+  <div class="ws-live">
+    <section class="panel ws-tass" id="ws-tass">
+      <div class="ws-viewhead"><h3>TASS</h3><span id="ws-tass-chips" class="small"></span></div>
+      <div id="ws-tass-setup"></div>
+      <div id="ws-tass-chat" hidden>
+        <div id="ws-tass-log" class="ws-tasslog" aria-live="polite"></div>
+        <label class="small ws-tass-file"><input type="checkbox" id="ws-tass-usefile" checked> Show TASS the file I'm viewing: <span id="ws-tass-cur" class="mono">none open</span></label>
+        <textarea id="ws-tass-q" rows="3" maxlength="1000" placeholder="Ask TASS about this file…"></textarea>
+        <div><button class="btn small" type="button" id="ws-tass-send">Ask TASS</button> <span id="ws-tass-busy" class="muted small"></span></div>
+        <p class="muted small">TASS answers with your local model. For each question it is shown the file's text read-only; only the file's name and fingerprint are kept in TASS's conversation. Identity checks every message.</p>
+      </div>
+    </section>
+<section class="panel" id="brain-workspace" >
+  <div class="brain-head"><div><h2>Thought Processor connections</h2><p class="muted small">Real installed features · Drag to arrange · Dashed lines are proposals only</p></div><div class="brain-actions">
+  <button id="brain-refresh" class="btn small" type="button">Refresh</button>
+<button id="brain-move" class="btn small" aria-pressed="true" type="button">Move</button>
+  <button id="brain-connect" class="btn small" aria-pressed="false" type="button">Draw link</button><button id="brain-remove" class="btn small" aria-pressed="false" type="button">Remove link</button>
+  <button id="brain-reset" class="btn small" type="button">Reset layout</button></div></div>
+
   <div class="brain-grid"><div id="brain-canvas"><svg id="brain-lines"></svg><div id="brain-nodes"></div></div>
-  <div id="brain-inspector"><h3>Feature inspector</h3><div id="brain-detail">Select a node.</div><h3>Connection proposals</h3><div id="brain-proposals">None</div><p class="muted small">Drawing is not activation. Identity authorization and compatibility validation are required for live wiring.</p></div></div>
-  <details open class="brain-logs"><summary><b>Diagnostics</b> <span id="brain-log-count" class="muted small">No telemetry</span></summary>
+  <div id="brain-inspector"><h3>Selected feature</h3><div id="brain-detail">Select a node.</div><h3>Suggested connections</h3><div id="brain-proposals">None</div><p class="muted small">Drawing is not activation. Identity authorization and compatibility validation are required for live wiring.</p></div></div>
+  <details id="brain-logs" open class="brain-logs"><summary><b>Diagnostics</b> <span id="brain-log-count" class="muted small">No telemetry</span></summary>
   <div class="brain-actions"><label>Test source <select id="brain-log-source"><option value="all">All runs</option></select></label>
   <button id="brain-log-refresh" class="btn small">Refresh log</button><button id="brain-log-copy" class="btn small">Copy Clean Log</button><span id="brain-copy-result" class="muted small"></span></div>
   <pre id="brain-log" class="brain-output">No telemetry reported.</pre>
   <p class="muted small">Only allowlisted test-run output from this Workstation is available here. Other service logs are not reported by this panel.</p></details>
 </section>
-<details id="ws-tools" class="panel" ><summary><b>Project tools — files, tests, TASS conversation and Thoughts</b></summary>
+  </div>
+<section id="ws-tools" class="ws-project panel" aria-label="Project files and tests">
+  <div class="ws-section-head"><div><span class="ws-eyebrow">REAL REPOSITORY WORK</span><h2>Project files & tests</h2></div><span class="muted small">Read files, run allowlisted tests, and show TASS the file you're viewing</span></div>
 <main class="ws-grid">
     <aside class="panel ws-side">
       <h3>Repositories</h3>
@@ -62,17 +87,6 @@
       <h3>Test runs</h3>
       <div id="ws-runs"></div>
     </section>
-    <section class="panel ws-tass" id="ws-tass">
-      <div class="ws-viewhead"><h3>TASS</h3><span id="ws-tass-chips" class="small"></span></div>
-      <div id="ws-tass-setup"></div>
-      <div id="ws-tass-chat" hidden>
-        <div id="ws-tass-log" class="ws-tasslog" aria-live="polite"></div>
-        <label class="small ws-tass-file"><input type="checkbox" id="ws-tass-usefile" checked> Show TASS the file I'm viewing: <span id="ws-tass-cur" class="mono">none open</span></label>
-        <textarea id="ws-tass-q" rows="3" maxlength="1000" placeholder="Ask TASS about this file…"></textarea>
-        <div><button class="btn small" type="button" id="ws-tass-send">Ask TASS</button> <span id="ws-tass-busy" class="muted small"></span></div>
-        <p class="muted small">TASS answers with your local model. For each question it is shown the file's text read-only; only the file's name and fingerprint are kept in TASS's conversation. Identity checks every message.</p>
-      </div>
-    </section>
     <section class="panel ws-thoughts" id="ws-thoughts">
       <div class="ws-viewhead"><h3>Thoughts</h3><span class="muted small">what each feature has thought, and which model wrote it</span></div>
       <div class="row"><button class="btn small" type="button" id="ws-th-refresh">Refresh</button>
@@ -81,7 +95,7 @@
       <p class="muted small">Read-only. Each read goes through Processor's normal path: Identity checks the permission the Admin already approved, every time. Nothing is changed and nothing is sent outside this computer by this panel.</p>
       <div id="ws-th-list"></div>
     </section>
-</main></details></div>
+</main></section></div>
   <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
 </div>
 </body>
