@@ -6,21 +6,7 @@
 <title>Development Workstation</title>
 <link rel="stylesheet" href="/app.css">
 <script src="/workstation.js" defer></script>
-<style>
-.brain-head,.brain-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}.brain-head{margin-bottom:10px}
-.brain-actions{justify-content:flex-start;margin:9px 0}.brain-actions button[aria-pressed="true"]{border-color:#69b3fd;background:#214b7c}
-.brain-grid{display:grid;grid-template-columns:minmax(0,1fr) 240px;border:1px solid #39516e;border-radius:10px;overflow:hidden}
-#brain-canvas{position:relative;min-height:430px;background:radial-gradient(ellipse at center,#213756,#0a1325 72%);overflow:hidden}
-#brain-canvas:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#6079a64d 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
-#brain-lines,#brain-nodes{position:absolute;inset:0;width:100%;height:100%}#brain-lines{pointer-events:none}
-.brain-node{position:absolute;min-width:120px;width:160px;max-width:32%;padding:11px;background:#172e4a;color:#e6f4ff;border:1px solid #6089b7;border-radius:13px;cursor:grab;touch-action:none;text-align:left;z-index:2;box-shadow:0 8px 20px #0007}
-.brain-node[data-id="processor"]{background:#32274f;border:2px solid #ba9eff}.brain-node.selected{outline:2px solid #8bdafa}
-.brain-node b,.brain-node small{display:block;overflow-wrap:anywhere}.brain-node small{color:#abc1db}
-#brain-inspector{background:#121e32;border-left:1px solid #39516e;padding:14px;overflow-wrap:anywhere}#brain-inspector h3{margin:0 0 10px;font-size:13px}#brain-inspector h3:not(:first-child){margin-top:18px}
-.brain-logs{padding:11px 0}.brain-logs summary{cursor:pointer}.brain-output{background:#080f1b;color:#d9e8ff;border:1px solid #39516e;border-radius:7px;padding:10px;min-height:85px;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
-#brain-log-source{background:#162b43;color:#e9f3ff;border:1px solid #526c8c;border-radius:6px;padding:6px}
-@media(max-width:800px){.brain-grid{grid-template-columns:1fr}#brain-inspector{border-left:0;border-top:1px solid #39516e}}
-</style>
+
 </head>
 <body>
 <div class="ws">
@@ -42,11 +28,14 @@
   </section>
 
   <div id="ws-main" hidden>
-<section class="panel" id="brain-workspace" style="margin:12px 0;padding:12px">
-  <div class="brain-head"><div><h2 style="margin:0">Brain Workbench</h2><p class="muted small">Live installed features · No simulated connections</p></div><div class="brain-actions">
-  <button id="brain-refresh" class="btn small">Refresh</button><button id="brain-move" class="btn small" aria-pressed="true">Move</button>
+<section class="panel" id="brain-workspace" >
+  <div class="brain-head"><div><h2 >Brain Workbench</h2><p class="muted small">Live installed features · No simulated connections</p></div><div class="brain-actions">
+  <button id="brain-refresh" class="btn small" type="button">Refresh</button>
+  <button id="brain-update-check" class="btn small" type="button">Check Updates</button>
+  <button id="brain-update-apply" class="btn small" type="button">⬆ Update Workbench</button><button id="brain-move" class="btn small" aria-pressed="true">Move</button>
   <button id="brain-connect" class="btn small" aria-pressed="false">Connect proposal</button><button id="brain-remove" class="btn small" aria-pressed="false">Remove line</button>
   <button id="brain-reset" class="btn small">Reset layout</button></div></div>
+  <div id="brain-update-status" class="muted small" role="status">Updates: not checked.</div>
   <div class="brain-grid"><div id="brain-canvas"><svg id="brain-lines"></svg><div id="brain-nodes"></div></div>
   <div id="brain-inspector"><h3>Feature inspector</h3><div id="brain-detail">Select a node.</div><h3>Connection proposals</h3><div id="brain-proposals">None</div><p class="muted small">Drawing is not activation. Identity authorization and compatibility validation are required for live wiring.</p></div></div>
   <details open class="brain-logs"><summary><b>Diagnostics</b> <span id="brain-log-count" class="muted small">No telemetry</span></summary>
@@ -55,7 +44,7 @@
   <pre id="brain-log" class="brain-output">No telemetry reported.</pre>
   <p class="muted small">Only allowlisted test-run output from this Workstation is available here. Other service logs are not reported by this panel.</p></details>
 </section>
-<details id="ws-tools" class="panel" style="margin:12px 0;padding:12px"><summary><b>Project tools — files, tests, TASS conversation and Thoughts</b></summary>
+<details id="ws-tools" class="panel" ><summary><b>Project tools — files, tests, TASS conversation and Thoughts</b></summary>
 <main class="ws-grid">
     <aside class="panel ws-side">
       <h3>Repositories</h3>
