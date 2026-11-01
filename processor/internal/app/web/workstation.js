@@ -54,6 +54,7 @@
     if (!g.ok) { lock(g.detail || g.reason || "Locked"); return; }
     $("#ws-locked").hidden = true; $("#ws-main").hidden = false;
     renderRepos(s.repos || []); renderTests(s.tests || []); renderRuns(s.runs || []);
+    window.dispatchEvent(new CustomEvent("bw:workstation-state", { detail: s }));
     refreshTass();
     if (!repo && s.repos && s.repos.length) open(s.repos[0].name, "");
   }
