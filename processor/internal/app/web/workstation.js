@@ -303,10 +303,33 @@
     const x = brainItems.find(i => i.id === brainSelected);
     const div = $("#brain-detail");
     if (!x) { div.textContent = "No current installation selected."; return; }
-    div.innerHTML = "<b>" + esc(x.name) + "</b><p class='small'>Status: " + esc(x.status) +
-      "</p><p class='small'>Instance: <code>" + esc(x.id) + "</code></p><p class='small'>Version: " +
-      esc(x.version || "Not reported") + "</p><p class='small'>Last verified: " +
-      esc(x.verified || "Not reported") + "</p><p class='muted small'>Source: " + esc(x.source) + "</p>";
+    div.innerHTML = "<b>" + esc(x.name) + "</b><p class='small'>Runtime: <b>" + esc(x.status) +
+      "</b></p><p class='small'>Instance: <code>" + esc(x.id) +
+      "</code></p><p class='small'>Version: " + esc(x.version || "Not reported") +
+      "</p><p class='small'>PID: " + esc(x.pid || "Not reported") +
+      "</p><p class='small'>Launch ID: " + esc(x.launchID || "Not reported") +
+      "</p><p class='small'>Package files: " + esc(x.files || "Not reported") +
+      "</p><p class='small'>Capabilities: " + esc(x.capabilities == null ? "Not reported" : x.capabilities) +
+      "</p><p class='small'>Last verified: " +
+      esc(x.verified || "Not reported") + "</p><p class='muted small'>Source: " + esc(x.source) +
+      "</p><p class='small' id='brain-feature-action'></p>";
+    if (x.id === "processor" || !x.installed) return;
+    const action = $("#brain-feature-action");
+    const running = x.status === "RUNNING";
+    const button=document.createElement("button");
+    button.type="button";button.className="btn small";
+    button.textContent=running?"Stop feature":"Start feature";
+    action.appendChild(button);
+    const msg=document.createElement("span");msg.className="muted small";action.appendChild(msg);
+    button.onclick=async()=>{
+      if(running&&!window.confirm("Stop the selected feature? This does not uninstall it or remove its data."))return;
+      button.disabled=true;msg.textContent=" Requesting "+(running?"Stop":"Start")+"…";
+      try{
+        await api("POST","/api/installations/"+encodeURIComponent(x.id)+(running?"/stop":"/start"),{});
+        msg.textContent=" Request completed; refreshing actual status…";
+        await brainRefresh();
+      }catch(e){msg.textContent=" Request failed: "+e.message;button.disabled=false;}
+    };
   }
   function brainDraw() {
     brainSvg.replaceChildren();
@@ -373,12 +396,14 @@
     if($("#ws-main").hidden)return;
     try {
       const s=await api("GET","/api/state");
-      const installs=(s.installations||[]).filter(x=>x && x.record && x.record.installation_id);
+      const installs=(s.installations||[]).filter(x=>x && x.record && x.record.installation_id && x.record.state==="INSTALLED");
       const existing=[{id:"processor",name:"Thought Processor",status:"Page connected",version:state?.processor_version || "Not reported",source:"Current authenticated session",verified:"Now"}];
       for(const v of installs){
         const r=v.record,rt=v.runtime||{},id=String(r.installation_id);
         existing.push({id,name:r.name||r.feature_id||"Unnamed feature",status:rt.state||"Not reported",
-          version:r.version||"Not reported",source:"/api/state installation record",verified:"Not reported"});
+          version:r.version||"Not reported",pid:rt.pid,launchID:rt.launch_id,files:v.files,
+          capabilities:(r.capabilities||[]).length,installed:true,
+          source:"/api/state installation record",verified:"Not reported"});
       }
       const ids=new Set(existing.map(x=>x.id));
       brainItems=existing;brainLinks=brainLinks.filter(x=>ids.has(x.a)&&ids.has(x.b));
@@ -387,14 +412,27 @@
     }catch(e){$("#brain-detail").textContent="Cannot read verified feature status: "+e.message;}
     brainLogs();
   }
-  function brainLogs(){
-    const runs=state?.runs||[],select=$("#brain-log-source"),old=select.value;
-    select.innerHTML='<option value="all">All runs</option>'+runs.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.label||r.id)+'</option>').join("");
-    select.value=[...select.options].some(o=>o.value===old)?old:"all";
-    const selected=runs.filter(r=>select.value==="all"||r.id===select.value);
-    const raw=selected.map(r=>"TEST "+(r.label||r.test||r.id)+" | "+r.state+" | "+r.started+"\n"+(r.output||"No output reported.")).join("\n\n");
-    $("#brain-log").textContent=brainSanitize(raw)||"No telemetry reported.";
-    $("#brain-log-count").textContent=runs.length?runs.length+" reported test run(s)":"No telemetry";
+  async function brainLogs(){
+    const text=$("#brain-log"),count=$("#brain-log-count"),select=$("#brain-log-source"),old=select.value;
+    try{
+      const r=await api("GET","/api/ws/diagnostics");
+      const runs=r.tests||[],events=r.processor||[];
+      select.innerHTML='<option value="all">All available logs</option><option value="processor">Processor activity</option>'+
+        runs.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label||x.id)+'</option>').join("");
+      select.value=[...select.options].some(o=>o.value===old)?old:"all";
+      const lines=[];
+      if(select.value==="all"||select.value==="processor") {
+        for(const x of events)lines.push([x.time,x.level,x.component,x.event,x.detail].map(y=>String(y||"")).join(" | "));
+      }
+      if(select.value!=="processor")for(const x of runs.filter(y=>select.value==="all"||select.value===y.id)) {
+        lines.push("\nTEST: "+(x.label||x.id)+" | "+x.state+" | "+x.started+"\n"+(x.output||"No output reported.")+
+        (x.output_truncated?"\n[OUTPUT TRUNCATED]":""));
+      }
+      const output=brainSanitize(lines.join("\n"));
+      text.textContent=output?output.slice(-131072):"No telemetry reported from this source.";
+      count.textContent=events.length+" activity entries · "+runs.length+" test runs";
+      if(output.length>131072)text.textContent="[EARLIER OUTPUT TRUNCATED]\n"+text.textContent;
+    }catch(e){text.textContent="Diagnostics unavailable: "+e.message;count.textContent="Unavailable";}
   }
   function brainSetMode(m){
     brainMode=m;brainRender.pending=null;
