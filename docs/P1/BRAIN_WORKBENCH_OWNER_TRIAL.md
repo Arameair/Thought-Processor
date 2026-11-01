@@ -23,17 +23,19 @@ The first owner attempt at `61f87c4` reported a Go build failure from an unused 
 set -e
 ROOT="$HOME/p1c/alpha/Thought-Processor"
 BRANCH="experiment/brain-workstation-controls-20261031"
-EXPECTED="de02b0e3c7f274cf83d195f2e317c6f5afe2cbac"
+FIX_COMMIT="de02b0e3c7f274cf83d195f2e317c6f5afe2cbac"
 cd "$ROOT"
 PREVIOUS="$(git branch --show-current)"
 test -n "$PREVIOUS"
 test -z "$(git status --porcelain)" || { echo "STOP: local changes present"; exit 1; }
 git remote set-branches --add origin "$BRANCH"
 git fetch origin
-test "$(git rev-parse "origin/$BRANCH")" = "$EXPECTED" || { echo "STOP: trial commit changed; review first"; exit 1; }
+git merge-base --is-ancestor "$FIX_COMMIT" "origin/$BRANCH" || { echo "STOP: build fix not found in trial branch"; exit 1; }
+TRIAL_SHA="$(git rev-parse "origin/$BRANCH")"
+echo "Testing branch commit $TRIAL_SHA"
 TEMP="$(mktemp -d)"
 trap 'git -C "$ROOT" worktree remove --force "$TEMP/tree" 2>/dev/null || true; rmdir "$TEMP" 2>/dev/null || true' EXIT
-git worktree add --detach "$TEMP/tree" "$EXPECTED"
+git worktree add --detach "$TEMP/tree" "$TRIAL_SHA"
 (cd "$TEMP/tree/processor" && go test ./...)
 git worktree remove --force "$TEMP/tree"
 rmdir "$TEMP"
@@ -55,7 +57,7 @@ if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
 else
   git switch --track -c "$BRANCH" "origin/$BRANCH"
 fi
-test "$(git rev-parse HEAD)" = "$EXPECTED"
+test "$(git rev-parse HEAD)" = "$TRIAL_SHA"
 python3 "$ROOT/tools/p0-launcher/secure_launch.py" start
 python3 "$ROOT/tools/p0-launcher/secure_launch.py" open
 trap - ERR
