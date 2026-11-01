@@ -3,7 +3,7 @@
   const $ = (s) => document.querySelector(s);
   const map = $("#bw-map"), layer = $("#bw-nodes"), wires = $("#bw-wires");
   const root = $("#ws-main");
-  let ws = null, engine = null, selected = "processor", mode = "move", pending = null, drag = null;
+  let ws = null, engine = null, selected = "processor", mode = "move", pending = null, drag = null, wireDrag = null;
   let nodes = [], proposals = [], layout = {}, lastClean = "", loading = false, actionBusy = false;
   const storageLayout = "tp_brain_positions_v1", storageProposals = "tp_brain_proposals_v1";
   try { layout = JSON.parse(localStorage.getItem(storageLayout) || "{}"); } catch (_) { layout = {}; }
@@ -83,17 +83,30 @@
     b.append(element("span","bw-node-icon",n.icon), element("strong", "", n.name),
       element("small", "", n.subtitle), element("small", "", currentStatus(n)));
     b.append(element("span","bw-lamp " + lamp(n)));
+    const port=element("span","bw-port"); port.title="Drag from here to propose a connection"; b.append(port);
     b.addEventListener("click", () => {
       if(b.dataset.suppressClick === "true") { b.dataset.suppressClick = ""; return; }
       pick(n.id);
     });
     b.addEventListener("pointerdown", e => {
+      if(mode === "connect" && e.target === port && e.button === 0){
+        e.preventDefault();e.stopPropagation();pending=null;
+        wireDrag={from:n.id,to:null};
+        b.setPointerCapture(e.pointerId);
+        $("#bw-help").textContent="Drag the connector to another feature to propose an inactive link.";
+        return;
+      }
       if(mode !== "move" || e.button !== 0) return;
       const r = map.getBoundingClientRect();
       drag = {id:n.id, startX:e.clientX, startY:e.clientY, x:n.x*r.width/100, y:n.y*r.height/100, moved:false};
       b.setPointerCapture(e.pointerId);
     });
     b.addEventListener("pointermove", e => {
+      if(wireDrag && wireDrag.from===n.id){
+        const r=map.getBoundingClientRect();
+        wireDrag.to={x:e.clientX-r.left,y:e.clientY-r.top};
+        drawWires();return;
+      }
       if(!drag || drag.id !== n.id || mode !== "move") return;
       const r = map.getBoundingClientRect(), dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
       if(Math.abs(dx)+Math.abs(dy) > 5) drag.moved = true;
@@ -103,12 +116,21 @@
       b.style.left = n.x+"%"; b.style.top = n.y+"%";
       drawWires();
     });
-    b.addEventListener("pointerup", () => {
+    b.addEventListener("pointerup", e => {
+      if(wireDrag && wireDrag.from===n.id){
+        const target=document.elementFromPoint(e.clientX,e.clientY);
+        const node=target && target.closest("[data-node-id]");
+        const to=node && node.dataset.nodeId;
+        wireDrag=null;b.dataset.suppressClick="true";
+        if(to && to!==n.id) propose(n.id,to);
+        else status("Connection drag cancelled. Drop on another node.");
+        drawWires();return;
+      }
       if(!drag || drag.id !== n.id) return;
       if(drag.moved) { b.dataset.suppressClick = "true"; layout[n.id] = {x:n.x,y:n.y}; saveLayout(); status("Layout saved locally. No service configuration changed."); }
       drag = null;
     });
-    b.addEventListener("pointercancel", () => { drag=null; });
+    b.addEventListener("pointercancel", () => { drag=null;wireDrag=null;drawWires(); });
     return b;
   }
   function position(id) {
@@ -130,8 +152,12 @@
       if($("#bw-authorized").checked && grants.some(g => g.status === "ACTIVE")) edges.push({from:"identity",to:n.id,kind:"authorized"});
     });
     proposals.forEach(p=>{if(byId(p.from)&&byId(p.to))edges.push({from:p.from,to:p.to,kind:"proposed"});});
+    if(wireDrag && wireDrag.to){
+      const a=position(wireDrag.from),b=wireDrag.to;
+      if(a && b)edges.push({from:wireDrag.from,to:null,kind:"proposed", preview:b});
+    }
     edges.forEach(link=>{
-      const a=position(link.from),b=position(link.to);if(!a||!b)return;
+      const a=position(link.from),b=link.preview || position(link.to);if(!a||!b)return;
       const line=document.createElementNS("http://www.w3.org/2000/svg","path");
       line.setAttribute("class","bw-wire "+link.kind);line.setAttribute("d",path(a,b));wires.append(line);
     });
@@ -183,6 +209,11 @@
       row.append(btn);box.append(row);
     });
   }
+  function propose(from,to){
+    if(proposals.some(p=>p.from===from&&p.to===to || p.from===to&&p.to===from)) status("That connection proposal already exists.");
+    else{proposals.push({from,to,state:"PROPOSED_INACTIVE"});saveProposals();status("Connection saved as INACTIVE proposal. Approval and activation are not implemented.");}
+    renderProposals();drawWires();
+  }
   function pick(id) {
     if(mode==="remove" || mode==="connect"){
       if(!pending){pending=id;status("Select the destination node.");$("#bw-help").textContent="Choose the other node to "+(mode==="remove"?"remove the proposal.":"create an inactive connection proposal.");return;}
@@ -192,11 +223,7 @@
         const before=proposals.length;
         proposals=proposals.filter(p=>!(p.from===from&&p.to===id || p.from===id&&p.to===from));
         status(before===proposals.length?"No proposal exists between those nodes.":"Proposal removed; live wiring unchanged.");
-      }else if(proposals.some(p=>p.from===from&&p.to===id || p.from===id&&p.to===from)){
-        status("That proposal already exists.");
-      }else{
-        proposals.push({from,to:id,state:"PROPOSED_INACTIVE"});status("Connection saved as an INACTIVE proposal. No authorization or activation occurred.");
-      }
+      }else{ propose(from,id); }
       saveProposals();renderProposals();drawWires();return;
     }
     selected=id;renderInspector();
