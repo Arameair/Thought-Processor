@@ -16,27 +16,49 @@ This first owner-specific update bridge relies on the existing authenticated Wor
 
 ## Owner smoke test (on your actual WSL computer)
 
-All commands operate in the current `~/p1c/alpha/Thought-Processor` clone, preserving the existing alpha profile, and will stop on error. Close unsaved Workstation work before switching; the old launcher is running `ffc0604`.
+The first owner attempt at `61f87c4` reported a Go build failure from an unused import in `workstation_update_linux.go`; that unused import was removed in commit `de02b0e3c7f274cf83d195f2e317c6f5afe2cbac`. **Go tests and actual browser acceptance still need an owner run.** The old rollback snippet also changed directories inside an ERR trap; this one fixes that by using absolute launcher paths and testing in a disposable worktree before stopping anything.
 
 ```bash
 (
 set -e
-cd ~/p1c/alpha/Thought-Processor
-python3 tools/p0-launcher/secure_launch.py stop
-test -z "$(git status --porcelain)" || { echo "STOP: Local changes present."; exit 1; }
-cp -a ~/p1c/p1-tass-alpha ~/p1c/p1-tass-alpha.brain-backup-$(date +%Y%m%d-%H%M%S)
-git remote set-branches --add origin experiment/brain-workstation-controls-20261031
+ROOT="$HOME/p1c/alpha/Thought-Processor"
+BRANCH="experiment/brain-workstation-controls-20261031"
+EXPECTED="de02b0e3c7f274cf83d195f2e317c6f5afe2cbac"
+cd "$ROOT"
+PREVIOUS="$(git branch --show-current)"
+test -n "$PREVIOUS"
+test -z "$(git status --porcelain)" || { echo "STOP: local changes present"; exit 1; }
+git remote set-branches --add origin "$BRANCH"
 git fetch origin
-if git show-ref --verify --quiet refs/heads/experiment/brain-workstation-controls-20261031; then
-  git switch experiment/brain-workstation-controls-20261031
-  git merge --ff-only origin/experiment/brain-workstation-controls-20261031
+test "$(git rev-parse "origin/$BRANCH")" = "$EXPECTED" || { echo "STOP: trial commit changed; review first"; exit 1; }
+TEMP="$(mktemp -d)"
+trap 'git -C "$ROOT" worktree remove --force "$TEMP/tree" 2>/dev/null || true; rmdir "$TEMP" 2>/dev/null || true' EXIT
+git worktree add --detach "$TEMP/tree" "$EXPECTED"
+(cd "$TEMP/tree/processor" && go test ./...)
+git worktree remove --force "$TEMP/tree"
+rmdir "$TEMP"
+trap - EXIT
+
+python3 "$ROOT/tools/p0-launcher/secure_launch.py" stop
+cp -a "$HOME/p1c/p1-tass-alpha" "$HOME/p1c/p1-tass-alpha.brain-backup-$(date +%Y%m%d-%H%M%S)"
+restore() {
+  trap - ERR
+  cd "$ROOT"
+  python3 "$ROOT/tools/p0-launcher/secure_launch.py" stop || true
+  git switch "$PREVIOUS" || true
+  python3 "$ROOT/tools/p0-launcher/secure_launch.py" start || true
+}
+trap restore ERR
+if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  git switch "$BRANCH"
+  git merge --ff-only "origin/$BRANCH"
 else
-  git switch --track -c experiment/brain-workstation-controls-20261031 origin/experiment/brain-workstation-controls-20261031
+  git switch --track -c "$BRANCH" "origin/$BRANCH"
 fi
-echo "BRAIN WORKBENCH SHA: $(git rev-parse HEAD)"
-(cd processor && go test ./...)
-python3 tools/p0-launcher/secure_launch.py start
-python3 tools/p0-launcher/secure_launch.py open
+test "$(git rev-parse HEAD)" = "$EXPECTED"
+python3 "$ROOT/tools/p0-launcher/secure_launch.py" start
+python3 "$ROOT/tools/p0-launcher/secure_launch.py" open
+trap - ERR
 )
 ```
 
