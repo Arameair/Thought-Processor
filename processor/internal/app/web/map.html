@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain Map — TASS Thought Processor</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/map.js" defer></script>
+</head>
+<body class="bm">
+<header class="bm-top">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>TASS Thought Processor</span></div>
+  <div class="bm-chips">
+    <span class="chip" id="bm-identity"><span class="dot"></span><span class="t">Identity: checking…</span></span>
+    <span class="chip" id="bm-github"><span class="dot"></span><span class="t">GitHub: checking…</span></span>
+  </div>
+</header>
+<nav class="bm-nav" aria-label="Thought Processor">
+  <a class="bm-tab on" href="/map" aria-current="page">Service Map</a>
+  <a class="bm-tab" href="/workstation#thoughts" title="Recorded Thoughts are shown in the Development Workstation's Thoughts panel">Thoughts</a>
+  <a class="bm-tab" href="/pipeline">Pipeline</a>
+  <button class="bm-tab bm-updates" type="button" id="bm-updates-btn" aria-expanded="false">UPDATES ↻</button>
+  <a class="bm-tab" href="/">Setup &amp; permissions</a>
+  <a class="bm-tab bm-ws" href="/workstation" target="_blank" rel="noopener">Open Workstation ↗</a>
+</nav>
+<main class="bm-main">
+  <aside class="bm-left">
+    <h3>View</h3>
+    <label class="small"><input type="checkbox" id="bm-show-auth"> Show authorized, not observed</label>
+    <label class="small"><input type="checkbox" id="bm-group" checked> Group by kind</label>
+    <div class="row"><button class="btn small" type="button" id="bm-arrange">Auto-arrange</button> <button class="btn small" type="button" id="bm-fit">Fit</button></div>
+    <p class="muted small" id="bm-saved"></p>
+    <h3>Legend</h3>
+    <ul class="bm-legend small">
+      <li><span class="bm-sw solid"></span> VERIFIED: fresh signed evidence</li>
+      <li><span class="bm-sw dotted"></span> AUTHORIZED, NOT OBSERVED</li>
+      <li><span class="bm-sw stale"></span> STALE / FAILED (says why)</li>
+      <li><span class="bm-sw none"></span> No line = not verified</li>
+    </ul>
+    <p class="muted small">Dragging a node only moves it on this screen. No service, grant, trust pin or process is changed. Connections can't be proposed or activated here yet.</p>
+    <p class="muted small" id="bm-refreshed"></p>
+  </aside>
+  <section class="bm-canvas" aria-label="Service map">
+    <svg id="bm-svg" role="application" aria-label="Service map: drag nodes to arrange, drag background to pan, wheel to zoom">
+      <defs><marker id="bm-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="bm-arrowhead"></path></marker></defs>
+      <g id="bm-world"><g id="bm-groups"></g><g id="bm-edges"></g><g id="bm-nodes"></g></g>
+    </svg>
+    <p class="bm-empty" id="bm-empty" hidden></p>
+  </section>
+  <aside class="bm-insp" id="bm-insp" aria-live="polite">
+    <h3>Inspector</h3>
+    <p class="muted small">Select a node or a line to see what is actually known about it, where it came from and when it was last checked.</p>
+  </aside>
+</main>
+<section class="bm-logs" id="bm-logs">
+  <div class="bm-logs-head">
+    <button class="btn ghost small" type="button" id="bm-logs-toggle" aria-expanded="true">▼ SERVICE LOGS</button>
+    <span class="small">Scope: <b id="bm-log-scope">All</b> <button class="btn ghost small" type="button" id="bm-log-all" hidden>Show all</button></span>
+    <span class="small muted">History: this run only, up to 24 h</span>
+    <button class="btn small" type="button" id="bm-copy">Copy Clean Log</button>
+    <span class="small muted" id="bm-copy-note"></span>
+  </div>
+  <div class="bm-logs-body" id="bm-logs-body"></div>
+</section>
+<div class="bm-sheet" id="bm-updates" hidden role="dialog" aria-label="Updates">
+  <div class="bm-sheet-head"><h3>Updates</h3><button class="btn ghost small" type="button" id="bm-updates-close">Close</button></div>
+  <div id="bm-updates-body"></div>
+</div>
+</body>
+</html>

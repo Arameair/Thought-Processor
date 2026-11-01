@@ -263,6 +263,10 @@ func (a *App) Handler() http.Handler {
 	// /api/state and Identity-checked feature reads.
 	m.HandleFunc("GET /pipeline", a.wrap(public, static("pipeline.html", "text/html; charset=utf-8")))
 	m.HandleFunc("GET /pipeline.js", a.wrap(public, static("pipeline.js", "text/javascript; charset=utf-8")))
+	// Brain Map, Screen 1: read-only Service Map (see brainmap.go).
+	m.HandleFunc("GET /map", a.wrap(public, static("map.html", "text/html; charset=utf-8")))
+	m.HandleFunc("GET /map.js", a.wrap(public, static("map.js", "text/javascript; charset=utf-8")))
+	a.mapRoutes(m)
 	m.HandleFunc("GET /api/health", a.wrap(public, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"app": Product, "version": a.Build.Version, "protocol": Protocol, "note": "self-reported; not authentication"})
 	}))
