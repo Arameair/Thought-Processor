@@ -299,6 +299,30 @@
     try{await navigator.clipboard.writeText(lastClean);status("Clean log copied. Review it for project names or sensitive details before sending.");}
     catch(e){const box=$("#bw-log");box.focus();box.select();status("Clipboard unavailable. Diagnostic text selected; press Ctrl+C to copy.");}
   }
+  async function copySupportReport(){
+    await loadLog();
+    const g=ws && ws.gate || {}, installed=nodes.filter(n=>n.kind==="feature");
+    const lines=[
+      "TASS Brain Workstation — review before sharing",
+      "Captured: "+new Date().toISOString(),
+      "Processor version: "+safe(engine && engine.processor && engine.processor.version),
+      "Identity: "+(engine && engine.verified ? "VERIFIED" : "NOT VERIFIED"),
+      "GitHub status: "+safe(g.github_state),
+      "Installed features: "+installed.length,
+      "Recent test runs: "+safe(ws && ws.runs && ws.runs.length),
+      "",
+      "SERVICE STATUS"
+    ];
+    installed.forEach(n=>{
+      const rt=n.view.runtime || {},h=rt.health || {};
+      lines.push(n.name+" | "+currentStatus(n)+" | health "+(h.ready?"READY":"NOT VERIFIED")+" | version "+safe(n.view.record.version));
+    });
+    lines.push("","CLEAN DIAGNOSTICS ("+($("#bw-log-source").selectedOptions[0]?.textContent || "unknown")+")");
+    lines.push(lastClean || "No sanitized diagnostic events available.");
+    const report=lines.join("\n");
+    try{await navigator.clipboard.writeText(report);status("Support report copied; review before sending. No raw file text or test stdout included.");}
+    catch(e){$("#bw-log").value=report;$("#bw-log").focus();$("#bw-log").select();status("Clipboard unavailable; support report selected. Press Ctrl+C to copy.");}
+  }
   window.addEventListener("bw:workstation-state",e=>{
     ws=e.detail;updateStats();
     if(!ws.gate || !ws.gate.ok){engine=null;nodes=[];layer.replaceChildren();wires.replaceChildren();status("Workstation locked — verify Identity and GitHub.");return;}
@@ -323,6 +347,7 @@
   $("#bw-activity").onclick=()=>{$("#bw-log-source").value=selected;copyClean();};
   $("#bw-reload-log").onclick=loadLog;
   $("#bw-copy-log").onclick=copyClean;
+  $("#bw-copy-report").onclick=copySupportReport;
   $("#bw-log-toggle").onclick=()=>{
     const section=$(".bw-diag"),collapsed=section.classList.toggle("collapsed");
     $("#bw-log-toggle").textContent=collapsed?"Expand":"Collapse";
