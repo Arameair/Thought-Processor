@@ -407,6 +407,11 @@
       }
       const ids=new Set(existing.map(x=>x.id));
       brainItems=existing;brainLinks=brainLinks.filter(x=>ids.has(x.a)&&ids.has(x.b));
+      const active=existing.filter(x=>x.installed&&x.status==="RUNNING").length;
+      const installed=existing.filter(x=>x.installed).length;
+      $("#brain-summary").textContent=installed+" installed feature"+(installed===1?"":"s")+" · "+
+        active+" running · "+(installed-active)+" other state"+(installed-active===1?"":"s")+
+        " · connections shown here are planning links only";
       if(!ids.has(brainSelected))brainSelected="processor";
       brainRender();
     }catch(e){$("#brain-detail").textContent="Cannot read verified feature status: "+e.message;}
