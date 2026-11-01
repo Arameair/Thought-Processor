@@ -267,3 +267,71 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .brain-head h2{margin:0}#brain-update-status{margin:6px 0 12px;padding:8px;border:1px solid #3b536f;border-radius:6px}
 #brain-update-apply{border-color:#2e9e87;background:#124e45;color:#e5fff6;font-weight:700}
 #brain-update-apply:disabled{opacity:.55;cursor:not-allowed}
+
+/* Brain Workbench usability pass: active work first, feature topology second. */
+.ws-workbar{position:relative;margin:13px 0;padding:16px 18px;border:1px solid #354d6d;border-radius:14px;background:linear-gradient(115deg,#172943 0%,#111d30 62%,#19263d 100%)}
+.ws-workbar-primary{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}
+.ws-workbar h1{font-size:24px;line-height:1.12;margin:1px 0 4px;letter-spacing:-.4px}
+.ws-workbar p{margin:0}
+.ws-eyebrow{font-size:10px;font-weight:750;letter-spacing:1.5px;color:#80bff8}
+.ws-workbar-links{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ws-workbar-links a{color:#dbeaff;text-decoration:none;border:1px solid #425a7c;border-radius:8px;padding:6px 10px;font-size:12px;background:#1a2c47}
+.ws-workbar-links a:hover,.ws-workbar-links a:focus-visible{border-color:#83b7fa;background:#28456e}
+.ws-update-controls{display:flex;align-items:center;gap:12px;margin-top:13px;border-top:1px solid #354763;padding-top:10px;flex-wrap:wrap}
+.ws-update-buttons{display:flex;gap:8px;flex-wrap:wrap}
+#brain-update-status{margin:0;flex:1;min-width:180px;padding:7px 11px;font-size:12px;line-height:1.5;background:#0e1a2b;border:1px solid #3a506d;border-radius:8px}
+#brain-update-apply{background:#135747;border:1px solid #56b399;color:#e9fff8;font-weight:700}
+.ws-live{display:grid;grid-template-columns:minmax(310px,.88fr) minmax(450px,1.12fr);gap:12px;align-items:start;margin-top:12px}
+.ws-live>.panel{margin:0;min-width:0;max-width:none}
+.ws-live>.ws-tass{padding:15px;background:linear-gradient(160deg,#1a2b43,#111e31 55%);border:1px solid #3c5a7b;border-radius:14px;min-height:405px}
+.ws-live .ws-tass .ws-viewhead{align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ws-live .ws-tass h3{font-size:19px;line-height:1.2;margin:0}
+.ws-live #ws-tass-chat textarea{min-height:76px}
+.ws-live .ws-tasslog{min-height:120px;max-height:240px}
+.ws-live .ws-tass .ws-msg{padding:11px;border-color:#39516a}
+.ws-live #brain-workspace{border:1px solid #364c6d;border-radius:14px;margin:0;min-width:0;padding:14px;background:linear-gradient(156deg,#131f34,#0d1729)}
+#brain-workspace .brain-head{align-items:start}
+#brain-workspace .brain-head h2{font-size:17px;line-height:1.35}
+#brain-workspace .brain-head p{max-width:48ch;margin:4px 0 0;font-size:11px}
+#brain-workspace .brain-actions{gap:5px}
+#brain-workspace .brain-actions button{padding:5px 8px;font-size:11px}
+#brain-workspace .brain-grid{grid-template-columns:minmax(0,1fr) minmax(160px,200px);border:1px solid #365172;border-radius:12px;background:#101e33}
+#brain-workspace #brain-canvas{min-height:355px;background:radial-gradient(ellipse 240px 180px at 49% 48%,#344c7a 0%,#1b2f53 35%,#101d37 75%,#0b1526 100%);isolation:isolate}
+#brain-workspace #brain-canvas:after{content:"";position:absolute;width:245px;height:245px;border:1px dashed #748fd642;border-radius:50%;top:calc(50% - 123px);left:calc(50% - 123px);pointer-events:none}
+#brain-workspace .brain-node{width:135px;min-width:0;max-width:36%;padding:10px;background:linear-gradient(145deg,#294464,#172b45);border:1px solid #6b94c2;border-radius:11px;box-shadow:0 8px 16px #0005}
+#brain-workspace .brain-node[data-id="processor"]{width:155px;background:linear-gradient(160deg,#473366,#292344);border-color:#bba4ff;box-shadow:0 0 28px #7c65e33b,0 9px 22px #0007}
+#brain-workspace .brain-node.selected{outline:2px solid #9be5ff;outline-offset:2px}
+#brain-workspace .brain-node b{font-size:12px;line-height:1.35}
+#brain-workspace .brain-node small{font-size:10px;line-height:1.4;margin-top:3px}
+#brain-inspector{background:#111e32;padding:12px}
+#brain-inspector h3{font-size:11px;letter-spacing:.3px;margin-bottom:8px}
+#brain-inspector p{font-size:11px;line-height:1.5}
+#brain-inspector code{word-break:break-all}
+#brain-logs{margin-top:10px;padding:8px 0 0;border-top:1px solid #354861}
+#brain-logs summary{font-size:12px}
+#brain-logs .brain-output{max-height:175px;min-height:75px}
+#ws-tools.ws-project{margin:14px 0 0;padding:16px;border:1px solid #364e6e;border-radius:14px;max-width:none}
+#ws-tools .ws-section-head{display:flex;align-items:end;justify-content:space-between;gap:9px;flex-wrap:wrap;margin:0 0 11px}
+#ws-tools .ws-section-head h2{margin:2px 0 0;font-size:18px}
+#ws-tools .ws-grid{display:grid;grid-template-columns:minmax(200px,.9fr) minmax(200px,.85fr) minmax(0,1.8fr);gap:12px;align-items:start}
+#ws-tools .ws-grid>.panel{min-width:0;max-width:none}
+#ws-tools .ws-tree{max-height:460px;overflow:auto}
+#ws-tools .ws-pre{max-height:460px}
+#ws-tools .ws-repo{padding:9px}
+#ws-tools .ws-thoughts{grid-column:1/-1}
+@media (max-width:1250px){
+ .ws-live{grid-template-columns:1fr}
+ #brain-workspace .brain-grid{grid-template-columns:minmax(0,1fr) 210px}
+}
+@media (max-width:980px){
+ #ws-tools .ws-grid{grid-template-columns:minmax(190px,1fr) minmax(0,1.5fr)}
+ #ws-tools .ws-view{grid-column:1/-1}
+}
+@media (max-width:640px){
+ .ws{padding-inline:10px}
+ .ws-workbar{padding:12px}
+ #brain-workspace .brain-grid{grid-template-columns:1fr}
+ #brain-inspector{border-left:0;border-top:1px solid #39516e}
+ #ws-tools .ws-grid{grid-template-columns:minmax(0,1fr)}
+ #ws-tools .ws-view{grid-column:auto}
+}
