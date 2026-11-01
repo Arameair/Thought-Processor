@@ -449,43 +449,88 @@
     catch(_){$("#brain-copy-result").textContent="Clipboard unavailable; select the output text and copy manually.";}
   };
 
-  // Update uses the Workstation's authenticated, CSRF-protected owner route.
-  // The launcher remains the sole authority on preflight, fast-forward,
-  // rollback, owned process stop/restart, and version receipts.
-  let brainUpdateReady=false, brainUpdating=false;
+  // Only the existing guarded launcher applies versions. The browser displays
+  // a receipt from the launcher's update-history.jsonl; 202 is never "success".
+  let brainUpdateReady=false, brainUpdating=false, brainLastReceipt="", brainReceiptTimer=0;
+  const receiptKey = x => x ? [x.at||"",x.result||"",x.available||"",x.now_running||"",x.reason||""].join("|") : "";
+  function updateReceiptText(rec) {
+    if(!rec || !rec.result) return "No completed update receipt has been recorded yet.";
+    const r=String(rec.result);
+    const stamp=rec.at||"time unknown";
+    const reason=rec.reason?" · "+String(rec.reason):"";
+    const version=(rec.now_running||rec.available||"").slice(0,12);
+    const v=version?" · version "+version:"";
+    if(r==="UP_TO_DATE")return "UP TO DATE — no changes installed · "+stamp;
+    if(r==="UPDATED")return "UPDATED — launcher restarted with new code"+v+" · "+stamp;
+    if(r==="ROLLED_BACK")return "ROLLED BACK — previous version restored"+v+reason+" · "+stamp;
+    if(r==="REFUSED")return "REFUSED — nothing applied"+reason+" · "+stamp;
+    return r+reason+" · "+stamp;
+  }
   async function brainUpdateStatus(checkRemote=false) {
     const label=$("#brain-update-status"),btn=$("#brain-update-apply");
-    btn.disabled=true;
-    label.textContent=checkRemote?"Checking the trusted launcher and remote version…":"Reading latest update receipt…";
-    try{
+    if(!brainUpdating)btn.disabled=true;
+    label.textContent=checkRemote?"Checking actual remote version…":"Reading launcher update receipt…";
+    try {
       const j=await api("GET","/api/ws/update"+(checkRemote?"?check=1":""));
       const r=j.versions?.revisions?.processor||{};
       const latest=j.last_update||{};
-      const cur=r.current_sha?r.current_sha.slice(0,12):"Not reported";
-      const next=r.remote_sha?r.remote_sha.slice(0,12):"Not reported";
-      const check=j.check==="UNAVAILABLE"?"Update check unavailable: "+(j.detail||"unknown reason"):
-        j.check==="COMPLETED"?"Current "+cur+" · available "+next+" · "+(r.check||"unknown state"):"Update status ready";
-      label.textContent=check+(latest.result?" | Last update: "+latest.result+" at "+(latest.at||"unknown time"):"");
-      brainUpdateReady=Boolean(j.owner_can_apply&&j.check!=="UNAVAILABLE");
+      brainLastReceipt=receiptKey(latest);
+      const version=(j.check==="COMPLETED")?
+        ("Current "+(r.current_sha||"?").slice(0,12)+" · Remote "+(r.remote_sha||"?").slice(0,12)+" · "+(r.check||"UNKNOWN")):
+        (j.check==="UNAVAILABLE"?"Update check unavailable: "+(j.detail||"unknown reason"):"Update check not run");
+      label.textContent=version+" | "+updateReceiptText(latest);
+      brainUpdateReady=Boolean(j.owner_can_apply && j.check!=="UNAVAILABLE");
       btn.disabled=!brainUpdateReady||brainUpdating;
-      btn.title=brainUpdateReady?"Apply the guarded branch-only launcher update with rollback.":"Unavailable: must be running on the trial branch with Identity-verified owner sign-in.";
-    }catch(e){label.textContent="Unable to read update status: "+e.message;brainUpdateReady=false;btn.disabled=true;}
+      btn.title=brainUpdateReady?"Use existing fast-forward-only launcher and rollback rules.":"Requires owner GitHub verification and valid trial checkout.";
+    } catch(e) {
+      label.textContent="Unable to read update status: "+e.message;
+      brainUpdateReady=false;btn.disabled=true;
+    }
+  }
+  async function watchUpdateReceipt(before, attempts=0) {
+    const label=$("#brain-update-status");
+    let j;
+    try {
+      j=await api("GET","/api/ws/update");
+    } catch(e) {
+      label.textContent="Connection interrupted after update request. The Workstation may be restarting. Reopen from the launcher, then read the last update receipt. Do not assume success.";
+      brainUpdating=false;
+      return;
+    }
+    const latest=j.last_update||{};
+    if(latest.result && receiptKey(latest)!==before) {
+      brainUpdating=false;
+      label.textContent=updateReceiptText(latest);
+      brainLastReceipt=receiptKey(latest);
+      $("#brain-update-apply").disabled=!j.owner_can_apply;
+      return;
+    }
+    if(attempts>=20) {
+      brainUpdating=false;
+      label.textContent="No NEW completed launcher receipt yet. Result unverified. Check again or reopen from the launcher before attempting another update.";
+      $("#brain-update-apply").disabled=true;
+      return;
+    }
+    brainReceiptTimer=setTimeout(()=>watchUpdateReceipt(before,attempts+1),1500);
   }
   $("#brain-update-check").onclick=()=>brainUpdateStatus(true);
   $("#brain-update-apply").onclick=async()=>{
     if(!brainUpdateReady||brainUpdating)return;
-    if(!window.confirm("Update this experimental Workbench now? The launcher may stop and restart the Workstation. Identity, TASS, permissions and profile must be preserved; the launcher will refuse or roll back unsafe updates."))return;
+    if(!window.confirm("Apply the guarded Workbench update? The existing launcher may restart this page. It refuses non-fast-forward changes, validates pins and rolls back on failure."))return;
+    const before=brainLastReceipt;
     brainUpdating=true;$("#brain-update-apply").disabled=true;
-    $("#brain-update-status").textContent="Requesting update from trusted launcher…";
-    try{
-      const result=await api("POST","/api/ws/update/apply",{confirm:"UPDATE"});
-      $("#brain-update-status").textContent=(result.state||"REQUESTED")+" — "+(result.detail||"Launcher accepted request. Reopen after restart.");
-    }catch(e){
-      $("#brain-update-status").textContent="Update request not confirmed: "+e.message+". Check the launcher status and update history.";
-      brainUpdating=false;brainUpdateStatus(false);
+    $("#brain-update-status").textContent="Update requested — waiting for the launcher's completed receipt. This does NOT yet mean it succeeded.";
+    try {
+      const response=await api("POST","/api/ws/update/apply",{confirm:"UPDATE"});
+      if(response.state!=="STARTED_NOT_FINISHED")throw new Error("unexpected updater response");
+      brainReceiptTimer=setTimeout(()=>watchUpdateReceipt(before),1200);
+    } catch(e) {
+      $("#brain-update-status").textContent="Update request was not confirmed: "+e.message+". Check launcher status and receipts before retrying.";
+      brainUpdating=false;
+      await brainUpdateStatus(false);
     }
   };
-  setTimeout(()=>{if(!$("#ws-main").hidden)brainUpdateStatus(false)},3500);
+  setTimeout(()=>{if(!$("#ws-main").hidden)brainUpdateStatus(false)},1800);
   // Refresh graph after the page has authenticated; never trigger model or service actions.
   const brainTimer=setInterval(()=>{if(!document.hidden&&!$("#ws-main").hidden)brainRefresh();},15000);
   setTimeout(brainRefresh,2500);
