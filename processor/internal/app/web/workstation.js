@@ -284,7 +284,6 @@
   $("#ws-th-auto").onchange = () => { sessionStorage.setItem("ws_th_auto", $("#ws-th-auto").checked ? "1" : "0"); thSchedule(); };
   thSchedule();
   setTimeout(loadThoughts, 2000); // once, after the workstation has unlocked
-}
   // Brain Workbench: read-only real installations and locally proposed links.
   // No service-wiring API is called and moving a node never changes a service.
   let brainMode = "move", brainSelected = "processor", brainItems = [], brainLinks = [];
