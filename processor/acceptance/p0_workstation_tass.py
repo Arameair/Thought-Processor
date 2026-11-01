@@ -84,7 +84,10 @@ MODEL_SEEN = []
 
 
 class Model(Quiet):
-    """TEST STAND-IN for Ollama. Answers from what it was actually shown."""
+    """TEST STAND-IN for Ollama and for a llama.cpp server (OpenAI-compatible).
+    Answers from what it was actually shown. The OpenAI-compatible side refuses a
+    request longer than its context window the way llama-server does (HTTP 400)."""
+    ctx_chars = 200000
 
     def do_GET(self):
         if self.path == "/v1/models":
@@ -101,7 +104,18 @@ class Model(Quiet):
             return self.send(200, {"capabilities": ["completion", "vision", "thinking"]})
         if self.path == "/v1/chat/completions":
             MODEL_SEEN.append(body)
-            return self.send(200, {"choices": [{"message": {"role": "assistant", "content": "STAND-IN OPENAI: authorized local model answered"}}]})
+            total = sum(len(m.get("content") or "") for m in body.get("messages", []) if isinstance(m.get("content"), str))
+            if total > Model.ctx_chars:
+                return self.send(400, {"error": {"code": 400, "type": "exceed_context_size_error", "message": "the request exceeds the available context size"}})
+            sysmsgs = [m["content"] for m in body["messages"] if m["role"] == "system"]
+            fileblock = [m for m in sysmsgs if "----- file text -----" in m]
+            if fileblock:
+                text = fileblock[0].split("----- file text -----\n", 1)[1].rsplit("\n----- end of file text -----", 1)[0]
+                funcs = sorted(set(re.findall(r"^func (\w+)", text, re.M)))
+                ans = "STAND-IN OPENAI saw %d lines. First line: %s. Functions: %s." % (len(text.splitlines()), text.strip().splitlines()[0], ", ".join(funcs[:5]))
+            else:
+                ans = "STAND-IN OPENAI: authorized local model answered"
+            return self.send(200, {"choices": [{"message": {"role": "assistant", "content": ans}}]})
         if self.path != "/api/chat":
             return self.send(404, {})
         MODEL_SEEN.append(body)
@@ -402,6 +416,19 @@ def main():
     b.until("/api/ws/tass", lambda t: t["step"] == "READY", 30)
     st, j = b.req("POST", "/api/ws/tass/ask", {"question": "hello local model"})
     rec(st == 200 and "STAND-IN OPENAI" in str(j), "G2 OpenAI-compatible chat completion returns through TASS")
+    # #31 on a llama.cpp-shaped server: a question about a real file
+    st, f2 = b.req("GET", "/api/ws/file?repo=processor&path=processor/main.go")
+    st, j = b.req("POST", "/api/ws/tass/ask", {"question": "What does this file do?", "repo": "processor", "path": "processor/main.go"})
+    rep2, ft = (j.get("tass") or {}).get("reply", ""), f2.get("text", "")
+    rec(j.get("outcome") == "COMPLETED" and ("First line: " + ft.strip().splitlines()[0]) in rep2 and ("saw %d lines" % len(ft.splitlines())) in rep2
+        and "openai-compatible" in (j.get("tass") or {}).get("answered_by", ""),
+        "G4 llama.cpp-style (OpenAI-compatible) server: TASS's answer about processor/main.go shows the model saw the file, and names the model", rep2[:110])
+    Model.ctx_chars = 2000  # a server started with a small context window
+    n0 = len((b.req("GET", "/api/ws/tass")[1].get("conversation") or []))
+    st, j = b.req("POST", "/api/ws/tass/ask", {"question": "What does this file do?", "repo": "processor", "path": "processor/main.go"})
+    Model.ctx_chars = 200000
+    rec(j.get("outcome") != "COMPLETED" and "HTTP 400" in j.get("detail", ""),
+        "G5 a file too long for the server's context window is refused with the server's reason, nothing made up", j.get("detail", "")[:110])
     st, j = b.req("POST", "/api/ws/tass/model", {"kind": "openai-compatible", "url": "http://192.0.2.1:8080", "model": "granite-test"})
     rec(j.get("result", {}).get("outcome") != "COMPLETED", "G3 TASS refuses a non-loopback model address")
     # owner reuse after Processor forgets its setting

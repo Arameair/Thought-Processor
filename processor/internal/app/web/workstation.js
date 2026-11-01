@@ -118,6 +118,19 @@
     SET_MODEL: ["Choose TASS's local model server in WSL.", "Use this model", "/api/ws/tass/model"],
   };
   let ownerAsked = false;
+  // Plain-language next steps for the two usual llama.cpp problems. Hints only:
+  // nothing is changed, retried or sent anywhere.
+  const LLAMA_START = "llama-server -hf ibm-research/granite-vision-3.2-2b-GGUF:Q4_K_M --host 127.0.0.1 --port 8080 -c 16384";
+  function modelHint(detail, withFile) {
+    const d = String(detail || "");
+    if (/can't be reached|UNREACHABLE|Connection refused|URLError/i.test(d))
+      return "\n\nNext step: your local model server isn't answering at that address. In Ubuntu, start it (for example: " + LLAMA_START + ") and wait until it says it is listening, then ask again.";
+    if (withFile && /HTTP 400|context|too long|exceeds/i.test(d))
+      return "\n\nNext step: the file may be too long for the model server's context window. Restart llama-server with a larger window (add -c 16384), or ask about a shorter file.";
+    if (/took longer than/i.test(d))
+      return "\n\nNext step: the model is slow on this computer. A file question can take up to 2 minutes; try a shorter file or question.";
+    return "";
+  }
   async function refreshTass() {
     let t;
     try { t = await api("GET", "/api/ws/tass"); } catch (_) { return; }
@@ -135,7 +148,7 @@
       else if (t.step === "SET_MODEL") h += `<label>Server <select id="ws-tass-kind"><option value="ollama">Ollama</option><option value="openai-compatible">llama.cpp / OpenAI-compatible</option></select></label> <label>Address <input id="ws-tass-url" value="http://127.0.0.1:11434"></label> <label>Model <input id="ws-tass-model" value="${esc(t.default_model)}"></label> <button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
       else if (label) h += `<button class="btn small" type="button" id="ws-tass-step">${esc(label)}</button>`;
       if (t.step === "OWNER" && !ownerAsked) { ownerAsked = true; tassStep(path, {}); }
-      if (t.step === "SET_MODEL" && m.detail) h += `<p class="muted small">${esc(m.detail)}</p>`;
+      if (t.step === "SET_MODEL" && m.detail) h += `<p class="muted small">${esc(m.detail)}${esc(modelHint(m.detail, false)).replace(/\n/g, "<br>")}</p>`;
     }
     const editing = $("#ws-tass-kind") ? [$("#ws-tass-kind").value, $("#ws-tass-url").value, $("#ws-tass-model").value] : null;
     $("#ws-tass-setup").innerHTML = h + `<div id="ws-tass-msg" class="small ws-warn"></div>`;
@@ -181,7 +194,7 @@
       if (j.outcome === "COMPLETED" && j.tass) {
         tassLog.push({ role: "tass", text: j.tass.reply || j.tass.headline, by: j.tass.answered_by });
         $("#ws-tass-q").value = "";
-      } else tassLog.push({ role: "tass", text: "Not answered — " + j.outcome + ": " + j.detail, by: "nothing was saved" });
+      } else tassLog.push({ role: "tass", text: "Not answered — " + j.outcome + ": " + j.detail + modelHint(j.detail, useFile), by: "nothing was saved" });
     } catch (e) { tassLog.push({ role: "tass", text: "Not answered — " + e.message, by: "" }); }
     tassBusy = false; $("#ws-tass-send").disabled = false; $("#ws-tass-busy").textContent = "";
     renderTassLog();
