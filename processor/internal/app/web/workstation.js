@@ -284,4 +284,134 @@
   $("#ws-th-auto").onchange = () => { sessionStorage.setItem("ws_th_auto", $("#ws-th-auto").checked ? "1" : "0"); thSchedule(); };
   thSchedule();
   setTimeout(loadThoughts, 2000); // once, after the workstation has unlocked
+}
+  // Brain Workbench: read-only real installations and locally proposed links.
+  // No service-wiring API is called and moving a node never changes a service.
+  let brainMode = "move", brainSelected = "processor", brainItems = [], brainLinks = [];
+  let brainPositions = {};
+  const bpKey = "tp_brain_visual_positions_v1";
+  try { brainPositions = JSON.parse(sessionStorage.getItem(bpKey) || "{}"); } catch (_) {}
+  const brainScene = $("#brain-canvas"), brainSvg = $("#brain-lines"), brainNodes = $("#brain-nodes");
+  const brainName = x => x === "processor" ? "Thought Processor" : (brainItems.find(i => i.id === x)?.name || "Unknown");
+  const brainEl = x => [...brainNodes.children].find(e => e.dataset.id === x);
+  const brainSanitize = raw => String(raw || "")
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, "$1[REDACTED]@")
+    .replace(/([?&#](?:code|key|token|ticket|access_token|refresh_token|client_secret)=)[^\s&#]+/gi, "$1[REDACTED]")
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]{10,}|github_pat_[A-Za-z0-9_]{10,})\b/g, "[REDACTED]")
+    .replace(/(authorization\s*:\s*bearer\s+)\S+/gi, "$1[REDACTED]")
+    .replace(/((?:password|secret|private_key|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]");
+  function brainDetail() {
+    const x = brainItems.find(i => i.id === brainSelected);
+    const div = $("#brain-detail");
+    if (!x) { div.textContent = "No current installation selected."; return; }
+    div.innerHTML = "<b>" + esc(x.name) + "</b><p class='small'>Status: " + esc(x.status) +
+      "</p><p class='small'>Instance: <code>" + esc(x.id) + "</code></p><p class='small'>Version: " +
+      esc(x.version || "Not reported") + "</p><p class='small'>Last verified: " +
+      esc(x.verified || "Not reported") + "</p><p class='muted small'>Source: " + esc(x.source) + "</p>";
+  }
+  function brainDraw() {
+    brainSvg.replaceChildren();
+    const byId = id => brainEl(id);
+    const center = id => { const el = byId(id); return el ? {x:el.offsetLeft+el.offsetWidth/2,y:el.offsetTop+el.offsetHeight/2} : null; };
+    for (const edge of brainLinks) {
+      const a = center(edge.a), b = center(edge.b);
+      if (!a || !b) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      for (const [k,v] of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"#b6a0fc","stroke-width":2,"stroke-dasharray":"7 6"})) line.setAttribute(k,v);
+      brainSvg.appendChild(line);
+    }
+    $("#brain-proposals").innerHTML = brainLinks.length ? brainLinks.map((x,i) => "<p class='small'>" +
+      esc(brainName(x.a)) + " ↔ " + esc(brainName(x.b)) + " <span class='muted'>PROPOSED / INACTIVE</span> " +
+      "<button type='button' data-brain-remove='" + i + "'>Remove</button></p>").join("") : "None";
+    $("#brain-proposals").querySelectorAll("[data-brain-remove]").forEach(b => b.onclick = () => {
+      brainLinks.splice(Number(b.dataset.brainRemove),1); brainDraw();
+    });
+  }
+  function brainRender() {
+    brainNodes.replaceChildren();
+    const defaults=[{x:43,y:40},{x:8,y:10},{x:70,y:10},{x:9,y:67},{x:70,y:67},{x:43,y:76}];
+    brainItems.forEach((item,i) => {
+      const node = document.createElement("button");node.type="button";node.className="brain-node";
+      node.dataset.id=item.id;const pos=brainPositions[item.id] || defaults[i%defaults.length];
+      node.style.left=pos.x+"%";node.style.top=pos.y+"%";
+      const title=document.createElement("b");title.textContent=(item.id==="processor"?"🧠 ":"◈ ")+item.name;
+      const detail=document.createElement("small");detail.textContent=item.status+" · "+(item.version||"Version not reported");
+      node.append(title,detail);node.classList.toggle("selected",brainSelected===item.id);
+      let start=null,moved=false;
+      node.addEventListener("pointerdown",e=>{
+        if(brainMode!=="move")return;
+        const p=brainScene.getBoundingClientRect();start={px:e.clientX,py:e.clientY,x:node.offsetLeft,y:node.offsetTop,w:p.width,h:p.height};
+        moved=false;node.setPointerCapture(e.pointerId);
+      });
+      node.addEventListener("pointermove",e=>{
+        if(!start)return;
+        let dx=e.clientX-start.px,dy=e.clientY-start.py;
+        if(Math.abs(dx)+Math.abs(dy)>3)moved=true;
+        const x=Math.max(0,Math.min(start.w-node.offsetWidth,start.x+dx)),y=Math.max(0,Math.min(start.h-node.offsetHeight,start.y+dy));
+        node.style.left=x/start.w*100+"%";node.style.top=y/start.h*100+"%";brainDraw();
+      });
+      node.addEventListener("pointerup",()=>{
+        if(start){brainPositions[item.id]={x:parseFloat(node.style.left),y:parseFloat(node.style.top)};
+          sessionStorage.setItem(bpKey,JSON.stringify(brainPositions));start=null;}
+      });
+      node.addEventListener("click",()=>{
+        if(moved){moved=false;return}
+        if(brainMode==="connect"){
+          if(!brainRender.pending)brainRender.pending=item.id;
+          else { const a=brainRender.pending,b=item.id;brainRender.pending=null;
+            if(a!==b&&!brainLinks.some(e=>[e.a,e.b].includes(a)&&[e.a,e.b].includes(b)))
+              brainLinks.push({a,b});brainDraw();
+          }
+        } else if(brainMode==="remove"){brainLinks=brainLinks.filter(e=>e.a!==item.id&&e.b!==item.id);brainDraw();}
+        brainSelected=item.id;brainDetail();
+        brainNodes.querySelectorAll(".brain-node").forEach(n=>n.classList.toggle("selected",n.dataset.id===item.id));
+      });
+      brainNodes.appendChild(node);
+    });
+    brainDetail();brainDraw();
+  }
+  async function brainRefresh() {
+    if($("#ws-main").hidden)return;
+    try {
+      const s=await api("GET","/api/state");
+      const installs=(s.installations||[]).filter(x=>x && x.record && x.record.installation_id);
+      const existing=[{id:"processor",name:"Thought Processor",status:"Page connected",version:state?.processor_version || "Not reported",source:"Current authenticated session",verified:"Now"}];
+      for(const v of installs){
+        const r=v.record,rt=v.runtime||{},id=String(r.installation_id);
+        existing.push({id,name:r.name||r.feature_id||"Unnamed feature",status:rt.state||"Not reported",
+          version:r.version||"Not reported",source:"/api/state installation record",verified:"Not reported"});
+      }
+      const ids=new Set(existing.map(x=>x.id));
+      brainItems=existing;brainLinks=brainLinks.filter(x=>ids.has(x.a)&&ids.has(x.b));
+      if(!ids.has(brainSelected))brainSelected="processor";
+      brainRender();
+    }catch(e){$("#brain-detail").textContent="Cannot read verified feature status: "+e.message;}
+    brainLogs();
+  }
+  function brainLogs(){
+    const runs=state?.runs||[],select=$("#brain-log-source"),old=select.value;
+    select.innerHTML='<option value="all">All runs</option>'+runs.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.label||r.id)+'</option>').join("");
+    select.value=[...select.options].some(o=>o.value===old)?old:"all";
+    const selected=runs.filter(r=>select.value==="all"||r.id===select.value);
+    const raw=selected.map(r=>"TEST "+(r.label||r.test||r.id)+" | "+r.state+" | "+r.started+"\n"+(r.output||"No output reported.")).join("\n\n");
+    $("#brain-log").textContent=brainSanitize(raw)||"No telemetry reported.";
+    $("#brain-log-count").textContent=runs.length?runs.length+" reported test run(s)":"No telemetry";
+  }
+  function brainSetMode(m){
+    brainMode=m;brainRender.pending=null;
+    for(const mode of ["move","connect","remove"])$("#brain-"+mode).setAttribute("aria-pressed",String(mode===m));
+  }
+  for(const mode of ["move","connect","remove"])$("#brain-"+mode).onclick=()=>brainSetMode(mode);
+  $("#brain-reset").onclick=()=>{brainPositions={};sessionStorage.removeItem(bpKey);brainRender();};
+  $("#brain-refresh").onclick=brainRefresh;
+  $("#brain-log-refresh").onclick=async()=>{await refresh();brainRefresh();};
+  $("#brain-log-source").onchange=brainLogs;
+  $("#brain-log-copy").onclick=async()=>{
+    const clean=brainSanitize($("#brain-log").textContent);
+    try{await navigator.clipboard.writeText(clean);$("#brain-copy-result").textContent="Copied sanitized test output.";}
+    catch(_){$("#brain-copy-result").textContent="Clipboard unavailable; select the output text and copy manually.";}
+  };
+  // Refresh graph after the page has authenticated; never trigger model or service actions.
+  const brainTimer=setInterval(()=>{if(!document.hidden&&!$("#ws-main").hidden)brainRefresh();},15000);
+  setTimeout(brainRefresh,2500);
 })();
