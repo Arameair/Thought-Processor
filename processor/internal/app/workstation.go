@@ -352,6 +352,19 @@ func (a *App) workstationRoutes(m *http.ServeMux) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Write(b)
 	}))
+	// The visual Workstation uses local, embedded assets — no CDN.
+	m.HandleFunc("GET /brain-workbench.js", a.wrap(public, func(w http.ResponseWriter, r *http.Request) {
+		b, err := webFS.ReadFile("web/brain-workbench.js")
+		if err != nil { http.Error(w, "missing", 500); return }
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Write(b)
+	}))
+	m.HandleFunc("GET /brain-workbench.css", a.wrap(public, func(w http.ResponseWriter, r *http.Request) {
+		b, err := webFS.ReadFile("web/brain-workbench.css")
+		if err != nil { http.Error(w, "missing", 500); return }
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Write(b)
+	}))
 	gated := func(lv level, h func(w http.ResponseWriter, r *http.Request, g wsGate)) http.HandlerFunc {
 		return a.wrap(lv, func(w http.ResponseWriter, r *http.Request) {
 			g := a.wsGate(r.Context())
