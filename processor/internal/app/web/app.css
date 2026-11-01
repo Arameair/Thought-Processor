@@ -246,3 +246,24 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); 
 .pl-flow { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); overflow-x: auto; }
 .pl-stage { flex: none; min-width: 0; }
 .pl-stage .badge { white-space: normal; word-break: break-all; display: inline-block; }
+
+/* Brain Workbench UI (external CSS required by the Workstation's strict CSP) */
+
+.brain-head,.brain-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}.brain-head{margin-bottom:10px}
+.brain-actions{justify-content:flex-start;margin:9px 0}.brain-actions button[aria-pressed="true"]{border-color:#69b3fd;background:#214b7c}
+.brain-grid{display:grid;grid-template-columns:minmax(0,1fr) 240px;border:1px solid #39516e;border-radius:10px;overflow:hidden}
+#brain-canvas{position:relative;min-height:430px;background:radial-gradient(ellipse at center,#213756,#0a1325 72%);overflow:hidden}
+#brain-canvas:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#6079a64d 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
+#brain-lines,#brain-nodes{position:absolute;inset:0;width:100%;height:100%}#brain-lines{pointer-events:none}
+.brain-node{position:absolute;min-width:120px;width:160px;max-width:32%;padding:11px;background:#172e4a;color:#e6f4ff;border:1px solid #6089b7;border-radius:13px;cursor:grab;touch-action:none;text-align:left;z-index:2;box-shadow:0 8px 20px #0007}
+.brain-node[data-id="processor"]{background:#32274f;border:2px solid #ba9eff}.brain-node.selected{outline:2px solid #8bdafa}
+.brain-node b,.brain-node small{display:block;overflow-wrap:anywhere}.brain-node small{color:#abc1db}
+#brain-inspector{background:#121e32;border-left:1px solid #39516e;padding:14px;overflow-wrap:anywhere}#brain-inspector h3{margin:0 0 10px;font-size:13px}#brain-inspector h3:not(:first-child){margin-top:18px}
+.brain-logs{padding:11px 0}.brain-logs summary{cursor:pointer}.brain-output{background:#080f1b;color:#d9e8ff;border:1px solid #39516e;border-radius:7px;padding:10px;min-height:85px;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+#brain-log-source{background:#162b43;color:#e9f3ff;border:1px solid #526c8c;border-radius:6px;padding:6px}
+@media(max-width:800px){.brain-grid{grid-template-columns:1fr}#brain-inspector{border-left:0;border-top:1px solid #39516e}}
+
+#brain-workspace{margin:12px 0;padding:12px}#ws-tools{margin:12px 0;padding:12px}#ws-tools>summary{cursor:pointer}
+.brain-head h2{margin:0}#brain-update-status{margin:6px 0 12px;padding:8px;border:1px solid #3b536f;border-radius:6px}
+#brain-update-apply{border-color:#2e9e87;background:#124e45;color:#e5fff6;font-weight:700}
+#brain-update-apply:disabled{opacity:.55;cursor:not-allowed}
