@@ -6,11 +6,13 @@
 <title>Development Workstation</title>
 <link rel="stylesheet" href="/app.css">
 <script src="/workstation.js" defer></script>
+<link rel="stylesheet" href="/brain-workbench.css">
+<script src="/brain-workbench.js" defer></script>
 </head>
 <body>
 <div class="ws">
   <header class="top">
-    <div class="brand"><span class="mark" aria-hidden="true"></span><span>Development Workstation</span></div>
+    <div class="brand"><span class="mark" aria-hidden="true"></span><span>TASS Brain Workstation</span></div>
     <div class="chips">
       <span class="chip" id="ws-identity"><span class="dot"></span><span class="t">Identity: checking…</span></span>
       <span class="chip" id="ws-github"><span class="dot"></span><span class="t">GitHub: checking…</span></span>
@@ -26,7 +28,63 @@
     <p><a class="btn" href="/">Open Thought Processor to pair / sign in</a></p>
   </section>
 
-  <main id="ws-main" class="ws-grid" hidden>
+
+  <main id="ws-main" class="bw-workbench" hidden>
+    <section class="bw-heading">
+      <div><h1>Development Brain</h1><p class="muted small">Real installations, verifiable status, visual connections, and diagnostics.</p></div>
+      <div class="bw-toolbar">
+        <button class="btn small" id="bw-refresh" type="button">↻ Refresh</button>
+        <button class="btn small" id="bw-reset" type="button">Reset layout</button>
+        <a class="btn small" href="/pipeline" target="_blank" rel="noopener">Pipeline ↗</a>
+        <a class="btn small" href="/">Thought Processor</a>
+        <button class="btn small" id="bw-updates" type="button">Updates</button>
+      </div>
+    </section>
+    <div class="bw-stats">
+      <div><small>Installed</small><strong id="bw-installed">Not reported</strong></div>
+      <div><small>Running</small><strong id="bw-running">Not reported</strong></div>
+      <div><small>Active grants</small><strong id="bw-grants">Not reported</strong></div>
+      <div><small>Identity</small><strong id="bw-identity">Checking</strong></div>
+      <div><small>Tests</small><strong id="bw-tests">No runs</strong></div>
+    </div>
+    <nav class="bw-tabs" aria-label="Workstation views">
+      <button type="button" class="bw-tab on" data-bw-view="brain">◈ Brain Map</button>
+      <button type="button" class="bw-tab" data-bw-view="files">⌘ Files &amp; TASS</button>
+      <button type="button" class="bw-tab" data-bw-view="tests">✓ Tests</button>
+      <button type="button" class="bw-tab" data-bw-view="thoughts">✧ Thoughts</button>
+    </nav>
+    <div class="bw-brain">
+      <section class="bw-graph-side">
+        <div class="bw-graphbar">
+          <div class="bw-modes">
+            <button type="button" class="bw-mode on" data-bw-mode="move">Move</button>
+            <button type="button" class="bw-mode" data-bw-mode="connect">Connect</button>
+            <button type="button" class="bw-mode" data-bw-mode="remove">Remove proposal</button>
+          </div>
+          <label class="small"><input type="checkbox" id="bw-authorized"> Show authorized, not observed</label>
+        </div>
+        <p class="small muted" id="bw-help">Drag nodes to arrange. Click a feature to inspect it.</p>
+        <div id="bw-map" class="bw-map"><svg id="bw-wires" aria-hidden="true"></svg><div id="bw-nodes"></div><p id="bw-empty" class="bw-empty muted">Reading real installed features…</p></div>
+        <div class="bw-legend small"><span>━ Signed runtime evidence</span><span>┄ Authorized, not observed</span><span>┈ Inactive proposal</span></div>
+      </section>
+      <aside class="panel bw-inspector">
+        <h3>Feature inspector</h3>
+        <strong id="bw-name">Thought Processor</strong>
+        <p id="bw-description" class="small muted">Select an installed feature.</p>
+        <dl id="bw-fields" class="bw-fields"></dl>
+        <div class="bw-inspector-buttons">
+          <button class="btn small" type="button" id="bw-start" disabled>Start</button>
+          <button class="btn small" type="button" id="bw-stop" disabled>Stop</button>
+          <button class="btn small" type="button" id="bw-selftest" disabled>Self-test</button>
+          <button class="btn small" type="button" id="bw-activity" disabled>Copy activity</button>
+        </div>
+        <p id="bw-action-status" class="small muted" role="status">Changes require authorization. Moving nodes never changes services.</p>
+        <h3>Proposed connections</h3>
+        <div id="bw-proposals" class="small muted">No proposals.</div>
+      </aside>
+    </div>
+    <div id="bw-existing" class="ws-grid">
+
     <aside class="panel ws-side">
       <h3>Repositories</h3>
       <div id="ws-repos"></div>
@@ -62,8 +120,22 @@
       <p class="muted small">Read-only. Each read goes through Processor's normal path: Identity checks the permission the Admin already approved, every time. Nothing is changed and nothing is sent outside this computer by this panel.</p>
       <div id="ws-th-list"></div>
     </section>
+    </div>
+    <section class="panel bw-diag">
+      <div class="bw-diaghead">
+        <div><h3>Diagnostics / Clean Log</h3><span id="bw-log-status" class="muted small">No telemetry</span></div>
+        <div class="bw-toolbar">
+          <label class="small">Source <select id="bw-log-source"><option value="processor">Processor</option></select></label>
+          <button class="btn small" type="button" id="bw-reload-log">Refresh log</button>
+          <button class="btn small" type="button" id="bw-copy-log">Copy Clean Log</button>
+          <button class="btn small" type="button" id="bw-log-toggle">Collapse</button>
+        </div>
+      </div>
+      <textarea id="bw-log" class="bw-log mono" readonly aria-label="Sanitized diagnostic events">No telemetry loaded. Press Refresh log.</textarea>
+      <p class="small muted">Redacted Processor events / clean per-feature activity. Review copied details before sharing. Raw test output and private feature logs are excluded.</p>
+    </section>
   </main>
-  <p class="muted small ws-foot">Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
+  <p class="muted small ws-foot">The map reflects installed features, with unverified links shown only as inactive proposals. Repository viewing is read-only; tests use the launcher's fixed allowlist. Start/Stop actions require Identity.</p>Read-only. Nothing here writes to a repository, runs a shell, or accepts a command from the page: tests are a fixed list chosen by the launcher.</p>
 </div>
 </body>
 </html>
