@@ -13,7 +13,7 @@ Linux/WSL developer evidence; NOT a Windows run and NOT real GitHub. Pairing
 codes and links are read from the disposable work folder and never printed.
 Exit 0 only when every check PASSes.
 """
-import argparse, json, os, re, signal, socket, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
+import argparse, json, os, re, shutil, signal, socket, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 import http.cookiejar
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,7 +24,9 @@ ap.add_argument("--tass-src", required=True)
 ap.add_argument("--work", required=True)
 args = ap.parse_args()
 W = Path(args.work).resolve()
-W.mkdir(parents=True, exist_ok=True, mode=0o700)
+if W.exists():
+    shutil.rmtree(W)  # a fresh, disposable folder every run (a reused one keeps an earlier run's pairing)
+W.mkdir(parents=True, mode=0o700)
 PROC_REPO = Path(__file__).resolve().parents[2]
 ID_SRC, TASS_SRC = Path(args.identity_src).resolve(), Path(args.tass_src).resolve()
 
