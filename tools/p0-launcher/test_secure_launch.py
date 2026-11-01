@@ -14,7 +14,7 @@ class TestLauncher(unittest.TestCase):
         # the exact approved launcher branch, not accept arbitrary checkouts.
         import re
         script = launcher.RUN.read_text()
-        match = re.search(r"(?m)^LAUNCH_BRANCH=([^\\s#]+)$", script)
+        match = re.search(r"(?m)^LAUNCH_BRANCH=([^\s#]+)$", script)
         self.assertIsNotNone(match, "missing P1 branch preflight requirement")
         self.assertEqual(match.group(1), launcher.LAUNCH_BRANCH)
         self.assertEqual(launcher.LAUNCH_BRANCH, "experiment/brain-workstation-controls-20261031")
