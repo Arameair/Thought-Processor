@@ -19,6 +19,9 @@ class FakeTASS(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header('Content-Type','application/json')
         self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def do_GET(self):
+        if self.path == '/api/status':
+            return self.respond({'model_ok': True, 'busy': False, 'identity': {'repo': 'Arameair/TASS'},
+                'jupyter': 'http://127.0.0.1:8888/?token=SECRET'})
         if self.path == '/api/state':
             return self.respond({
                 'status': {
@@ -101,6 +104,14 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(len(payload['proposals']),1)
         self.assertNotIn('token=',data.decode())
         self.assertNotIn('TOP SECRET',data.decode())
+
+    def test_connection_diagnostics_without_secrets(self):
+        code, headers, data = self.req('/bridge/diagnostics')
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(data)['workshop'], 'reachable')
+        self.assertEqual(json.loads(data)['model'], 'ready')
+        self.assertNotIn('SECRET', data.decode())
+        self.assertNotIn('token=', data.decode())
 
     def test_csrf_host_and_post_methods(self):
         body={'text':'Hello from Atrium'}
