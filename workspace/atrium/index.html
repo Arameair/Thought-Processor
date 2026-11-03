@@ -86,6 +86,15 @@
             <span class="constellation-label bottom-right">REPRESENTATIVE MAP · VERIFIED STATE IN INSPECTOR</span>
           </div>
           <div class="node-inspector" id="nodeInspector"><div class="inspector-badge" id="inspectorIcon">✳</div><div class="inspector-text"><strong id="inspectorTitle">Select a connection</strong><p id="inspectorBody">Explore how TASS, Identity, the model, the library and the Workshop fit together.</p></div><span class="inspector-state" id="inspectorState">MAP</span></div>
+
+          <div class="capability-evidence" aria-label="Real library execution evidence">
+            <div class="evidence-head">
+              <div><span class="eyebrow">LIVE CAPABILITY AUDIT</span><h3>What TASS has actually run</h3></div>
+              <button class="subtle-btn" type="button" id="refreshEvidence">Refresh evidence</button>
+            </div>
+            <p>Library entries are discoverable code, not proven abilities. Only actual Workshop audit results count here.</p>
+            <div id="evidenceCards" class="evidence-cards"><span class="muted-kicker">Waiting for Workshop audit...</span></div>
+          </div>
         </section>
 
         <section class="view" id="view-ideas" aria-label="Idea garden">
