@@ -155,6 +155,7 @@ async function askTass(ev) {
   if(session.busy)return notify('TASS is already working on another request.');
   if(session.fullAuto)return notify('Full Auto is enabled. Turn it off in Workshop so you can approve code first.');
   $('askTass').disabled=true;
+  const taskStartId=session.lastId;
   const message='TASS, I want to build this with you: '+task+
     '\nPlease tell me what existing library or project ability could help, and propose ONE concrete, safe step that I can review. Do not execute code without my approval. Do not claim work was done until there is a real Workshop result.';
   try {
@@ -164,7 +165,7 @@ async function askTass(ev) {
     const data=await res.json();
     if(!res.ok)throw Error(data.error||'Workshop rejected the request');
     session.request=task;
-    session.requestStart=session.lastId;
+    session.requestStart=taskStartId;
     session.asked=false;session.answered=false;session.proposed=false;session.executed=false;
     session.busy=true;renderStatus();updateProgress();
     notify('Sent to the real TASS. Waiting for Workshop events.');
