@@ -47,6 +47,8 @@ def make_mirror(root: Path):
         "# Make a tool, then prove it works\nby: Claude\n\nBuild a tool and check it.\n\n## Step 1\n"
         "```python\nprint('wrote tool')\n```\n\n## Step 2\n```python\nprint('ALL PASS')\n```\n")
     (files / "lessons/claude/README.md").write_text("# not a lesson\n")
+    (files / "lessons/claude/01-talk-in-discord.md").write_text(
+        "# Talk in Discord\nby: Claude\n\nSay hello.\n\n## Step 1\n```python\nprint('hello')\n```\n")
     (files / "projects/hello-tass").mkdir(parents=True)
     (files / "projects/hello-tass/project.md").write_text(
         "# Hello TASS\n\nA first project that greets us.\n\nentry: main.py\n")
@@ -475,8 +477,8 @@ class EndToEndTests(unittest.TestCase):
 
     def test_lesson_teach_step_and_progress(self):
         st = self.get("/api/studio")
-        self.assertEqual([(l["path"], l["teacher"], l["steps"]) for l in st["lessons"]],
-                         [("lessons/claude/01-make-a-tool-and-check-it.md", "Claude", 2)])
+        self.assertIn(("lessons/claude/01-make-a-tool-and-check-it.md", "Claude", 2),
+                      [(l["path"], l["teacher"], l["steps"]) for l in st["lessons"]])
         self.post("/api/message", {"text": "TASS, let's do the lesson \"Make a tool\""})
         st = self.wait_for(lambda s: s["proposals"])
         self.assertTrue(any(e["type"] == "book" and e.get("kind") == "lesson" for e in st["timeline"]))
@@ -485,8 +487,51 @@ class EndToEndTests(unittest.TestCase):
         self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
         self.wait_for(lambda s: any(e["type"] == "result" and "wrote tool" in e["text"] for e in s["timeline"]))
         self.wait_for(lambda s: not s["status"]["busy"])
-        lesson = self.get("/api/studio")["lessons"][0]
+        lesson = next(l for l in self.get("/api/studio")["lessons"] if l["path"].endswith("make-a-tool-and-check-it.md"))
         self.assertEqual(lesson["done"], [1])                     # progress comes from what really ran
+
+    def test_discord_skill_is_earned_then_allowed(self):
+        box = self.root / "shared/discord"
+        (box / "outbox").mkdir(parents=True, exist_ok=True)
+        (box / "sent").mkdir(exist_ok=True)
+        (box / "status.json").write_text(json.dumps({"connected": True, "discord_state": "connected"}))
+        lesson = "lessons/claude/01-talk-in-discord.md"
+        # Not learned yet: the action is refused and the skill can't be allowed.
+        self.post("/api/message", {"text": "TASS, say hi in Discord"})
+        self.wait_for(lambda s: any(e["type"] == "notice" and "haven't learned" in e["text"] for e in s["timeline"]))
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            self.post("/api/skill", {"name": "discord", "allow": True})
+        self.assertEqual(cm.exception.code, 409)
+        self.wait_for(lambda s: not s["status"]["busy"])
+        # The lesson really ran (progress comes from the audit log).
+        with open(self.root / "data/audit.jsonl", "a") as f:
+            f.write(json.dumps({"event": "ran", "label": f"RUN {lesson}#1", "source": f"{lesson} · cell 1"}) + "\n")
+        skill = next(l for l in self.get("/api/studio")["lessons"] if l["path"] == lesson)["skill"]
+        self.assertEqual((skill["learned"], skill["allowed"]), (True, False))
+        # Learned, not allowed: Dustin approves the message first.
+        self.post("/api/reset", {})
+        self.post("/api/message", {"text": "TASS, say hi in Discord"})
+        st = self.wait_for(lambda s: s["proposals"])
+        p = st["proposals"][0]
+        self.assertEqual((p["kind"], p["text"]), ("say", "Hi Dustin, TASS here in Discord!"))
+        self.assertEqual(list((box / "outbox").glob("*")), [])
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
+        out = box / "outbox" / f"tass-{p['id']}.txt"
+        self.assertEqual(out.read_text(), "Hi Dustin, TASS here in Discord!")
+        (box / "sent" / f"tass-{p['id']}.json").write_text(json.dumps({"delivery": "delivered"}))   # the door's receipt
+        out.unlink()
+        self.wait_for(lambda s: any(e["type"] == "result" and e["text"].startswith("Delivered in Discord") for e in s["timeline"]))
+        # Allowed: the next message goes straight out, no approval card.
+        self.post("/api/skill", {"name": "discord", "allow": True})
+        self.post("/api/reset", {})
+        self.post("/api/message", {"text": "TASS, say hi in Discord"})
+        self.wait_for(lambda s: any(e["type"] == "notice" and "on his own" in e["text"] for e in s["timeline"]))
+        st = self.get("/api/state")
+        self.assertEqual([q for q in st["proposals"] if q["status"] == "pending"], [])
+        self.assertEqual(len(list((box / "outbox").glob("tass-*.txt"))), 1)
+        self.post("/api/skill", {"name": "discord", "allow": False})
+        self.wait_for(lambda s: not s["status"]["busy"])
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

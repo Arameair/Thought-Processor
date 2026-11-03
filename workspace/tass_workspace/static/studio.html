@@ -70,6 +70,10 @@
   .steps { display: flex; gap: 4px; margin-top: 5px; }
   .steps i { width: 18px; height: 6px; border-radius: 3px; background: #2e3a45; }
   .steps i.ok { background: var(--idea); }
+  .skill { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .skill .learned { font-size: 12px; color: var(--idea); letter-spacing: .5px; }
+  .skill .btn.on { border-color: var(--idea); color: var(--idea); }
+  .skill .again { font-size: 11.5px; color: var(--dim); }
   .center-col { display: flex; flex-direction: column; gap: 18px; }
   .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; color: var(--dim); }
   .empty b { color: var(--text); font-family: var(--serif); font-weight: 500; font-size: 17px; display: block; margin-bottom: 6px; }
@@ -246,9 +250,21 @@ function renderLessons(lessons) {
     return `<div class="lesson"><span class="who ${who}">${esc(l.teacher || "lesson")}</span>
       <div class="body"><div class="t">${esc(l.title)}</div><div class="s">${esc(l.summary)}</div>
         <div class="steps">${dots}</div></div>
-      <button class="btn" data-lesson="${i}">${finished ? "Do it again" : l.done.length ? "Continue" : "Teach TASS this"}</button></div>`;
+      ${l.skill && l.skill.learned
+        ? `<div class="skill"><span class="learned">✓ Learned</span>
+             <button class="btn ${l.skill.allowed ? "on" : ""}" data-skill="${esc(l.skill.name)}" data-allow="${l.skill.allowed ? 0 : 1}"
+               title="${l.skill.allowed ? "TASS uses this on his own. Click to make him ask you each time." : "Let TASS use this without asking you each time."}">
+               ${l.skill.allowed ? "✓ TASS can use it · turn off" : "▶ Let TASS use it"}</button>
+             <a href="#" class="again" data-lesson="${i}">do the lesson again</a></div>`
+        : `<button class="btn" data-lesson="${i}">${finished ? "Do it again" : l.done.length ? "Continue" : "Teach TASS this"}</button>`}</div>`;
   }).join("");
-  document.querySelectorAll("[data-lesson]").forEach(b => b.onclick = () => {
+  document.querySelectorAll("[data-skill]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { await post("/api/skill", {name: b.dataset.skill, allow: b.dataset.allow === "1"}); await refresh(); }
+    catch (e) { alert(e.message); b.disabled = false; }
+  });
+  document.querySelectorAll("[data-lesson]").forEach(b => b.onclick = (ev) => {
+    ev.preventDefault();
     const l = lessons[+b.dataset.lesson];
     const next = Array.from({length: l.steps}, (_, k) => k + 1).find(n => !l.done.includes(n)) || 1;
     say(next === 1

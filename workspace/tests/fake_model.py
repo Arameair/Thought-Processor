@@ -20,6 +20,8 @@ def script(messages):
         first_line = bullets[0][2:] if bullets else ""
     if "[BOOK lessons/claude/01-make-a-tool" in last:
         return ("Step 1 writes a tool file.", "Step 1 writes our tool into tools/.\nRUN: lessons/claude/01-make-a-tool-and-check-it.md#1")
+    if "say hi in discord" in last.lower():
+        return ("Dustin wants a hello in Discord.", "Sure.\nSAY IN DISCORD: Hi Dustin, TASS here in Discord!")
     if "let's do the lesson" in last.lower():
         return ("Open the lesson first.", "Let me open it.\nOPEN: lessons/claude/01-make-a-tool-and-check-it.md")
     if "build our first room" in last.lower():

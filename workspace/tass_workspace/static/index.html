@@ -185,6 +185,17 @@ function proposalCard(p) {
     if (p.status !== "pending") settle(el, p.status);
     return;
   }
+  if (p.kind === "say") {
+    const el = add(chat, `<h4>TASS wants to say this in Discord <span class="tag">needs your OK</span></h4>
+      <pre>${esc(p.text)}</pre>
+      <div class="row"><button class="approve">Approve → send</button><button class="reject">Reject</button>
+      <span class="muted state"></span></div>`, "card proposal");
+    el.id = "p-" + p.id;
+    el.querySelector(".approve").onclick = () => decide(p.id, "approve", el);
+    el.querySelector(".reject").onclick = () => decide(p.id, "reject", el);
+    if (p.status !== "pending") settle(el, p.status);
+    return;
+  }
   const files = p.files ? `<div class="muted">Files that will be copied into <code>shared/projects/${esc(p.project)}/</code>:</div>
     <div>${p.files.map(f => `<code>${esc(f)}</code>`).join(" ")}</div>
     <div class="muted" style="margin-top:6px">Code that runs (<code>${esc(p.entry)}</code>):</div>` : "";

@@ -36,7 +36,7 @@ Talk like a teammate: short, concrete, and say what you want to try and why."""
 
 @dataclass
 class Action:
-    kind: str          # "open" | "run" | "mind"
+    kind: str          # "open" | "run" | "mind" | "say"
     book: str | None = None
     project: str | None = None
     path: str | None = None       # mind file for "mind"
@@ -46,6 +46,8 @@ class Action:
     code: str | None = None
 
     def label(self) -> str:
+        if self.kind == "say":
+            return "SAY IN DISCORD"
         if self.kind == "mind":
             return f"CHANGE MIND {self.path}"
         if self.kind == "open":
@@ -65,6 +67,8 @@ ACTION_RUN_CODE = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?code`?[^\n]*\n+\s*`
 ACTION_MIND = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*\n+\s*```(?:markdown|md)?[ \t]*\n(.*?)\n```",
                          re.M | re.I | re.S)
 ACTION_MIND_HEAD = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*$", re.M | re.I)
+# A learned skill (lesson "Talk in Discord"): everything after the colon, to the end of the reply, is the message.
+ACTION_SAY = re.compile(r"^[ \t*_`>-]*SAY[ _-]+IN[ _-]+DISCORD[*_ ]*:[*_ ]*", re.M | re.I)
 REMEMBER = re.compile(r"^[ \t*_`>-]*REMEMBER[*_ ]*:[*_ ]*(.+?)[*_ ]*$", re.M | re.I)
 
 
@@ -89,6 +93,10 @@ def parse_action(reply: str) -> tuple[str, Action | None]:
         full = ACTION_MIND.match(reply, m.start())
         if full:
             found.append((m.start(), full.end(), Action("mind", path=m.group(1), content=full.group(2).strip() + "\n")))
+    for m in ACTION_SAY.finditer(reply):
+        said = reply[m.end():].strip().strip("`").strip()
+        if said:
+            found.append((m.start(), len(reply), Action("say", content=said)))
     for m in ACTION_RUN_CODE.finditer(reply):
         found.append((m.start(), m.end(), Action("run", code=m.group(1))))
     for m in ACTION_RUN_BOOK.finditer(reply):

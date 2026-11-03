@@ -40,6 +40,13 @@ def env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+# Skills TASS earns by finishing a lesson. Once learned, Dustin can let him use one without approving each time.
+SKILLS = {
+    "discord": {"title": "Talk in Discord", "lesson": "lessons/claude/01-talk-in-discord.md",
+                "action": "SAY IN DISCORD: <your words>"},
+}
+
+
 class Workspace:
     def __init__(self):
         self.data = Path(env("TASS_DATA", "/workspace/data"))
@@ -82,6 +89,8 @@ class Workspace:
         self.auto_streak = 0          # automatic approvals since Dustin's last message
         self._auto_queue: list[str] = []
         self.allow.update({k: v for k, v in saved.get("allow", {}).items() if k in self.allow})
+        # Learned skills Dustin lets TASS use without approving each time (only once the lesson is done).
+        self.skills_allowed = {k: bool(v) for k, v in saved.get("skills", {}).items() if k in SKILLS}
         self.clients: list[queue.Queue] = []
         self.turn_lock = threading.Lock()
         self.busy = False
@@ -178,6 +187,18 @@ class Workspace:
         except (OSError, ValueError):
             return {}
 
+    def skill_learned(self, name: str) -> bool:
+        lesson = SKILLS[name]["lesson"]
+        try:
+            steps = len(self.mind.book(lesson).cells)
+        except ValueError:
+            return False
+        return steps > 0 and len(self.lesson_progress().get(lesson, ())) >= steps
+
+    def skills_state(self) -> list[dict]:
+        return [{"name": k, "title": v["title"], "lesson": v["lesson"], "learned": self.skill_learned(k),
+                 "allowed": self.skill_learned(k) and self.skills_allowed.get(k, False)} for k, v in SKILLS.items()]
+
     def discord_section(self) -> str:
         st = self.discord_status()
         if not st:
@@ -186,8 +207,14 @@ class Workspace:
         how = ("talk there with tools/discord_talk.py (say, reply, wait, heard)"
                if (self.kernel.shared / "tools" / "discord_talk.py").exists()
                else "learn it first with the lesson lessons/claude/01-talk-in-discord.md")
-        return (f"DISCORD: {state}. The Discord door carries files in discord/outbox/ to the channel and "
-                f"puts what Dustin says there in discord/inbox/; {how}.")
+        out = (f"DISCORD: {state}. The Discord door carries files in discord/outbox/ to the channel and "
+               f"puts what Dustin says there in discord/inbox/; {how}.")
+        if self.skill_learned("discord"):
+            out += ("\nYou LEARNED to talk in Discord (lesson done). To say something there, end a reply with a line\n"
+                    "  SAY IN DISCORD: <your words>\n(that is your one action; at most 1900 characters). "
+                    + ("Dustin lets you do this on your own now: use it when it helps, not for every reply."
+                       if self.skills_allowed.get("discord") else "Dustin approves each message before it goes."))
+        return out
 
     def studio_state(self) -> dict:
         tl = self.timeline
@@ -205,7 +232,10 @@ class Workspace:
         return {
             "ideas": self.studio.ideas(), "rooms": self.studio.rooms(), "recent": recent,
             "lessons": [{"path": b.path, "title": b.title, "summary": b.summary, "teacher": b.teacher, "steps": len(b.cells),
-                         "done": sorted(self.lesson_progress().get(b.path, ()))} for b in self.mind.lessons()],
+                         "done": sorted(self.lesson_progress().get(b.path, ())),
+                         "skill": next((s for s in self.skills_state() if s["lesson"] == b.path), None)}
+                        for b in self.mind.lessons()],
+            "skills": self.skills_state(),
             "memory": [l[2:] for l in self.memory_text(8).splitlines()],
             "pending": [{"id": p["id"], "label": p["label"]} for p in self.proposals.values() if p["status"] == "pending"],
             "busy": self.busy, "last_thought": (thought or {}).get("text", "")[-600:],
@@ -225,7 +255,8 @@ class Workspace:
         }
 
     def save_controls(self):
-        (self.data / "controls.json").write_text(json.dumps({"autonomy": self.autonomy, "allow": self.allow}))
+        (self.data / "controls.json").write_text(json.dumps({"autonomy": self.autonomy, "allow": self.allow,
+                                                             "skills": self.skills_allowed}))
 
     def log(self, msg: str):
         print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -411,7 +442,7 @@ class Workspace:
                         self.messages.append({"role": "user", "content": f"[Could not open: {e}]"})
                         self.emit("notice", text=str(e))
                         continue
-                if action and action.kind in ("run", "mind"):
+                if action and action.kind in ("run", "mind", "say"):
                     self._propose(action)
                 break
         except Exception as e:  # noqa: BLE001
@@ -440,7 +471,22 @@ class Workspace:
     def _propose(self, action: Action):
         p: dict = {"id": secrets.token_hex(4), "label": action.label(), "status": "pending", "at": time.time()}
         try:
-            if action.kind == "mind":
+            if action.kind == "say":
+                if not self.skill_learned("discord"):
+                    raise ValueError("You haven't learned to talk in Discord yet: finish the lesson "
+                                     f"{SKILLS['discord']['lesson']} with Dustin first.")
+                text = (action.content or "").strip()
+                if len(text) > 1900:
+                    raise ValueError(f"That Discord message is {len(text)} characters; the limit is 1900.")
+                p.update(kind="say", text=text, code=text, source="Discord channel (through the door)")
+                if self.skills_allowed.get("discord"):
+                    if self._origin:
+                        p["origin"] = self._origin
+                    self.proposals[p["id"]] = p
+                    self.audit("proposed", p)
+                    self._send_discord(p, via="skill allowed")
+                    return
+            elif action.kind == "mind":
                 if not self.allow["mind changes"]:
                     return self._refuse("mind changes", p["label"])
                 man = self.mind.manifest()
@@ -541,6 +587,8 @@ class Workspace:
             return p
         if p.get("kind") == "mind":
             return self._send_mind(p)
+        if p.get("kind") == "say":
+            return self._send_discord(p, via=via)
         if self.running:
             raise ValueError(f"Wait: {self.running['label']} is still running (or press Stop).")
         p["status"] = "running"
@@ -549,6 +597,58 @@ class Workspace:
         self.emit("decision", pid=pid, status="running")
         threading.Thread(target=self._run, args=(p,), daemon=True).start()
         return p
+
+    def _send_discord(self, p: dict, via: str = "workspace") -> dict:
+        """Hand a message to the Discord door (a file in shared/discord/outbox/), then report its receipt."""
+        box = self.kernel.shared / "discord"
+        p["status"] = "sent"
+        self.audit("approved", p, via=via)
+        if not self.discord_status():
+            p["status"] = "failed"
+            self._discord_result(p, False, "the Discord door isn't running (./run.sh discord)")
+            return p
+        (box / "outbox").mkdir(parents=True, exist_ok=True)
+        name = f"tass-{p['id']}"
+        tmp = box / "outbox" / f"{name}.tmp"
+        tmp.write_text(p["text"], "utf-8")
+        tmp.rename(box / "outbox" / f"{name}.txt")
+        self.emit("decision", pid=p["id"], status="sending to Discord…")
+        if via == "skill allowed":
+            self.emit("notice", text="TASS said something in Discord on his own (you allowed this skill).")
+
+        def watch():
+            end = time.time() + 60
+            while time.time() < end:
+                failed = box / "failed" / f"{name}.json"
+                if failed.exists():
+                    try:
+                        why = json.loads(failed.read_text("utf-8")).get("error", "refused")
+                    except (OSError, ValueError):
+                        why = "refused"
+                    return self._discord_result(p, False, why)
+                try:
+                    d = json.loads((box / "sent" / f"{name}.json").read_text("utf-8")).get("delivery")
+                except (OSError, ValueError):
+                    d = None
+                if d in ("delivered", "failed", "uncertain"):
+                    return self._discord_result(p, d == "delivered", "" if d == "delivered" else d)
+                time.sleep(1)
+            st = self.discord_status()
+            self._discord_result(p, False, "no receipt yet" + (f" ({st.get('waiting') or st.get('problem')})"
+                                                                if st.get("waiting") or st.get("problem") else ""))
+
+        threading.Thread(target=watch, daemon=True).start()
+        return p
+
+    def _discord_result(self, p: dict, ok: bool, why: str):
+        p["status"] = "ran" if ok else "failed"
+        self.audit("delivered" if ok else "failed", p, error=why or None)
+        text = (f"Delivered in Discord:\n{p['text']}" if ok else f"Not delivered: {why}\n{p['text']}")[:3000]
+        self.emit("result", pid=p["id"], label=p["label"], ok=ok, text=text, images=[], error=None if ok else why,
+                  seconds=0)
+        self.recent_runs = (self.recent_runs + [f"SAY IN DISCORD: {'delivered' if ok else 'not delivered'}"])[-10:]
+        self.messages.append({"role": "user", "content": f"[DISCORD: your message was {'delivered' if ok else 'NOT delivered: ' + why}]"})
+        self._save()
 
     def _send_mind(self, p: dict) -> dict:
         """Owner approved a mind change: hand it to the Liaison (which has the token) as a PR request."""
@@ -867,6 +967,18 @@ def make_handler(ws: Workspace):
                     ws.emit("notice", text=f"🌱 Dustin planted an idea in the Studio: {idea['title']}")
                     ws.audit("idea_planted", {"label": idea["title"], "source": idea["path"]})
                     return self._json(200, idea)
+                if path == "/api/skill":
+                    name, allow = str(body.get("name", "")), bool(body.get("allow"))
+                    if name not in SKILLS:
+                        return self._json(404, {"error": "no such skill"})
+                    if allow and not ws.skill_learned(name):
+                        return self._json(409, {"error": "TASS hasn't finished that lesson yet"})
+                    ws.skills_allowed[name] = allow
+                    ws.save_controls()
+                    ws.audit("skill_allowed" if allow else "skill_off", {"label": SKILLS[name]["title"], "source": "owner"})
+                    ws.emit("notice", text=f"Skill “{SKILLS[name]['title']}”: " + (
+                        "TASS may use it on his own now." if allow else "TASS asks you each time again."))
+                    return self._json(200, {"skills": ws.skills_state()})
                 if path == "/api/proposal":
                     return self._json(200, ws.decide(str(body.get("id")), str(body.get("decision"))))
                 if path == "/api/settings":
