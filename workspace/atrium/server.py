@@ -295,7 +295,7 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                     # Fail closed for common credential patterns. This is only a safeguard:
                     # the UI must disclose exactly what text is shared before consent.
                     if re.search(r"(?i)(?:gh[pousr]_[A-Za-z0-9_]{15,}|github_pat_|"
-                                 r"(?:token|password|api[_-]?key|secret)\\s*[:=]|bearer\\s+\\S+|"
+                                 r"(?:token|password|api[_-]?key|secret)\s*[:=]|bearer\s+\S+|"
                                  r"[?&](?:token|key|code)=)", task):
                         return self._json(400, {"error": "Task resembles a credential; sharing blocked"})
                     rid = f"brief-{int(time.time())}-{secrets.token_hex(5)}"
