@@ -88,8 +88,8 @@ class Studio:
 
     def prompt_section(self, public_url: str) -> str:
         ideas, rooms = self.ideas(), self.rooms()
-        lines = ["STUDIO (Claude's station, our shared playground: ideas we plant and rooms we build; Dustin sees it at "
-                 f"{public_url}/studio):"]
+        lines = ["PROCESSOR (Claude's station, our thought processor and shared playground: ideas we plant and rooms "
+                 f"we build, kept in studio/; Dustin sees it at {public_url}/processor):"]
         if ideas:
             lines.append("Ideas:")
             for i in ideas[:10]:

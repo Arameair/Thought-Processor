@@ -419,9 +419,10 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("LINKCHECK yes", next(e["text"] for e in st["timeline"] if e["type"] == "reply"))
 
     def test_studio_ideas_and_rooms_are_real_and_shared(self):
-        code, _, body = self.raw("/studio")
+        code, _, body = self.raw("/processor")
         self.assertEqual(code, 200)
-        self.assertIn(b"Studio", body)
+        self.assertIn(b"Processor", body)
+        self.assertEqual(self.raw("/studio")[0], 200)              # old link still works
         idea = self.post("/api/studio/idea", {"title": "A notes board", "text": "Somewhere to collect ideas from the road."})
         self.assertEqual((idea["status"], idea["path"]), ("new", "studio/ideas/a-notes-board.md"))
         self.assertTrue((self.root / "shared/studio/ideas/a-notes-board.md").exists())

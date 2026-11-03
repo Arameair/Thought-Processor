@@ -784,7 +784,7 @@ def make_handler(ws: Workspace):
                 self.send_header("Location", env("TASS_ATRIUM_URL", "http://127.0.0.1:8791/"))
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-            elif path == "/studio":
+            elif path in ("/processor", "/studio"):
                 body = studio_page
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")

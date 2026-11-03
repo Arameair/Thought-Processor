@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Studio · TASS, Dustin &amp; Claude</title>
+<title>Processor · TASS, Dustin &amp; Claude</title>
 <style>
   :root {
     --bg: #101418; --panel: #171d23; --panel2: #1d252d; --line: #2b3640; --text: #ece7df; --dim: #93a0ab;
@@ -105,11 +105,11 @@
 </head>
 <body>
 <header>
-  <div class="mark">Studio<small>Claude's station · learning and building with TASS</small></div>
+  <div class="mark">Processor<small>Claude's station · the thought processor where TASS learns and builds</small></div>
   <span class="spacer"></span>
   <span id="c-tass" class="chip">TASS</span>
   <span id="c-model" class="chip">model</span>
-  <a class="btn" href="/files/studio/" target="_blank" rel="noopener">📁 Studio files</a>
+  <a class="btn" href="/files/studio/" target="_blank" rel="noopener">📁 Processor files</a>
   <a class="btn" href="/" title="Approvals, controls and the full thought stream">Workshop ↗</a>
 </header>
 <div class="wrap">
@@ -170,9 +170,9 @@
 const $ = id => document.getElementById(id);
 let state = null, liveThought = "", busy = false, refreshTimer = null;
 const STARTERS = [
-  ["Build our first room", "TASS, let's build our first room in the Studio. Pick something small and useful for us, tell me your idea in two sentences, then propose the code that writes it to studio/rooms/."],
-  ["Pick an idea", "TASS, look at the ideas in our Studio. Pick one you'd like to explore, say why, and mark it as exploring."],
-  ["Make this ours", "TASS, what's one small thing that would make the Studio feel more like our shared space? Plant it as an idea if you like it."],
+  ["Build our first room", "TASS, let's build our first room in the Processor. Pick something small and useful for us, tell me your idea in two sentences, then propose the code that writes it to studio/rooms/."],
+  ["Pick an idea", "TASS, look at the ideas in our Processor. Pick one you'd like to explore, say why, and mark it as exploring."],
+  ["Make this ours", "TASS, what's one small thing that would make the Processor feel more like our shared space? Plant it as an idea if you like it."],
   ["Teach me what you learned", "TASS, what have you learned from the lessons so far? Tell me in a few bullets, and which lesson you'd like to do next."],
   ["What did we build?", "TASS, walk me through the rooms we've built so far and what each one is for."],
 ];
@@ -209,7 +209,7 @@ function renderMap(m, st) {
     node("Thinking", st.busy ? "…" : (m.thinking.model_up ? "ready" : "offline"), `Nemotron · thinking ${m.thinking.thinking ? "on" : "off"}`, "/", st.busy),
     node("Memory", m.memory.lines, "things he chose to keep", "/files/memory/tass-memory.md"),
     node("Library", m.library.books, `books · ${m.library.projects} project(s)`, "/"),
-    node("Studio", `${m.studio.ideas} · ${m.studio.rooms}`, "ideas · rooms", "/files/studio/"),
+    node("Processor", `${m.studio.ideas} · ${m.studio.rooms}`, "ideas · rooms", "/files/studio/"),
     node("Shared space", m.space.files, "files", "/files/"),
     node("Journal", m.journal.runs, "approved runs", "/files/journal/tass-journal.ipynb"),
     node("Audit", m.audit.events, "recorded events", "/"),
@@ -265,7 +265,7 @@ function renderIdeas(ideas) {
         ${i.status !== "built" ? `<button class="btn" data-ask="${esc(i.id)}">Ask TASS</button>` : ""}</div></div>`).join("");
   document.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => {
     const i = ideas.find(x => x.id === b.dataset.ask);
-    say(`TASS, look at our Studio idea "${i.title}" (${i.path}). What do you think, and what's one small first step? If you want to work on it, mark it as exploring.`);
+    say(`TASS, look at our Processor idea "${i.title}" (${i.path}). What do you think, and what's one small first step? If you want to work on it, mark it as exploring.`);
   });
 }
 
@@ -318,7 +318,7 @@ $("plant").onsubmit = async e => {
   try {
     const idea = await post("/api/studio/idea", {title, text});
     $("ideaTitle").value = ""; $("ideaText").value = "";
-    if ($("askNow").checked && !busy) await say(`I planted an idea in our Studio: "${idea.title}" (${idea.path}). What do you think, and what's one small first step?`);
+    if ($("askNow").checked && !busy) await say(`I planted an idea in our Processor: "${idea.title}" (${idea.path}). What do you think, and what's one small first step?`);
     refresh();
   } catch (err) { alert(err.message); } finally { $("plantBtn").disabled = false; }
 };
