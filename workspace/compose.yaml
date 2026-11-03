@@ -1,0 +1,113 @@
+# Thought Processor workspace — the full circle in Docker:
+#   model      Nemotron 3 Nano 4B (llama.cpp)                      — thinks
+#   liaison    identity-liaison (holds the GitHub token)            — Identity's piece: GitHub access,
+#              mirrors Developmnt mind/ + library/, runs instructions + side chat
+#   workspace  Thought Processor workspace                          — talk to TASS, watch it think,
+#              shared folder + JupyterLab + shared kernel
+#
+#   ./run.sh                     (recommended: checks setup, then starts)
+# No NVIDIA GPU?  ./run.sh --cpu
+services:
+  model:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    init: true
+    command:
+      - --model
+      - /models/${TASS_MODEL_FILE:-NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf}
+      - --alias
+      - nemotron-3-nano-4b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - --ctx-size
+      - "${TASS_CTX:-16384}"
+      - --parallel
+      - "1"
+      - --jinja
+      - --reasoning-format
+      - deepseek
+      - --gpu-layers
+      - "${TASS_GPU_LAYERS:-99}"
+    volumes:
+      - type: bind
+        source: ${TASS_MODEL_DIR:-./models}
+        target: /models
+        read_only: true
+    ports:
+      - "127.0.0.1:18083:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  liaison:
+    build:
+      context: https://github.com/Arameair/identity.git#${LIAISON_REF:-alpha}:liaison
+      args:
+        BASE: ${LIAISON_BASE:-python:3.12-alpine}
+    image: identity-liaison:workspace
+    init: true
+    depends_on:
+      model:
+        condition: service_healthy
+    environment:
+      IDENTITY_LIAISON_MODEL_URL: http://model:8081
+      IDENTITY_LIAISON_MODE: pr
+      IDENTITY_LIAISON_REPOS: ${LIAISON_REPOS:-Arameair/identity,Arameair/nemotronTASS,Arameair/Developmnt}
+      IDENTITY_LIAISON_CHAT_REPOS: ${LIAISON_CHAT_REPOS:-Arameair/Developmnt}
+      IDENTITY_LIAISON_CHAT_PULSE: "30"
+      IDENTITY_LIAISON_OWNERS: ${LIAISON_OWNERS:-Arameair}
+      # Mirror TASS's mind and library from GitHub into ./mirror for the workspace.
+      IDENTITY_LIAISON_SYNC_REPO: ${TASS_MIND_REPO:-Arameair/Developmnt}
+      IDENTITY_LIAISON_SYNC_DEST: /shared/mirror
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    volumes:
+      - ./secrets/github_token:/run/secrets/github_token:ro   # only this container gets the token
+      - ./config:/config
+      - ./mirror:/shared/mirror
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  workspace:
+    build:
+      context: .
+      args:
+        BASE: ${WORKSPACE_BASE:-python:3.12-slim}
+        PIP_FLAGS: ${WORKSPACE_PIP_FLAGS:-}
+    image: tass-workspace:local
+    init: true
+    depends_on:
+      model:
+        condition: service_healthy
+    environment:
+      TASS_MODEL_URL: http://model:8081
+      TASS_JUPYTER_PUBLIC: http://127.0.0.1:${TASS_JUPYTER_PORT:-8888}
+      TASS_THINKING: ${TASS_THINKING:-1}
+      TASS_AUTO_REFLECT: ${TASS_AUTO_REFLECT:-1}
+      TASS_MAX_TOKENS: ${TASS_MAX_TOKENS:-4096}
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    volumes:
+      - ./shared:/workspace/shared       # your shared space with TASS (also visible from WSL)
+      - ./data:/workspace/data           # conversation history, Jupyter settings
+      - ./mirror:/shared/mirror:ro       # mind + library, written only by the liaison
+    ports:
+      - "127.0.0.1:${TASS_PORT:-8790}:8790"
+      - "127.0.0.1:${TASS_JUPYTER_PORT:-8888}:8888"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
