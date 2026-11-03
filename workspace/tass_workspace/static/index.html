@@ -63,6 +63,9 @@
   .step .v { font-size: 13px; color: var(--text); }
   .step.spark { --c: var(--spark); } .step.trace { --c: var(--trace); } .step.thought { --c: var(--thought); }
   .step.reply { --c: var(--reply); } .step.book { --c: var(--trace); } .step.err { --c: var(--bad); }
+  .step.memory { --c: #f78fb3; }
+  .diff .add { color: #7ee2a8; } .diff .del { color: #ff9b94; } .diff .hunk { color: var(--trace); }
+  .msg.mem { background: transparent; border: 1px dashed #f78fb3; color: #f9c6d8; font-size: 13px; padding: 5px 10px; }
   .step.thought .v { font: 12.5px/1.5 var(--mono); color: #cdb9f5; white-space: pre-wrap; max-height: 260px;
                      overflow-y: auto; background: #140f22; border-radius: 7px; padding: 7px 9px; margin-top: 3px; }
   .step.live .v { border: 1px dashed var(--thought); }
@@ -79,6 +82,7 @@
 <body>
 <header>
   <h1>Thought Processor · <b>TASS</b> workspace</h1>
+  <span id="p-ident" class="pill" title="The identity this workspace is thinking as, and where its mind lives">identity</span>
   <span id="p-model" class="pill">model</span>
   <span id="p-kernel" class="pill">kernel</span>
   <span id="p-mind" class="pill">mind</span>
@@ -136,7 +140,25 @@ async function post(url, body) {
   return d;
 }
 
+function diffHtml(d) {
+  return d.split("\n").map(l => {
+    const c = l.startsWith("+++") || l.startsWith("---") ? "muted" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : "";
+    return `<span class="${c}">${esc(l)}</span>`;
+  }).join("\n");
+}
 function proposalCard(p) {
+  if (p.kind === "mind") {
+    const el = add(chat, `<h4>TASS wants to change his mind: <code>${esc(p.path)}</code> <span class="tag">needs your OK</span></h4>
+      <div class="muted">${esc(p.source)}${p.new_file ? " · new file" : ""}</div>
+      <pre class="diff">${diffHtml(p.diff)}</pre>
+      <div class="row"><button class="approve">Approve → open pull request</button><button class="reject">Reject</button>
+      <span class="muted state"></span></div>`, "card proposal");
+    el.id = "p-" + p.id;
+    el.querySelector(".approve").onclick = () => decide(p.id, "approve", el);
+    el.querySelector(".reject").onclick = () => decide(p.id, "reject", el);
+    if (p.status !== "pending") settle(el, p.status);
+    return;
+  }
   const files = p.files ? `<div class="muted">Files that will be copied into <code>shared/projects/${esc(p.project)}/</code>:</div>
     <div>${p.files.map(f => `<code>${esc(f)}</code>`).join(" ")}</div>
     <div class="muted" style="margin-top:6px">Code that runs (<code>${esc(p.entry)}</code>):</div>` : "";
@@ -151,7 +173,8 @@ function proposalCard(p) {
 }
 function settle(el, st) {
   el.querySelectorAll("button").forEach(b => b.disabled = true);
-  el.querySelector(".state").textContent = {running: "running…", rejected: "rejected", ran: "ran", failed: "failed"}[st] || st;
+  el.querySelector(".state").textContent = {running: "running…", rejected: "rejected", ran: "ran", failed: "failed",
+    sent: "sent to the Liaison…", "pr opened": "pull request opened", "pr failed": "pull request failed"}[st] || st;
   el.classList.remove("proposal");
 }
 async function decide(id, decision, el) {
@@ -199,6 +222,14 @@ function render(ev, replay) {
         ${ev.text ? `<pre>${esc(ev.text)}</pre>` : `<span class="muted">(no output)</span>`}${ev.error ? `<div style="color:var(--bad)">${esc(ev.error)}</div>` : ""}${imgs}`, "card result");
       break; }
     case "notice": add(chat, esc(ev.text), "msg note"); refresh(); break;
+    case "memory": add(chat, `🧠 TASS remembered: ${esc(ev.text)}`, "msg mem"); step("memory", "Memory", esc(ev.text)); break;
+    case "mind_pr": {
+      const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "pr opened" : "pr failed");
+      add(chat, ev.ok ? `<h4>✓ Pull request opened for <code>${esc(ev.path)}</code></h4>
+          <a class="btn" href="${esc(ev.url)}" target="_blank" rel="noopener">Review &amp; merge on GitHub ↗</a>
+          <div class="muted" style="margin-top:6px">TASS thinks with the new text about 30 s after you merge.</div>`
+        : `<h4>✗ Pull request failed for <code>${esc(ev.path)}</code></h4><div style="color:var(--bad)">${esc(ev.error)}</div>`, "card result");
+      break; }
     case "error": add(chat, `<div class="who">Problem</div>${esc(ev.text)}`, "msg err"); step("err", "Error", esc(ev.text)); break;
     case "busy": setBusy(ev.busy); break;
   }
@@ -224,6 +255,9 @@ function showStatus(s) {
   const m = s.mind || {};
   $("p-mind").className = "pill " + (m.synced_at ? "ok" : "bad");
   $("p-mind").textContent = m.synced_at ? `mind: ${m.mind.length} files · synced ${when(m.synced_at)}` : "mind: not synced yet";
+  const id = s.identity || {};
+  $("p-ident").className = "pill " + (id.repo ? "ok" : "");
+  $("p-ident").textContent = id.repo ? `thinking as ${id.name} · ${id.repo}@${id.branch}` : "identity: not synced";
   $("t-thinking").checked = s.thinking; $("t-autonomy").checked = s.autonomy;
   if (!s.running) $("stop").style.display = "none";
   $("allow").innerHTML = Object.entries(s.allow || {}).map(([k, v]) =>
@@ -236,6 +270,7 @@ function showStatus(s) {
      <b>Mind</b><ul>${(m.mind || []).map(f => `<li><code>${esc(f.path)}</code> <span class="muted">${when(f.updated_at)}</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Library</b><ul>${(m.library || []).map(b => `<li><code>${esc(b.path)}</code> — ${esc(b.title)} <span class="muted">(${b.cells} cells)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Projects</b> <span class="muted">(Developmnt projects/)</span><ul>${(m.projects || []).map(p => `<li><code>${esc(p.path)}</code> — ${esc(p.title)} <span class="muted">(entry ${esc(p.entry)}, ${p.files} files)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
+     <b>Memory</b> <span class="muted">(shared/memory/tass-memory.md, newest last)</span><pre style="max-height:160px;overflow-y:auto">${esc(s.memory || "(empty)")}</pre>
      <b>Shared folder</b><ul>${(s.listing || []).slice(0, 25).map(f => `<li><code>${esc(f)}</code></li>`).join("") || "<li class='muted'>empty</li>"}</ul>`;
   setBusy(s.busy);
 }

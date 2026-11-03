@@ -53,7 +53,7 @@ services:
 
   liaison:
     build:
-      context: https://github.com/Arameair/identity.git#${LIAISON_REF:-alpha}:liaison
+      context: https://github.com/Arameair/identity.git#${LIAISON_REF:-experiment/tass-grows-20261103}:liaison
       args:
         BASE: ${LIAISON_BASE:-python:3.12-alpine}
     image: identity-liaison:workspace
@@ -68,14 +68,18 @@ services:
       IDENTITY_LIAISON_CHAT_REPOS: ${LIAISON_CHAT_REPOS:-Arameair/Developmnt}
       IDENTITY_LIAISON_CHAT_PULSE: "30"
       IDENTITY_LIAISON_OWNERS: ${LIAISON_OWNERS:-Arameair}
-      # Mirror TASS's mind and library from GitHub into ./mirror for the workspace.
-      IDENTITY_LIAISON_SYNC_REPO: ${TASS_MIND_REPO:-Arameair/Developmnt}
+      # Mirror TASS's mind (his own repo, listed first) and the team's library + projects into ./mirror.
+      IDENTITY_LIAISON_SYNC_SOURCES: ${TASS_SOURCES:-Arameair/TASS@alpha:mind/*.md;Arameair/Developmnt:library/*,projects/*}
       IDENTITY_LIAISON_SYNC_DEST: /shared/mirror
+      # Mind changes TASS proposes and the owner approves in the workspace become pull requests here.
+      IDENTITY_LIAISON_OUTBOX: /shared/outbox
+      IDENTITY_LIAISON_WRITE_ALLOW: ${TASS_MIND_WRITE:-Arameair/TASS@*:mind/*.md}
     user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
     volumes:
       - ./secrets/github_token:/run/secrets/github_token:ro   # only this container gets the token
       - ./config:/config
       - ./mirror:/shared/mirror
+      - ./outbox:/shared/outbox                               # owner-approved requests from the workspace
     read_only: true
     tmpfs:
       - /tmp
@@ -104,7 +108,8 @@ services:
     volumes:
       - ./shared:/workspace/shared       # your shared space with TASS (also visible from WSL)
       - ./data:/workspace/data           # conversation history, Jupyter settings
-      - ./mirror:/shared/mirror:ro       # mind + library, written only by the liaison
+      - ./mirror:/shared/mirror:ro       # mind + library + projects, written only by the liaison
+      - ./outbox:/shared/outbox          # approved mind changes go out here; the liaison opens the PR
     ports:
       - "127.0.0.1:${TASS_PORT:-8790}:8790"
       - "127.0.0.1:${TASS_JUPYTER_PORT:-8888}:8888"

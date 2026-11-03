@@ -18,6 +18,17 @@ def script(messages):
     if who:
         bullets = [l for l in who.group(1).splitlines() if l.startswith("- ")]
         first_line = bullets[0][2:] if bullets else ""
+    if "improve" in last.lower() and not last.startswith("["):
+        return ("Dustin wants me to think better. My how-i-think file could say: plan before acting.",
+                "Here's one change I'd make to how I think.\n"
+                "REMEMBER: Dustin wants me to keep improving how I think.\n"
+                "CHANGE MIND: mind/who-i-am.md\nFIND: - I am a teammate, not a boss.\nACTION: after\n"
+                "<<<TEXT\n- Before I act, I make a one-line plan.\nTEXT>>>")
+    if "rewrite yourself" in last.lower():
+        return ("Rewrite everything.", "Fresh start.\nCHANGE MIND: mind/who-i-am.md\n```markdown\n# Me\n```")
+    if "what do you remember" in last.lower():
+        mem = system.split("YOUR MEMORY", 1)[1].split("\n\n", 1)[0] if "YOUR MEMORY" in system else ""
+        return ("Check my memory.", "From my memory:" + mem.split(":", 1)[-1])
     if "[PROJECT projects/hello-tass" in last:
         return ("ChatGPT's project only writes inside its own folder. Safe to propose.",
                 "It greets us and writes status.json in its own folder.\nRUN: projects/hello-tass")

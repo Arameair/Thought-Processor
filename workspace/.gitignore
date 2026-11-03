@@ -5,3 +5,4 @@ shared/
 mirror/
 data/
 __pycache__/
+outbox/
