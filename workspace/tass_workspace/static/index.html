@@ -24,6 +24,11 @@
   .pill.ok::before { color: var(--reply); } .pill.bad::before { color: var(--bad); }
   .pill.busy::before { color: var(--thought); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
+  body.fullauto { box-shadow: inset 0 4px 0 #ff9f1c; }
+  #fa-banner { display: none; background: #3a2508; color: #ffcf8a; border-bottom: 1px solid #ff9f1c;
+               padding: 5px 18px; font-size: 13px; }
+  body.fullauto #fa-banner { display: block; }
+  body.fullauto #fa-label { color: #ffb347; }
   header .spacer { flex: 1; }
   header label { font-size: 13px; color: var(--dim); display: flex; gap: 5px; align-items: center; cursor: pointer; }
   a.btn, button { font: inherit; font-size: 13px; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
@@ -89,12 +94,14 @@
   <span id="p-busy" class="pill">idle</span>
   <span class="spacer"></span>
   <label><input type="checkbox" id="t-thinking"> show thinking</label>
+  <label id="fa-label" title="Full auto: TASS's proposals run WITHOUT your click (for testing). Off after every restart. Pauses after a limit of runs in a row; Stop still works."><input type="checkbox" id="t-fullauto"> <b>full auto</b></label>
   <label title="On: TASS may start turns by itself (when its mind changes on GitHub, and right after a run). Off: TASS only acts when you send a message."><input type="checkbox" id="t-autonomy"> autonomy</label>
   <button id="stop" class="reject" style="display:none" title="Interrupt the code that is running now">■ Stop run</button>
   <a id="jupyter" class="btn" target="_blank" rel="noopener" style="display:none">Open JupyterLab ↗</a>
   <button id="restart" title="Clear Python variables; files are kept">Restart kernel</button>
   <button id="reset" title="Clear this conversation; files and kernel are kept">Clear chat</button>
 </header>
+<div id="fa-banner">⚡ <b>FULL AUTO</b>: TASS's proposals run without your click. <span id="fa-count"></span> Uncheck "full auto" or press Stop to take over.</div>
 <main>
   <section>
     <div class="head">Conversation</div>
@@ -213,6 +220,7 @@ function render(ev, replay) {
       `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
     case "proposal": proposalCard(ev.proposal); break;
     case "decision": { const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.status);
+      if (el && status.full_auto && ev.status !== "rejected") el.querySelector(".state").textContent += " (auto-approved)";
       $("stop").style.display = ev.status === "running" ? "" : "none"; break; }
     case "result": {
       const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.ok ? "ran" : "failed");
@@ -258,6 +266,9 @@ function showStatus(s) {
   const id = s.identity || {};
   $("p-ident").className = "pill " + (id.repo ? "ok" : "");
   $("p-ident").textContent = id.repo ? `thinking as ${id.name} · ${id.repo}@${id.branch}` : "identity: not synced";
+  $("t-fullauto").checked = !!s.full_auto;
+  document.body.classList.toggle("fullauto", !!s.full_auto);
+  $("fa-count").textContent = s.full_auto ? `${s.auto_streak} of ${s.auto_limit} automatic runs since your last message.` : "";
   $("t-thinking").checked = s.thinking; $("t-autonomy").checked = s.autonomy;
   if (!s.running) $("stop").style.display = "none";
   $("allow").innerHTML = Object.entries(s.allow || {}).map(([k, v]) =>
@@ -296,6 +307,7 @@ $("form").onsubmit = async e => {
 };
 $("text").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } };
 $("t-thinking").onchange = e => post("/api/settings", {thinking: e.target.checked}).then(showStatus);
+$("t-fullauto").onchange = e => post("/api/settings", {full_auto: e.target.checked}).then(showStatus);
 $("t-autonomy").onchange = e => post("/api/settings", {autonomy: e.target.checked}).then(showStatus);
 $("stop").onclick = () => post("/api/stop").catch(e => add(chat, esc(e.message), "msg note"));
 async function loadAudit() {

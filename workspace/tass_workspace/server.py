@@ -65,6 +65,11 @@ class Workspace:
         self.running: dict | None = None
         saved = self._load("controls.json", {})
         self.autonomy = saved.get("autonomy", self.autonomy)
+        # Full auto: proposals are approved without a click. Never saved: off after every restart.
+        self.full_auto = False
+        self.auto_limit = int(env("TASS_AUTO_LIMIT", "8"))
+        self.auto_streak = 0          # automatic approvals since Dustin's last message
+        self._auto_queue: list[str] = []
         self.allow.update({k: v for k, v in saved.get("allow", {}).items() if k in self.allow})
         self.clients: list[queue.Queue] = []
         self.turn_lock = threading.Lock()
@@ -150,7 +155,8 @@ class Workspace:
 
     def status(self) -> dict:
         return {"busy": self.busy, "model_ok": self.model.health(), "thinking": self.model.thinking,
-                "autonomy": self.autonomy, "allow": self.allow, "identity": self.identity(),
+                "autonomy": self.autonomy, "allow": self.allow, "full_auto": self.full_auto,
+                "auto_streak": self.auto_streak, "auto_limit": self.auto_limit, "identity": self.identity(),
                 "memory": self.memory_text(20),
                 "running": {"id": self.running["id"], "label": self.running["label"]} if self.running else None,
                 "kernel": self.kernel.mode, "kernel_error": self.kernel_error,
@@ -219,7 +225,8 @@ class Workspace:
             history = history[2:] if len(history) > 3 and history[2]["role"] == "user" else history[1:]
 
     def turn(self, kind: str, text: str):
-        if not self.turn_lock.acquire(blocking=False):
+        # A user message never waits behind a running turn; follow-ups (results, mind changes) do, briefly.
+        if not self.turn_lock.acquire(blocking=kind != "user", timeout=-1 if kind == "user" else 60):
             self.emit("notice", text="TASS is still thinking; try again in a moment.")
             return
         try:
@@ -301,6 +308,7 @@ class Workspace:
             self.emit("busy", keep=False, busy=False)
             self._save()
             self.turn_lock.release()
+            self._drain_auto()
 
     # --- proposals ------------------------------------------------------------------
 
@@ -375,6 +383,27 @@ class Workspace:
         self.proposals[p["id"]] = p
         self.audit("proposed", p)
         self.emit("proposal", proposal=p)
+        if self.full_auto:
+            if self.auto_streak >= self.auto_limit:
+                self.emit("notice", text=f"Full auto paused: {self.auto_limit} automatic runs in a row. "
+                                         "Approve this one yourself, or send a message to continue.")
+                self.audit("auto-paused", p)
+            else:
+                self._auto_queue.append(p["id"])   # approved right after this turn finishes
+
+    def _drain_auto(self):
+        while self._auto_queue:
+            pid = self._auto_queue.pop(0)
+            p = self.proposals.get(pid)
+            if not p or p["status"] != "pending" or not self.full_auto:
+                continue
+            self.auto_streak += 1
+            p["auto"] = True
+            self.audit("auto-approved", p, streak=self.auto_streak)
+            try:
+                self.decide(pid, "approve")
+            except ValueError as e:
+                self.emit("notice", text=f"Full auto couldn't approve {p['label']}: {e}")
 
     def decide(self, pid: str, decision: str) -> dict:
         p = self.proposals.get(pid)
@@ -565,6 +594,7 @@ def make_handler(ws: Workspace):
             path = urlparse(self.path).path
             try:
                 if path == "/api/message":
+                    ws.auto_streak = 0   # Dustin spoke: full auto may continue
                     text = str(body.get("text", "")).strip()[:4000]
                     if not text:
                         return self._json(400, {"error": "empty message"})
@@ -577,6 +607,18 @@ def make_handler(ws: Workspace):
                 if path == "/api/settings":
                     if "thinking" in body:
                         ws.model.thinking = bool(body["thinking"])
+                    if "full_auto" in body:
+                        ws.full_auto = bool(body["full_auto"])
+                        ws.auto_streak = 0
+                        ws.audit("full_auto_on" if ws.full_auto else "full_auto_off", {"label": "settings"})
+                        ws.emit("notice", text="FULL AUTO is ON: TASS's proposals run without a click "
+                                               f"(pauses after {ws.auto_limit} in a row; Stop still works)."
+                                if ws.full_auto else "Full auto is off: every run needs your click again.")
+                        if ws.full_auto:
+                            for p in ws.proposals.values():
+                                if p["status"] == "pending":
+                                    ws._auto_queue.append(p["id"])
+                            threading.Thread(target=ws._drain_auto, daemon=True).start()
                     if "autonomy" in body:
                         ws.autonomy = bool(body["autonomy"])
                         ws.emit("notice", text=f"Autonomy {'on' if ws.autonomy else 'off'}.")

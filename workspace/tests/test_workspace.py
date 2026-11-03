@@ -145,7 +145,7 @@ class EndToEndTests(unittest.TestCase):
         cls.model_port, cls.port = free_port(), free_port()
         cls.model = subprocess.Popen([sys.executable, str(HERE / "fake_model.py"), str(cls.model_port)],
                                      stdout=subprocess.DEVNULL)
-        env = dict(os.environ, TASS_OUTBOX=str(root / "outbox"), TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
+        env = dict(os.environ, TASS_AUTO_LIMIT="2", TASS_OUTBOX=str(root / "outbox"), TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
                    TASS_SHARED=str(root / "shared"), TASS_DATA=str(root / "data"), TASS_PORT=str(cls.port),
                    TASS_JUPYTER="0", PYTHONPATH=str(HERE.parent))
         cls.server = subprocess.Popen([sys.executable, "-m", "tass_workspace"], env=env, stdout=subprocess.DEVNULL)
@@ -305,6 +305,36 @@ class EndToEndTests(unittest.TestCase):
             self.assertFalse([p for p in st["proposals"] if p.get("kind") == "mind"])
         finally:
             self.post("/api/settings", {"allow": {"mind changes": True}})
+
+    def test_full_auto_runs_without_clicks_and_pauses_at_the_limit(self):
+        try:
+            st = self.post("/api/settings", {"full_auto": True})
+            self.assertTrue(st["full_auto"])
+            # Hello -> OPEN book -> RUN cell 1: approved and run with no click, then TASS reacts.
+            self.post("/api/message", {"text": "Hi TASS"})
+            st = self.wait_for(lambda s: any(e["type"] == "reply" and "Next we could" in e["text"] for e in s["timeline"]))
+            self.assertTrue(any(e["type"] == "result" and e["ok"] for e in st["timeline"]))
+            self.assertIn("auto-approved", [r["event"] for r in self.get("/api/audit")])
+            # A chain of runs with no message from Dustin stops at the limit (2) and waits.
+            self.wait_for(lambda s: not s["status"]["busy"] and not s["status"]["running"])
+            self.post("/api/message", {"text": "keep going, chain runs"})
+            st = self.wait_for(lambda s: any(e["type"] == "notice" and "Full auto paused" in e["text"]
+                                             for e in s["timeline"]), 60)
+            self.assertEqual(sum(1 for e in st["timeline"] if e["type"] == "result" and "chained run" in e["text"]), 2)
+            self.assertEqual(len(st["proposals"]), 1)                       # the third one waits for Dustin
+            self.assertIn("auto-paused", [r["event"] for r in self.get("/api/audit")])
+        finally:
+            self.post("/api/settings", {"full_auto": False})
+        # Off again: proposals wait for a click.
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.post("/api/reset", {})
+        self.post("/api/message", {"text": "Try some of your own code please"})
+        st = self.wait_for(lambda s: s["proposals"])
+        time.sleep(1.5)
+        self.assertEqual(self.get("/api/state")["proposals"][0]["status"], "pending")
+
+    def test_full_auto_is_off_after_restart_by_design(self):
+        self.assertFalse(self.get("/api/status")["full_auto"])
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

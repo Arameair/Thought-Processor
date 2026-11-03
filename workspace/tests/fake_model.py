@@ -39,6 +39,10 @@ def script(messages):
     if "[BOOK library/01-look-around.md" in last:
         return ("The book has three cells. Cell 1 lists our shared folder, a safe first look.",
                 "Cell 1 only reads. I'll explain why.\nRUN: library/01-look-around.md#1")
+    if "[Spark] The run finished" in last and any("chain" in m["content"] for m in messages if m["role"] == "user"):
+        return ("Keep going.", "Again!\nRUN: code\n```python\nprint('chained run')\n```")
+    if "chain" in last.lower() and not last.startswith("["):
+        return ("Start a chain.", "Starting.\nRUN: code\n```python\nprint('chained run')\n```")
     if "[Spark] The run finished" in last:
         res = next((m["content"] for m in reversed(messages) if m["content"].startswith("[RESULT")), "")
         first = res.splitlines()[1] if len(res.splitlines()) > 1 else "(nothing)"
