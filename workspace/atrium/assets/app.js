@@ -163,7 +163,7 @@ function renderCapabilityEvidence() {
     details.append(title, meta);
     const buttons = document.createElement('div');
     const badge = document.createElement('span'); badge.className = 'evidence-badge';
-    badge.textContent = count !== null && count > 0 && pass === count ? 'ALL CELLS PASSED' :
+    badge.textContent = count !== null && count > 0 && pass === count ? 'ALL CELLS REPORTED OK' :
                         pass || fail ? 'PARTIALLY TESTED' : 'NOT TESTED';
     const next = document.createElement('button'); next.className = 'subtle-btn'; next.type = 'button';
     next.textContent = 'Test next cell';
