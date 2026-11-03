@@ -142,6 +142,10 @@ services:
     environment:
       TASS_ATRIUM_BACKEND_URL: http://workspace:8790
       TASS_ATRIUM_BIND_HOST: 0.0.0.0
+      TASS_ATRIUM_COLLAB_REQUESTS: /collab/requests
+    volumes:
+      # Only this dedicated bounded request queue; not the privileged Liaison outbox.
+      - ./collab_requests:/collab/requests
     ports:
       - "127.0.0.1:8791:8791"
     read_only: true
@@ -177,6 +181,7 @@ services:
       - ./data:/workspace/data:ro
       - ./outbox:/shared/outbox
       - ./collab_state:/collab/state
+      - ./collab_requests:/collab/requests
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
