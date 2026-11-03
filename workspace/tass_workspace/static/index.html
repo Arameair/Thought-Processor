@@ -212,10 +212,10 @@ function render(ev, replay) {
     case "book": step("book", ev.kind === "project" ? "Opened project" : "Opened book",
       `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
     case "proposal": proposalCard(ev.proposal); break;
-    case "decision": { const el = $("p-" + ev.id); if (el) settle(el, ev.status);
+    case "decision": { const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.status);
       $("stop").style.display = ev.status === "running" ? "" : "none"; break; }
     case "result": {
-      const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "ran" : "failed");
+      const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.ok ? "ran" : "failed");
       $("stop").style.display = "none"; refresh();
       const imgs = (ev.images || []).map(b => `<img src="data:image/png;base64,${b}">`).join("");
       add(chat, `<h4>${ev.ok ? "✓" : "✗"} Result · ${esc(ev.label)} <span class="muted">${ev.seconds}s</span></h4>
@@ -224,7 +224,7 @@ function render(ev, replay) {
     case "notice": add(chat, esc(ev.text), "msg note"); refresh(); break;
     case "memory": add(chat, `🧠 TASS remembered: ${esc(ev.text)}`, "msg mem"); step("memory", "Memory", esc(ev.text)); break;
     case "mind_pr": {
-      const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "pr opened" : "pr failed");
+      const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.ok ? "pr opened" : "pr failed");
       add(chat, ev.ok ? `<h4>✓ Pull request opened for <code>${esc(ev.path)}</code></h4>
           <a class="btn" href="${esc(ev.url)}" target="_blank" rel="noopener">Review &amp; merge on GitHub ↗</a>
           <div class="muted" style="margin-top:6px">TASS thinks with the new text about 30 s after you merge.</div>`

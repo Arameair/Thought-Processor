@@ -60,7 +60,8 @@ class Workspace:
         self.messages: list[dict] = self._load("messages.json", [])
         self.proposals: dict[str, dict] = {p["id"]: p for p in self._load("proposals.json", [])}
         self.recent_runs: list[str] = self._load("recent_runs.json", [])
-        self.next_id = max([e.get("id", 0) for e in self.timeline] + [0]) + 1
+        # Older saved timelines could hold a proposal id (text) in "id"; only count real event numbers.
+        self.next_id = max([e["id"] for e in self.timeline if isinstance(e.get("id"), int)] + [0]) + 1
         self.running: dict | None = None
         saved = self._load("controls.json", {})
         self.autonomy = saved.get("autonomy", self.autonomy)
@@ -137,7 +138,8 @@ class Workspace:
         print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
     def emit(self, type_: str, keep: bool = True, **data) -> dict:
-        event = {"id": self.next_id, "type": type_, "at": time.time(), **data}
+        data.pop("id", None)   # "id" is the event's own number; a proposal's id travels as "pid"
+        event = {**data, "id": self.next_id, "type": type_, "at": time.time()}
         self.next_id += 1
         if keep:
             self.timeline.append(event)
@@ -382,7 +384,7 @@ class Workspace:
             p["status"] = "rejected"
             self.audit("rejected", p)
             self.messages.append({"role": "user", "content": f"[Dustin rejected {p['label']}.]"})
-            self.emit("decision", id=pid, status="rejected")
+            self.emit("decision", pid=pid, status="rejected")
             self._save()
             return p
         if p.get("kind") == "mind":
@@ -392,7 +394,7 @@ class Workspace:
         p["status"] = "running"
         self.running = p
         self.audit("approved", p)
-        self.emit("decision", id=pid, status="running")
+        self.emit("decision", pid=pid, status="running")
         threading.Thread(target=self._run, args=(p,), daemon=True).start()
         return p
 
@@ -408,7 +410,7 @@ class Workspace:
         tmp.replace(self.outbox / f"{p['id']}.json")
         p["status"] = "sent"
         self.audit("approved", p)
-        self.emit("decision", id=p["id"], status="sent")
+        self.emit("decision", pid=p["id"], status="sent")
         self.emit("notice", text=f"Sent to the Liaison: it will open a pull request for {p['path']} (usually within 30 s).")
         self._save()
         return p
@@ -435,7 +437,7 @@ class Workspace:
                 self.audit("pr_failed", p, error=res.get("error"))
                 self.messages.append({"role": "user", "content": f"[Your change to {p['path']} could not become a "
                                       f"pull request: {res.get('error')}]"})
-            self.emit("mind_pr", id=p["id"], path=p["path"], ok=bool(res.get("ok")), url=res.get("pr_url"),
+            self.emit("mind_pr", pid=p["id"], path=p["path"], ok=bool(res.get("ok")), url=res.get("pr_url"),
                       error=res.get("error"))
             self._save()
 
@@ -467,7 +469,7 @@ class Workspace:
         p["status"] = "ran" if r["ok"] else "failed"
         self.audit(p["status"], p, seconds=r["seconds"], error=r["error"])
         text = r["text"][-3000:]
-        self.emit("result", id=p["id"], label=p["label"], ok=r["ok"], text=text, images=r["images"][:4],
+        self.emit("result", pid=p["id"], label=p["label"], ok=r["ok"], text=text, images=r["images"][:4],
                   error=r["error"], seconds=r["seconds"])
         summary = f"{p['label']}: {'ok' if r['ok'] else 'ERROR ' + str(r['error'])}"
         self.recent_runs = (self.recent_runs + [summary])[-10:]
