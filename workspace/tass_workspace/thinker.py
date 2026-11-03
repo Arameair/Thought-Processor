@@ -12,7 +12,9 @@ from dataclasses import dataclass
 HOW_TO_ACT = """HOW TO ACT
 You can end a reply with ONE action, on its own line at the very end:
   OPEN: library/<file>          read a book before deciding (you'll get its text, then continue)
+  OPEN: projects/<name>         read a project: its description, files and the code that would run
   RUN: library/<file>#<n>       propose running cell n of a book
+  RUN: projects/<name>          propose installing a project into our shared folder and running its entry file
   RUN: code                     propose your own code; put it in a ```python block right after this line
 Dustin approves or rejects every RUN. Code runs in the shared Python kernel with the shared folder as the
 working directory. Never say something ran, or what it printed, until you see its RESULT message.
@@ -23,16 +25,20 @@ Talk like a teammate: short, concrete, and say what you want to try and why."""
 class Action:
     kind: str          # "open" | "run"
     book: str | None = None
+    project: str | None = None
     cell: int | None = None
     code: str | None = None
 
     def label(self) -> str:
         if self.kind == "open":
-            return f"OPEN {self.book}"
+            return f"OPEN {self.book or 'projects/' + str(self.project)}"
+        if self.project:
+            return f"RUN projects/{self.project}"
         return f"RUN {self.book}#{self.cell}" if self.book else "RUN own code"
 
 
-ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+)`?", re.M | re.I)
+ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+|projects/[\w.\-]+)/?`?", re.M | re.I)
+ACTION_RUN_PROJECT = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?projects/([\w.\-]+)/?`?[ \t]*$", re.M | re.I)
 ACTION_RUN_BOOK = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?(library/[^\s#`*]+)#(\d+)`?", re.M | re.I)
 ACTION_RUN_CODE = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?code`?[^\n]*\n+\s*```(?:python|py)?\s*\n(.*?)\n```",
                              re.M | re.I | re.S)
@@ -45,8 +51,14 @@ def parse_action(reply: str) -> tuple[str, Action | None]:
         found.append((m.start(), m.end(), Action("run", code=m.group(1))))
     for m in ACTION_RUN_BOOK.finditer(reply):
         found.append((m.start(), m.end(), Action("run", book=m.group(1), cell=int(m.group(2)))))
+    for m in ACTION_RUN_PROJECT.finditer(reply):
+        found.append((m.start(), m.end(), Action("run", project=m.group(1))))
     for m in ACTION_OPEN.finditer(reply):
-        found.append((m.start(), m.end(), Action("open", book=m.group(1))))
+        target = m.group(1)
+        if target.lower().startswith("projects/"):
+            found.append((m.start(), m.end(), Action("open", project=target.split("/", 1)[1])))
+        else:
+            found.append((m.start(), m.end(), Action("open", book=target)))
     if not found:
         return reply.strip(), None
     start, end, action = max(found, key=lambda f: f[0])
@@ -55,7 +67,7 @@ def parse_action(reply: str) -> tuple[str, Action | None]:
 
 
 def build_system(mind_files: list[tuple[str, str]], catalog: list, listing: list[str],
-                 recent_runs: list[str]) -> str:
+                 recent_runs: list[str], projects: list | None = None, allowed: dict | None = None) -> str:
     parts = ["You are TASS. Your MIND is the set of files below, kept in Dustin's GitHub repo. "
              "Dustin can change them at any time; always follow the latest version.\n"]
     if mind_files:
@@ -72,6 +84,16 @@ def build_system(mind_files: list[tuple[str, str]], catalog: list, listing: list
         parts.append("")
     else:
         parts.append("LIBRARY: empty.\n")
+    if projects:
+        parts.append("PROJECTS (added on GitHub, often by ChatGPT; you can OPEN and RUN them):")
+        for p in projects:
+            parts.append(f"- projects/{p.name} — {p.title}: {p.description} (entry {p.entry}, {len(p.files)} files)")
+        parts.append("")
+    else:
+        parts.append("PROJECTS: none yet.\n")
+    off = [k for k, v in (allowed or {}).items() if not v]
+    if off:
+        parts.append("TURNED OFF BY DUSTIN right now (don't propose these): " + ", ".join(off) + "\n")
     parts.append("SHARED FOLDER NOW:\n" + ("\n".join(f"  {l}" for l in listing) if listing else "  (empty)"))
     if recent_runs:
         parts.append("\nRECENT RUNS:\n" + "\n".join(recent_runs))

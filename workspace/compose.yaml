@@ -53,7 +53,7 @@ services:
 
   liaison:
     build:
-      context: https://github.com/Arameair/identity.git#${LIAISON_REF:-experiment/github-liaison-agent-20261103}:liaison
+      context: https://github.com/Arameair/identity.git#${LIAISON_REF:-alpha}:liaison
       args:
         BASE: ${LIAISON_BASE:-python:3.12-alpine}
     image: identity-liaison:workspace

@@ -7,8 +7,10 @@ Actions: OPEN a library book, or RUN a book cell / its own code (always after yo
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import queue
 import secrets
 import subprocess
@@ -40,7 +42,9 @@ class Workspace:
         self.model = ModelClient(env("TASS_MODEL_URL", "http://model:8081"),
                                  max_tokens=int(env("TASS_MAX_TOKENS", "3072")),
                                  thinking=env("TASS_THINKING", "1") == "1")
-        self.auto_reflect = env("TASS_AUTO_REFLECT", "1") == "1"
+        # Owner controls. Autonomy = TASS may start turns on its own (mind changes, after a run).
+        self.autonomy = env("TASS_AUTONOMY", env("TASS_AUTO_REFLECT", "1")) == "1"
+        self.allow = {"library books": True, "projects": True, "own code": True}
         self.jupyter_token = secrets.token_hex(16)
         self.jupyter_internal = env("TASS_JUPYTER_INTERNAL", "http://127.0.0.1:8888")
         self.jupyter_public = env("TASS_JUPYTER_PUBLIC", "http://127.0.0.1:8888")
@@ -53,6 +57,10 @@ class Workspace:
         self.proposals: dict[str, dict] = {p["id"]: p for p in self._load("proposals.json", [])}
         self.recent_runs: list[str] = self._load("recent_runs.json", [])
         self.next_id = max([e.get("id", 0) for e in self.timeline] + [0]) + 1
+        self.running: dict | None = None
+        saved = self._load("controls.json", {})
+        self.autonomy = saved.get("autonomy", self.autonomy)
+        self.allow.update({k: v for k, v in saved.get("allow", {}).items() if k in self.allow})
         self.clients: list[queue.Queue] = []
         self.turn_lock = threading.Lock()
         self.busy = False
@@ -74,6 +82,25 @@ class Workspace:
             tmp.write_text(json.dumps(value))
             tmp.replace(self.data / name)
 
+    def audit(self, event: str, p: dict, **extra):
+        """Append-only record of every proposal, decision and run (for security review)."""
+        rec = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "event": event, "id": p.get("id"),
+               "label": p.get("label"), "source": p.get("source"),
+               "code_sha256": hashlib.sha256((p.get("code") or "").encode()).hexdigest(),
+               "files": p.get("file_shas"), **extra}
+        with open(self.data / "audit.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+
+    def read_audit(self, n: int = 100) -> list[dict]:
+        try:
+            lines = (self.data / "audit.jsonl").read_text("utf-8").splitlines()[-n:]
+        except OSError:
+            return []
+        return [json.loads(l) for l in lines if l.strip()]
+
+    def save_controls(self):
+        (self.data / "controls.json").write_text(json.dumps({"autonomy": self.autonomy, "allow": self.allow}))
+
     def log(self, msg: str):
         print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -89,7 +116,9 @@ class Workspace:
 
     def status(self) -> dict:
         return {"busy": self.busy, "model_ok": self.model.health(), "thinking": self.model.thinking,
-                "auto_reflect": self.auto_reflect, "kernel": self.kernel.mode, "kernel_error": self.kernel_error,
+                "autonomy": self.autonomy, "allow": self.allow,
+                "running": {"id": self.running["id"], "label": self.running["label"]} if self.running else None,
+                "kernel": self.kernel.mode, "kernel_error": self.kernel_error,
                 "jupyter": f"{self.jupyter_public}/lab/tree/{LIVE_NOTEBOOK}?token={self.jupyter_token}"
                            if self.jupyter_proc else None,
                 "journal": JOURNAL, "mind": self.mind.status(), "listing": self.kernel.listing()}
@@ -133,7 +162,7 @@ class Workspace:
             self.emit("spark", kind="repo", text=("First sync from GitHub: " if first_sync else
                                                   "Changed on GitHub: ") + ", ".join(files[:8]))
             mind_changed = [f for f in files if f.startswith("mind/")]
-            if mind_changed and not first_sync and self.auto_reflect and not self.busy:
+            if mind_changed and not first_sync and self.autonomy and not self.busy:
                 threading.Thread(target=self.turn, args=(
                     "mind", f"[Spark] Your mind files just changed on GitHub: {', '.join(mind_changed)}. "
                             "In one or two sentences, tell Dustin what is different for you now."),
@@ -166,9 +195,11 @@ class Workspace:
                 mind_files = self.mind.mind_files()
                 catalog = self.mind.catalog()
                 listing = self.kernel.listing()
-                system = build_system(mind_files, catalog, listing, self.recent_runs[-3:])
+                projects = self.mind.projects()
+                system = build_system(mind_files, catalog, listing, self.recent_runs[-3:], projects, self.allow)
                 msgs, used, ctx = self._fit(system)
-                self.emit("trace", mind=[p for p, _ in mind_files], books=len(catalog), opened=opened,
+                self.emit("trace", mind=[p for p, _ in mind_files], books=len(catalog), projects=len(projects),
+                          opened=opened,
                           files=len(listing), history=len(msgs) - 1, tokens=used, context=ctx)
                 self.emit("thought_start", keep=False)
                 out = self.model.stream(msgs, lambda d: self.emit("thought_delta", keep=False, delta=d),
@@ -184,6 +215,24 @@ class Workspace:
                 self.emit("reply", text=shown, tokens=out["prompt_tokens"], context=out["context"],
                           action=action.label() if action else None)
                 self.messages.append({"role": "assistant", "content": out["text"].strip()})
+                if action and action.kind == "open" and action.project:
+                    if len(opened) >= MAX_OPENS_PER_TURN:
+                        break
+                    try:
+                        proj = self.mind.project(action.project)
+                        code = self.mind.entry_code(proj)
+                        opened.append(proj.path)
+                        self.messages.append({"role": "user", "content":
+                                              f"[PROJECT {proj.path} — you opened it]\n{proj.about.strip()[:3000]}\n\n"
+                                              f"FILES: {', '.join(proj.files)}\nENTRY: {proj.entry}\n"
+                                              f"```python\n{code[:4000]}\n```\n"
+                                              "[Now continue: explain what it does and whether to RUN it.]"})
+                        self.emit("book", path=proj.path, title=proj.title, cells=len(proj.files), kind="project")
+                        continue
+                    except ValueError as e:
+                        self.messages.append({"role": "user", "content": f"[Could not open: {e}]"})
+                        self.emit("notice", text=str(e))
+                        continue
                 if action and action.kind == "open":
                     if len(opened) >= MAX_OPENS_PER_TURN:
                         break
@@ -212,22 +261,46 @@ class Workspace:
 
     # --- proposals ------------------------------------------------------------------
 
+    def _refuse(self, what: str, label: str):
+        msg = f"{label} not proposed: Dustin has turned off {what}."
+        self.messages.append({"role": "user", "content": f"[{msg}]"})
+        self.emit("notice", text=msg)
+        self.audit("refused", {"label": label, "source": what})
+
     def _propose(self, action: Action):
-        code, source = action.code, "TASS's own code"
-        if action.book:
-            try:
+        p: dict = {"id": secrets.token_hex(4), "label": action.label(), "status": "pending", "at": time.time()}
+        try:
+            if action.project:
+                if not self.allow["projects"]:
+                    return self._refuse("projects", p["label"])
+                proj = self.mind.project(action.project)
+                if not proj.entry:
+                    raise ValueError(f"{proj.path} has no entry file (.py or .ipynb) to run")
+                shas = self.mind.manifest().get("files", {})
+                dest = f"projects/{proj.name}"
+                p.update(kind="project", project=proj.name, entry=proj.entry, files=proj.files,
+                         file_shas={f: shas.get(f"{proj.path}/{f}", {}).get("sha") for f in proj.files},
+                         source=f"{proj.path} → copy {len(proj.files)} file(s) into shared/{dest}/, then run {proj.entry}",
+                         code=self.mind.entry_code(proj))
+            elif action.book:
+                if not self.allow["library books"]:
+                    return self._refuse("library books", p["label"])
                 book = self.mind.book(action.book)
                 if not 1 <= action.cell <= len(book.cells):
                     raise ValueError(f"{book.path} has {len(book.cells)} cells; there is no cell {action.cell}")
-                code, source = book.cells[action.cell - 1], f"{book.path} · cell {action.cell}"
-            except ValueError as e:
-                self.messages.append({"role": "user", "content": f"[Could not propose: {e}]"})
-                self.emit("notice", text=str(e))
-                return
-        pid = secrets.token_hex(4)
-        p = {"id": pid, "label": action.label(), "source": source, "code": code, "status": "pending",
-             "at": time.time()}
-        self.proposals[pid] = p
+                sha = self.mind.manifest().get("files", {}).get(book.path, {}).get("sha")
+                p.update(kind="book", code=book.cells[action.cell - 1], source=f"{book.path} · cell {action.cell}",
+                         file_shas={book.path: sha})
+            else:
+                if not self.allow["own code"]:
+                    return self._refuse("own code", p["label"])
+                p.update(kind="code", code=action.code, source="TASS's own code")
+        except ValueError as e:
+            self.messages.append({"role": "user", "content": f"[Could not propose: {e}]"})
+            self.emit("notice", text=str(e))
+            return
+        self.proposals[p["id"]] = p
+        self.audit("proposed", p)
         self.emit("proposal", proposal=p)
 
     def decide(self, pid: str, decision: str) -> dict:
@@ -236,21 +309,47 @@ class Workspace:
             raise ValueError("That proposal is not waiting for a decision.")
         if decision == "reject":
             p["status"] = "rejected"
+            self.audit("rejected", p)
             self.messages.append({"role": "user", "content": f"[Dustin rejected {p['label']}.]"})
             self.emit("decision", id=pid, status="rejected")
             self._save()
             return p
+        if self.running:
+            raise ValueError(f"Wait: {self.running['label']} is still running (or press Stop).")
         p["status"] = "running"
+        self.running = p
+        self.audit("approved", p)
         self.emit("decision", id=pid, status="running")
         threading.Thread(target=self._run, args=(p,), daemon=True).start()
         return p
 
+    def _install_project(self, p: dict) -> str:
+        """Copy the mirrored project into shared/projects/<name>/ and return the code that runs its entry."""
+        src = self.mind.files / "projects" / p["project"]
+        dest = self.kernel.shared / "projects" / p["project"]
+        dest.mkdir(parents=True, exist_ok=True)
+        for rel in p["files"]:
+            target = dest / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src / rel, target)
+        entry = p["entry"]
+        if entry.endswith(".ipynb"):
+            body = f"exec(compile({p['code']!r}, {entry!r}, 'exec'), globals())"
+        else:
+            body = f"runpy.run_path({entry!r}, run_name='__main__')"
+        return (f"import os as _os, runpy\n_back = _os.getcwd()\n_os.chdir({str(dest)!r})\n"
+                f"try:\n    {body}\nfinally:\n    _os.chdir(_back)\n")
+
     def _run(self, p: dict):
         try:
-            r = self.kernel.execute(p["code"])
+            code = self._install_project(p) if p.get("kind") == "project" else p["code"]
+            r = self.kernel.execute(code)
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "text": "", "images": [], "error": str(e), "seconds": 0}
+        finally:
+            self.running = None
         p["status"] = "ran" if r["ok"] else "failed"
+        self.audit(p["status"], p, seconds=r["seconds"], error=r["error"])
         text = r["text"][-3000:]
         self.emit("result", id=p["id"], label=p["label"], ok=r["ok"], text=text, images=r["images"][:4],
                   error=r["error"], seconds=r["seconds"])
@@ -262,7 +361,17 @@ class Workspace:
                               + (f"\nERROR: {r['error']}" if r["error"] else "")
                               + ("\n(It also produced an image.)" if r["images"] else "")})
         self._save()
-        self.turn("result", f"[Spark] The run finished: {summary}")
+        if self.autonomy:
+            self.turn("result", f"[Spark] The run finished: {summary}")
+        else:
+            self.emit("notice", text="Autonomy is off, so TASS waits for you before reacting to this result.")
+
+    def stop_run(self):
+        if not self.running:
+            raise ValueError("Nothing is running.")
+        self.kernel._interrupt()
+        self.audit("stopped", self.running)
+        self.emit("notice", text=f"Stop requested for {self.running['label']}.")
 
 
 # --- HTTP ---------------------------------------------------------------------------
@@ -296,6 +405,8 @@ def make_handler(ws: Workspace):
             elif path == "/api/state":
                 self._json(200, {"timeline": ws.timeline[-300:], "status": ws.status(),
                                  "proposals": [p for p in ws.proposals.values() if p["status"] == "pending"]})
+            elif path == "/api/audit":
+                self._json(200, ws.read_audit())
             elif path == "/api/status":
                 self._json(200, ws.status())
             elif path == "/api/events":
@@ -348,9 +459,18 @@ def make_handler(ws: Workspace):
                 if path == "/api/settings":
                     if "thinking" in body:
                         ws.model.thinking = bool(body["thinking"])
-                    if "auto_reflect" in body:
-                        ws.auto_reflect = bool(body["auto_reflect"])
+                    if "autonomy" in body:
+                        ws.autonomy = bool(body["autonomy"])
+                        ws.emit("notice", text=f"Autonomy {'on' if ws.autonomy else 'off'}.")
+                    for k, v in (body.get("allow") or {}).items():
+                        if k in ws.allow:
+                            ws.allow[k] = bool(v)
+                            ws.emit("notice", text=f"{k}: {'allowed' if v else 'turned off'}.")
+                    ws.save_controls()
                     return self._json(200, ws.status())
+                if path == "/api/stop":
+                    ws.stop_run()
+                    return self._json(200, {"ok": True})
                 if path == "/api/kernel/restart":
                     ws.kernel.restart()
                     ws.emit("notice", text="Python kernel restarted (variables cleared; files kept).")

@@ -39,6 +39,13 @@ def make_mirror(root: Path):
     (files / "library/01-look-around.md").write_text(
         "# Look around\n\nSee what's here.\n\n```python\nprint('cell one')\n```\n\n```python\nx = 41 + 1\nprint(x)\n```\n")
     (files / "library/README.md").write_text("# Library\n")
+    (files / "projects/hello-tass").mkdir(parents=True)
+    (files / "projects/hello-tass/project.md").write_text(
+        "# Hello TASS\n\nA first project that greets us.\n\nentry: main.py\n")
+    (files / "projects/hello-tass/main.py").write_text(
+        "import os\nopen('status.json','w').write('{}')\nprint('Hello from hello-tass in', os.path.basename(os.getcwd()))\n")
+    (files / "projects/hello-tass/data/notes.txt").parent.mkdir()
+    (files / "projects/hello-tass/data/notes.txt").write_text("hi\n")
     (root / "manifest.json").write_text(json.dumps({"repo": "Arameair/Developmnt", "synced_at": time.time(),
                                                     "last_change_at": 1.0, "last_changed": [], "files": {}}))
 
@@ -80,6 +87,24 @@ class MindTests(unittest.TestCase):
             self.assertIn("RUN: library/<file>#<n>", system)
 
 
+class ProjectTests(unittest.TestCase):
+    def test_project_parse_and_actions(self):
+        with tempfile.TemporaryDirectory() as d:
+            make_mirror(Path(d))
+            m = Mind(d)
+            p = m.project("hello-tass")
+            self.assertEqual((p.title, p.entry, p.files), ("Hello TASS", "main.py", ["data/notes.txt", "main.py", "project.md"]))
+            self.assertIn("Hello from hello-tass", m.entry_code(p))
+            for bad in ("../mind", ".hidden", "nope"):
+                with self.assertRaises(ValueError):
+                    m.project(bad)
+            self.assertIn("projects/hello-tass — Hello TASS", build_system([], [], [], [], m.projects()))
+        a = parse_action("ok\nRUN: projects/hello-tass")[1]
+        self.assertEqual((a.kind, a.project), ("run", "hello-tass"))
+        a = parse_action("OPEN: projects/hello-tass/")[1]
+        self.assertEqual((a.kind, a.project), ("open", "hello-tass"))
+
+
 class EndToEndTests(unittest.TestCase):
     """Real server + real (private) Jupyter kernel + scripted fake model."""
 
@@ -111,6 +136,13 @@ class EndToEndTests(unittest.TestCase):
             p.terminate()
             p.wait(10)
         cls.tmp.cleanup()
+
+    def setUp(self):
+        # Each test starts from an idle TASS and an empty conversation.
+        self.wait_for(lambda s: not s["status"]["busy"] and not s["status"]["running"])
+        time.sleep(0.5)
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.post("/api/reset", {})
 
     @classmethod
     def get(cls, path):
@@ -152,6 +184,50 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("cell one", result["text"])
         journal = json.loads((self.root / "shared/journal/tass-journal.ipynb").read_text())
         self.assertEqual(journal["cells"][-1]["outputs"][0]["text"], "cell one\n")
+
+    def test_project_open_approve_runs_in_its_folder_and_audits(self):
+        self.post("/api/message", {"text": "ChatGPT added a project, can you look?"})
+        st = self.wait_for(lambda s: any(p.get("kind") == "project" for p in s["proposals"]))
+        p = next(p for p in st["proposals"] if p.get("kind") == "project")
+        self.assertEqual(p["files"], ["data/notes.txt", "main.py", "project.md"])
+        self.assertIn("print('Hello from hello-tass", p["code"])
+        self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == p["id"] for e in s["timeline"]))
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == p["id"])
+        self.assertTrue(res["ok"], res)
+        self.assertIn("Hello from hello-tass in hello-tass", res["text"])        # ran inside its folder
+        dest = self.root / "shared/projects/hello-tass"
+        self.assertTrue((dest / "status.json").exists() and (dest / "data/notes.txt").exists())
+        events = [(r["event"], r["label"]) for r in self.get("/api/audit")]
+        for ev in ("proposed", "approved", "ran"):
+            self.assertIn((ev, "RUN projects/hello-tass"), events)
+        self.assertEqual(len(next(r for r in self.get("/api/audit") if r["event"] == "ran")["code_sha256"]), 64)
+
+    def test_controls_refuse_autonomy_and_stop(self):
+        # Turn projects off: TASS's RUN is refused, never proposed.
+        self.post("/api/settings", {"allow": {"projects": False}})
+        self.post("/api/message", {"text": "Open the project again please"})
+        st = self.wait_for(lambda s: any(e["type"] == "notice" and "turned off projects" in e["text"] for e in s["timeline"]))
+        self.assertFalse(st["proposals"])
+        self.assertIn("refused", [r["event"] for r in self.get("/api/audit")])
+        self.post("/api/settings", {"allow": {"projects": True}, "autonomy": False})
+        # Autonomy off + Stop: a long run is interrupted, and TASS does not react on its own.
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.post("/api/message", {"text": "try a sleep job"})
+        st = self.wait_for(lambda s: s["proposals"])
+        pid = st["proposals"][0]["id"]
+        self.post("/api/proposal", {"id": pid, "decision": "approve"})
+        self.wait_for(lambda s: s["status"]["running"])
+        self.post("/api/stop", {})
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == pid for e in s["timeline"]), 30)
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)
+        self.assertFalse(res["ok"])
+        self.assertIn("KeyboardInterrupt", res["error"] or res["text"])
+        time.sleep(1.5)
+        st = self.get("/api/state")
+        after = st["timeline"][[e.get("id") for e in st["timeline"]].index(next(e["id"] for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)):]
+        self.assertFalse(any(e["type"] == "spark" and e.get("kind") == "result" for e in after))
+        self.post("/api/settings", {"autonomy": True})
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

@@ -18,6 +18,13 @@ def script(messages):
     if who:
         bullets = [l for l in who.group(1).splitlines() if l.startswith("- ")]
         first_line = bullets[0][2:] if bullets else ""
+    if "[PROJECT projects/hello-tass" in last:
+        return ("ChatGPT's project only writes inside its own folder. Safe to propose.",
+                "It greets us and writes status.json in its own folder.\nRUN: projects/hello-tass")
+    if "sleep" in last.lower():
+        return ("A slow job.", "This takes a while.\nRUN: code\n```python\nimport time\ntime.sleep(60)\n```")
+    if "project" in last.lower() and not last.startswith("["):
+        return ("Dustin mentioned a project. Open it first.", "Let me read it first.\nOPEN: projects/hello-tass")
     if "[BOOK library/01-look-around.md" in last:
         return ("The book has three cells. Cell 1 lists our shared folder, a safe first look.",
                 "Cell 1 only reads. I'll explain why.\nRUN: library/01-look-around.md#1")

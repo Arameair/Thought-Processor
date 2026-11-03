@@ -85,7 +85,8 @@
   <span id="p-busy" class="pill">idle</span>
   <span class="spacer"></span>
   <label><input type="checkbox" id="t-thinking"> show thinking</label>
-  <label title="When a mind file changes on GitHub, TASS says what changed for it"><input type="checkbox" id="t-reflect"> reflect on mind changes</label>
+  <label title="On: TASS may start turns by itself (when its mind changes on GitHub, and right after a run). Off: TASS only acts when you send a message."><input type="checkbox" id="t-autonomy"> autonomy</label>
+  <button id="stop" class="reject" style="display:none" title="Interrupt the code that is running now">■ Stop run</button>
   <a id="jupyter" class="btn" target="_blank" rel="noopener" style="display:none">Open JupyterLab ↗</a>
   <button id="restart" title="Clear Python variables; files are kept">Restart kernel</button>
   <button id="reset" title="Clear this conversation; files and kernel are kept">Clear chat</button>
@@ -101,7 +102,13 @@
   </section>
   <section>
     <div class="head">Thought stream <span class="muted" style="text-transform:none;letter-spacing:0">Spark → Trace → Thought → Reply</span></div>
-    <details class="mindlib" id="mindlib"><summary>Mind &amp; library</summary><div id="mindlist"></div></details>
+    <details class="mindlib" id="mindlib"><summary>Mind, library &amp; projects</summary><div id="mindlist"></div></details>
+    <details class="mindlib" id="controls"><summary>Controls &amp; audit</summary>
+      <div class="muted">What TASS may propose. Every run still needs your click.</div>
+      <div id="allow" style="display:flex;gap:14px;flex-wrap:wrap;margin:6px 0"></div>
+      <b>Audit log</b> <span class="muted">(newest first: every proposal, decision and run, with the code's SHA-256)</span>
+      <div id="audit" style="max-height:220px;overflow-y:auto;font:12px/1.5 var(--mono)"></div>
+    </details>
     <div id="stream" class="scroll"></div>
   </section>
 </main>
@@ -130,8 +137,11 @@ async function post(url, body) {
 }
 
 function proposalCard(p) {
+  const files = p.files ? `<div class="muted">Files that will be copied into <code>shared/projects/${esc(p.project)}/</code>:</div>
+    <div>${p.files.map(f => `<code>${esc(f)}</code>`).join(" ")}</div>
+    <div class="muted" style="margin-top:6px">Code that runs (<code>${esc(p.entry)}</code>):</div>` : "";
   const el = add(chat, `<h4>TASS wants to run: ${esc(p.source)} <span class="tag">needs your OK</span></h4>
-    <pre>${esc(p.code)}</pre>
+    ${files}<pre>${esc(p.code)}</pre>
     <div class="row"><button class="approve">Approve &amp; run</button><button class="reject">Reject</button>
     <span class="muted state"></span></div>`, "card proposal");
   el.id = "p-" + p.id;
@@ -157,7 +167,7 @@ function render(ev, replay) {
       step("spark", "Spark · " + esc(ev.kind), esc(ev.text)); break;
     case "trace":
       step("trace", "Trace", `read ${ev.mind.length} mind file(s) (${ev.mind.map(esc).join(", ") || "none"}),
-        ${ev.books} book(s) in the library, ${ev.files} item(s) in the shared folder, ${ev.history} message(s) of history
+        ${ev.books} book(s), ${ev.projects ?? 0} project(s), ${ev.files} item(s) in the shared folder, ${ev.history} message(s) of history
         ${ev.opened.length ? "· opened " + ev.opened.map(esc).join(", ") : ""} · ${ev.tokens} / ${ev.context} tokens`); break;
     case "thought_start":
       live = step("thought live", "Thought", ""); liveReply = null; break;
@@ -176,16 +186,19 @@ function render(ev, replay) {
       if (liveReply) { liveReply.remove(); liveReply = null; }
       add(chat, `<div class="who">TASS ${ev.action ? `<span class="tag">→ ${esc(ev.action)}</span>` : ""}</div>${md(ev.text)}`, "msg tass");
       step("reply", "Reply", ev.action ? "decided: " + esc(ev.action) : "answered"); break;
-    case "book": step("book", "Opened book", `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} cells)</span>`); break;
+    case "book": step("book", ev.kind === "project" ? "Opened project" : "Opened book",
+      `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
     case "proposal": proposalCard(ev.proposal); break;
-    case "decision": { const el = $("p-" + ev.id); if (el) settle(el, ev.status); break; }
+    case "decision": { const el = $("p-" + ev.id); if (el) settle(el, ev.status);
+      $("stop").style.display = ev.status === "running" ? "" : "none"; break; }
     case "result": {
       const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "ran" : "failed");
+      $("stop").style.display = "none"; refresh();
       const imgs = (ev.images || []).map(b => `<img src="data:image/png;base64,${b}">`).join("");
       add(chat, `<h4>${ev.ok ? "✓" : "✗"} Result · ${esc(ev.label)} <span class="muted">${ev.seconds}s</span></h4>
         ${ev.text ? `<pre>${esc(ev.text)}</pre>` : `<span class="muted">(no output)</span>`}${ev.error ? `<div style="color:var(--bad)">${esc(ev.error)}</div>` : ""}${imgs}`, "card result");
       break; }
-    case "notice": add(chat, esc(ev.text), "msg note"); break;
+    case "notice": add(chat, esc(ev.text), "msg note"); refresh(); break;
     case "error": add(chat, `<div class="who">Problem</div>${esc(ev.text)}`, "msg err"); step("err", "Error", esc(ev.text)); break;
     case "busy": setBusy(ev.busy); break;
   }
@@ -193,6 +206,10 @@ function render(ev, replay) {
   if (keepStream) stream.scrollTop = stream.scrollHeight;
 }
 
+function refresh() {
+  fetch("/api/status").then(r => r.json()).then(showStatus).catch(() => {});
+  if ($("controls").open) loadAudit();
+}
 function setBusy(b) {
   status.busy = b;
   $("p-busy").className = "pill " + (b ? "busy" : ""); $("p-busy").textContent = b ? "thinking" : "idle";
@@ -207,12 +224,18 @@ function showStatus(s) {
   const m = s.mind || {};
   $("p-mind").className = "pill " + (m.synced_at ? "ok" : "bad");
   $("p-mind").textContent = m.synced_at ? `mind: ${m.mind.length} files · synced ${when(m.synced_at)}` : "mind: not synced yet";
-  $("t-thinking").checked = s.thinking; $("t-reflect").checked = s.auto_reflect;
+  $("t-thinking").checked = s.thinking; $("t-autonomy").checked = s.autonomy;
+  if (!s.running) $("stop").style.display = "none";
+  $("allow").innerHTML = Object.entries(s.allow || {}).map(([k, v]) =>
+    `<label><input type="checkbox" data-allow="${esc(k)}" ${v ? "checked" : ""}> ${esc(k)}</label>`).join("");
+  $("allow").querySelectorAll("input").forEach(i => i.onchange = () =>
+    post("/api/settings", {allow: {[i.dataset.allow]: i.checked}}).then(showStatus));
   if (s.jupyter) { $("jupyter").href = s.jupyter; $("jupyter").style.display = ""; }
   $("mindlist").innerHTML =
     `<div class="muted">From ${esc(m.repo || "—")} · last change ${when(m.last_change_at)}</div>
      <b>Mind</b><ul>${(m.mind || []).map(f => `<li><code>${esc(f.path)}</code> <span class="muted">${when(f.updated_at)}</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Library</b><ul>${(m.library || []).map(b => `<li><code>${esc(b.path)}</code> — ${esc(b.title)} <span class="muted">(${b.cells} cells)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
+     <b>Projects</b> <span class="muted">(Developmnt projects/)</span><ul>${(m.projects || []).map(p => `<li><code>${esc(p.path)}</code> — ${esc(p.title)} <span class="muted">(entry ${esc(p.entry)}, ${p.files} files)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Shared folder</b><ul>${(s.listing || []).slice(0, 25).map(f => `<li><code>${esc(f)}</code></li>`).join("") || "<li class='muted'>empty</li>"}</ul>`;
   setBusy(s.busy);
 }
@@ -238,7 +261,13 @@ $("form").onsubmit = async e => {
 };
 $("text").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } };
 $("t-thinking").onchange = e => post("/api/settings", {thinking: e.target.checked}).then(showStatus);
-$("t-reflect").onchange = e => post("/api/settings", {auto_reflect: e.target.checked}).then(showStatus);
+$("t-autonomy").onchange = e => post("/api/settings", {autonomy: e.target.checked}).then(showStatus);
+$("stop").onclick = () => post("/api/stop").catch(e => add(chat, esc(e.message), "msg note"));
+async function loadAudit() {
+  const rows = await (await fetch("/api/audit")).json().catch(() => []);
+  $("audit").innerHTML = rows.reverse().map(r => `<div><span class="muted">${esc(r.at.slice(11, 19))}</span> <b>${esc(r.event)}</b> ${esc(r.label || "")} <span class="muted">${esc((r.code_sha256 || "").slice(0, 12))}</span></div>`).join("") || "<span class='muted'>nothing yet</span>";
+}
+$("controls").ontoggle = () => { if ($("controls").open) loadAudit(); };
 $("restart").onclick = () => post("/api/kernel/restart").catch(e => add(chat, esc(e.message), "msg note"));
 $("reset").onclick = async () => { if (confirm("Clear this conversation? The shared folder and kernel stay.")) { await post("/api/reset").catch(()=>{}); boot(); } };
 boot();
