@@ -172,6 +172,23 @@ class Workspace:
                      "REMEMBER the most useful thing you learned, in one line.")
         return "\n".join(lines)
 
+    def discord_status(self) -> dict:
+        try:
+            return json.loads((self.kernel.shared / "discord" / "status.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def discord_section(self) -> str:
+        st = self.discord_status()
+        if not st:
+            return "DISCORD: not set up yet (Dustin runs ./run.sh discord)."
+        state = "connected" if st.get("connected") else (st.get("discord_state") or "unknown")
+        how = ("talk there with tools/discord_talk.py (say, reply, wait, heard)"
+               if (self.kernel.shared / "tools" / "discord_talk.py").exists()
+               else "learn it first with the lesson lessons/claude/01-talk-in-discord.md")
+        return (f"DISCORD: {state}. The Discord door carries files in discord/outbox/ to the channel and "
+                f"puts what Dustin says there in discord/inbox/; {how}.")
+
     def studio_state(self) -> dict:
         tl = self.timeline
         recent = [{"type": e["type"], "text": e.get("text", "")[:1500], "via": e.get("issue"), "at": e.get("at")}
@@ -203,6 +220,7 @@ class Workspace:
                 "journal": {"runs": journal_runs},
                 "audit": {"events": len(self.read_audit(100000))},
                 "studio": self.studio.summary(),
+                "discord": {k: self.discord_status().get(k) for k in ("connected", "discord_state", "waiting", "problem")},
             },
         }
 
@@ -333,6 +351,7 @@ class Workspace:
                                       memory=self.memory_text())
                 system += "\n\n" + self.studio.prompt_section(self.public_url)
                 system += "\n\n" + self.lessons_section()
+                system += "\n\n" + self.discord_section()
                 system += (f"\n\nLINKS: Dustin can open any file in the shared folder in his browser at "
                            f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
                            "When he asks for a link, give that full address, and only for a file that is in the "

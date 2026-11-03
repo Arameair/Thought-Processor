@@ -21,6 +21,10 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Atrium bridge tests (simulated TASS)
         run: python -m unittest discover -s workspace/atrium/tests -v
+      - name: Discord door tests (fake Communication Bridge)
+        run: python -m unittest discover -s workspace/discord_door/tests -v
+      - name: Discord door container builds
+        run: docker build -t tass-discord-door:ci workspace/discord_door
       - name: Atrium standalone container builds
         run: docker build -t tass-atrium:ci workspace/atrium
       - name: Workspace image builds and starts
@@ -32,4 +36,4 @@ jobs:
         working-directory: workspace
         run: |
           mkdir -p secrets config && touch secrets/github_token
-          docker compose -f compose.yaml config -q && docker compose -f compose.yaml -f compose.cpu.yaml config -q && echo compose-ok
+          docker compose -f compose.yaml config -q && docker compose -f compose.yaml -f compose.cpu.yaml config -q && COMPOSE_PROFILES=discord docker compose -f compose.yaml config -q && echo compose-ok

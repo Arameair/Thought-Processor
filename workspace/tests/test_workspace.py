@@ -139,6 +139,33 @@ class RestartTests(unittest.TestCase):
                 os.environ.update(old)
 
 
+class DiscordSectionTests(unittest.TestCase):
+    def test_prompt_and_map_follow_the_door(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_mirror(root / "mirror")
+            env = dict(os.environ, TASS_MIRROR=str(root / "mirror"), TASS_SHARED=str(root / "shared"),
+                       TASS_DATA=str(root / "data"), TASS_JUPYTER="0")
+            old = dict(os.environ)
+            os.environ.update(env)
+            try:
+                from tass_workspace.server import Workspace
+                ws = Workspace()
+                self.assertIn("not set up", ws.discord_section())
+                (root / "shared/discord").mkdir(parents=True)
+                (root / "shared/discord/status.json").write_text(json.dumps(
+                    {"connected": True, "discord_state": "connected", "waiting": "", "problem": ""}))
+                self.assertIn("DISCORD: connected", ws.discord_section())
+                self.assertIn("01-talk-in-discord", ws.discord_section())       # not learned yet: points at the lesson
+                (root / "shared/tools").mkdir()
+                (root / "shared/tools/discord_talk.py").write_text("")
+                self.assertIn("tools/discord_talk.py", ws.discord_section())
+                self.assertTrue(ws.studio_state()["map"]["discord"]["connected"])
+            finally:
+                os.environ.clear()
+                os.environ.update(old)
+
+
 class EndToEndTests(unittest.TestCase):
     """Real server + real (private) Jupyter kernel + scripted fake model."""
 

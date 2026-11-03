@@ -76,19 +76,26 @@ TASS can also propose its own code, which needs the same approval.
 
 Settings persist in `data/controls.json`.
 
-## The Atrium (our shared playground)
+## The two stations: Processor and Atrium
 
-Open **http://127.0.0.1:8790/atrium**, or click **✦ Atrium** in the Workshop. It's where you and TASS imagine and build things together. The Workshop stays the place for approvals and control.
+Open each in its own browser:
+- **Processor** (Claude's station): **http://127.0.0.1:8790/processor**, or **⚙ Processor** in the Workshop header. A live map of how TASS is working (identity, mind, thinking, memory, library, Discord, shared space, journal, audit), **Lessons** with real step progress, **Ideas** (`studio/ideas/*.md`), **Rooms** TASS builds (`studio/rooms/<name>/`) and the conversation.
+- **Atrium** (ChatGPT's station): **http://127.0.0.1:8791/**, a separate origin with a chat-only bridge.
 
-| Part | What it is |
-| --- | --- |
-| **How TASS is working right now** | A live map with real numbers: identity repo, mind, thinking, memory, library, Atrium, shared space, journal and audit. Click any part to open the real thing. |
-| **TASS, now** | His live thinking, the last thing he said, and his recent memories. Shows a banner if a run is waiting for you in the Workshop. |
-| **Ideas** | Plant an idea and it's saved as a file (`atrium/ideas/<name>.md`, with `status: new · exploring · built`). TASS sees every idea in his prompt each turn and updates the status when he works on it. |
-| **Rooms** | Things you built together. TASS builds a room by proposing code that writes `atrium/rooms/<name>/index.html` and a `room.md`. Each room shows as a live preview, sandboxed so it can't use the workspace controls. The library book **Build a room** gives him a template. |
-| **Talking** | The same conversation as the Workshop, with starter prompts. Runs he proposes are still approved in the Workshop. |
+Runs are always approved in the Workshop.
 
-Inspired by ChatGPT's Atrium idea (a space beyond the Workshop where approvals stay in the Workshop). Here, ideas and rooms are real shared files that TASS can see and build on, not something kept only in the browser.
+## Discord
+
+TASS learns to talk in Discord with the lesson **Talk in Discord** (`lessons/claude/01-talk-in-discord.md` in Developmnt).
+
+1. `./run.sh discord`: it explains how to make the bot, asks for the bot token (hidden), the channel ID and your user ID, saves `~/.communication-bridge/discord.json` (mode 600, outside any Git checkout) and starts everything.
+2. In the Processor, **Lessons → Talk in Discord → Teach TASS this**.
+
+How it fits together:
+- **bridge**: Arameair/Communication-Bridge, unchanged, in Manual mode, so it never answers by itself. It holds the token, accepts only your messages in that one channel, never double-posts, and pauses itself if a send might have half-happened. Its own page is at http://127.0.0.1:7820. It shares `~/.communication-bridge` with any other bridge you run, so the one-bot lock stops two bridges answering the same bot.
+- **discord-door**: a small mailbox carrier. TASS writes `discord/outbox/<name>.txt`; the door posts it and writes the receipt to `discord/sent/<name>.json` (`delivered`, `failed` or `uncertain`). What you say lands in `discord/inbox/`. It enforces 1900 characters, 3 seconds between posts and 20 posts per 10 minutes.
+- **TASS's code never sees a secret**: the kernel only reads and writes files in `shared/discord/`.
+- The bridge repo is private, so `run.sh` fetches it with your `gh` login into `vendor/` (ignored by Git).
 
 ## Direct TASS from GitHub
 

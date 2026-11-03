@@ -4,6 +4,9 @@
 #              mirrors Developmnt mind/ + library/, runs instructions + side chat
 #   workspace  Thought Processor workspace                          — talk to TASS, watch it think,
 #              shared folder + JupyterLab + shared kernel
+#   bridge + discord-door (only when Discord is set up: ./run.sh discord)
+#              Communication Bridge (holds the bot token) and the door that carries
+#              messages between it and shared/discord/ — TASS's code never sees a secret
 #
 #   ./run.sh                     (recommended: checks setup, then starts)
 # No NVIDIA GPU?  ./run.sh --cpu
@@ -155,4 +158,71 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+    restart: unless-stopped
+
+  # --- Discord (profile "discord": run.sh turns it on once ~/.communication-bridge/discord.json exists) ---
+  # Arameair/Communication-Bridge, unchanged: only Dustin's messages in one channel, no double posts,
+  # pauses itself when a send is uncertain. Manual mode: it never answers on its own; TASS answers.
+  bridge:
+    profiles: [discord]
+    build:
+      context: ${BRIDGE_SRC:-./vendor/communication-bridge}   # private repo: run.sh fetches it with your gh login
+      args:
+        GO_IMAGE: ${BRIDGE_GO_IMAGE:-golang:1.24-alpine}
+        RUN_IMAGE: ${BRIDGE_RUN_IMAGE:-alpine:3.20}
+      dockerfile_inline: |
+        ARG GO_IMAGE
+        ARG RUN_IMAGE
+        FROM $${GO_IMAGE} AS build
+        WORKDIR /src
+        COPY . .
+        RUN CGO_ENABLED=0 go build -trimpath -o /communication-bridge .
+        FROM $${RUN_IMAGE}
+        COPY --from=build /communication-bridge /usr/local/bin/communication-bridge
+        ENTRYPOINT ["/usr/local/bin/communication-bridge"]
+    image: tass-communication-bridge:local
+    init: true
+    environment:
+      BRIDGE_DATA: /data
+      BRIDGE_MODE: manual
+      PORT: "7820"
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    volumes:
+      # discord.json (bot token), journal, api-key and the one-bot lock. Shared with a bridge you run
+      # elsewhere (e.g. Project Controller), so the lock stops two bridges answering the same bot.
+      - ${BRIDGE_DATA_DIR:-./bridge-data}:/data
+    ports:
+      - "127.0.0.1:${BRIDGE_PORT:-7820}:7821"   # the bridge's own page, via the door's forwarder
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  discord-door:
+    profiles: [discord]
+    build:
+      context: ./discord_door
+      args:
+        BASE: ${DOOR_BASE:-python:3.12-alpine}
+    image: tass-discord-door:local
+    init: true
+    network_mode: "service:bridge"      # reaches the bridge on 127.0.0.1, the only place it listens
+    depends_on:
+      - bridge
+    environment:
+      DOOR_MAILBOX: /mailbox
+      DOOR_BRIDGE: http://127.0.0.1:7820
+      DOOR_KEY_FILE: /bridge-data/api-key
+      DOOR_FORWARD_PORT: "7821"
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    volumes:
+      - ./shared/discord:/mailbox                     # the only part of the shared space it touches
+      - ${BRIDGE_DATA_DIR:-./bridge-data}:/bridge-data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
