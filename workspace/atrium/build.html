@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080d18">
+  <meta name="playground-csrf" content="__PLAYGROUND_CSRF__">
+  <title>TASS / Build Room — Build Together</title>
+  <link rel="stylesheet" href="/assets/build.css">
+  <script src="/assets/build.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <header class="topbar">
+    <a href="/build" class="brand"><span class="brand-mark">✳</span><span class="brand-words"><b>TASS <i>/</i> BUILD ROOM</b><small>ONE COMPANION. REAL CAPABILITIES.</small></span></a>
+    <nav class="header-nav">
+      <span class="connection" id="modelStatus" role="status">◌ Connecting to TASS</span>
+      <a href="/" class="soft-link">✦ Explore Atrium</a>
+      <a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer" class="soft-link">↗ Review in Workshop</a>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <div class="eyebrow">DUSTIN × TASS × CHATGPT <span>·</span> EXPERIMENTAL COLLABORATION</div>
+      <h1>Tell TASS what you want. <em>Build it together.</em></h1>
+      <p>You describe a need. TASS uses his real abilities to propose one step. You approve code in Workshop. Atrium shows what actually happened. Share a reviewed brief with ChatGPT when you choose.</p>
+    </section>
+    <div class="workspace">
+      <section class="main-panel" aria-label="Live conversation and build requests">
+        <div class="panel-title"><div><span class="eyebrow">01 / YOUR INTENT</span><h2>What should we build?</h2></div><span class="small-chip">Real TASS session</span></div>
+        <form id="requestForm" class="request-form">
+          <label for="requestText">Describe what you'd like TASS to help create or change</label>
+          <textarea id="requestText" maxlength="1200" rows="3" placeholder="TASS, I'd like a simple page where we can see and test your real abilities..."></textarea>
+          <div class="form-bottom">
+            <span>One small, verifiable step at a time</span>
+            <button id="askTass" type="submit" class="primary">✦ Ask TASS <span>➜</span></button>
+          </div>
+        </form>
+        <div class="suggestions"><span>TRY A REAL REQUEST:</span>
+          <button type="button" data-prompt="Inspect your Look Around library ability and propose running its next untested cell. Explain what it would show me.">Test an ability</button>
+          <button type="button" data-prompt="Help me build a small, safe local notes tool using the abilities you actually have. Propose one step and wait for approval.">Make a useful tool</button>
+          <button type="button" data-prompt="I want a visible local page. Tell me which real project or library tool you could use to build and display it. Propose just one safe step.">Create a small page</button>
+        </div>
+        <div class="panel-title conversation-title"><div><span class="eyebrow">02 / LIVE WORK</span><h2>Conversation & results</h2></div><span class="mini-status" id="streamStatus">Waiting for Workshop</span></div>
+        <div id="conversation" class="conversation" aria-live="polite"><div class="empty-state"><span>✧</span><b>No invented responses.</b><p>Messages below come from your real Workshop session. If TASS is offline, you'll see that instead.</p></div></div>
+        <div id="pending" class="pending" hidden><div class="pending-glyph">◉</div><div><b id="pendingTitle">TASS has proposed an action</b><p id="pendingDetail">Review the exact code and approve it only if you want to execute it.</p></div><a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer" class="review-button">Review in Workshop ↗</a></div>
+      </section>
+
+      <aside class="right-panel" aria-label="Build progress and collaboration controls">
+        <section class="side-card"><div class="eyebrow">BUILD PROGRESS · REAL EVIDENCE</div><h2>From idea to working result</h2>
+          <ol id="steps" class="steps">
+            <li data-step="asked"><span>01</span><div><b>Ask TASS</b><small>Request recorded in Workshop</small></div></li>
+            <li data-step="answered"><span>02</span><div><b>Get a plan</b><small>Actual TASS reply received</small></div></li>
+            <li data-step="proposed"><span>03</span><div><b>Review a proposed action</b><small>Owner approves in Workshop</small></div></li>
+            <li data-step="executed"><span>04</span><div><b>See execution evidence</b><small>Real result, not a claimed success</small></div></li>
+          </ol><div class="note" id="progressNote">The next step appears here as TASS works.</div>
+        </section>
+        <section class="side-card"><div class="eyebrow">PRIVATE GITHUB HANDOFF</div><h2>Bring ChatGPT into the work</h2>
+          <p>I can read a task you explicitly share through the private <a href="https://github.com/Arameair/TASS/issues/19" target="_blank" rel="noopener noreferrer">TASS collaboration thread #19 ↗</a>. This is not a live ChatGPT connection, and no message is shared automatically.</p>
+          <div class="share-preview"><b>Exact text to share</b><p id="briefPreview">Write a task above. Only that text will be shared, not your full conversation or model internals.</p></div>
+          <label class="share-consent"><input type="checkbox" id="shareConsent"> <span>I approve sharing this task text to my private GitHub issue.</span></label>
+          <button id="shareBrief" type="button" class="secondary" disabled>Share this brief with ChatGPT ↗</button>
+          <div class="note" id="sharingStatus">Requires the optional private collaboration feed and Identity Liaison. A queued brief is not yet a GitHub post.</div>
+        </section>
+        <section class="side-card"><div class="eyebrow">DISCOVERED ≠ VERIFIED</div><h2>Real abilities</h2>
+          <div id="abilities" class="abilities">Checking actual Workshop library...</div>
+          <button id="refresh" type="button" class="text-button">↻ Refresh live evidence</button>
+        </section>
+      </aside>
+    </div>
+    <footer><span>✧ Atrium Build Room — experimental, local-first</span><span>Code runs only after owner approval in Workshop unless its existing Full Auto setting is enabled.</span></footer>
+  </main>
+  <div class="toast" id="toast" hidden role="alert"></div>
+</body>
+</html>
