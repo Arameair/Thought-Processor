@@ -7,3 +7,5 @@ data/
 __pycache__/
 outbox/
 inbox/
+collab_requests/
+collab_state/
