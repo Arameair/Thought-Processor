@@ -235,7 +235,7 @@ function render(ev, replay) {
       if (liveReply) { liveReply.remove(); liveReply = null; }
       add(chat, `<div class="who">TASS ${ev.action ? `<span class="tag">→ ${esc(ev.action)}</span>` : ""}</div>${md(ev.text)}`, "msg tass");
       step("reply", "Reply", ev.action ? "decided: " + esc(ev.action) : "answered"); break;
-    case "book": step("book", ev.kind === "project" ? "Opened project" : "Opened book",
+    case "book": step("book", ev.kind === "project" ? "Opened project" : ev.kind === "lesson" ? "Opened lesson" : "Opened book",
       `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
     case "proposal": proposalCard(ev.proposal); break;
     case "decision": { const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.status);

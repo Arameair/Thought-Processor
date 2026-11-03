@@ -69,7 +69,7 @@ services:
       IDENTITY_LIAISON_CHAT_PULSE: "30"
       IDENTITY_LIAISON_OWNERS: ${LIAISON_OWNERS:-Arameair}
       # Mirror TASS's mind (his own repo, listed first) and the team's library + projects into ./mirror.
-      IDENTITY_LIAISON_SYNC_SOURCES: ${TASS_SOURCES:-Arameair/TASS@alpha:mind/*.md;Arameair/Developmnt:library/*,projects/*}
+      IDENTITY_LIAISON_SYNC_SOURCES: ${TASS_SOURCES:-Arameair/TASS@alpha:mind/*.md;Arameair/Developmnt:library/*,projects/*,lessons/*}
       IDENTITY_LIAISON_SYNC_DEST: /shared/mirror
       # Mind changes TASS proposes and the owner approves in the workspace become pull requests here.
       IDENTITY_LIAISON_OUTBOX: /shared/outbox

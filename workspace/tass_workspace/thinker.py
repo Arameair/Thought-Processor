@@ -13,7 +13,7 @@ HOW_TO_ACT = """HOW TO ACT
 You can end a reply with ONE action, on its own line at the very end:
   OPEN: library/<file>          read a book before deciding (you'll get its text, then continue)
   OPEN: projects/<name>         read a project: its description, files and the code that would run
-  RUN: library/<file>#<n>       propose running cell n of a book
+  RUN: library/<file>#<n>       propose running cell n of a book (lessons work the same: RUN: lessons/<teacher>/<file>#<n>)
   RUN: projects/<name>          propose installing a project into our shared folder and running its entry file
   RUN: code                     propose your own code; put it in a ```python block right after this line
   CHANGE MIND: mind/<file>      propose a change to one of your mind files. Do NOT rewrite the file: right after
@@ -55,9 +55,9 @@ class Action:
         return f"RUN {self.book}#{self.cell}" if self.book else "RUN own code"
 
 
-ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+|projects/[\w.\-]+)/?`?", re.M | re.I)
+ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+|lessons/[^\s`*]+|projects/[\w.\-]+)/?`?", re.M | re.I)
 ACTION_RUN_PROJECT = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?projects/([\w.\-]+)/?`?[ \t]*$", re.M | re.I)
-ACTION_RUN_BOOK = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?(library/[^\s#`*]+)#(\d+)`?", re.M | re.I)
+ACTION_RUN_BOOK = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?((?:library|lessons)/[^\s#`*]+)#(\d+)`?", re.M | re.I)
 ACTION_RUN_CODE = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?code`?[^\n]*\n+\s*```(?:python|py)?\s*\n(.*?)\n```",
                              re.M | re.I | re.S)
 

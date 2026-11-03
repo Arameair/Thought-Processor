@@ -59,6 +59,18 @@
   .room .t { font-family: var(--serif); font-size: 17px; }
   .room .s { font-size: 13px; color: var(--dim); min-height: 1.2em; }
   .room .meta a { font-size: 13px; color: var(--room); }
+  .lesson { display: flex; gap: 12px; align-items: center; background: var(--panel2); border: 1px solid var(--line);
+            border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+  .lesson .who { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+                 border: 1px solid currentColor; white-space: nowrap; }
+  .lesson .who.claude { color: #e8a87c; } .lesson .who.chatgpt { color: #74d4b0; }
+  .lesson .body { flex: 1; min-width: 0; }
+  .lesson .t { font-family: var(--serif); font-size: 16.5px; }
+  .lesson .s { font-size: 13px; color: var(--dim); }
+  .steps { display: flex; gap: 4px; margin-top: 5px; }
+  .steps i { width: 18px; height: 6px; border-radius: 3px; background: #2e3a45; }
+  .steps i.ok { background: var(--idea); }
+  .center-col { display: flex; flex-direction: column; gap: 18px; }
   .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; color: var(--dim); }
   .empty b { color: var(--text); font-family: var(--serif); font-weight: 500; font-size: 17px; display: block; margin-bottom: 6px; }
   form.plant input, form.plant textarea, form.talk textarea { width: 100%; font: inherit; color: var(--text); background: #12171c;
@@ -116,10 +128,16 @@
       <ul id="mem" class="mem"></ul>
     </section>
 
-    <section class="card">
-      <h2>Rooms <small>things we built · TASS writes them to studio/rooms/</small></h2>
-      <div id="rooms" class="rooms"></div>
-    </section>
+    <div class="center-col">
+      <section class="card">
+        <h2>Lessons <small>Claude and ChatGPT show how · TASS learns it step by step with you</small></h2>
+        <div id="lessons"></div>
+      </section>
+      <section class="card">
+        <h2>Rooms <small>things we built · TASS writes them to studio/rooms/</small></h2>
+        <div id="rooms" class="rooms"></div>
+      </section>
+    </div>
 
     <section class="card">
       <h2>Ideas <small>planted here · TASS sees every one</small></h2>
@@ -155,6 +173,7 @@ const STARTERS = [
   ["Build our first room", "TASS, let's build our first room in the Studio. Pick something small and useful for us, tell me your idea in two sentences, then propose the code that writes it to studio/rooms/."],
   ["Pick an idea", "TASS, look at the ideas in our Studio. Pick one you'd like to explore, say why, and mark it as exploring."],
   ["Make this ours", "TASS, what's one small thing that would make the Studio feel more like our shared space? Plant it as an idea if you like it."],
+  ["Teach me what you learned", "TASS, what have you learned from the lessons so far? Tell me in a few bullets, and which lesson you'd like to do next."],
   ["What did we build?", "TASS, walk me through the rooms we've built so far and what each one is for."],
 ];
 
@@ -212,6 +231,29 @@ function renderRooms(rooms) {
     </div>`).join("");
 }
 
+function renderLessons(lessons) {
+  if (!lessons.length) {
+    $("lessons").innerHTML = `<div class="note">No lessons yet. Lessons live in Developmnt <code>lessons/claude/</code> and <code>lessons/chatgpt/</code>.</div>`;
+    return;
+  }
+  $("lessons").innerHTML = lessons.map((l, i) => {
+    const who = (l.teacher || "").toLowerCase().includes("chatgpt") ? "chatgpt" : (l.teacher || "").toLowerCase().includes("claude") ? "claude" : "";
+    const dots = Array.from({length: l.steps}, (_, k) => `<i class="${l.done.includes(k + 1) ? "ok" : ""}" title="step ${k + 1}"></i>`).join("");
+    const finished = l.steps && l.done.length >= l.steps;
+    return `<div class="lesson"><span class="who ${who}">${esc(l.teacher || "lesson")}</span>
+      <div class="body"><div class="t">${esc(l.title)}</div><div class="s">${esc(l.summary)}</div>
+        <div class="steps">${dots}</div></div>
+      <button class="btn" data-lesson="${i}">${finished ? "Do it again" : l.done.length ? "Continue" : "Teach TASS this"}</button></div>`;
+  }).join("");
+  document.querySelectorAll("[data-lesson]").forEach(b => b.onclick = () => {
+    const l = lessons[+b.dataset.lesson];
+    const next = Array.from({length: l.steps}, (_, k) => k + 1).find(n => !l.done.includes(n)) || 1;
+    say(next === 1
+      ? `TASS, let's do the lesson "${l.title}" by ${l.teacher} (${l.path}). Open it, tell me in your own words what we'll learn, then explain step 1 and propose it.`
+      : `TASS, let's continue the lesson "${l.title}" (${l.path}). Steps done so far: ${l.done.join(", ")}. Explain step ${next} and propose it.`);
+  });
+}
+
 function renderIdeas(ideas) {
   if (!ideas.length) { $("ideas").innerHTML = `<div class="note" style="margin-top:10px">No ideas yet. Plant the first one.</div>`; return; }
   const order = {exploring: 0, new: 1, built: 2};
@@ -254,7 +296,7 @@ function renderLog(recent) {
 async function refresh() {
   try {
     state = await (await fetch("/api/studio")).json();
-    renderMap(state.map, state); renderRooms(state.rooms); renderIdeas(state.ideas); renderNow(state); renderLog(state.recent);
+    renderMap(state.map, state); renderLessons(state.lessons || []); renderRooms(state.rooms); renderIdeas(state.ideas); renderNow(state); renderLog(state.recent);
   } catch (e) { $("c-model").className = "chip off"; $("c-model").textContent = "workspace not reachable"; }
 }
 function soon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 400); }

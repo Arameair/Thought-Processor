@@ -42,6 +42,11 @@ def make_mirror(root: Path):
     (files / "library/01-look-around.md").write_text(
         "# Look around\n\nSee what's here.\n\n```python\nprint('cell one')\n```\n\n```python\nx = 41 + 1\nprint(x)\n```\n")
     (files / "library/README.md").write_text("# Library\n")
+    (files / "lessons/claude").mkdir(parents=True)
+    (files / "lessons/claude/01-make-a-tool-and-check-it.md").write_text(
+        "# Make a tool, then prove it works\nby: Claude\n\nBuild a tool and check it.\n\n## Step 1\n"
+        "```python\nprint('wrote tool')\n```\n\n## Step 2\n```python\nprint('ALL PASS')\n```\n")
+    (files / "lessons/claude/README.md").write_text("# not a lesson\n")
     (files / "projects/hello-tass").mkdir(parents=True)
     (files / "projects/hello-tass/project.md").write_text(
         "# Hello TASS\n\nA first project that greets us.\n\nentry: main.py\n")
@@ -439,6 +444,21 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("sandbox", headers["Content-Security-Policy"])
         with self.assertRaises(urllib.error.HTTPError):
             self.post("/api/studio/idea", {"title": "  "})
+
+    def test_lesson_teach_step_and_progress(self):
+        st = self.get("/api/studio")
+        self.assertEqual([(l["path"], l["teacher"], l["steps"]) for l in st["lessons"]],
+                         [("lessons/claude/01-make-a-tool-and-check-it.md", "Claude", 2)])
+        self.post("/api/message", {"text": "TASS, let's do the lesson \"Make a tool\""})
+        st = self.wait_for(lambda s: s["proposals"])
+        self.assertTrue(any(e["type"] == "book" and e.get("kind") == "lesson" for e in st["timeline"]))
+        p = st["proposals"][0]
+        self.assertEqual(p["source"], "lessons/claude/01-make-a-tool-and-check-it.md · cell 1")
+        self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
+        self.wait_for(lambda s: any(e["type"] == "result" and "wrote tool" in e["text"] for e in s["timeline"]))
+        self.wait_for(lambda s: not s["status"]["busy"])
+        lesson = self.get("/api/studio")["lessons"][0]
+        self.assertEqual(lesson["done"], [1])                     # progress comes from what really ran
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

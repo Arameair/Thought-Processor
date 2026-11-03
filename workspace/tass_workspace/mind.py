@@ -24,6 +24,7 @@ class Book:
     summary: str
     cells: list[str]
     text: str
+    teacher: str = ""
 
 
 @dataclass
@@ -93,10 +94,26 @@ class Mind:
                     continue
         return books
 
+    def lessons(self) -> list[Book]:
+        """Step-by-step lessons from the teachers (Claude, ChatGPT): lessons/<teacher>/<lesson>.md"""
+        d = self.files / "lessons"
+        if not d.is_dir():
+            return []
+        out = []
+        for p in sorted(d.glob("*/*.md")):
+            if p.stem.lower() == "readme" or p.name.startswith("."):
+                continue
+            try:
+                out.append(self.book(f"lessons/{p.parent.name}/{p.name}"))
+            except (OSError, ValueError):
+                continue
+        return out
+
     def book(self, path: str) -> Book:
         path = path.strip().lstrip("/")
-        if not re.fullmatch(r"library/[\w.\- ]+\.(md|ipynb)", path):
-            raise ValueError(f"Not a library book: {path}")
+        lesson = re.fullmatch(r"lessons/([\w.\-]+)/[\w.\- ]+\.md", path)
+        if not (lesson or re.fullmatch(r"library/[\w.\- ]+\.(md|ipynb)", path)):
+            raise ValueError(f"Not a library book or lesson: {path}")
         p = self.files / path
         if not p.is_file():
             raise ValueError(f"No such book: {path}")
@@ -118,7 +135,11 @@ class Mind:
         title = next((l.lstrip("# ").strip() for l in text.splitlines() if l.startswith("#")), p.stem)
         summary = next((l.strip() for l in text.splitlines()
                         if l.strip() and not l.startswith(("#", "```", "|", "-", "*", ">"))), "")
-        return Book(path, title, summary[:200], cells, text)
+        teacher = lesson.group(1) if lesson else ""
+        m = re.search(r"(?im)^\s*by\s*:\s*(.+)$", text)
+        if m:
+            teacher = m.group(1).strip()
+        return Book(path, title, summary[:200], cells, text, teacher)
 
     # --- projects -------------------------------------------------------------
     # A project is a folder projects/<name>/ with a project.md (title, description, `entry: <file>`)

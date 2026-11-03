@@ -147,6 +147,31 @@ class Workspace:
         m = self.mind.manifest()
         return {"name": "TASS", "repo": m.get("repo"), "branch": m.get("branch")}
 
+    def lesson_progress(self) -> dict:
+        """lesson path -> set of step numbers that ran OK (from the audit log, so it's real)."""
+        done: dict[str, set] = {}
+        for r in self.read_audit(100000):
+            src = r.get("source") or ""
+            if r.get("event") == "ran" and src.startswith("lessons/") and " · cell " in src:
+                path, n = src.split(" · cell ")
+                done.setdefault(path, set()).add(int(n))
+        return done
+
+    def lessons_section(self) -> str:
+        lessons = self.mind.lessons()
+        if not lessons:
+            return "LESSONS: none yet."
+        done = self.lesson_progress()
+        lines = ["LESSONS (step-by-step lessons from your teachers, Claude and ChatGPT; each step is a numbered cell):"]
+        for b in lessons:
+            d = len(done.get(b.path, ()))
+            lines.append(f"- {b.path} — {b.title} (by {b.teacher or '?'}, {len(b.cells)} steps, {d} done): {b.summary}")
+        lines.append("How to do a lesson with Dustin: OPEN it first. Then for each step: explain in your own words what "
+                     "the step does and why, propose it with RUN: lessons/<teacher>/<file>#<n>, and after the RESULT say "
+                     "what it showed and whether it matched what the lesson expected. One step per reply. At the end, "
+                     "REMEMBER the most useful thing you learned, in one line.")
+        return "\n".join(lines)
+
     def studio_state(self) -> dict:
         tl = self.timeline
         recent = [{"type": e["type"], "text": e.get("text", "")[:1500], "via": e.get("issue"), "at": e.get("at")}
@@ -162,6 +187,8 @@ class Workspace:
         files = [l for l in self.kernel.listing(500) if not l.endswith("/")]
         return {
             "ideas": self.studio.ideas(), "rooms": self.studio.rooms(), "recent": recent,
+            "lessons": [{"path": b.path, "title": b.title, "summary": b.summary, "teacher": b.teacher, "steps": len(b.cells),
+                         "done": sorted(self.lesson_progress().get(b.path, ()))} for b in self.mind.lessons()],
             "memory": [l[2:] for l in self.memory_text(8).splitlines()],
             "pending": [{"id": p["id"], "label": p["label"]} for p in self.proposals.values() if p["status"] == "pending"],
             "busy": self.busy, "last_thought": (thought or {}).get("text", "")[-600:],
@@ -305,6 +332,7 @@ class Workspace:
                                       identity=f"{ident['repo']}@{ident['branch']}" if ident["repo"] else "",
                                       memory=self.memory_text())
                 system += "\n\n" + self.studio.prompt_section(self.public_url)
+                system += "\n\n" + self.lessons_section()
                 system += (f"\n\nLINKS: Dustin can open any file in the shared folder in his browser at "
                            f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
                            "When he asks for a link, give that full address, and only for a file that is in the "
@@ -357,7 +385,8 @@ class Workspace:
                         self.messages.append({"role": "user", "content":
                                               f"[BOOK {book.path} — you opened it]\n{self.mind.numbered(book)}\n"
                                               "[Now continue: explain what you'd do with it, and RUN a cell if you want.]"})
-                        self.emit("book", path=book.path, title=book.title, cells=len(book.cells))
+                        self.emit("book", path=book.path, title=book.title, cells=len(book.cells),
+                                  kind="lesson" if book.path.startswith("lessons/") else "book")
                         continue
                     except ValueError as e:
                         self.messages.append({"role": "user", "content": f"[Could not open: {e}]"})
