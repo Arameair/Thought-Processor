@@ -23,6 +23,10 @@ jobs:
         run: python -m unittest discover -s workspace/atrium/tests -v
       - name: Atrium standalone container builds
         run: docker build -t tass-atrium:ci workspace/atrium
+      - name: Collaboration feed tests (no network, no GitHub token)
+        run: python -m unittest discover -s workspace/collab_feed/tests -v
+      - name: Collaboration feed container builds
+        run: docker build -t tass-collab-feed:ci workspace/collab_feed
       - name: Workspace image builds and starts
         working-directory: workspace
         run: |
