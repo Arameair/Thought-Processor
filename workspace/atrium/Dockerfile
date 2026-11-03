@@ -1,6 +1,6 @@
 FROM python:3.12-alpine
 WORKDIR /app
-COPY server.py index.html ./
+COPY server.py index.html build.html ./
 COPY assets/ ./assets/
 RUN addgroup -S atrium && adduser -S -G atrium atrium
 USER atrium
