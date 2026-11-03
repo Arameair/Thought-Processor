@@ -97,6 +97,8 @@
   <label id="fa-label" title="Full auto: TASS's proposals run WITHOUT your click (for testing). Off after every restart. Pauses after a limit of runs in a row; Stop still works."><input type="checkbox" id="t-fullauto"> <b>full auto</b></label>
   <label title="On: TASS may start turns by itself (when its mind changes on GitHub, and right after a run). Off: TASS only acts when you send a message."><input type="checkbox" id="t-autonomy"> autonomy</label>
   <button id="stop" class="reject" style="display:none" title="Interrupt the code that is running now">■ Stop run</button>
+  <a id="playground" class="btn" target="_blank" rel="noopener" title="Open the Thought Playground notebook in JupyterLab">🧪 Playground</a>
+  <a id="filesbtn" class="btn" target="_blank" rel="noopener" title="Browse the shared folder">📁 Files</a>
   <a id="jupyter" class="btn" target="_blank" rel="noopener" style="display:none">Open JupyterLab ↗</a>
   <button id="restart" title="Clear Python variables; files are kept">Restart kernel</button>
   <button id="reset" title="Clear this conversation; files and kernel are kept">Clear chat</button>
@@ -129,7 +131,22 @@ const chat = $("chat"), stream = $("stream");
 let live = null, liveReply = null, status = {}, es = null;
 
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function md(s) {
+let fileSet = new Set();
+function fileLink(path) {
+  const p = path.replace(/^\/?(shared\/)?/, "");
+  if (p.endsWith(".ipynb") && status.jupyter_tree) return status.jupyter_tree.replace("{path}", encodeURIComponent(p).replace(/%2F/g, "/"));
+  return "/files/" + encodeURI(p);
+}
+function linkify(html) {
+  // Real links for files that exist in the shared folder, and for full URLs.
+  html = html.replace(/<code>([^<]+)<\/code>/g, (m, c) => {
+    const p = c.trim().replace(/^\/?(shared\/)?/, "");
+    return fileSet.has(p) || fileSet.has(p.replace(/\/$/, "") + "/") ? `<a href="${fileLink(p)}" target="_blank" rel="noopener"><code>${c}</code></a>` : m;
+  });
+  return html.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+}
+function md(s) { return linkify(mdRaw(s)); }
+function mdRaw(s) {
   const parts = String(s ?? "").split(/```(?:\w+)?\n?([\s\S]*?)```/g);
   return parts.map((p, i) => i % 2 ? `<pre>${esc(p.replace(/\n$/, ""))}</pre>` :
     esc(p).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
@@ -276,21 +293,30 @@ function showStatus(s) {
   $("allow").querySelectorAll("input").forEach(i => i.onchange = () =>
     post("/api/settings", {allow: {[i.dataset.allow]: i.checked}}).then(showStatus));
   if (s.jupyter) { $("jupyter").href = s.jupyter; $("jupyter").style.display = ""; }
+  fileSet = new Set(s.listing || []);
+  $("filesbtn").href = "/files/";
+  if (s.playground && s.jupyter_tree) {
+    $("playground").href = s.jupyter_tree.replace("{path}", encodeURIComponent(s.playground));
+    $("playground").onclick = null; $("playground").style.opacity = 1;
+  } else {
+    $("playground").removeAttribute("href"); $("playground").style.opacity = .6;
+    $("playground").onclick = () => add(chat, "The Thought Playground isn't installed in the shared folder yet. Ask TASS: “Please install the thought-playground project.”", "msg note");
+  }
   $("mindlist").innerHTML =
     `<div class="muted">From ${esc(m.repo || "—")} · last change ${when(m.last_change_at)}</div>
      <b>Mind</b><ul>${(m.mind || []).map(f => `<li><code>${esc(f.path)}</code> <span class="muted">${when(f.updated_at)}</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Library</b><ul>${(m.library || []).map(b => `<li><code>${esc(b.path)}</code> — ${esc(b.title)} <span class="muted">(${b.cells} cells)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Projects</b> <span class="muted">(Developmnt projects/)</span><ul>${(m.projects || []).map(p => `<li><code>${esc(p.path)}</code> — ${esc(p.title)} <span class="muted">(entry ${esc(p.entry)}, ${p.files} files)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
      <b>Memory</b> <span class="muted">(shared/memory/tass-memory.md, newest last)</span><pre style="max-height:160px;overflow-y:auto">${esc(s.memory || "(empty)")}</pre>
-     <b>Shared folder</b><ul>${(s.listing || []).slice(0, 25).map(f => `<li><code>${esc(f)}</code></li>`).join("") || "<li class='muted'>empty</li>"}</ul>`;
+     <b>Shared folder</b> <a href="/files/" target="_blank" rel="noopener" class="muted">(browse ↗)</a><ul>${(s.listing || []).slice(0, 60).map(f => `<li><a href="${fileLink(f)}" target="_blank" rel="noopener"><code>${esc(f)}</code></a></li>`).join("") || "<li class='muted'>empty</li>"}</ul>`;
   setBusy(s.busy);
 }
 
 async function boot() {
   const st = await (await fetch("/api/state")).json();
   chat.innerHTML = ""; stream.innerHTML = "";
+  showStatus(st.status);              // first, so file mentions in past messages become links
   st.timeline.forEach(ev => render(ev, true));
-  showStatus(st.status);
   if (!st.timeline.length) add(chat, "Say hello to TASS. It reads its mind files and library from GitHub, thinks out loud on the right, and asks before running anything in your shared Jupyter space.", "msg note");
   if (es) es.close();
   es = new EventSource("/api/events");

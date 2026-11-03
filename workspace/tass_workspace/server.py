@@ -8,6 +8,7 @@ Actions: OPEN a library book, or RUN a book cell / its own code (always after yo
 from __future__ import annotations
 
 import difflib
+import mimetypes
 import hashlib
 import json
 import os
@@ -28,6 +29,9 @@ from .mind import Mind
 from .thinker import Action, ModelClient, build_system, parse_reply
 
 MAX_OPENS_PER_TURN = 2
+PLAYGROUND = "Thought Playground.ipynb"
+VIEW_TYPES = {".html", ".htm", ".md", ".txt", ".json", ".csv", ".py", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+              ".ipynb", ".log", ".yaml", ".yml", ".toml"}
 MAX_TIMELINE = 600
 
 
@@ -48,7 +52,8 @@ class Workspace:
         self.allow = {"library books": True, "projects": True, "own code": True,
                       "remember": True, "mind changes": True}
         self.outbox = Path(env("TASS_OUTBOX", "/shared/outbox"))
-        self.inbox = Path(env("TASS_INBOX", "/shared/inbox"))   # messages from GitHub, written by the Liaison
+        self.inbox = Path(env("TASS_INBOX", "/shared/inbox"))
+        self.public_url = env("TASS_PUBLIC_URL", "http://127.0.0.1:8790").rstrip("/")   # messages from GitHub, written by the Liaison
         self._origin: dict | None = None                        # GitHub issue the current turn answers
         self._turn_replies: list[str] = []
         self._turn_proposals: list[dict] = []
@@ -166,7 +171,11 @@ class Workspace:
                 "kernel": self.kernel.mode, "kernel_error": self.kernel_error,
                 "jupyter": f"{self.jupyter_public}/lab/tree/{LIVE_NOTEBOOK}?token={self.jupyter_token}"
                            if self.jupyter_proc else None,
-                "journal": JOURNAL, "mind": self.mind.status(), "listing": self.kernel.listing()}
+                "journal": JOURNAL, "mind": self.mind.status(), "listing": self.kernel.listing(200),
+                "files_url": f"{self.public_url}/files/",
+                "jupyter_tree": f"{self.jupyter_public}/lab/tree/{{path}}?token={self.jupyter_token}"
+                                if self.jupyter_proc else None,
+                "playground": PLAYGROUND if (self.kernel.shared / PLAYGROUND).exists() else None}
 
     # --- startup ----------------------------------------------------------------------
 
@@ -261,6 +270,10 @@ class Workspace:
                 system = build_system(mind_files, catalog, listing, self.recent_runs[-3:], projects, self.allow,
                                       identity=f"{ident['repo']}@{ident['branch']}" if ident["repo"] else "",
                                       memory=self.memory_text())
+                system += (f"\n\nLINKS: Dustin can open any file in the shared folder in his browser at "
+                           f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
+                           "When he asks for a link, give that full address, and only for a file that is in the "
+                           "SHARED FOLDER list above. If a file isn't there yet, say so; don't claim you made it.")
                 msgs, used, ctx = self._fit(system)
                 self.emit("trace", mind=[p for p, _ in mind_files], books=len(catalog), projects=len(projects),
                           opened=opened,
@@ -643,6 +656,50 @@ def make_handler(ws: Workspace):
             self.end_headers()
             self.wfile.write(b)
 
+        def _file(self, raw: str):
+            """Serve the shared folder read-only. Pages run in a sandbox (no access to this app's controls)."""
+            from urllib.parse import unquote
+            rel = unquote(raw).lstrip("/")
+            root = ws.kernel.shared.resolve()
+            target = (root / rel).resolve()
+            if (root not in target.parents and target != root) or any(part.startswith(".") for part in Path(rel).parts):
+                return self._json(404, {"error": "not found"})
+            if target.is_dir():
+                items = sorted(target.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+                from html import escape
+                rows = "".join(
+                    f'<li><a href="{escape(p.name)}{"/" if p.is_dir() else ""}">{escape(p.name)}{"/" if p.is_dir() else ""}</a></li>'
+                    for p in items if not p.name.startswith("."))
+                body = (f"<!doctype html><meta charset=utf-8><title>shared/{escape(rel)}</title>"
+                        f"<style>body{{font:15px system-ui;background:#0f1720;color:#e6edf3;padding:20px}}a{{color:#5fb3f9}}</style>"
+                        f"<h3>shared/{escape(rel)}</h3><ul>{rows or '<li>(empty)</li>'}</ul>").encode()
+                if not raw.endswith("/") and rel:
+                    self.send_response(301)
+                    self.send_header("Location", f"/files/{rel}/")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                ctype = "text/html; charset=utf-8"
+            elif target.is_file() and target.suffix.lower() in VIEW_TYPES:
+                body = target.read_bytes()[:20 * 1024 * 1024]
+                if target.suffix.lower() in (".html", ".htm", ".svg"):
+                    ctype = mimetypes.guess_type(target.name)[0] or "text/html"
+                elif target.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif"):
+                    ctype = mimetypes.guess_type(target.name)[0]
+                else:
+                    ctype = "text/plain; charset=utf-8"   # md, py, json, ipynb… shown as text
+            else:
+                return self._json(404, {"error": "not found or not a viewable type"})
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            # Opaque origin: scripts in TASS-made pages can't call /api/* as this app.
+            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms")
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self):
             path = urlparse(self.path).path
             if path == "/":
@@ -654,6 +711,8 @@ def make_handler(ws: Workspace):
             elif path == "/api/state":
                 self._json(200, {"timeline": ws.timeline[-300:], "status": ws.status(),
                                  "proposals": [p for p in ws.proposals.values() if p["status"] == "pending"]})
+            elif path == "/files" or path.startswith("/files/"):
+                self._file(urlparse(self.path).path[len("/files"):])
             elif path == "/api/audit":
                 self._json(200, ws.read_audit())
             elif path == "/api/status":

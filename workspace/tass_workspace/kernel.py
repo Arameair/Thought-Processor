@@ -193,7 +193,7 @@ class SharedKernel:
         out = []
         for p in sorted(self.shared.rglob("*")):
             rel = p.relative_to(self.shared)
-            if any(part.startswith(".") for part in rel.parts) or len(rel.parts) > 3:
+            if any(part.startswith(".") for part in rel.parts) or len(rel.parts) > 3 or "__pycache__" in rel.parts:
                 continue
             out.append(str(rel) + ("/" if p.is_dir() else ""))
             if len(out) >= limit:

@@ -377,6 +377,42 @@ class EndToEndTests(unittest.TestCase):
         self.wait_for(lambda s: len(self._comments()) >= 4, 15)
         self.assertIn("Nothing from this issue is waiting", self._comments()[3])
 
+    def raw(self, path):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}", timeout=10) as r:
+                return r.status, dict(r.headers), r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read()
+
+    def test_shared_files_are_viewable_and_sandboxed(self):
+        tools = self.root / "shared/tools"
+        tools.mkdir(parents=True, exist_ok=True)
+        (tools / "index.html").write_text("<h1>Notes</h1><script>fetch('/api/proposal')</script>")
+        (self.root / "shared/.secret").write_text("nope")
+        code, headers, body = self.raw("/files/tools/index.html")
+        self.assertEqual(code, 200)
+        self.assertIn(b"<h1>Notes</h1>", body)
+        self.assertIn("sandbox", headers["Content-Security-Policy"])   # can't act as this app
+        self.assertNotIn("allow-same-origin", headers["Content-Security-Policy"])
+        code, _, body = self.raw("/files/tools/")
+        self.assertEqual(code, 200)
+        self.assertIn(b"index.html", body)
+        for bad in ("/files/../data/messages.json", "/files/%2e%2e/data/messages.json", "/files/.secret",
+                    "/files/tools/../../mirror/manifest.json"):
+            self.assertEqual(self.raw(bad)[0], 404, bad)
+        # A page served from /files (opaque origin "null") can't post to the controls.
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post("/api/settings", {"full_auto": True}, origin="null")
+        self.assertEqual(e.exception.code, 403)
+        st = self.get("/api/status")
+        self.assertIn("tools/index.html", st["listing"])
+        self.assertTrue(st["files_url"].endswith("/files/"))
+
+    def test_tass_is_told_the_real_link_form(self):
+        self.post("/api/message", {"text": "can you give me a link I can copy and paste?"})
+        st = self.wait_for(lambda s: any(e["type"] == "reply" and "LINKCHECK" in e["text"] for e in s["timeline"]))
+        self.assertIn("LINKCHECK yes", next(e["text"] for e in st["timeline"] if e["type"] == "reply"))
+
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post("/api/message", {"text": "hi"}, origin="https://evil.example")

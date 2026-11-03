@@ -18,6 +18,9 @@ def script(messages):
     if who:
         bullets = [l for l in who.group(1).splitlines() if l.startswith("- ")]
         first_line = bullets[0][2:] if bullets else ""
+    if "give me a link" in last.lower():
+        ok = "/files/<path>" in system and "files/notes/" in system
+        return ("Check the link rules.", f"LINKCHECK {'yes' if ok else 'no'}")
     if "improve" in last.lower() and not last.startswith("["):
         return ("Dustin wants me to think better. My how-i-think file could say: plan before acting.",
                 "Here's one change I'd make to how I think.\n"
