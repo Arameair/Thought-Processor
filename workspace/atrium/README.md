@@ -33,6 +33,23 @@ wslview http://127.0.0.1:8791/
 
 **Do not run `./run.sh` while troubleshooting another running stack without reviewing its existing behavior:** it can stop a separate identity-liaison Docker stack as part of its normal start procedure.
 
+## Diagnose a connection before testing features
+
+Atrium has a **Check TASS** control. It checks the existing Workshop `/api/status` and reports separately whether Atrium, the Workshop and the model are reachable. The output avoids tokens and internal container addresses.
+
+A CLI equivalent, which **does not start or stop any containers**, is:
+
+```bash
+curl --noproxy '*' -sS --max-time 5 http://127.0.0.1:8791/bridge/diagnostics
+echo
+curl --noproxy '*' -sS --max-time 5 http://127.0.0.1:8790/api/status
+echo
+```
+
+If port 8791 cannot be reached, check which process owns it with `ss -ltnp '( sport = :8791 )'` and verify the Atrium container is running. If the Workshop is unreachable, resolve that existing service before trying chat. Do not run the full stack start script merely to troubleshoot Atrium, since it may stop another Liaison.
+
+Atrium also has **Try a real task**. It drafts a request for TASS to inspect `projects/hello-tass`, explain its effect, and propose a run. **Sending is still a separate owner action**. Any execution needs review in the original Workshop. A model response is not evidence of a completed run; use its actual result card and audit evidence. The **Copy report** button copies non-secret diagnostics for troubleshooting.
+
 ## Test evidence
 
 - From the Workshop, click **✦ Atrium**: it should open a new tab at port 8791.
