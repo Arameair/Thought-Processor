@@ -21,6 +21,8 @@
       <div class="top-mid"><span class="top-spark">✦</span> A space beyond the Workshop <span class="top-spark">✦</span></div>
       <div class="top-actions">
         <div class="connection" id="connection" role="status" aria-live="polite"><span class="status-dot"></span><span id="connectionLabel">Checking TASS...</span></div>
+        <a class="top-button" href="https://github.com/Arameair/TASS/issues/20" target="_blank" rel="noopener noreferrer" style="border-color:#398e80;color:#a5fff0">◉ Talk to TASS on GitHub</a>
+        <a class="top-button" href="/build" style="border-color:#67e5df;background:#13333e;color:#b5faff" title="Build together with TASS">✦ Build with TASS</a>
         <a class="top-button" href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer" aria-label="Open original Workshop in another tab"><span aria-hidden="true">↗</span> Workshop</a>
       </div>
     </header>
@@ -86,6 +88,15 @@
             <span class="constellation-label bottom-right">REPRESENTATIVE MAP · VERIFIED STATE IN INSPECTOR</span>
           </div>
           <div class="node-inspector" id="nodeInspector"><div class="inspector-badge" id="inspectorIcon">✳</div><div class="inspector-text"><strong id="inspectorTitle">Select a connection</strong><p id="inspectorBody">Explore how TASS, Identity, the model, the library and the Workshop fit together.</p></div><span class="inspector-state" id="inspectorState">MAP</span></div>
+
+          <div class="capability-evidence" aria-label="Real library execution evidence">
+            <div class="evidence-head">
+              <div><span class="eyebrow">LIVE CAPABILITY AUDIT</span><h3>What TASS has actually run</h3></div>
+              <button class="subtle-btn" type="button" id="refreshEvidence">Refresh evidence</button>
+            </div>
+            <p>Library entries are discoverable code, not proven abilities. Only actual Workshop audit results count here; recorded outcomes do not independently verify file effects.</p>
+            <div id="evidenceCards" class="evidence-cards"><span class="muted-kicker">Waiting for Workshop audit...</span></div>
+          </div>
         </section>
 
         <section class="view" id="view-ideas" aria-label="Idea garden">

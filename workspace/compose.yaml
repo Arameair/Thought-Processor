@@ -136,12 +136,17 @@ services:
       context: ./atrium
     image: tass-atrium:local
     init: true
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
     depends_on:
       workspace:
         condition: service_healthy
     environment:
       TASS_ATRIUM_BACKEND_URL: http://workspace:8790
       TASS_ATRIUM_BIND_HOST: 0.0.0.0
+      TASS_ATRIUM_COLLAB_REQUESTS: /collab/requests
+    volumes:
+      # Only this dedicated bounded request queue; not the privileged Liaison outbox.
+      - ./collab_requests:/collab/requests
     ports:
       - "127.0.0.1:8791:8791"
     read_only: true
@@ -155,4 +160,29 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+    restart: unless-stopped
+
+  # Owner-activated ONLY. Reads the Workshop event record and queues bounded
+  # evidence through Identity Liaison into the owner's private TASS issue.
+  # The observer has no GitHub token, Jupyter privileges, or network.
+  collab-feed:
+    profiles: ["collaboration"]
+    build:
+      context: ./collab_feed
+    image: tass-collab-feed:local
+    init: true
+    command: ["--issue", "${TASS_COLLAB_ISSUE:-19}", "--data", "/workspace/data",
+              "--outbox", "/shared/outbox", "--state", "/collab/state"]
+    environment:
+      TASS_COLLAB_INCLUDE_TEXT: ${TASS_COLLAB_INCLUDE_TEXT:-0}
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    network_mode: "none"
+    read_only: true
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./outbox:/shared/outbox
+      - ./collab_state:/collab/state
+      - ./collab_requests:/collab/requests
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped

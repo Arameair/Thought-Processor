@@ -7,8 +7,10 @@ The existing Workshop remains the execution/approval surface.
 from __future__ import annotations
 
 import argparse
+import time
 import json
 import os
+import re
 import secrets
 import socket
 import sys
@@ -23,6 +25,8 @@ OPENER = build_opener(ProxyHandler({}))
 ALLOWED_ASSETS = {
     "/assets/style.css": (HERE / "assets/style.css", "text/css; charset=utf-8"),
     "/assets/app.js": (HERE / "assets/app.js", "text/javascript; charset=utf-8"),
+    "/assets/build.js": (HERE / "assets/build.js", "text/javascript; charset=utf-8"),
+    "/assets/build.css": (HERE / "assets/build.css", "text/css; charset=utf-8"),
 }
 
 
@@ -72,13 +76,15 @@ def safe_status(status: dict) -> dict:
     return {
         "model_ok": status.get("model_ok") is True,
         "busy": status.get("busy") is True,
+        "full_auto": status.get("full_auto") is True,
         "kernel": str(status.get("kernel", "unknown"))[:90],
         "kernel_error": bool(status.get("kernel_error")),
         "identity": {key: str(identity.get(key, ""))[:120] for key in ("name", "repo", "branch")},
         "mind": {
             "synced_at": mind.get("synced_at"),
             "mind": [{"path": str(x.get("path", ""))[:150]} for x in (mind.get("mind") or [])[:30] if isinstance(x, dict)],
-            "library": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120]}
+            "library": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120],
+                         "cells": x.get("cells") if isinstance(x.get("cells"), int) and 0 <= x["cells"] <= 200 else None}
                         for x in (mind.get("library") or [])[:30] if isinstance(x, dict)],
             "projects": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120]}
                          for x in (mind.get("projects") or [])[:30] if isinstance(x, dict)],
@@ -100,9 +106,35 @@ def safe_state(raw: dict) -> dict:
     }
 
 
+def safe_evidence(raw) -> list[dict]:
+    """Only executor outcome records, without code, stdout, memory or secrets."""
+    if not isinstance(raw, list):
+        return []
+    evidence = []
+    for entry in raw[-150:]:
+        if not isinstance(entry, dict) or entry.get("event") not in ("ran", "failed"):
+            continue
+        label = str(entry.get("label") or "")
+        source = str(entry.get("source") or "")
+        match = re.search(r"(library/[\w.\-]+\.(?:md|ipynb))#(\d+)", label)
+        if not match:
+            match = re.search(r"(library/[\w.\-]+\.(?:md|ipynb))\s*·\s*cell\s*(\d+)", source)
+        if not match:
+            continue
+        digest = entry.get("code_sha256")
+        evidence.append({
+            "book": match.group(1), "cell": int(match.group(2)),
+            "outcome": "pass" if entry["event"] == "ran" else "fail",
+            "sha256": digest[:12] if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None,
+            "at": str(entry.get("at", ""))[:25],
+        })
+    return evidence[-100:]
+
+
 def create_handler(backend_port: int, csrf: str, server_port: int):
     backend = os.environ.get("TASS_ATRIUM_BACKEND_URL", f"http://127.0.0.1:{backend_port}").rstrip("/")
     valid_hosts = {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}
+    share_dir = Path(os.environ.get("TASS_ATRIUM_COLLAB_REQUESTS", "/collab/requests"))
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "TASSAtrium/0.1"
@@ -146,8 +178,9 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
             if not self._valid_host():
                 return self._json(403, {"error": "invalid host"})
             path = urlsplit(self.path).path
-            if path == "/":
-                raw = (HERE / "index.html").read_text("utf-8")
+            if path in ("/", "/build"):
+                file_name = "build.html" if path == "/build" else "index.html"
+                raw = (HERE / file_name).read_text("utf-8")
                 data = raw.replace("__PLAYGROUND_CSRF__", csrf).encode("utf-8")
                 return self._send(200, data, "text/html; charset=utf-8")
             if path in ALLOWED_ASSETS:
@@ -155,6 +188,11 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 return self._send(200, p.read_bytes(), ctype)
             if path == "/bridge/health":
                 return self._json(200, {"playground": "ready", "backend": "unverified"})
+            if path == "/bridge/share-status":
+                active = share_dir.is_dir()
+                queued = sum(1 for p in share_dir.glob("brief-*.json") if p.is_file()) if active else 0
+                return self._json(200, {"available": active, "queued": min(queued, 1000),
+                                        "private_repo": "Arameair/TASS", "issue": 19})
             if path == "/bridge/diagnostics":
                 # Read-only, on-demand check. Never returns tokens or internal addresses.
                 try:
@@ -178,6 +216,13 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                         "identity": "not confirmed",
                         "next_step": "Check that the Workshop opens at http://127.0.0.1:8790/ and inspect its existing service logs."
                     })
+            if path == "/bridge/evidence":
+                try:
+                    with self._upstream("/api/audit") as response:
+                        body = response.read(200_000)
+                    return self._json(200, {"records": safe_evidence(json.loads(body))})
+                except (OSError, ValueError, HTTPError, URLError):
+                    return self._json(503, {"error": "Workshop audit not available"})
             if path == "/bridge/state":
                 try:
                     with self._upstream("/api/state") as response:
@@ -223,7 +268,8 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
         def do_POST(self):
             if not self._valid_host():
                 return self._json(403, {"error": "invalid host"})
-            if urlsplit(self.path).path != "/bridge/message":
+            target = urlsplit(self.path).path
+            if target not in ("/bridge/message", "/bridge/share-brief"):
                 return self._json(404, {"error": "not found"})
             origin = self.headers.get("Origin")
             if origin and origin not in (f"http://127.0.0.1:{server_port}", f"http://localhost:{server_port}"):
@@ -237,6 +283,36 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 if not 0 < n <= 8192:
                     return self._json(413, {"error": "message too large"})
                 obj = json.loads(self.rfile.read(n))
+                if not isinstance(obj, dict):
+                    return self._json(400, {"error": "expected JSON object"})
+                if target == "/bridge/share-brief":
+                    if not share_dir.is_dir():
+                        return self._json(503, {"error": "Sharing not configured. Enable the optional collaboration feed."})
+                    if obj.get("consent") is not True:
+                        return self._json(400, {"error": "Explicit owner consent is required for each brief"})
+                    task = obj.get("task")
+                    if not isinstance(task, str) or not 1 <= len(task.strip()) <= 1200:
+                        return self._json(400, {"error": "task required (1–1200 characters)"})
+                    # Fail closed for common credential patterns. This is only a safeguard:
+                    # the UI must disclose exactly what text is shared before consent.
+                    if re.search(r"(?i)(?:gh[pousr]_[A-Za-z0-9_]{15,}|github_pat_|"
+                                 r"(?:token|password|api[_-]?key|secret)\s*[:=]|bearer\s+\S+|"
+                                 r"[?&](?:token|key|code)=)", task):
+                        return self._json(400, {"error": "Task resembles a credential; sharing blocked"})
+                    rid = f"brief-{int(time.time())}-{secrets.token_hex(5)}"
+                    payload = {"id": rid, "kind": "owner_task_brief",
+                               "task": task.strip(), "created_at": int(time.time()),
+                               "destination": "Arameair/TASS#19"}
+                    tmp = share_dir / f".{rid}.tmp"
+                    dest = share_dir / f"{rid}.json"
+                    try:
+                        with open(tmp, "x", encoding="utf-8") as out:
+                            json.dump(payload, out, ensure_ascii=False)
+                        os.replace(tmp, dest)
+                    except OSError:
+                        return self._json(503, {"error": "Cannot queue brief. Check local collaboration storage."})
+                    return self._json(202, {"queued": True, "id": rid,
+                                            "delivery": "Pending optional collaboration feed and Identity Liaison"})
                 msg = obj.get("text")
                 if not isinstance(msg, str) or not msg.strip() or len(msg) > 4000:
                     return self._json(400, {"error": "text required (max 4000 characters)"})

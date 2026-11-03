@@ -7,3 +7,11 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 /* Actionable diagnostics; separate from the decorative visual playground. */
 .connection-doctor{border-bottom:1px solid var(--line);background:rgba(18,28,47,.95);padding:13px 17px;display:grid;gap:10px}.connection-doctor>div:first-child{display:grid;gap:3px}.connection-doctor strong{font-size:12px;letter-spacing:.4px}.connection-doctor #doctorSummary{font-size:11px;color:var(--soft);line-height:1.45}.doctor-actions{display:flex;flex-wrap:wrap;gap:7px}.doctor-actions button{font-size:11px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);color:var(--text);background:var(--panel2)}.doctor-actions button:hover{border-color:var(--accent)}
+
+/* Real audit evidence is distinguished from the illustrative constellation. */
+.capability-evidence{margin-top:24px;padding:18px;border:1px solid var(--line);border-radius:14px;background:rgba(14,22,39,.8)}
+.evidence-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.evidence-head h3{font-size:17px;margin:4px 0 0}.capability-evidence p{color:var(--soft);font-size:12px;margin:8px 0 15px}
+.evidence-cards{display:grid;gap:8px}.evidence-item{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px;border:1px solid var(--line);background:var(--panel);border-radius:10px}
+.evidence-item>div:first-child{display:grid;gap:3px;min-width:0}.evidence-item b{font-size:13px}.evidence-meta{font:11px/1.5 ui-monospace,Consolas,monospace;color:var(--soft);overflow-wrap:anywhere}
+.evidence-item>div:last-child{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.evidence-badge{font-size:10px;letter-spacing:.6px;color:var(--aqua);white-space:nowrap}
+@media(max-width:800px){.evidence-item{align-items:flex-start;flex-direction:column}}
