@@ -39,7 +39,7 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual(queued['type'],'comment')
         self.assertIn('Please build a useful local page.',queued['body'])
         self.assertNotIn('DANGEROUS',queued['body'])
-        self.assertIn('not execution',queued['body'].lower())
+        self.assertIn('no execution or test result is implied',queued['body'].lower())
         self.assertEqual(process_owner_briefs(requests,self.outbox,19),0)
         self.assertFalse(source.exists())
 
