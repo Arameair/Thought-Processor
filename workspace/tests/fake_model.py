@@ -18,6 +18,14 @@ def script(messages):
     if who:
         bullets = [l for l in who.group(1).splitlines() if l.startswith("- ")]
         first_line = bullets[0][2:] if bullets else ""
+    if "build our first room" in last.lower():
+        return ("A notes board would be small and useful.",
+                "Let's build a notes board.\nRUN: code\n```python\nfrom pathlib import Path\nr = Path('atrium/rooms/notes-board')\n"
+                "r.mkdir(parents=True, exist_ok=True)\n(r / 'index.html').write_text('<h1>Notes board</h1>')\n"
+                "(r / 'room.md').write_text('# Notes board\\n\\nOur notes in one place.\\n')\nprint('built', r)\n```")
+    if "planted an idea" in last.lower():
+        seen = "Ideas:" in system and "[new]" in system
+        return ("Look at the idea.", f"ATRIUMCHECK {'yes' if seen else 'no'}")
     if "give me a link" in last.lower():
         ok = "/files/<path>" in system and "files/notes/" in system
         return ("Check the link rules.", f"LINKCHECK {'yes' if ok else 'no'}")

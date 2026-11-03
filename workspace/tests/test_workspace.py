@@ -413,6 +413,33 @@ class EndToEndTests(unittest.TestCase):
         st = self.wait_for(lambda s: any(e["type"] == "reply" and "LINKCHECK" in e["text"] for e in s["timeline"]))
         self.assertIn("LINKCHECK yes", next(e["text"] for e in st["timeline"] if e["type"] == "reply"))
 
+    def test_atrium_ideas_and_rooms_are_real_and_shared(self):
+        code, _, body = self.raw("/atrium")
+        self.assertEqual(code, 200)
+        self.assertIn(b"Atrium", body)
+        idea = self.post("/api/atrium/idea", {"title": "A notes board", "text": "Somewhere to collect ideas from the road."})
+        self.assertEqual((idea["status"], idea["path"]), ("new", "atrium/ideas/a-notes-board.md"))
+        self.assertTrue((self.root / "shared/atrium/ideas/a-notes-board.md").exists())
+        st = self.get("/api/atrium")
+        self.assertEqual([i["title"] for i in st["ideas"]], ["A notes board"])
+        self.assertEqual(st["map"]["atrium"]["ideas"], 1)
+        # TASS sees planted ideas in his prompt.
+        self.post("/api/message", {"text": 'I planted an idea in our Atrium: "A notes board"'})
+        st = self.wait_for(lambda s: any(e["type"] == "reply" and "ATRIUMCHECK" in e["text"] for e in s["timeline"]))
+        self.assertIn("ATRIUMCHECK yes", [e["text"] for e in st["timeline"] if e["type"] == "reply"][-1])
+        # Build a room: proposal -> approve -> the room is real and viewable (sandboxed).
+        self.post("/api/message", {"text": "TASS, let's build our first room in the Atrium."})
+        st = self.wait_for(lambda s: s["proposals"])
+        self.post("/api/proposal", {"id": st["proposals"][0]["id"], "decision": "approve"})
+        self.wait_for(lambda s: any(e["type"] == "result" for e in s["timeline"]))
+        rooms = self.get("/api/atrium")["rooms"]
+        self.assertEqual([(r["id"], r["title"], r["has_page"]) for r in rooms], [("notes-board", "Notes board", True)])
+        code, headers, body = self.raw(rooms[0]["url"])
+        self.assertEqual((code, body), (200, b"<h1>Notes board</h1>"))
+        self.assertIn("sandbox", headers["Content-Security-Policy"])
+        with self.assertRaises(urllib.error.HTTPError):
+            self.post("/api/atrium/idea", {"title": "  "})
+
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post("/api/message", {"text": "hi"}, origin="https://evil.example")

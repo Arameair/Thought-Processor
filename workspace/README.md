@@ -76,6 +76,20 @@ TASS can also propose its own code, which needs the same approval.
 
 Settings persist in `data/controls.json`.
 
+## The Atrium (our shared playground)
+
+Open **http://127.0.0.1:8790/atrium**, or click **✦ Atrium** in the Workshop. It's where you and TASS imagine and build things together. The Workshop stays the place for approvals and control.
+
+| Part | What it is |
+| --- | --- |
+| **How TASS is working right now** | A live map with real numbers: identity repo, mind, thinking, memory, library, Atrium, shared space, journal and audit. Click any part to open the real thing. |
+| **TASS, now** | His live thinking, the last thing he said, and his recent memories. Shows a banner if a run is waiting for you in the Workshop. |
+| **Ideas** | Plant an idea and it's saved as a file (`atrium/ideas/<name>.md`, with `status: new · exploring · built`). TASS sees every idea in his prompt each turn and updates the status when he works on it. |
+| **Rooms** | Things you built together. TASS builds a room by proposing code that writes `atrium/rooms/<name>/index.html` and a `room.md`. Each room shows as a live preview, sandboxed so it can't use the workspace controls. The library book **Build a room** gives him a template. |
+| **Talking** | The same conversation as the Workshop, with starter prompts. Runs he proposes are still approved in the Workshop. |
+
+Inspired by ChatGPT's Atrium idea (a space beyond the Workshop where approvals stay in the Workshop). Here, ideas and rooms are real shared files that TASS can see and build on, not something kept only in the browser.
+
 ## Direct TASS from GitHub
 
 Open an issue in **Arameair/TASS** with the label **`tass`**, or comment on one. Within about 30 seconds the Liaison hands it to the running TASS. He thinks, and his reply is posted back on the issue.

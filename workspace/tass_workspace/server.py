@@ -24,6 +24,7 @@ from importlib import resources
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .atrium import Atrium
 from .kernel import JOURNAL, LIVE_NOTEBOOK, SharedKernel
 from .mind import Mind
 from .thinker import Action, ModelClient, build_system, parse_reply
@@ -53,7 +54,8 @@ class Workspace:
                       "remember": True, "mind changes": True}
         self.outbox = Path(env("TASS_OUTBOX", "/shared/outbox"))
         self.inbox = Path(env("TASS_INBOX", "/shared/inbox"))
-        self.public_url = env("TASS_PUBLIC_URL", "http://127.0.0.1:8790").rstrip("/")   # messages from GitHub, written by the Liaison
+        self.public_url = env("TASS_PUBLIC_URL", "http://127.0.0.1:8790").rstrip("/")
+        self.atrium = Atrium(env("TASS_SHARED", "/workspace/shared"))   # messages from GitHub, written by the Liaison
         self._origin: dict | None = None                        # GitHub issue the current turn answers
         self._turn_replies: list[str] = []
         self._turn_proposals: list[dict] = []
@@ -144,6 +146,38 @@ class Workspace:
     def identity(self) -> dict:
         m = self.mind.manifest()
         return {"name": "TASS", "repo": m.get("repo"), "branch": m.get("branch")}
+
+    def atrium_state(self) -> dict:
+        tl = self.timeline
+        recent = [{"type": e["type"], "text": e.get("text", "")[:1500], "via": e.get("issue"), "at": e.get("at")}
+                  for e in tl if e["type"] in ("user", "reply") and e.get("text")][-8:]
+        journal_runs = 0
+        try:
+            journal_runs = sum(1 for c in json.loads((self.kernel.shared / JOURNAL).read_text("utf-8"))["cells"]
+                               if c.get("cell_type") == "code")
+        except (OSError, ValueError, KeyError):
+            pass
+        man = self.mind.manifest()
+        thought = next((e for e in reversed(tl) if e["type"] == "thought" and e.get("text")), None)
+        files = [l for l in self.kernel.listing(500) if not l.endswith("/")]
+        return {
+            "ideas": self.atrium.ideas(), "rooms": self.atrium.rooms(), "recent": recent,
+            "memory": [l[2:] for l in self.memory_text(8).splitlines()],
+            "pending": [{"id": p["id"], "label": p["label"]} for p in self.proposals.values() if p["status"] == "pending"],
+            "busy": self.busy, "last_thought": (thought or {}).get("text", "")[-600:],
+            "map": {
+                "identity": {"repo": man.get("repo"), "branch": man.get("branch"),
+                             "url": f"https://github.com/{man['repo']}/tree/{man.get('branch') or ''}" if man.get("repo") else None},
+                "mind": {"files": len(self.mind.mind_files()), "changed": man.get("last_change_at")},
+                "thinking": {"model_up": self.model.health(), "thinking": self.model.thinking},
+                "memory": {"lines": len(self.memory_text(10000).splitlines())},
+                "library": {"books": len(self.mind.catalog()), "projects": len(self.mind.projects())},
+                "space": {"files": len(files)},
+                "journal": {"runs": journal_runs},
+                "audit": {"events": len(self.read_audit(100000))},
+                "atrium": self.atrium.summary(),
+            },
+        }
 
     def save_controls(self):
         (self.data / "controls.json").write_text(json.dumps({"autonomy": self.autonomy, "allow": self.allow}))
@@ -270,6 +304,7 @@ class Workspace:
                 system = build_system(mind_files, catalog, listing, self.recent_runs[-3:], projects, self.allow,
                                       identity=f"{ident['repo']}@{ident['branch']}" if ident["repo"] else "",
                                       memory=self.memory_text())
+                system += "\n\n" + self.atrium.prompt_section(self.public_url)
                 system += (f"\n\nLINKS: Dustin can open any file in the shared folder in his browser at "
                            f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
                            "When he asks for a link, give that full address, and only for a file that is in the "
@@ -640,6 +675,7 @@ class Workspace:
 
 def make_handler(ws: Workspace):
     page = resources.files(__package__).joinpath("static/index.html").read_bytes()
+    atrium_page = resources.files(__package__).joinpath("static/atrium.html").read_bytes()
 
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -713,6 +749,15 @@ def make_handler(ws: Workspace):
                                  "proposals": [p for p in ws.proposals.values() if p["status"] == "pending"]})
             elif path == "/files" or path.startswith("/files/"):
                 self._file(urlparse(self.path).path[len("/files"):])
+            elif path == "/atrium":
+                body = atrium_page
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path == "/api/atrium":
+                self._json(200, ws.atrium_state())
             elif path == "/api/audit":
                 self._json(200, ws.read_audit())
             elif path == "/api/status":
@@ -763,6 +808,11 @@ def make_handler(ws: Workspace):
                         return self._json(409, {"error": "TASS is thinking"})
                     threading.Thread(target=ws.turn, args=("user", text), daemon=True).start()
                     return self._json(202, {"ok": True})
+                if path == "/api/atrium/idea":
+                    idea = ws.atrium.plant(str(body.get("title", "")), str(body.get("text", "")))
+                    ws.emit("notice", text=f"🌱 Dustin planted an idea in the Atrium: {idea['title']}")
+                    ws.audit("idea_planted", {"label": idea["title"], "source": idea["path"]})
+                    return self._json(200, idea)
                 if path == "/api/proposal":
                     return self._json(200, ws.decide(str(body.get("id")), str(body.get("decision"))))
                 if path == "/api/settings":
