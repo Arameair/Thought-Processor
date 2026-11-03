@@ -76,6 +76,7 @@ def safe_status(status: dict) -> dict:
     return {
         "model_ok": status.get("model_ok") is True,
         "busy": status.get("busy") is True,
+        "full_auto": status.get("full_auto") is True,
         "kernel": str(status.get("kernel", "unknown"))[:90],
         "kernel_error": bool(status.get("kernel_error")),
         "identity": {key: str(identity.get(key, ""))[:120] for key in ("name", "repo", "branch")},
