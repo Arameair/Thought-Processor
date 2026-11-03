@@ -116,6 +116,10 @@
 
       <aside class="conversation-panel" aria-label="Live TASS conversation">
         <div class="conversation-heading"><div class="eyebrow">THE CONVERSATION ROOM</div><div class="conversation-headline"><h2>Talk to TASS<span class="talk-star"> ✳</span></h2><span class="reply-marker" id="chatMode">LOCAL</span></div><p>The same mind, another window.</p></div>
+        <div class="connection-doctor" id="connectionDoctor" aria-live="polite">
+          <div><strong>Connection check</strong><span id="doctorSummary">Check whether Atrium can reach the real TASS.</span></div>
+          <div class="doctor-actions"><button type="button" class="subtle-btn" id="diagnoseButton">Check TASS</button><button type="button" class="subtle-btn" id="firstTaskButton">Try a real task</button><button type="button" class="subtle-btn" id="copyReportButton">Copy report</button></div>
+        </div>
         <div class="chat-stream" id="chatStream" aria-live="polite" aria-relevant="additions text"><div class="welcome-message"><span class="sparkle">✧</span><b>The conversation lives here.</b><p>When your Workshop is running, this panel connects to that very same TASS. Until then, explore the map and build ideas without pretending a model is replying.</p></div></div>
         <div class="pending-review" id="pendingReview" hidden><span>◉</span><div><b id="pendingCount">1 action needs review</b><small>Approve or reject in the original Workshop.</small></div><a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer">Review ↗</a></div>
         <div class="composer-area"><div class="composer-hint" id="composerHint">Checking for your running TASS...</div><form id="chatForm" class="chat-form"><label class="sr-only" for="messageInput">Message for TASS</label><textarea id="messageInput" maxlength="4000" rows="2" placeholder="Ask TASS to imagine something..." spellcheck="true"></textarea><div class="composer-controls"><span>↵ Send · ⇧↵ New line</span><button class="send-button" id="sendButton" type="submit" disabled aria-label="Send message">➤</button></div></form></div>
