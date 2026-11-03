@@ -4,7 +4,7 @@ const csrf = document.querySelector('meta[name="playground-csrf"]').content;
 const state = {
   connected: false, serverReachable: false, busy: false, eventSource: null,
   lastIds: new Set(), ideas: [], scene: 'aurora', selectedNode: null,
-  streaming: null, toastTimer: null, lastStatus: {}, started: false,
+  streaming: null, toastTimer: null, lastStatus: {}, started: false, evidence: [],
 };
 const nodeInfo = {
   identity: {symbol:'◈',title:'Identity · who TASS is',body:'The identity records and permissions are a separate authority. The repo label shown here is from a local mirror, not proof of an authorization grant.'},
@@ -117,6 +117,7 @@ function setMode(reachable, s) {
   $('bookCount').textContent = reachable ? String(books ?? '0') : '—';
   $('projectCount').textContent = reachable ? String(projects ?? '0') : '—';
   updateComposer();
+  renderCapabilityEvidence();
   if (!wasConnected && state.connected) addActivity('Connected','Same TASS session as the existing Workshop','model');
   if (wasConnected && !state.connected) addActivity('Disconnected','Your ideas still work locally','warn');
   if (state.selectedNode) showNode(state.selectedNode);
@@ -133,6 +134,56 @@ function setPending(proposals) {
   const n = Array.isArray(proposals) ? proposals.length : 0;
   $('pendingReview').hidden = !n;
   $('pendingCount').textContent = `${n} action${n === 1 ? '' : 's'} waiting for review`;
+}
+function renderCapabilityEvidence() {
+  const host = $('evidenceCards'); if (!host) return;
+  host.replaceChildren();
+  const books = state.lastStatus?.mind?.library || [];
+  if (!state.serverReachable) {
+    host.textContent = 'Workshop offline — no live library evidence available.';
+    return;
+  }
+  if (!books.length) {
+    host.textContent = 'No synced library books. Check the Workshop mirror.';
+    return;
+  }
+  books.forEach(book => {
+    const path = book.path;
+    const count = Number.isInteger(book.cells) ? book.cells : null;
+    const results = new Map();
+    state.evidence.filter(x => x.book === path).forEach(x => results.set(x.cell, x));
+    const pass = [...results.values()].filter(x => x.outcome === 'pass').length;
+    const fail = [...results.values()].filter(x => x.outcome === 'fail').length;
+    const total = count ?? 'unknown';
+    const row = document.createElement('div'); row.className = 'evidence-item';
+    const details = document.createElement('div');
+    const title = document.createElement('b'); title.textContent = book.title || path;
+    const meta = document.createElement('span'); meta.className = 'evidence-meta';
+    meta.textContent = `${path} · ${pass} pass · ${fail} fail · ${total} cells`;
+    details.append(title, meta);
+    const buttons = document.createElement('div');
+    const badge = document.createElement('span'); badge.className = 'evidence-badge';
+    badge.textContent = count !== null && count > 0 && pass === count ? 'ALL CELLS PASSED' :
+                        pass || fail ? 'PARTIALLY TESTED' : 'NOT TESTED';
+    const next = document.createElement('button'); next.className = 'subtle-btn'; next.type = 'button';
+    next.textContent = 'Test next cell';
+    const nextCell = count !== null ? Array.from({length:count},(_,i)=>i+1).find(i=>results.get(i)?.outcome !== 'pass') : 1;
+    if (!nextCell) { next.disabled = true; next.textContent = 'All tested'; }
+    else next.onclick = () => draftPrompt(`TASS, please OPEN ${path}, propose RUN of CELL ${nextCell} only, and wait for my approval in the Workshop. After execution, report the actual result; do not infer success.`);
+    buttons.append(badge,next); row.append(details,buttons); host.append(row);
+  });
+}
+async function pollEvidence() {
+  try {
+    const response = await fetch('/bridge/evidence', {cache:'no-store'});
+    if (!response.ok) throw new Error('Audit endpoint unavailable');
+    const body = await response.json();
+    state.evidence = Array.isArray(body.records) ? body.records : [];
+    renderCapabilityEvidence();
+  } catch (_) {
+    const host=$('evidenceCards');
+    if (host) host.textContent='Audit unavailable — no verified capability status can be shown.';
+  }
 }
 async function pollState() {
   try {
@@ -317,6 +368,7 @@ function boot() {
   $('clearIdeas').addEventListener('click',()=>{
     if(!state.ideas.length)return;if(confirm('Clear your local ideas? This cannot be undone unless exported.')){state.ideas=[];renderIdeas();}
   });
+  $('refreshEvidence').addEventListener('click', pollEvidence);
   $('diagnoseButton').addEventListener('click', diagnose);
   $('firstTaskButton').addEventListener('click', () => draftPrompt('TASS, I want to do one real task together. Please check whether you can see projects/hello-tass. If it exists, OPEN that project, explain what it changes, then PROPOSE running it and wait for my review. If it does not exist, tell me what project you can actually see. Do not claim success until you receive a real execution result.'));
   $('copyReportButton').addEventListener('click', () => {
@@ -328,5 +380,7 @@ function boot() {
   showNode('model'); renderIdeas();initStars(); pollState();
   setInterval(pollState,5000);
   diagnose();
+  pollEvidence();
+  setInterval(pollEvidence, 15000);
 }
 boot();
