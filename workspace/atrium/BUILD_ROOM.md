@@ -11,6 +11,18 @@
 5. The human can explicitly share a **previewed request** in the right-hand panel. This is NOT an automatic full-conversation upload. Sharing queues one bounded task (max 1,200 characters) in a dedicated local `collab_requests/` directory. No GitHub token goes into Atrium; the opt-in `collab-feed` service forwards it through the existing Identity Liaison to private `Arameair/TASS#19`.
 6. The owner can then ask ChatGPT in this conversation to inspect the latest private issue comment. ChatGPT cannot continuously watch localhost and will not independently know a new brief appeared until the issue is read. The optional feed can separately queue filtered execution metadata. **GitHub comments are not a live API connection to ChatGPT.**
 
+## Easiest way to talk with TASS through GitHub
+
+The private [TASS companion conversation #20](https://github.com/Arameair/TASS/issues/20) is now labeled `tass` for the **existing Identity Liaison** direct-message route. This is a two-way conversation, not the task-evidence feed:
+
+1. Open the thread (Atrium/Build Room has a **Talk to TASS on GitHub** link).
+2. Comment something harmless, for example: **"TASS, can you confirm you received this message through GitHub? Please reply here. Do not run any code."**
+3. Leave the local Workshop/Liaison running. Its poller forwards owner-written messages into the Workshop; TASS's real reply is returned to the thread.
+4. Ask ChatGPT **"Check TASS conversation #20"** to read the same GitHub exchange. ChatGPT doesn't watch the issue automatically.
+5. If no reply appears, inspect `docker compose logs --tail 80 liaison workspace`; a GitHub issue with a label is a route configuration, **not evidence of live delivery**.
+
+Keep **issue #19** for explicitly shared, filtered execution metadata and task briefs. Issue #20 is the conversational channel. The owner must inspect and approve execution in Workshop, and must not share secrets or authorize a dangerous action merely because it arrived as a GitHub comment.
+
 ## First owner test — minimum change, no stack restart
 
 From a clean experimental checkout with the branch from PR #38:
