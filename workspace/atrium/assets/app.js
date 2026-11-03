@@ -147,6 +147,10 @@ async function pollState() {
       important.forEach(ev => drawTimelineEvent(ev, true));
       if (!important.length) addBubble('note','Connected. The next message goes to the real local TASS.','ATRIUM');
       startEvents();
+    } else {
+      // SSE may disconnect without the state endpoint failing. Backfill missed activity.
+      (payload.timeline || []).filter(e => ['user','reply','result','proposal','error'].includes(e.type))
+        .forEach(ev => drawTimelineEvent(ev, false));
     }
   } catch (err) {
     setMode(false, {});
@@ -190,6 +194,24 @@ async function sendText(text) {
     notice(`Cannot send: ${err.message}`);
     updateComposer();
     return false;
+  }
+}
+let lastDiagnostic = 'Not checked';
+async function diagnose() {
+  $('doctorSummary').textContent = 'Checking the running services...';
+  try {
+    const response = await fetch('/bridge/diagnostics', {cache:'no-store'});
+    if (!response.ok) throw new Error('Atrium diagnostic request failed');
+    const check = await response.json();
+    const msg = `Atrium: ${check.atrium} · Workshop: ${check.workshop} · Model: ${check.model} · Identity: ${check.identity}. ${check.next_step}`;
+    lastDiagnostic = msg;
+    $('doctorSummary').textContent = msg;
+    addActivity('Connection checked', `${check.workshop} / model ${check.model}`, check.model === 'ready' ? 'model' : 'warn');
+    return check;
+  } catch (err) {
+    lastDiagnostic = 'Atrium diagnostics could not run. Check whether the Atrium server on port 8791 is still running.';
+    $('doctorSummary').textContent = lastDiagnostic;
+    return null;
   }
 }
 function draftPrompt(text) {
@@ -295,8 +317,16 @@ function boot() {
   $('clearIdeas').addEventListener('click',()=>{
     if(!state.ideas.length)return;if(confirm('Clear your local ideas? This cannot be undone unless exported.')){state.ideas=[];renderIdeas();}
   });
+  $('diagnoseButton').addEventListener('click', diagnose);
+  $('firstTaskButton').addEventListener('click', () => draftPrompt('TASS, I want to do one real task together. Please check whether you can see projects/hello-tass. If it exists, OPEN that project, explain what it changes, then PROPOSE running it and wait for my review. If it does not exist, tell me what project you can actually see. Do not claim success until you receive a real execution result.'));
+  $('copyReportButton').addEventListener('click', () => {
+    const report = 'TASS Atrium connection check\\n' + lastDiagnostic + '\\nWorkshop: http://127.0.0.1:8790/\\nAtrium: http://127.0.0.1:8791/';
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(report).then(()=>notice('Connection report copied.')).catch(()=>{prompt('Copy the report:',report);});
+    else prompt('Copy the report:',report);
+  });
   $('sendScene').addEventListener('click',()=>draftPrompt(`TASS, I tried an interactive ${state.scene} color scene in our Atrium playground. Can we think about a small real interface inspired by this look? Please propose one safe first step.`));
   showNode('model'); renderIdeas();initStars(); pollState();
   setInterval(pollState,5000);
+  diagnose();
 }
 boot();
