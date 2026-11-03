@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from observer import Publisher, clean_text, event_summary
+from observer import Publisher, clean_text, event_summary, process_owner_briefs
 
 
 class PublisherTest(unittest.TestCase):
@@ -24,6 +24,34 @@ class PublisherTest(unittest.TestCase):
 
     def queued(self):
         return [json.loads(f.read_text()) for f in self.outbox.glob("feed-*.json")]
+
+    def test_queued_owner_brief_is_delivered_via_liaison_without_code(self):
+        requests=self.root/'requests';requests.mkdir()
+        source=requests/'brief-1793732700-aabbccddee.json'
+        source.write_text(json.dumps({'id':'brief-1793732700-aabbccddee',
+                                      'kind':'owner_task_brief',
+                                      'task':'Please build a useful local page.',
+                                      'code':'DANGEROUS IGNORE THIS'}))
+        self.assertEqual(process_owner_briefs(requests,self.outbox,19),1)
+        queued=json.loads((self.outbox/'brief-1793732700-aabbccddee.json').read_text())
+        self.assertEqual(queued['repo'],'Arameair/TASS')
+        self.assertEqual(queued['issue'],19)
+        self.assertEqual(queued['type'],'comment')
+        self.assertIn('Please build a useful local page.',queued['body'])
+        self.assertNotIn('DANGEROUS',queued['body'])
+        self.assertIn('not execution',queued['body'].lower())
+        self.assertEqual(process_owner_briefs(requests,self.outbox,19),0)
+        self.assertFalse(source.exists())
+
+    def test_credential_like_owner_brief_is_not_forwarded(self):
+        requests=self.root/'requests';requests.mkdir()
+        source=requests/'brief-1793732700-ffeeaabbcc.json'
+        source.write_text(json.dumps({'id':'brief-1793732700-ffeeaabbcc',
+                                      'kind':'owner_task_brief',
+                                      'task':'token=SUPER_SECRET do something'}))
+        self.assertEqual(process_owner_briefs(requests,self.outbox,19),0)
+        self.assertEqual(list(self.outbox.glob('*.json')),[])
+        self.assertTrue((requests/(source.name+'.rejected')).exists())
 
     def test_initial_sync_does_not_export_history(self):
         self.write([{"id": 1, "type": "user", "text": "private past request"}])
