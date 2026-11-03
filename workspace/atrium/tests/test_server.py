@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from server import create_handler, safe_state, safe_event
+from server import create_handler, safe_state, safe_event, safe_evidence
 
 OPENER=build_opener(ProxyHandler({}))
 
@@ -19,6 +19,18 @@ class FakeTASS(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header('Content-Type','application/json')
         self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def do_GET(self):
+        if self.path == '/api/audit':
+            return self.respond([
+              {'event':'ran','label':'RUN library/01-look-around.md#1',
+               'source':'library/01-look-around.md · cell 1',
+               'code_sha256':'a'*64, 'at':'2026-11-03T12:00:00',
+               'error':'CREDENTIAL_IS_PRIVATE', 'text':'PRIVATE STDOUT'},
+              {'event':'failed','label':'RUN library/01-look-around.md#2',
+               'source':'library/01-look-around.md · cell 2', 'at':'2026-11-03T12:10:00',
+               'error':'SECRET'},
+              {'event':'ran','label':'TASS own code', 'source':'TASS secret code',
+               'code_sha256':'b'*64}
+            ])
         if self.path == '/api/status':
             return self.respond({'model_ok': True, 'busy': False, 'identity': {'repo': 'Arameair/TASS'},
                 'jupyter': 'http://127.0.0.1:8888/?token=SECRET'})
@@ -104,6 +116,21 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(len(payload['proposals']),1)
         self.assertNotIn('token=',data.decode())
         self.assertNotIn('TOP SECRET',data.decode())
+
+    def test_verified_library_evidence_without_code_or_stdout(self):
+        code, _, data = self.req('/bridge/evidence')
+        self.assertEqual(code, 200)
+        payload = json.loads(data)
+        records = payload['records']
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]['book'], 'library/01-look-around.md')
+        self.assertEqual(records[0]['cell'], 1)
+        self.assertEqual(records[0]['outcome'], 'pass')
+        self.assertEqual(records[1]['outcome'], 'fail')
+        self.assertNotIn('CREDENTIAL_IS_PRIVATE', data.decode())
+        self.assertNotIn('PRIVATE STDOUT', data.decode())
+        self.assertNotIn('SECRET', data.decode())
+        self.assertEqual(safe_evidence({'fake':'not an array'}), [])
 
     def test_connection_diagnostics_without_secrets(self):
         code, headers, data = self.req('/bridge/diagnostics')
