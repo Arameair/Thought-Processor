@@ -320,7 +320,7 @@ function boot() {
   $('diagnoseButton').addEventListener('click', diagnose);
   $('firstTaskButton').addEventListener('click', () => draftPrompt('TASS, I want to do one real task together. Please check whether you can see projects/hello-tass. If it exists, OPEN that project, explain what it changes, then PROPOSE running it and wait for my review. If it does not exist, tell me what project you can actually see. Do not claim success until you receive a real execution result.'));
   $('copyReportButton').addEventListener('click', () => {
-    const report = 'TASS Atrium connection check\\n' + lastDiagnostic + '\\nWorkshop: http://127.0.0.1:8790/\\nAtrium: http://127.0.0.1:8791/';
+    const report = 'TASS Atrium connection check\n' + lastDiagnostic + '\nWorkshop: http://127.0.0.1:8790/\nAtrium: http://127.0.0.1:8791/';
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(report).then(()=>notice('Connection report copied.')).catch(()=>{prompt('Copy the report:',report);});
     else prompt('Copy the report:',report);
   });
