@@ -111,6 +111,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b'What should we build?', page)
         self.assertIn(b'test-csrf', page)
+        self.assertIn(b'https://github.com/Arameair/TASS/issues/20', page)
         for path in ('/assets/build.js','/assets/build.css'):
             self.assertEqual(self.req(path)[0], 200)
         self.assertEqual(self.req('/bridge/share-status')[0], 200)
