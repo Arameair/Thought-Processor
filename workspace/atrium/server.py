@@ -155,6 +155,29 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 return self._send(200, p.read_bytes(), ctype)
             if path == "/bridge/health":
                 return self._json(200, {"playground": "ready", "backend": "unverified"})
+            if path == "/bridge/diagnostics":
+                # Read-only, on-demand check. Never returns tokens or internal addresses.
+                try:
+                    with self._upstream("/api/status", timeout=3) as response:
+                        status = json.loads(response.read(60_000))
+                    if not isinstance(status, dict):
+                        raise ValueError("unexpected status")
+                    available = status.get("model_ok") is True
+                    result = {
+                        "atrium": "ready", "workshop": "reachable",
+                        "model": "ready" if available else "not ready",
+                        "identity": "repo mirrored" if (status.get("identity") or {}).get("repo") else "not confirmed",
+                        "next_step": ("Send a message to TASS, then review any proposed code in the Workshop."
+                                      if available else
+                                      "The Workshop responds but the model is unavailable. Check the existing Workshop status/logs."),
+                    }
+                    return self._json(200, result)
+                except (OSError, ValueError, HTTPError, URLError):
+                    return self._json(200, {
+                        "atrium": "ready", "workshop": "unreachable", "model": "unknown",
+                        "identity": "not confirmed",
+                        "next_step": "Check that the Workshop opens at http://127.0.0.1:8790/ and inspect its existing service logs."
+                    })
             if path == "/bridge/state":
                 try:
                     with self._upstream("/api/state") as response:
