@@ -1,0 +1,7 @@
+secrets/
+config/
+models/
+shared/
+mirror/
+data/
+__pycache__/

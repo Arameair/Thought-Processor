@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thought Processor · TASS workspace</title>
+<style>
+  :root {
+    --bg: #0f1720; --panel: #16212d; --panel2: #1b2836; --line: #2a3a4c; --text: #e6edf3; --dim: #8fa3b8;
+    --spark: #f4b63f; --trace: #5fb3f9; --thought: #b892ff; --reply: #4fd1a5; --bad: #ff7b72; --you: #2f4f72;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+         display: grid; grid-template-rows: auto 1fr; }
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid var(--line);
+           background: #121c27; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  header h1 b { color: var(--thought); font-weight: 600; }
+  .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel2); color: var(--dim);
+          border: 1px solid var(--line); white-space: nowrap; }
+  .pill.ok::before, .pill.bad::before, .pill.busy::before { content: "●"; margin-right: 5px; }
+  .pill.ok::before { color: var(--reply); } .pill.bad::before { color: var(--bad); }
+  .pill.busy::before { color: var(--thought); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  header .spacer { flex: 1; }
+  header label { font-size: 13px; color: var(--dim); display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  a.btn, button { font: inherit; font-size: 13px; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+                  border-radius: 7px; padding: 5px 11px; cursor: pointer; text-decoration: none; }
+  a.btn:hover, button:hover { border-color: var(--trace); }
+  button:disabled { opacity: .45; cursor: default; }
+  main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 0; }
+  section { display: flex; flex-direction: column; min-height: 0; }
+  section + section { border-left: 1px solid var(--line); }
+  .head { padding: 9px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim);
+          border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+  .scroll { overflow-y: auto; padding: 14px 16px 20px; flex: 1; min-height: 0; }
+  .msg { max-width: 92%; margin: 0 0 12px; padding: 10px 13px; border-radius: 10px; background: var(--panel); }
+  .msg.you { margin-left: auto; background: var(--you); }
+  .msg.tass { border-left: 3px solid var(--reply); }
+  .msg .who { font-size: 12px; color: var(--dim); margin-bottom: 3px; }
+  .msg.note { background: transparent; color: var(--dim); font-size: 13px; padding: 2px 4px; max-width: 100%; }
+  .msg.err { border-left: 3px solid var(--bad); }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin: 0 0 12px; }
+  .card.proposal { border-color: var(--spark); }
+  .card h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+  .card .row { display: flex; gap: 8px; margin-top: 9px; align-items: center; }
+  .approve { border-color: var(--reply); } .reject { border-color: var(--bad); }
+  pre { font: 12.5px/1.45 var(--mono); background: #0b1118; border: 1px solid var(--line); border-radius: 7px;
+        padding: 9px 11px; overflow-x: auto; margin: 6px 0; white-space: pre-wrap; word-break: break-word; }
+  code { font-family: var(--mono); font-size: 13px; background: #0b1118; padding: 1px 5px; border-radius: 4px; }
+  .result img { max-width: 100%; border-radius: 6px; background: white; margin-top: 6px; }
+  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: #121c27; }
+  textarea { flex: 1; resize: none; height: 54px; font: inherit; color: var(--text); background: var(--panel);
+             border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea:focus { outline: none; border-color: var(--trace); }
+  /* thought stream */
+  .step { position: relative; padding: 0 0 12px 18px; margin-left: 6px; border-left: 2px solid var(--line); }
+  .step::before { content: ""; position: absolute; left: -7px; top: 3px; width: 12px; height: 12px; border-radius: 50%;
+                  background: var(--c); box-shadow: 0 0 0 3px var(--bg); }
+  .step .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1.3px; color: var(--c); font-weight: 700; }
+  .step .v { font-size: 13px; color: var(--text); }
+  .step.spark { --c: var(--spark); } .step.trace { --c: var(--trace); } .step.thought { --c: var(--thought); }
+  .step.reply { --c: var(--reply); } .step.book { --c: var(--trace); } .step.err { --c: var(--bad); }
+  .step.thought .v { font: 12.5px/1.5 var(--mono); color: #cdb9f5; white-space: pre-wrap; max-height: 260px;
+                     overflow-y: auto; background: #140f22; border-radius: 7px; padding: 7px 9px; margin-top: 3px; }
+  .step.live .v { border: 1px dashed var(--thought); }
+  .turn-sep { height: 1px; background: var(--line); margin: 6px 0 14px; }
+  details.mindlib { border-bottom: 1px solid var(--line); padding: 8px 16px; font-size: 13px; }
+  details.mindlib summary { cursor: pointer; color: var(--dim); }
+  details.mindlib ul { margin: 6px 0; padding-left: 18px; }
+  details.mindlib li { margin: 2px 0; }
+  .muted { color: var(--dim); }
+  .tag { font-size: 11px; color: var(--spark); margin-left: 6px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } section + section { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Thought Processor · <b>TASS</b> workspace</h1>
+  <span id="p-model" class="pill">model</span>
+  <span id="p-kernel" class="pill">kernel</span>
+  <span id="p-mind" class="pill">mind</span>
+  <span id="p-busy" class="pill">idle</span>
+  <span class="spacer"></span>
+  <label><input type="checkbox" id="t-thinking"> show thinking</label>
+  <label title="When a mind file changes on GitHub, TASS says what changed for it"><input type="checkbox" id="t-reflect"> reflect on mind changes</label>
+  <a id="jupyter" class="btn" target="_blank" rel="noopener" style="display:none">Open JupyterLab ↗</a>
+  <button id="restart" title="Clear Python variables; files are kept">Restart kernel</button>
+  <button id="reset" title="Clear this conversation; files and kernel are kept">Clear chat</button>
+</header>
+<main>
+  <section>
+    <div class="head">Conversation</div>
+    <div id="chat" class="scroll"></div>
+    <form id="form">
+      <textarea id="text" placeholder="Talk to TASS… (Enter to send, Shift+Enter for a new line)"></textarea>
+      <button id="send">Send</button>
+    </form>
+  </section>
+  <section>
+    <div class="head">Thought stream <span class="muted" style="text-transform:none;letter-spacing:0">Spark → Trace → Thought → Reply</span></div>
+    <details class="mindlib" id="mindlib"><summary>Mind &amp; library</summary><div id="mindlist"></div></details>
+    <div id="stream" class="scroll"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const chat = $("chat"), stream = $("stream");
+let live = null, liveReply = null, status = {}, es = null;
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function md(s) {
+  const parts = String(s ?? "").split(/```(?:\w+)?\n?([\s\S]*?)```/g);
+  return parts.map((p, i) => i % 2 ? `<pre>${esc(p.replace(/\n$/, ""))}</pre>` :
+    esc(p).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      .replace(/^\s*[-*] (.*)$/gm, "• $1").replace(/\n/g, "<br>")).join("");
+}
+function when(t) { return t ? new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "—"; }
+function add(el, html, cls) { const d = document.createElement("div"); if (cls) d.className = cls; d.innerHTML = html; el.appendChild(d); el.scrollTop = el.scrollHeight; return d; }
+function near(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 140; }
+function step(kind, k, v) { return add(stream, `<div class="k">${k}</div><div class="v">${v}</div>`, `step ${kind}`); }
+
+async function post(url, body) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+
+function proposalCard(p) {
+  const el = add(chat, `<h4>TASS wants to run: ${esc(p.source)} <span class="tag">needs your OK</span></h4>
+    <pre>${esc(p.code)}</pre>
+    <div class="row"><button class="approve">Approve &amp; run</button><button class="reject">Reject</button>
+    <span class="muted state"></span></div>`, "card proposal");
+  el.id = "p-" + p.id;
+  el.querySelector(".approve").onclick = () => decide(p.id, "approve", el);
+  el.querySelector(".reject").onclick = () => decide(p.id, "reject", el);
+  if (p.status !== "pending") settle(el, p.status);
+}
+function settle(el, st) {
+  el.querySelectorAll("button").forEach(b => b.disabled = true);
+  el.querySelector(".state").textContent = {running: "running…", rejected: "rejected", ran: "ran", failed: "failed"}[st] || st;
+  el.classList.remove("proposal");
+}
+async function decide(id, decision, el) {
+  try { await post("/api/proposal", {id, decision}); } catch (e) { el.querySelector(".state").textContent = e.message; }
+}
+
+function render(ev, replay) {
+  const keepChat = near(chat), keepStream = near(stream);
+  switch (ev.type) {
+    case "user": add(chat, `<div class="who">You</div>${md(ev.text)}`, "msg you"); break;
+    case "spark":
+      add(stream, "", "turn-sep");
+      step("spark", "Spark · " + esc(ev.kind), esc(ev.text)); break;
+    case "trace":
+      step("trace", "Trace", `read ${ev.mind.length} mind file(s) (${ev.mind.map(esc).join(", ") || "none"}),
+        ${ev.books} book(s) in the library, ${ev.files} item(s) in the shared folder, ${ev.history} message(s) of history
+        ${ev.opened.length ? "· opened " + ev.opened.map(esc).join(", ") : ""} · ${ev.tokens} / ${ev.context} tokens`); break;
+    case "thought_start":
+      live = step("thought live", "Thought", ""); liveReply = null; break;
+    case "thought_delta":
+      if (live) { const v = live.querySelector(".v"); v.textContent += ev.delta; v.scrollTop = v.scrollHeight; } break;
+    case "reply_delta":
+      if (!liveReply) liveReply = add(chat, `<div class="who">TASS <span class="muted">· typing</span></div><div class="t"></div>`, "msg tass");
+      liveReply._raw = (liveReply._raw || "") + ev.delta;
+      liveReply.querySelector(".t").innerHTML = md(liveReply._raw); break;
+    case "thought":
+      if (live) { live.remove(); live = null; }
+      if (ev.text) { const s = step("thought", `Thought · ${ev.seconds}s`, ""); s.querySelector(".v").textContent = ev.text; }
+      else step("thought", "Thought", "<span class='muted'>(thinking is off or the model gave no reasoning)</span>");
+      break;
+    case "reply":
+      if (liveReply) { liveReply.remove(); liveReply = null; }
+      add(chat, `<div class="who">TASS ${ev.action ? `<span class="tag">→ ${esc(ev.action)}</span>` : ""}</div>${md(ev.text)}`, "msg tass");
+      step("reply", "Reply", ev.action ? "decided: " + esc(ev.action) : "answered"); break;
+    case "book": step("book", "Opened book", `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} cells)</span>`); break;
+    case "proposal": proposalCard(ev.proposal); break;
+    case "decision": { const el = $("p-" + ev.id); if (el) settle(el, ev.status); break; }
+    case "result": {
+      const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "ran" : "failed");
+      const imgs = (ev.images || []).map(b => `<img src="data:image/png;base64,${b}">`).join("");
+      add(chat, `<h4>${ev.ok ? "✓" : "✗"} Result · ${esc(ev.label)} <span class="muted">${ev.seconds}s</span></h4>
+        ${ev.text ? `<pre>${esc(ev.text)}</pre>` : `<span class="muted">(no output)</span>`}${ev.error ? `<div style="color:var(--bad)">${esc(ev.error)}</div>` : ""}${imgs}`, "card result");
+      break; }
+    case "notice": add(chat, esc(ev.text), "msg note"); break;
+    case "error": add(chat, `<div class="who">Problem</div>${esc(ev.text)}`, "msg err"); step("err", "Error", esc(ev.text)); break;
+    case "busy": setBusy(ev.busy); break;
+  }
+  if (keepChat) chat.scrollTop = chat.scrollHeight;
+  if (keepStream) stream.scrollTop = stream.scrollHeight;
+}
+
+function setBusy(b) {
+  status.busy = b;
+  $("p-busy").className = "pill " + (b ? "busy" : ""); $("p-busy").textContent = b ? "thinking" : "idle";
+  $("send").disabled = b;
+}
+
+function showStatus(s) {
+  status = s;
+  $("p-model").className = "pill " + (s.model_ok ? "ok" : "bad"); $("p-model").textContent = s.model_ok ? "model ready" : "model offline";
+  $("p-kernel").className = "pill " + (s.kernel_error ? "bad" : s.kernel === "not started" ? "" : "ok");
+  $("p-kernel").textContent = "kernel: " + (s.kernel_error ? "error" : s.kernel);
+  const m = s.mind || {};
+  $("p-mind").className = "pill " + (m.synced_at ? "ok" : "bad");
+  $("p-mind").textContent = m.synced_at ? `mind: ${m.mind.length} files · synced ${when(m.synced_at)}` : "mind: not synced yet";
+  $("t-thinking").checked = s.thinking; $("t-reflect").checked = s.auto_reflect;
+  if (s.jupyter) { $("jupyter").href = s.jupyter; $("jupyter").style.display = ""; }
+  $("mindlist").innerHTML =
+    `<div class="muted">From ${esc(m.repo || "—")} · last change ${when(m.last_change_at)}</div>
+     <b>Mind</b><ul>${(m.mind || []).map(f => `<li><code>${esc(f.path)}</code> <span class="muted">${when(f.updated_at)}</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
+     <b>Library</b><ul>${(m.library || []).map(b => `<li><code>${esc(b.path)}</code> — ${esc(b.title)} <span class="muted">(${b.cells} cells)</span></li>`).join("") || "<li class='muted'>none</li>"}</ul>
+     <b>Shared folder</b><ul>${(s.listing || []).slice(0, 25).map(f => `<li><code>${esc(f)}</code></li>`).join("") || "<li class='muted'>empty</li>"}</ul>`;
+  setBusy(s.busy);
+}
+
+async function boot() {
+  const st = await (await fetch("/api/state")).json();
+  chat.innerHTML = ""; stream.innerHTML = "";
+  st.timeline.forEach(ev => render(ev, true));
+  showStatus(st.status);
+  if (!st.timeline.length) add(chat, "Say hello to TASS. It reads its mind files and library from GitHub, thinks out loud on the right, and asks before running anything in your shared Jupyter space.", "msg note");
+  if (es) es.close();
+  es = new EventSource("/api/events");
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { $("p-model").className = "pill bad"; $("p-model").textContent = "reconnecting…"; };
+  es.onopen = () => fetch("/api/status").then(r => r.json()).then(showStatus);
+}
+setInterval(() => fetch("/api/status").then(r => r.json()).then(showStatus).catch(() => {}), 10000);
+
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("text").value.trim(); if (!text || status.busy) return;
+  try { await post("/api/message", {text}); $("text").value = ""; } catch (err) { add(chat, esc(err.message), "msg note"); }
+};
+$("text").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } };
+$("t-thinking").onchange = e => post("/api/settings", {thinking: e.target.checked}).then(showStatus);
+$("t-reflect").onchange = e => post("/api/settings", {auto_reflect: e.target.checked}).then(showStatus);
+$("restart").onclick = () => post("/api/kernel/restart").catch(e => add(chat, esc(e.message), "msg note"));
+$("reset").onclick = async () => { if (confirm("Clear this conversation? The shared folder and kernel stay.")) { await post("/api/reset").catch(()=>{}); boot(); } };
+boot();
+</script>
+</body>
+</html>
