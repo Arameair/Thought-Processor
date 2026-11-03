@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import sys
 import threading
 import unittest
@@ -63,6 +65,9 @@ class FakeTASS(BaseHTTPRequestHandler):
 class ServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.shared_temp = tempfile.TemporaryDirectory()
+        cls.previous_requests = os.environ.get("TASS_ATRIUM_COLLAB_REQUESTS")
+        os.environ["TASS_ATRIUM_COLLAB_REQUESTS"] = cls.shared_temp.name
         cls.backend=ThreadingHTTPServer(('127.0.0.1',0),FakeTASS)
         cls.bport=cls.backend.server_port
         cls.backend_thread=threading.Thread(target=cls.backend.serve_forever,daemon=True);cls.backend_thread.start()
@@ -79,6 +84,11 @@ class ServerTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.app.shutdown();cls.app.server_close();cls.backend.shutdown();cls.backend.server_close()
+        if cls.previous_requests is None:
+            os.environ.pop("TASS_ATRIUM_COLLAB_REQUESTS", None)
+        else:
+            os.environ["TASS_ATRIUM_COLLAB_REQUESTS"] = cls.previous_requests
+        cls.shared_temp.cleanup()
 
     def req(self,path,method='GET',body=None,headers=None):
         payload=json.dumps(body).encode() if body is not None else None
@@ -95,6 +105,42 @@ class ServerTest(unittest.TestCase):
         self.assertIn(b'test-csrf',data)
         self.assertIn("default-src 'none'",headers['Content-Security-Policy'])
         self.assertEqual(headers['Cache-Control'],'no-store')
+
+    def test_build_room_and_assets_are_served_without_workshop_authority(self):
+        status, headers, page = self.req('/build')
+        self.assertEqual(status, 200)
+        self.assertIn(b'What should we build?', page)
+        self.assertIn(b'test-csrf', page)
+        for path in ('/assets/build.js','/assets/build.css'):
+            self.assertEqual(self.req(path)[0], 200)
+        self.assertEqual(self.req('/bridge/share-status')[0], 200)
+        self.assertEqual(self.req('/api/settings',method='POST',
+                                  headers={'Content-Type':'application/json'})[0], 404)
+
+    def test_share_brief_requires_explicit_consent_and_csrf(self):
+        task = 'I want a simple local note viewer'
+        allowed = {'Content-Type':'application/json','X-Playground-CSRF':'test-csrf','Origin':self.origin}
+        self.assertEqual(self.req('/bridge/share-brief',method='POST',
+                                  body={'task':task,'consent':True},
+                                  headers={'Content-Type':'application/json'})[0],403)
+        self.assertEqual(self.req('/bridge/share-brief',method='POST',
+                                  body={'task':task},headers=allowed)[0],400)
+        self.assertEqual(self.req('/bridge/share-brief',method='POST',
+                                  body={'task':'password=SECRET','consent':True},
+                                  headers=allowed)[0],400)
+        code, _, data = self.req('/bridge/share-brief',method='POST',
+                                 body={'task':task,'consent':True,'code':'DANGEROUS UNREQUESTED'},
+                                 headers=allowed)
+        self.assertEqual(code, 202)
+        response = json.loads(data)
+        self.assertTrue(response['queued'])
+        queued = list(Path(self.shared_temp.name).glob('brief-*.json'))
+        self.assertEqual(len(queued), 1)
+        payload = json.loads(queued[0].read_text())
+        self.assertEqual(payload['task'], task)
+        self.assertEqual(payload['kind'],'owner_task_brief')
+        self.assertNotIn('code',payload)
+        self.assertNotIn('DANGEROUS',queued[0].read_text())
 
     def test_static_files_and_unlisted_paths(self):
         for path,mime in [('/assets/style.css','text/css'),('/assets/app.js','text/javascript')]:
