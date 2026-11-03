@@ -156,3 +156,27 @@ services:
       retries: 6
       start_period: 10s
     restart: unless-stopped
+
+  # Owner-activated ONLY. Reads the Workshop event record and queues bounded
+  # evidence through Identity Liaison into the owner's private TASS issue.
+  # The observer has no GitHub token, Jupyter privileges, or network.
+  collab-feed:
+    profiles: ["collaboration"]
+    build:
+      context: ./collab_feed
+    image: tass-collab-feed:local
+    init: true
+    command: ["--issue", "${TASS_COLLAB_ISSUE:-19}", "--data", "/workspace/data",
+              "--outbox", "/shared/outbox", "--state", "/collab/state"]
+    environment:
+      TASS_COLLAB_INCLUDE_TEXT: ${TASS_COLLAB_INCLUDE_TEXT:-0}
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
+    network_mode: "none"
+    read_only: true
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./outbox:/shared/outbox
+      - ./collab_state:/collab/state
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
