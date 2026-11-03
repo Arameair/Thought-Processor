@@ -128,3 +128,31 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+  
+  # Optional companion playground on a SEPARATE origin, with a restricted chat-only bridge.
+  # No GitHub token, Jupyter access or /api/proposal proxy is mounted in Atrium.
+  atrium:
+    build:
+      context: ./atrium
+    image: tass-atrium:local
+    init: true
+    depends_on:
+      workspace:
+        condition: service_healthy
+    environment:
+      TASS_ATRIUM_BACKEND_URL: http://workspace:8790
+      TASS_ATRIUM_BIND_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:8791:8791"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8791/bridge/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped

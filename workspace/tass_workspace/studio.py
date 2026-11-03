@@ -1,9 +1,9 @@
-"""The Atrium: the shared playground where Dustin and TASS imagine and build things together.
+"""The Studio (Claude's station): the shared playground where Dustin and TASS imagine and build things together.
 
 Everything here is real files in the shared space, so both of them see the same thing:
-    atrium/ideas/<slug>.md           ideas, with a "status:" line (new · exploring · built)
-    atrium/rooms/<slug>/index.html   rooms: things they built (a page, a tool, a view)
-    atrium/rooms/<slug>/room.md      optional: "# Title" and a one-line description
+    studio/ideas/<slug>.md           ideas, with a "status:" line (new · exploring · built)
+    studio/rooms/<slug>/index.html   rooms: things they built (a page, a tool, a view)
+    studio/rooms/<slug>/room.md      optional: "# Title" and a one-line description
 TASS sees the ideas and rooms in his prompt every turn, and builds rooms with approved code.
 Rooms are served from /files/ in a sandbox, so they can't use the workspace's controls.
 """
@@ -29,9 +29,9 @@ def _title_and_line(text: str, fallback: str) -> tuple[str, str]:
     return title, line
 
 
-class Atrium:
+class Studio:
     def __init__(self, shared: str | Path):
-        self.root = Path(shared) / "atrium"
+        self.root = Path(shared) / "studio"
         self.ideas_dir = self.root / "ideas"
         self.rooms_dir = self.root / "rooms"
 
@@ -49,7 +49,7 @@ class Atrium:
                                  if not l.startswith("#") and not re.match(r"(?i)\s*(status|from)\s*:", l)).strip()
                 out.append({"id": p.stem, "title": title, "summary": line[:200], "text": body[:2000],
                             "status": (m.group(1).lower() if m else "new"), "from": frm.group(1).strip() if frm else "",
-                            "path": f"atrium/ideas/{p.name}", "updated": p.stat().st_mtime})
+                            "path": f"studio/ideas/{p.name}", "updated": p.stat().st_mtime})
         return out
 
     def plant(self, title: str, text: str, author: str = "Dustin") -> dict:
@@ -79,7 +79,7 @@ class Atrium:
                 entry = d / "index.html"
                 files = [str(p.relative_to(d)) for p in d.rglob("*") if p.is_file()]
                 out.append({"id": d.name, "title": title, "summary": line[:200], "has_page": entry.is_file(),
-                            "url": f"/files/atrium/rooms/{d.name}/" + ("index.html" if entry.is_file() else ""),
+                            "url": f"/files/studio/rooms/{d.name}/" + ("index.html" if entry.is_file() else ""),
                             "files": len(files),
                             "updated": max([d.stat().st_mtime] + [(d / f).stat().st_mtime for f in files])})
         return out
@@ -88,8 +88,8 @@ class Atrium:
 
     def prompt_section(self, public_url: str) -> str:
         ideas, rooms = self.ideas(), self.rooms()
-        lines = ["ATRIUM (our shared playground: ideas we plant and rooms we build; Dustin sees it at "
-                 f"{public_url}/atrium):"]
+        lines = ["STUDIO (Claude's station, our shared playground: ideas we plant and rooms we build; Dustin sees it at "
+                 f"{public_url}/studio):"]
         if ideas:
             lines.append("Ideas:")
             for i in ideas[:10]:
@@ -97,11 +97,11 @@ class Atrium:
         else:
             lines.append("Ideas: none planted yet.")
         if rooms:
-            lines.append("Rooms: " + "; ".join(f"{r['title']} (atrium/rooms/{r['id']}/)" for r in rooms[:10]))
+            lines.append("Rooms: " + "; ".join(f"{r['title']} (studio/rooms/{r['id']}/)" for r in rooms[:10]))
         else:
             lines.append("Rooms: none built yet.")
-        lines.append("To build a room: propose code (RUN: code) that writes atrium/rooms/<short-name>/index.html "
-                     "(a small self-contained HTML page) and atrium/rooms/<short-name>/room.md (# Title + one line). "
+        lines.append("To build a room: propose code (RUN: code) that writes studio/rooms/<short-name>/index.html "
+                     "(a small self-contained HTML page) and studio/rooms/<short-name>/room.md (# Title + one line). "
                      "When you start or finish an idea, update its 'status:' line to exploring or built in the same code. "
                      "The library book 'Build a room' has a template.")
         return "\n".join(lines)

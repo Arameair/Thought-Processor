@@ -113,6 +113,7 @@ if ! curl -s -m 5 -o /dev/null "http://127.0.0.1:${TASS_PORT:-8790}/api/status";
 fi
 echo
 echo "Ready. Open:  http://127.0.0.1:${TASS_PORT:-8790}"
+echo "  ✦ Atrium playground: http://127.0.0.1:8791/ (opens from the Workshop header)"
 echo "  JupyterLab:  use the 'Open JupyterLab' button on that page (it carries the login token)"
 echo "  Your shared space is also here in WSL:  $(pwd)/shared"
 echo "  Direct TASS from GitHub: open an issue labelled 'tass' in ${TASS_DIRECT_REPOS:-Arameair/TASS}"
