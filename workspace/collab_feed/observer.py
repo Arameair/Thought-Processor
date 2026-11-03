@@ -134,7 +134,8 @@ def main() -> None:
     args = cli.parse_args()
     if not 1 <= args.interval <= 3600:
         cli.error("--interval must be 1-3600 seconds")
-    publisher = Publisher(args.data, args.outbox, args.state, args.issue, args.include_conversation_text)
+    share_text = (args.include_conversation_text or os.environ.get("TASS_COLLAB_INCLUDE_TEXT") == "1")
+    publisher = Publisher(args.data, args.outbox, args.state, args.issue, share_text)
     print("Owner-started private GitHub activity feed; no old conversations exported.", flush=True)
     while True:
         count = publisher.pulse()
