@@ -191,7 +191,7 @@ async function decide(id, decision, el) {
 function render(ev, replay) {
   const keepChat = near(chat), keepStream = near(stream);
   switch (ev.type) {
-    case "user": add(chat, `<div class="who">You</div>${md(ev.text)}`, "msg you"); break;
+    case "user": add(chat, `<div class="who">You${ev.via ? ` · <a href="${esc(ev.via)}" target="_blank" rel="noopener" style="color:inherit">via GitHub ${esc(ev.issue)}</a>` : ""}</div>${md(ev.text)}`, "msg you"); break;
     case "spark":
       add(stream, "", "turn-sep");
       step("spark", "Spark · " + esc(ev.kind), esc(ev.text)); break;

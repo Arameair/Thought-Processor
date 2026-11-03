@@ -145,7 +145,7 @@ class EndToEndTests(unittest.TestCase):
         cls.model_port, cls.port = free_port(), free_port()
         cls.model = subprocess.Popen([sys.executable, str(HERE / "fake_model.py"), str(cls.model_port)],
                                      stdout=subprocess.DEVNULL)
-        env = dict(os.environ, TASS_AUTO_LIMIT="2", TASS_OUTBOX=str(root / "outbox"), TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
+        env = dict(os.environ, TASS_AUTO_LIMIT="2", TASS_INBOX=str(root / "inbox"), TASS_OUTBOX=str(root / "outbox"), TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
                    TASS_SHARED=str(root / "shared"), TASS_DATA=str(root / "data"), TASS_PORT=str(cls.port),
                    TASS_JUPYTER="0", PYTHONPATH=str(HERE.parent))
         cls.server = subprocess.Popen([sys.executable, "-m", "tass_workspace"], env=env, stdout=subprocess.DEVNULL)
@@ -335,6 +335,47 @@ class EndToEndTests(unittest.TestCase):
 
     def test_full_auto_is_off_after_restart_by_design(self):
         self.assertFalse(self.get("/api/status")["full_auto"])
+
+    def _inbox(self, name, text, issue=7):
+        d = self.root / "inbox"
+        d.mkdir(exist_ok=True)
+        (d / f"Arameair__TASS__{issue}__{name}.json").write_text(json.dumps(
+            {"repo": "Arameair/TASS", "issue": issue, "comment_id": name, "text": text,
+             "url": f"https://github.com/Arameair/TASS/issues/{issue}#{name}"}))
+
+    def _comments(self, issue=7):
+        out = []
+        for f in sorted((self.root / "outbox").glob("*.json"), key=lambda x: x.stat().st_mtime):
+            if f.name.startswith(".") or f.name.endswith(".result.json"):
+                continue
+            r = json.loads(f.read_text())
+            if r.get("type") == "comment" and r["issue"] == issue:
+                out.append(r["body"])
+        return out
+
+    def test_direct_tass_from_github_and_approve_there(self):
+        self._inbox("0", "Try some of your own code please")
+        st = self.wait_for(lambda s: s["proposals"], 30)
+        user = next(e for e in st["timeline"] if e["type"] == "user")
+        self.assertEqual(user["issue"], "Arameair/TASS#7")
+        self.wait_for(lambda s: len(self._comments()) >= 1, 15)
+        first = self._comments()[0]
+        self.assertIn("**TASS:**", first)
+        self.assertIn("answer = sum(range(10))", first)          # the exact code is shown on GitHub
+        self.assertIn("/approve", first)
+        self._inbox("1001", "/approve")
+        self.wait_for(lambda s: len(self._comments()) >= 3, 40)
+        bodies = self._comments()
+        self.assertIn("Approved `RUN own code` from GitHub", bodies[1])
+        self.assertIn("**Result of `RUN own code`:** ✓ ok", bodies[2])
+        self.assertIn("answer = 45", bodies[2])
+        self.assertIn("**TASS:**", bodies[2])                       # his reaction to the result
+        audit = self.get("/api/audit")
+        self.assertTrue(any(r["event"] == "approved" and r.get("via") == "github" for r in audit))
+        self.assertIn("github_message", [r["event"] for r in audit])
+        self._inbox("1002", "/approve")
+        self.wait_for(lambda s: len(self._comments()) >= 4, 15)
+        self.assertIn("Nothing from this issue is waiting", self._comments()[3])
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:

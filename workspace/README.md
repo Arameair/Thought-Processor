@@ -76,6 +76,23 @@ TASS can also propose its own code, which needs the same approval.
 
 Settings persist in `data/controls.json`.
 
+## Direct TASS from GitHub
+
+Open an issue in **Arameair/TASS** with the label **`tass`**, or comment on one. Within about 30 seconds the Liaison hands it to the running TASS. He thinks, and his reply is posted back on the issue.
+
+- If he proposes a run, the comment shows the exact code (or the diff, for a mind change). Reply **`/approve`** or **`/reject`** on the issue, or use the workspace page. The result and his reaction are posted back to the issue too.
+- Only your comments are forwarded. The repo is public, so everyone else is ignored, and TASS's own comments carry a hidden marker so they never loop back.
+- You see it all in the workspace as well: messages show as "You · via GitHub #n", and the audit log records `github_message`, `approved via github` and `github_reply`.
+
+## Full auto (for testing)
+
+The **full auto** checkbox in the header approves TASS's proposals without a click, so you get clean end-to-end runs while testing. That includes runs started from GitHub.
+- It's off after every restart and is never saved. While it's on, an orange banner shows.
+- Your allow-switches still apply.
+- It pauses after `TASS_AUTO_LIMIT` (default 8) automatic runs since your last message (from the page or GitHub).
+- **■ Stop run** still works. The audit log marks `auto-approved` and `auto-paused`.
+- Mind changes still become pull requests that you merge.
+
 ## Safety
 
 - Every run needs your click. The yellow card shows the exact code first.

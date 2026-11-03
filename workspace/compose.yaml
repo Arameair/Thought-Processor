@@ -74,12 +74,16 @@ services:
       # Mind changes TASS proposes and the owner approves in the workspace become pull requests here.
       IDENTITY_LIAISON_OUTBOX: /shared/outbox
       IDENTITY_LIAISON_WRITE_ALLOW: ${TASS_MIND_WRITE:-Arameair/TASS@*:mind/*.md}
+      # Direct TASS from GitHub: issues labelled "tass" here go to the running TASS; replies come back.
+      IDENTITY_LIAISON_DIRECT_REPOS: ${TASS_DIRECT_REPOS:-Arameair/TASS}
+      IDENTITY_LIAISON_INBOX: /shared/inbox
     user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
     volumes:
       - ./secrets/github_token:/run/secrets/github_token:ro   # only this container gets the token
       - ./config:/config
       - ./mirror:/shared/mirror
       - ./outbox:/shared/outbox                               # owner-approved requests from the workspace
+      - ./inbox:/shared/inbox                                 # messages from GitHub for TASS
     read_only: true
     tmpfs:
       - /tmp
@@ -116,7 +120,8 @@ services:
       - ./shared:/workspace/shared       # your shared space with TASS (also visible from WSL)
       - ./data:/workspace/data           # conversation history, Jupyter settings
       - ./mirror:/shared/mirror:ro       # mind + library + projects, written only by the liaison
-      - ./outbox:/shared/outbox          # approved mind changes go out here; the liaison opens the PR
+      - ./outbox:/shared/outbox          # approved mind changes and GitHub replies go out here
+      - ./inbox:/shared/inbox            # messages you send TASS from GitHub arrive here
     ports:
       - "127.0.0.1:${TASS_PORT:-8790}:8790"
       - "127.0.0.1:${TASS_JUPYTER_PORT:-8888}:8888"

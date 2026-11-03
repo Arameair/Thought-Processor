@@ -48,6 +48,10 @@ class Workspace:
         self.allow = {"library books": True, "projects": True, "own code": True,
                       "remember": True, "mind changes": True}
         self.outbox = Path(env("TASS_OUTBOX", "/shared/outbox"))
+        self.inbox = Path(env("TASS_INBOX", "/shared/inbox"))   # messages from GitHub, written by the Liaison
+        self._origin: dict | None = None                        # GitHub issue the current turn answers
+        self._turn_replies: list[str] = []
+        self._turn_proposals: list[dict] = []
         self.memory_path = Path(env("TASS_SHARED", "/workspace/shared")) / "memory" / "tass-memory.md"
         self.jupyter_token = secrets.token_hex(16)
         self.jupyter_internal = env("TASS_JUPYTER_INTERNAL", "http://127.0.0.1:8888")
@@ -197,6 +201,10 @@ class Workspace:
                 self._check_outbox()
             except Exception as e:  # noqa: BLE001
                 self.log(f"outbox check failed: {e}")
+            try:
+                self._check_inbox()
+            except Exception as e:  # noqa: BLE001
+                self.log(f"inbox check failed: {e}")
             m = self.mind.manifest()
             changed_at = m.get("last_change_at")
             if not changed_at or changed_at == self.last_change_seen:
@@ -224,7 +232,7 @@ class Workspace:
                 return msgs, used, ctx
             history = history[2:] if len(history) > 3 and history[2]["role"] == "user" else history[1:]
 
-    def turn(self, kind: str, text: str):
+    def turn(self, kind: str, text: str, origin: dict | None = None, comment_prefix: str = ""):
         # A user message never waits behind a running turn; follow-ups (results, mind changes) do, briefly.
         if not self.turn_lock.acquire(blocking=kind != "user", timeout=-1 if kind == "user" else 60):
             self.emit("notice", text="TASS is still thinking; try again in a moment.")
@@ -232,10 +240,17 @@ class Workspace:
         try:
             self.busy = True
             self.emit("busy", keep=False, busy=True)
+            self._origin, self._turn_replies, self._turn_proposals = origin, [], []
             if kind == "user":
                 self.emit("user", text=text)
-            self.messages.append({"role": "user", "content": text})
-            self.emit("spark", kind=kind, text=text if kind != "user" else "Your message")
+            if kind == "github":
+                self.emit("user", text=text, via=origin.get("url"), issue=f"{origin['repo']}#{origin['issue']}")
+                self.messages.append({"role": "user", "content":
+                                      f"[Dustin, on GitHub {origin['repo']}#{origin['issue']}] {text}"})
+                self.emit("spark", kind="github", text=f"Message on GitHub {origin['repo']}#{origin['issue']}")
+            else:
+                self.messages.append({"role": "user", "content": text})
+                self.emit("spark", kind=kind, text=text if kind != "user" else "Your message")
             opened: list[str] = []
             for _ in range(MAX_OPENS_PER_TURN + 1):
                 mind_files = self.mind.mind_files()
@@ -261,6 +276,8 @@ class Workspace:
                     out = out2
                 shown, action, memories = parse_reply(out["text"])
                 self.emit("thought", text=out["thought"], seconds=out["seconds"])
+                if shown:
+                    self._turn_replies.append(shown)
                 self.emit("reply", text=shown, tokens=out["prompt_tokens"], context=out["context"],
                           action=action.label() if action else None)
                 self.messages.append({"role": "assistant", "content": out["text"].strip()})
@@ -304,6 +321,12 @@ class Workspace:
         except Exception as e:  # noqa: BLE001
             self.emit("error", text=str(e))
         finally:
+            if origin:
+                try:
+                    self._reply_on_github(origin, comment_prefix)
+                except Exception as e:  # noqa: BLE001
+                    self.log(f"could not queue GitHub reply: {e}")
+            self._origin = None
             self.busy = False
             self.emit("busy", keep=False, busy=False)
             self._save()
@@ -380,6 +403,9 @@ class Workspace:
             self.messages.append({"role": "user", "content": f"[Could not propose: {e}]"})
             self.emit("notice", text=str(e))
             return
+        if self._origin:
+            p["origin"] = self._origin
+        self._turn_proposals.append(p)
         self.proposals[p["id"]] = p
         self.audit("proposed", p)
         self.emit("proposal", proposal=p)
@@ -405,13 +431,14 @@ class Workspace:
             except ValueError as e:
                 self.emit("notice", text=f"Full auto couldn't approve {p['label']}: {e}")
 
-    def decide(self, pid: str, decision: str) -> dict:
+    def decide(self, pid: str, decision: str, via: str = "workspace") -> dict:
         p = self.proposals.get(pid)
         if not p or p["status"] != "pending":
             raise ValueError("That proposal is not waiting for a decision.")
+        p["decided_via"] = via
         if decision == "reject":
             p["status"] = "rejected"
-            self.audit("rejected", p)
+            self.audit("rejected", p, via=via)
             self.messages.append({"role": "user", "content": f"[Dustin rejected {p['label']}.]"})
             self.emit("decision", pid=pid, status="rejected")
             self._save()
@@ -422,7 +449,7 @@ class Workspace:
             raise ValueError(f"Wait: {self.running['label']} is still running (or press Stop).")
         p["status"] = "running"
         self.running = p
-        self.audit("approved", p)
+        self.audit("approved", p, via=via)
         self.emit("decision", pid=pid, status="running")
         threading.Thread(target=self._run, args=(p,), daemon=True).start()
         return p
@@ -443,6 +470,75 @@ class Workspace:
         self.emit("notice", text=f"Sent to the Liaison: it will open a pull request for {p['path']} (usually within 30 s).")
         self._save()
         return p
+
+    def _outbox_write(self, req: dict) -> str:
+        rid = req.get("id") or secrets.token_hex(4)
+        req["id"] = rid
+        self.outbox.mkdir(parents=True, exist_ok=True)
+        tmp = self.outbox / f".{rid}.tmp"
+        tmp.write_text(json.dumps(req))
+        tmp.replace(self.outbox / f"{rid}.json")
+        return rid
+
+    def _reply_on_github(self, origin: dict, prefix: str = ""):
+        parts = [prefix] if prefix else []
+        if self._turn_replies:
+            parts.append("**TASS:** " + "\n\n".join(self._turn_replies))
+        for p in self._turn_proposals:
+            if p.get("kind") == "mind":
+                shown = f"```diff\n{p['diff'][:3000]}\n```"
+            else:
+                files = f"Files: {', '.join(p['files'])}\n" if p.get("files") else ""
+                shown = f"{files}```python\n{(p.get('code') or '')[:3000]}\n```"
+            how = ("Full auto is on, so it runs now." if self.full_auto and p["status"] == "pending"
+                   else f"Reply **`/approve`** to run it, or **`/reject`** (or use the workspace page). Id: `{p['id']}`")
+            parts.append(f"**Proposed:** `{p['label']}` — {p.get('source', '')}\n{shown}\n{how}")
+        if not parts:
+            parts.append("**TASS:** (no reply text)")
+        self._outbox_write({"type": "comment", "repo": origin["repo"], "issue": origin["issue"],
+                            "body": "\n\n".join(parts)})
+        self.audit("github_reply", {"label": f"{origin['repo']}#{origin['issue']}"})
+
+    def _check_inbox(self):
+        if not self.inbox.is_dir():
+            return
+        for f in sorted(self.inbox.glob("*.json"), key=lambda x: x.stat().st_mtime):
+            if f.name.startswith(".") or f.name.endswith(".done.json"):
+                continue
+            try:
+                msg = json.loads(f.read_text("utf-8"))
+            except (OSError, ValueError):
+                continue
+            if self.busy or self.running:
+                return                       # try again on the next check, in order
+            origin = {"repo": msg["repo"], "issue": msg["issue"], "url": msg.get("url")}
+            f.replace(f.with_name(f.name[:-5] + ".done.json"))
+            text = (msg.get("text") or "").strip()
+            cmd = text.split()[0].lower() if text else ""
+            if cmd in ("/approve", "/reject"):
+                self._github_decision(origin, cmd[1:], text.split()[1] if len(text.split()) > 1 else None)
+                continue
+            self.audit("github_message", {"label": f"{origin['repo']}#{origin['issue']}", "source": text[:200]})
+            self.auto_streak = 0
+            self.busy = True   # claim the turn now so the next check waits for this one
+            threading.Thread(target=self.turn, args=("github", text), kwargs={"origin": origin}, daemon=True).start()
+            return
+
+    def _github_decision(self, origin: dict, decision: str, pid: str | None):
+        waiting = [p for p in self.proposals.values() if p["status"] == "pending"
+                   and (pid == p["id"] if pid else (p.get("origin") or {}).get("issue") == origin["issue"])]
+        if not waiting:
+            body = "Nothing from this issue is waiting for a decision." if not pid else f"No pending proposal `{pid}`."
+        else:
+            p = waiting[-1]
+            try:
+                self.decide(p["id"], "approve" if decision == "approve" else "reject", via="github")
+                body = (f"✓ Approved `{p['label']}` from GitHub; running now. The result will be posted here."
+                        if decision == "approve" else f"Rejected `{p['label']}`. TASS will see that.")
+                self.emit("notice", text=f"{decision.title()}d from GitHub: {p['label']}")
+            except ValueError as e:
+                body = f"Couldn't {decision} `{p['label']}`: {e}"
+        self._outbox_write({"type": "comment", "repo": origin["repo"], "issue": origin["issue"], "body": body})
 
     def _check_outbox(self):
         for p in self.proposals.values():
@@ -509,9 +605,15 @@ class Workspace:
                               + ("\n(It also produced an image.)" if r["images"] else "")})
         self._save()
         if self.autonomy:
-            self.turn("result", f"[Spark] The run finished: {summary}")
+            block = (f"**Result of `{p['label']}`:** {'✓ ok' if r['ok'] else '✗ ' + str(r['error'])} ({r['seconds']} s)\n"
+                     f"```\n{(text[-1500:] or '(no output)')}\n```\n") if p.get("origin") else ""
+            self.turn("result", f"[Spark] The run finished: {summary}", origin=p.get("origin"), comment_prefix=block)
         else:
             self.emit("notice", text="Autonomy is off, so TASS waits for you before reacting to this result.")
+            if p.get("origin"):
+                self._outbox_write({"type": "comment", "repo": p["origin"]["repo"], "issue": p["origin"]["issue"],
+                                    "body": f"**Result of `{p['label']}`:** {'✓ ok' if r['ok'] else '✗ ' + str(r['error'])}"
+                                            f"\n```\n{(text[-1500:] or '(no output)')}\n```"})
 
     def stop_run(self):
         if not self.running:

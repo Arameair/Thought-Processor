@@ -38,7 +38,7 @@ docker_err="$(docker info 2>&1 >/dev/null)" || {
   if [[ "$docker_err" == *"permission denied"* && $EUID -ne 0 ]]; then
     echo "Docker needs sudo on this computer, so docker commands will run with sudo."
     keep="TASS_UID,TASS_GID,TASS_MODEL_DIR,TASS_MODEL_FILE,TASS_CTX,TASS_GPU_LAYERS,TASS_PORT,TASS_JUPYTER_PORT"
-    keep+=",TASS_THINKING,TASS_AUTO_REFLECT,TASS_MAX_TOKENS,TASS_SOURCES,TASS_MIND_WRITE,LIAISON_REF,LIAISON_REPOS"
+    keep+=",TASS_THINKING,TASS_AUTO_REFLECT,TASS_MAX_TOKENS,TASS_SOURCES,TASS_MIND_WRITE,TASS_DIRECT_REPOS,LIAISON_REF,LIAISON_REPOS"
     keep+=",LIAISON_CHAT_REPOS,LIAISON_OWNERS,LIAISON_BASE,WORKSPACE_BASE,WORKSPACE_PIP_FLAGS"
     DOCKER=(sudo "--preserve-env=$keep" docker)
     sudo true || { echo "sudo was refused."; exit 1; }
@@ -59,7 +59,7 @@ case "$action" in
 esac
 
 # --- folders and token -------------------------------------------------------
-as_user mkdir -p secrets config shared data mirror outbox
+as_user mkdir -p secrets config shared data mirror outbox inbox
 [[ -d secrets/github_token ]] && { rmdir secrets/github_token 2>/dev/null || { echo "secrets/github_token is a folder; remove it."; exit 1; }; }
 if [[ ! -s secrets/github_token ]]; then
   for other in "$real_home/identity-liaison/liaison/secrets/github_token"; do
@@ -75,7 +75,7 @@ if [[ ! -s secrets/github_token ]]; then
     exit 1
   fi
 fi
-chown -R "$real_uid:$real_gid" secrets config shared data mirror outbox 2>/dev/null || true
+chown -R "$real_uid:$real_gid" secrets config shared data mirror outbox inbox 2>/dev/null || true
 chmod 700 secrets; chmod 600 secrets/github_token
 
 # --- model file ----------------------------------------------------------------
@@ -115,4 +115,5 @@ echo
 echo "Ready. Open:  http://127.0.0.1:${TASS_PORT:-8790}"
 echo "  JupyterLab:  use the 'Open JupyterLab' button on that page (it carries the login token)"
 echo "  Your shared space is also here in WSL:  $(pwd)/shared"
+echo "  Direct TASS from GitHub: open an issue labelled 'tass' in ${TASS_DIRECT_REPOS:-Arameair/TASS}"
 echo "  Watch:  ./run.sh logs      Stop:  ./run.sh stop"
