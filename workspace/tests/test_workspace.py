@@ -31,11 +31,14 @@ def free_port():
     return port
 
 
+MIND_WHO = "# Who I am\n\n- I am curious.\n- I am a teammate, not a boss.\n- I never pretend something happened.\n"
+
+
 def make_mirror(root: Path):
     files = root / "files"
     (files / "mind").mkdir(parents=True)
     (files / "library").mkdir(parents=True)
-    (files / "mind/who-i-am.md").write_text("# Who I am\n\n- I am curious.\n")
+    (files / "mind/who-i-am.md").write_text(MIND_WHO)
     (files / "library/01-look-around.md").write_text(
         "# Look around\n\nSee what's here.\n\n```python\nprint('cell one')\n```\n\n```python\nx = 41 + 1\nprint(x)\n```\n")
     (files / "library/README.md").write_text("# Library\n")
@@ -46,8 +49,9 @@ def make_mirror(root: Path):
         "import os\nopen('status.json','w').write('{}')\nprint('Hello from hello-tass in', os.path.basename(os.getcwd()))\n")
     (files / "projects/hello-tass/data/notes.txt").parent.mkdir()
     (files / "projects/hello-tass/data/notes.txt").write_text("hi\n")
-    (root / "manifest.json").write_text(json.dumps({"repo": "Arameair/Developmnt", "synced_at": time.time(),
-                                                    "last_change_at": 1.0, "last_changed": [], "files": {}}))
+    (root / "manifest.json").write_text(json.dumps({"repo": "Arameair/TASS", "branch": "alpha", "synced_at": time.time(),
+                                                    "last_change_at": 1.0, "last_changed": [], "files": {
+        "mind/who-i-am.md": {"sha": "abc", "repo": "Arameair/TASS", "branch": "alpha"}}}))
 
 
 class ActionTests(unittest.TestCase):
@@ -105,6 +109,31 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual((a.kind, a.project), ("open", "hello-tass"))
 
 
+class RestartTests(unittest.TestCase):
+    def test_starts_with_a_saved_timeline_from_an_older_version(self):
+        # Before the fix, decision/result events saved a proposal id (text) as "id", and the next start crashed.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            make_mirror(root / "mirror")
+            (root / "data").mkdir()
+            (root / "data/timeline.json").write_text(json.dumps([
+                {"id": 1, "type": "user", "text": "hi"}, {"id": "a1b2c3d4", "type": "decision", "status": "running"},
+                {"id": 7, "type": "reply", "text": "ok"}]))
+            env = dict(os.environ, TASS_MIRROR=str(root / "mirror"), TASS_SHARED=str(root / "shared"),
+                       TASS_DATA=str(root / "data"), TASS_JUPYTER="0")
+            old = dict(os.environ)
+            os.environ.update(env)
+            try:
+                from tass_workspace.server import Workspace
+                ws = Workspace()
+                self.assertEqual(ws.next_id, 8)
+                ev = ws.emit("decision", pid="ffff0000", status="ran", id="should-not-win")
+                self.assertEqual((ev["id"], ev["pid"]), (8, "ffff0000"))
+            finally:
+                os.environ.clear()
+                os.environ.update(old)
+
+
 class EndToEndTests(unittest.TestCase):
     """Real server + real (private) Jupyter kernel + scripted fake model."""
 
@@ -116,7 +145,7 @@ class EndToEndTests(unittest.TestCase):
         cls.model_port, cls.port = free_port(), free_port()
         cls.model = subprocess.Popen([sys.executable, str(HERE / "fake_model.py"), str(cls.model_port)],
                                      stdout=subprocess.DEVNULL)
-        env = dict(os.environ, TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
+        env = dict(os.environ, TASS_OUTBOX=str(root / "outbox"), TASS_MODEL_URL=f"http://127.0.0.1:{cls.model_port}", TASS_MIRROR=str(root / "mirror"),
                    TASS_SHARED=str(root / "shared"), TASS_DATA=str(root / "data"), TASS_PORT=str(cls.port),
                    TASS_JUPYTER="0", PYTHONPATH=str(HERE.parent))
         cls.server = subprocess.Popen([sys.executable, "-m", "tass_workspace"], env=env, stdout=subprocess.DEVNULL)
@@ -192,8 +221,8 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(p["files"], ["data/notes.txt", "main.py", "project.md"])
         self.assertIn("print('Hello from hello-tass", p["code"])
         self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
-        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == p["id"] for e in s["timeline"]))
-        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == p["id"])
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e.get("pid") == p["id"] for e in s["timeline"]))
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e.get("pid") == p["id"])
         self.assertTrue(res["ok"], res)
         self.assertIn("Hello from hello-tass in hello-tass", res["text"])        # ran inside its folder
         dest = self.root / "shared/projects/hello-tass"
@@ -219,15 +248,63 @@ class EndToEndTests(unittest.TestCase):
         self.post("/api/proposal", {"id": pid, "decision": "approve"})
         self.wait_for(lambda s: s["status"]["running"])
         self.post("/api/stop", {})
-        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == pid for e in s["timeline"]), 30)
-        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e.get("pid") == pid for e in s["timeline"]), 30)
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e.get("pid") == pid)
         self.assertFalse(res["ok"])
         self.assertIn("KeyboardInterrupt", res["error"] or res["text"])
         time.sleep(1.5)
         st = self.get("/api/state")
-        after = st["timeline"][[e.get("id") for e in st["timeline"]].index(next(e["id"] for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)):]
+        after = st["timeline"][[e.get("id") for e in st["timeline"]].index(next(e["id"] for e in st["timeline"] if e["type"] == "result" and e.get("pid") == pid)):]
         self.assertFalse(any(e["type"] == "spark" and e.get("kind") == "result" for e in after))
         self.post("/api/settings", {"autonomy": True})
+
+    def test_remember_and_change_mind_become_a_pr_request(self):
+        self.post("/api/message", {"text": "How could you improve how you think?"})
+        st = self.wait_for(lambda s: any(p.get("kind") == "mind" for p in s["proposals"]))
+        self.assertTrue(any(e["type"] == "memory" and "keep improving" in e["text"] for e in st["timeline"]))
+        mem = (self.root / "shared/memory/tass-memory.md").read_text()
+        self.assertIn("keep improving how I think", mem)
+        reply = next(e for e in st["timeline"] if e["type"] == "reply")
+        self.assertNotIn("REMEMBER", reply["text"])                      # memory lines are not shown as text
+        p = next(p for p in st["proposals"] if p.get("kind") == "mind")
+        self.assertEqual((p["path"], p["repo"], p["branch"]), ("mind/who-i-am.md", "Arameair/TASS", "alpha"))
+        self.assertIn("+- Before I act, I make a one-line plan.", p["diff"])
+        self.assertEqual([l for l in p["diff"].splitlines() if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))],
+                         ["+- Before I act, I make a one-line plan."])          # one line added, nothing removed
+        self.assertIn("- I am a teammate, not a boss.\n- Before I act", p["content"])
+        self.assertEqual(st["status"]["identity"], {"name": "TASS", "repo": "Arameair/TASS", "branch": "alpha"})
+        # Memory is in the next prompt.
+        self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
+        req = json.loads((self.root / "outbox" / f"{p['id']}.json").read_text())
+        self.assertEqual((req["repo"], req["branch"], req["path"]), ("Arameair/TASS", "alpha", "mind/who-i-am.md"))
+        self.assertIn("one-line plan", req["content"])
+        # The Liaison answers with the PR link; the workspace reports it to Dustin and to TASS.
+        (self.root / "outbox" / f"{p['id']}.result.json").write_text(
+            json.dumps({"id": p["id"], "ok": True, "pr_url": "https://github.com/Arameair/TASS/pull/99"}))
+        st = self.wait_for(lambda s: any(e["type"] == "mind_pr" for e in s["timeline"]), 15)
+        ev = next(e for e in st["timeline"] if e["type"] == "mind_pr")
+        self.assertEqual((ev["ok"], ev["url"]), (True, "https://github.com/Arameair/TASS/pull/99"))
+        events = [r["event"] for r in self.get("/api/audit")]
+        for e in ("remembered", "proposed", "approved", "pr_opened"):
+            self.assertIn(e, events)
+        self.post("/api/message", {"text": "What do you remember?"})
+        st = self.wait_for(lambda s: any(e["type"] == "reply" and "From my memory" in e["text"] for e in s["timeline"]))
+        self.assertIn("keep improving", [e for e in st["timeline"] if e["type"] == "reply"][-1]["text"])
+
+    def test_whole_file_rewrite_that_drops_most_of_it_is_refused(self):
+        self.post("/api/message", {"text": "Rewrite yourself from scratch"})
+        st = self.wait_for(lambda s: any(e["type"] == "notice" and "remove most of" in e["text"] for e in s["timeline"]))
+        self.assertFalse([p for p in st["proposals"] if p.get("kind") == "mind"])
+
+    def test_mind_changes_can_be_turned_off(self):
+        self.post("/api/settings", {"allow": {"mind changes": False}})
+        try:
+            self.post("/api/message", {"text": "Please improve yourself"})
+            st = self.wait_for(lambda s: any(e["type"] == "notice" and "turned off mind changes" in e["text"]
+                                             for e in s["timeline"]))
+            self.assertFalse([p for p in st["proposals"] if p.get("kind") == "mind"])
+        finally:
+            self.post("/api/settings", {"allow": {"mind changes": True}})
 
     def test_foreign_origin_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
@@ -241,8 +318,11 @@ class EndToEndTests(unittest.TestCase):
         m = json.loads((mirror / "manifest.json").read_text())
         m.update(last_change_at=time.time(), last_changed=["mind/who-i-am.md"])
         (mirror / "manifest.json").write_text(json.dumps(m))
-        st = self.wait_for(lambda s: any(e["type"] == "reply" and "small tool" in e["text"] for e in s["timeline"]), 30)
-        self.assertTrue(any(e["type"] == "spark" and e.get("kind") == "repo" for e in st["timeline"]))
+        try:
+            st = self.wait_for(lambda s: any(e["type"] == "reply" and "small tool" in e["text"] for e in s["timeline"]), 30)
+            self.assertTrue(any(e["type"] == "spark" and e.get("kind") == "repo" for e in st["timeline"]))
+        finally:
+            (mirror / "files/mind/who-i-am.md").write_text(MIND_WHO)
 
 
 if __name__ == "__main__":

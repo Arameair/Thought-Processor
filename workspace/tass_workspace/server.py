@@ -7,6 +7,7 @@ Actions: OPEN a library book, or RUN a book cell / its own code (always after yo
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -24,7 +25,7 @@ from urllib.parse import urlparse
 
 from .kernel import JOURNAL, LIVE_NOTEBOOK, SharedKernel
 from .mind import Mind
-from .thinker import Action, ModelClient, build_system, parse_action
+from .thinker import Action, ModelClient, build_system, parse_reply
 
 MAX_OPENS_PER_TURN = 2
 MAX_TIMELINE = 600
@@ -44,7 +45,10 @@ class Workspace:
                                  thinking=env("TASS_THINKING", "1") == "1")
         # Owner controls. Autonomy = TASS may start turns on its own (mind changes, after a run).
         self.autonomy = env("TASS_AUTONOMY", env("TASS_AUTO_REFLECT", "1")) == "1"
-        self.allow = {"library books": True, "projects": True, "own code": True}
+        self.allow = {"library books": True, "projects": True, "own code": True,
+                      "remember": True, "mind changes": True}
+        self.outbox = Path(env("TASS_OUTBOX", "/shared/outbox"))
+        self.memory_path = Path(env("TASS_SHARED", "/workspace/shared")) / "memory" / "tass-memory.md"
         self.jupyter_token = secrets.token_hex(16)
         self.jupyter_internal = env("TASS_JUPYTER_INTERNAL", "http://127.0.0.1:8888")
         self.jupyter_public = env("TASS_JUPYTER_PUBLIC", "http://127.0.0.1:8888")
@@ -56,7 +60,8 @@ class Workspace:
         self.messages: list[dict] = self._load("messages.json", [])
         self.proposals: dict[str, dict] = {p["id"]: p for p in self._load("proposals.json", [])}
         self.recent_runs: list[str] = self._load("recent_runs.json", [])
-        self.next_id = max([e.get("id", 0) for e in self.timeline] + [0]) + 1
+        # Older saved timelines could hold a proposal id (text) in "id"; only count real event numbers.
+        self.next_id = max([e["id"] for e in self.timeline if isinstance(e.get("id"), int)] + [0]) + 1
         self.running: dict | None = None
         saved = self._load("controls.json", {})
         self.autonomy = saved.get("autonomy", self.autonomy)
@@ -98,6 +103,34 @@ class Workspace:
             return []
         return [json.loads(l) for l in lines if l.strip()]
 
+    def memory_text(self, lines: int = 60) -> str:
+        try:
+            body = [l for l in self.memory_path.read_text("utf-8").splitlines() if l.startswith("- ")]
+        except OSError:
+            return ""
+        return "\n".join(body[-lines:])
+
+    def remember(self, items: list[str]):
+        if not items:
+            return
+        if not self.allow["remember"]:
+            self.emit("notice", text="TASS wanted to remember something, but remembering is turned off.")
+            return
+        self.memory_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.memory_path.exists():
+            self.memory_path.write_text("# TASS memory\n\nThings TASS chose to remember. Dustin can edit or delete "
+                                        "any line (JupyterLab: memory/tass-memory.md).\n\n")
+        with open(self.memory_path, "a", encoding="utf-8") as f:
+            for item in items:
+                f.write(f"- {time.strftime('%Y-%m-%d')}: {item[:300]}\n")
+        for item in items:
+            self.emit("memory", text=item[:300])
+            self.audit("remembered", {"label": "REMEMBER", "source": item[:300]})
+
+    def identity(self) -> dict:
+        m = self.mind.manifest()
+        return {"name": "TASS", "repo": m.get("repo"), "branch": m.get("branch")}
+
     def save_controls(self):
         (self.data / "controls.json").write_text(json.dumps({"autonomy": self.autonomy, "allow": self.allow}))
 
@@ -105,7 +138,8 @@ class Workspace:
         print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
     def emit(self, type_: str, keep: bool = True, **data) -> dict:
-        event = {"id": self.next_id, "type": type_, "at": time.time(), **data}
+        data.pop("id", None)   # "id" is the event's own number; a proposal's id travels as "pid"
+        event = {**data, "id": self.next_id, "type": type_, "at": time.time()}
         self.next_id += 1
         if keep:
             self.timeline.append(event)
@@ -116,7 +150,8 @@ class Workspace:
 
     def status(self) -> dict:
         return {"busy": self.busy, "model_ok": self.model.health(), "thinking": self.model.thinking,
-                "autonomy": self.autonomy, "allow": self.allow,
+                "autonomy": self.autonomy, "allow": self.allow, "identity": self.identity(),
+                "memory": self.memory_text(20),
                 "running": {"id": self.running["id"], "label": self.running["label"]} if self.running else None,
                 "kernel": self.kernel.mode, "kernel_error": self.kernel_error,
                 "jupyter": f"{self.jupyter_public}/lab/tree/{LIVE_NOTEBOOK}?token={self.jupyter_token}"
@@ -152,6 +187,10 @@ class Workspace:
     def _watch_mind(self):
         while True:
             time.sleep(3)
+            try:
+                self._check_outbox()
+            except Exception as e:  # noqa: BLE001
+                self.log(f"outbox check failed: {e}")
             m = self.mind.manifest()
             changed_at = m.get("last_change_at")
             if not changed_at or changed_at == self.last_change_seen:
@@ -196,7 +235,10 @@ class Workspace:
                 catalog = self.mind.catalog()
                 listing = self.kernel.listing()
                 projects = self.mind.projects()
-                system = build_system(mind_files, catalog, listing, self.recent_runs[-3:], projects, self.allow)
+                ident = self.identity()
+                system = build_system(mind_files, catalog, listing, self.recent_runs[-3:], projects, self.allow,
+                                      identity=f"{ident['repo']}@{ident['branch']}" if ident["repo"] else "",
+                                      memory=self.memory_text())
                 msgs, used, ctx = self._fit(system)
                 self.emit("trace", mind=[p for p, _ in mind_files], books=len(catalog), projects=len(projects),
                           opened=opened,
@@ -210,11 +252,12 @@ class Workspace:
                                              lambda d: self.emit("reply_delta", keep=False, delta=d), thinking=False)
                     out2["thought"] = out["thought"]
                     out = out2
-                shown, action = parse_action(out["text"])
+                shown, action, memories = parse_reply(out["text"])
                 self.emit("thought", text=out["thought"], seconds=out["seconds"])
                 self.emit("reply", text=shown, tokens=out["prompt_tokens"], context=out["context"],
                           action=action.label() if action else None)
                 self.messages.append({"role": "assistant", "content": out["text"].strip()})
+                self.remember(memories)
                 if action and action.kind == "open" and action.project:
                     if len(opened) >= MAX_OPENS_PER_TURN:
                         break
@@ -248,7 +291,7 @@ class Workspace:
                         self.messages.append({"role": "user", "content": f"[Could not open: {e}]"})
                         self.emit("notice", text=str(e))
                         continue
-                if action and action.kind == "run":
+                if action and action.kind in ("run", "mind"):
                     self._propose(action)
                 break
         except Exception as e:  # noqa: BLE001
@@ -270,7 +313,37 @@ class Workspace:
     def _propose(self, action: Action):
         p: dict = {"id": secrets.token_hex(4), "label": action.label(), "status": "pending", "at": time.time()}
         try:
-            if action.project:
+            if action.kind == "mind":
+                if not self.allow["mind changes"]:
+                    return self._refuse("mind changes", p["label"])
+                man = self.mind.manifest()
+                rec = man.get("files", {}).get(action.path, {})
+                repo, branch = rec.get("repo") or man.get("repo"), rec.get("branch") or man.get("branch")
+                if not repo:
+                    raise ValueError("Mind isn't synced from GitHub yet, so there's no repo to propose a change to.")
+                cur_path = self.mind.files / action.path
+                current = cur_path.read_text("utf-8") if cur_path.is_file() else ""
+                if action.edits is not None:
+                    if not current:
+                        raise ValueError(f"{action.path} doesn't exist yet; a new mind file needs its whole text")
+                    from .edits import EditError, apply_edits
+                    try:
+                        action.content = apply_edits(current, action.edits)
+                    except EditError as e:
+                        raise ValueError(str(e)) from None
+                elif current and len(action.content) < 0.6 * len(current):
+                    # A small model rewriting a whole file tends to drop most of it (seen in testing).
+                    raise ValueError(f"That would remove most of {action.path} ({len(action.content)} of "
+                                     f"{len(current)} characters left), so it was not proposed. "
+                                     "Describe one edit with FIND/ACTION/TEXT instead.")
+                if current.strip() == action.content.strip():
+                    raise ValueError(f"{action.path}: the change doesn't alter anything (maybe it's already there)")
+                diff = "".join(difflib.unified_diff(current.splitlines(True), action.content.splitlines(True),
+                                                    f"a/{action.path}", f"b/{action.path}"))
+                p.update(kind="mind", path=action.path, repo=repo, branch=branch, content=action.content,
+                         diff=diff, code=action.content, new_file=not current,
+                         source=f"{action.path} in {repo}@{branch} → pull request (you merge)")
+            elif action.project:
                 if not self.allow["projects"]:
                     return self._refuse("projects", p["label"])
                 proj = self.mind.project(action.project)
@@ -311,17 +384,62 @@ class Workspace:
             p["status"] = "rejected"
             self.audit("rejected", p)
             self.messages.append({"role": "user", "content": f"[Dustin rejected {p['label']}.]"})
-            self.emit("decision", id=pid, status="rejected")
+            self.emit("decision", pid=pid, status="rejected")
             self._save()
             return p
+        if p.get("kind") == "mind":
+            return self._send_mind(p)
         if self.running:
             raise ValueError(f"Wait: {self.running['label']} is still running (or press Stop).")
         p["status"] = "running"
         self.running = p
         self.audit("approved", p)
-        self.emit("decision", id=pid, status="running")
+        self.emit("decision", pid=pid, status="running")
         threading.Thread(target=self._run, args=(p,), daemon=True).start()
         return p
+
+    def _send_mind(self, p: dict) -> dict:
+        """Owner approved a mind change: hand it to the Liaison (which has the token) as a PR request."""
+        self.outbox.mkdir(parents=True, exist_ok=True)
+        req = {"id": p["id"], "repo": p["repo"], "branch": p["branch"], "path": p["path"], "content": p["content"],
+               "title": f"TASS: update {p['path']}",
+               "summary": f"TASS proposed this change in the workspace; Dustin approved it at {time.strftime('%H:%M')}.",
+               "approved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        tmp = self.outbox / f".{p['id']}.tmp"
+        tmp.write_text(json.dumps(req))
+        tmp.replace(self.outbox / f"{p['id']}.json")
+        p["status"] = "sent"
+        self.audit("approved", p)
+        self.emit("decision", pid=p["id"], status="sent")
+        self.emit("notice", text=f"Sent to the Liaison: it will open a pull request for {p['path']} (usually within 30 s).")
+        self._save()
+        return p
+
+    def _check_outbox(self):
+        for p in self.proposals.values():
+            if p.get("kind") != "mind" or p["status"] != "sent":
+                continue
+            res_path = self.outbox / f"{p['id']}.result.json"
+            if not res_path.exists():
+                continue
+            try:
+                res = json.loads(res_path.read_text("utf-8"))
+            except (OSError, ValueError):
+                continue
+            if res.get("ok"):
+                p["status"], p["pr_url"] = "pr opened", res["pr_url"]
+                self.audit("pr_opened", p, pr_url=res["pr_url"])
+                self.messages.append({"role": "user", "content":
+                                      f"[Your change to {p['path']} is now a pull request: {res['pr_url']}. "
+                                      "You'll think with it once Dustin merges it.]"})
+            else:
+                p["status"] = "pr failed"
+                self.audit("pr_failed", p, error=res.get("error"))
+                self.messages.append({"role": "user", "content": f"[Your change to {p['path']} could not become a "
+                                      f"pull request: {res.get('error')}]"})
+            self.emit("mind_pr", pid=p["id"], path=p["path"], ok=bool(res.get("ok")), url=res.get("pr_url"),
+                      error=res.get("error"))
+            self._save()
 
     def _install_project(self, p: dict) -> str:
         """Copy the mirrored project into shared/projects/<name>/ and return the code that runs its entry."""
@@ -351,7 +469,7 @@ class Workspace:
         p["status"] = "ran" if r["ok"] else "failed"
         self.audit(p["status"], p, seconds=r["seconds"], error=r["error"])
         text = r["text"][-3000:]
-        self.emit("result", id=p["id"], label=p["label"], ok=r["ok"], text=text, images=r["images"][:4],
+        self.emit("result", pid=p["id"], label=p["label"], ok=r["ok"], text=text, images=r["images"][:4],
                   error=r["error"], seconds=r["seconds"])
         summary = f"{p['label']}: {'ok' if r['ok'] else 'ERROR ' + str(r['error'])}"
         self.recent_runs = (self.recent_runs + [summary])[-10:]

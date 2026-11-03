@@ -16,6 +16,19 @@ You can end a reply with ONE action, on its own line at the very end:
   RUN: library/<file>#<n>       propose running cell n of a book
   RUN: projects/<name>          propose installing a project into our shared folder and running its entry file
   RUN: code                     propose your own code; put it in a ```python block right after this line
+  CHANGE MIND: mind/<file>      propose a change to one of your mind files. Do NOT rewrite the file: right after
+                                this line describe ONE edit, and the program applies it to the real file:
+                                  FIND: <one line copied exactly from that mind file>
+                                  ACTION: after | before | replace
+                                  <<<TEXT
+                                  <the new text>
+                                  TEXT>>>
+                                (Only for a brand-new mind file: put its whole text in a ```markdown block instead.)
+                                Dustin sees the difference and decides; if he approves it becomes a pull request
+                                on your repo, and you think with it once he merges.
+Separately, you may add any number of lines like this anywhere in a reply:
+  REMEMBER: <one short line>    save something worth keeping (a decision, a result, something about Dustin) to your
+                                memory. Your memory is shown to you every turn.
 Dustin approves or rejects every RUN. Code runs in the shared Python kernel with the shared folder as the
 working directory. Never say something ran, or what it printed, until you see its RESULT message.
 Talk like a teammate: short, concrete, and say what you want to try and why."""
@@ -23,13 +36,18 @@ Talk like a teammate: short, concrete, and say what you want to try and why."""
 
 @dataclass
 class Action:
-    kind: str          # "open" | "run"
+    kind: str          # "open" | "run" | "mind"
     book: str | None = None
     project: str | None = None
+    path: str | None = None       # mind file for "mind"
+    content: str | None = None    # whole new file (new files only)
+    edits: list | None = None     # FIND/ACTION/TEXT edits for an existing file
     cell: int | None = None
     code: str | None = None
 
     def label(self) -> str:
+        if self.kind == "mind":
+            return f"CHANGE MIND {self.path}"
         if self.kind == "open":
             return f"OPEN {self.book or 'projects/' + str(self.project)}"
         if self.project:
@@ -44,9 +62,33 @@ ACTION_RUN_CODE = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?code`?[^\n]*\n+\s*`
                              re.M | re.I | re.S)
 
 
+ACTION_MIND = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*\n+\s*```(?:markdown|md)?[ \t]*\n(.*?)\n```",
+                         re.M | re.I | re.S)
+ACTION_MIND_HEAD = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*$", re.M | re.I)
+REMEMBER = re.compile(r"^[ \t*_`>-]*REMEMBER[*_ ]*:[*_ ]*(.+?)[*_ ]*$", re.M | re.I)
+
+
+def parse_reply(reply: str) -> tuple[str, Action | None, list[str]]:
+    """(text to show, action, memories). REMEMBER lines are collected and removed from the text."""
+    memories = [m.group(1).strip() for m in REMEMBER.finditer(reply) if m.group(1).strip()]
+    text, action = parse_action(REMEMBER.sub("", reply))
+    return re.sub(r"\n{3,}", "\n\n", text).strip(), action, memories[:5]
+
+
 def parse_action(reply: str) -> tuple[str, Action | None]:
     """Split the reply into (text to show, action). The last action in the reply wins."""
     found = []
+    for m in ACTION_MIND_HEAD.finditer(reply):
+        body = reply[m.end():]
+        if re.search(r"(?im)^[ \t*_>-]*FIND[*_ ]*[:\-]", body):
+            from .edits import parse_edits
+            edits = parse_edits(body)[1]
+            if edits:
+                found.append((m.start(), len(reply), Action("mind", path=m.group(1), edits=edits)))
+                continue
+        full = ACTION_MIND.match(reply, m.start())
+        if full:
+            found.append((m.start(), full.end(), Action("mind", path=m.group(1), content=full.group(2).strip() + "\n")))
     for m in ACTION_RUN_CODE.finditer(reply):
         found.append((m.start(), m.end(), Action("run", code=m.group(1))))
     for m in ACTION_RUN_BOOK.finditer(reply):
@@ -67,14 +109,17 @@ def parse_action(reply: str) -> tuple[str, Action | None]:
 
 
 def build_system(mind_files: list[tuple[str, str]], catalog: list, listing: list[str],
-                 recent_runs: list[str], projects: list | None = None, allowed: dict | None = None) -> str:
-    parts = ["You are TASS. Your MIND is the set of files below, kept in Dustin's GitHub repo. "
-             "Dustin can change them at any time; always follow the latest version.\n"]
+                 recent_runs: list[str], projects: list | None = None, allowed: dict | None = None,
+                 identity: str = "", memory: str = "") -> str:
+    where = f" in your own GitHub repo ({identity})" if identity else " in Dustin's GitHub repo"
+    parts = [f"You are TASS. Your MIND is the set of files below, kept{where}. "
+             "Dustin can change them at any time, and you can propose changes too; always follow the latest version.\n"]
     if mind_files:
         for path, text in mind_files:
             parts.append(f"=== MIND: {path} ===\n{text.strip()}\n")
     else:
         parts.append("(Your mind folder is empty or not synced yet. Say so if it matters.)\n")
+    parts.append("YOUR MEMORY (things you chose to remember; newest last):\n" + (memory.strip() or "(empty so far)") + "\n")
     parts.append("You and Dustin share a workspace: a folder and a live Python (Jupyter) kernel. "
                  "You are building this environment together, as your shared space.\n")
     if catalog:
