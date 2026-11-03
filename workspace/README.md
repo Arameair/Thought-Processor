@@ -97,6 +97,19 @@ How it fits together:
 - **TASS's code never sees a secret**: the kernel only reads and writes files in `shared/discord/`.
 - The bridge repo is private, so `run.sh` fetches it with your `gh` login into `vendor/` (ignored by Git).
 
+## Skills TASS earns, and his own folder
+
+Some lessons teach a **skill**. When TASS has really run every step (from the audit log), the lesson in the Processor shows **✓ Learned** and a button **▶ Let TASS use it**:
+- off (default): each use is a card in the Workshop that you approve;
+- on: TASS uses it on his own. Every use is still in the audit log and the Workshop.
+
+| Skill | Lesson | What TASS can do |
+| --- | --- | --- |
+| Talk in Discord | `lessons/claude/01-talk-in-discord.md` | `SAY IN DISCORD: <words>` |
+| Improve yourself in your own folder | `lessons/claude/04-your-own-folder.md` | `CHANGE FILE: tass/<path>`: a pull request on **Arameair/Developmnt** `tass/`, which you merge. That is the only folder he may change (`TASS_OWN_FOLDER`). |
+
+In his folder TASS keeps an improvement log and writes **"Teach me" requests** (`tass/requests/`). ChatGPT, the team member, answers each with a lesson in `lessons/chatgpt/`, and TASS learns it with you.
+
 ## Direct TASS from GitHub
 
 Open an issue in **Arameair/TASS** with the label **`tass`**, or comment on one. Within about 30 seconds the Liaison hands it to the running TASS. He thinks, and his reply is posted back on the issue.

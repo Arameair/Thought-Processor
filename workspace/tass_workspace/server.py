@@ -44,6 +44,8 @@ def env(name: str, default: str) -> str:
 SKILLS = {
     "discord": {"title": "Talk in Discord", "lesson": "lessons/claude/01-talk-in-discord.md",
                 "action": "SAY IN DISCORD: <your words>"},
+    "own-folder": {"title": "Improve yourself in your own folder", "lesson": "lessons/claude/04-your-own-folder.md",
+                   "action": "CHANGE FILE: tass/<path>"},
 }
 
 
@@ -61,6 +63,10 @@ class Workspace:
                       "remember": True, "mind changes": True}
         self.outbox = Path(env("TASS_OUTBOX", "/shared/outbox"))
         self.inbox = Path(env("TASS_INBOX", "/shared/inbox"))
+        # TASS's own folder: one directory in one repo he may change (pull requests Dustin merges).
+        own = env("TASS_OWN_FOLDER", "Arameair/Developmnt@main:tass")
+        self.own_repo, _, rest = own.partition("@")
+        self.own_branch, _, self.own_dir = rest.partition(":")
         self.public_url = env("TASS_PUBLIC_URL", "http://127.0.0.1:8790").rstrip("/")
         self.studio = Studio(env("TASS_SHARED", "/workspace/shared"))   # messages from GitHub, written by the Liaison
         self._origin: dict | None = None                        # GitHub issue the current turn answers
@@ -186,6 +192,35 @@ class Workspace:
             return json.loads((self.kernel.shared / "discord" / "status.json").read_text("utf-8"))
         except (OSError, ValueError):
             return {}
+
+    def own_files(self) -> list[str]:
+        base = self.mind.files / self.own_dir
+        if not base.is_dir():
+            return []
+        return sorted(str(p.relative_to(self.mind.files)) for p in base.rglob("*") if p.is_file())
+
+    def own_file(self, path: str) -> tuple[str, str]:
+        path = path.strip().strip("/")
+        if ".." in path.split("/") or not path.startswith(self.own_dir + "/"):
+            raise ValueError(f"{path} is not in your own folder ({self.own_dir}/)")
+        f = self.mind.files / path
+        if not f.is_file():
+            raise ValueError(f"{path} doesn't exist yet. Files in your folder: {', '.join(self.own_files()) or 'none'}")
+        return path, f.read_text("utf-8", errors="replace")
+
+    def own_folder_section(self) -> str:
+        files = self.own_files()
+        lines = [f"YOUR OWN FOLDER: {self.own_dir}/ in {self.own_repo} (yours to improve yourself in; "
+                 "Claude and ChatGPT may suggest things there too). Files: " + (", ".join(files) or "none yet")]
+        if self.skill_learned("own-folder"):
+            lines.append(f"You LEARNED to change it. OPEN: {self.own_dir}/<file> to read a file, then propose a change with\n"
+                         f"  CHANGE FILE: {self.own_dir}/<file>\nand one FIND/ACTION/TEXT edit (a new file: its whole text in a "
+                         "``` block). It becomes a pull request Dustin merges. "
+                         + ("Dustin lets you open these pull requests without asking first."
+                            if self.skills_allowed.get("own-folder") else "Dustin approves it first."))
+        else:
+            lines.append(f"You can OPEN files there. To change them, first do the lesson {SKILLS['own-folder']['lesson']}.")
+        return "\n".join(lines)
 
     def skill_learned(self, name: str) -> bool:
         lesson = SKILLS[name]["lesson"]
@@ -383,6 +418,7 @@ class Workspace:
                 system += "\n\n" + self.studio.prompt_section(self.public_url)
                 system += "\n\n" + self.lessons_section()
                 system += "\n\n" + self.discord_section()
+                system += "\n\n" + self.own_folder_section()
                 system += (f"\n\nLINKS: Dustin can open any file in the shared folder in his browser at "
                            f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
                            "When he asks for a link, give that full address, and only for a file that is in the "
@@ -430,6 +466,17 @@ class Workspace:
                     if len(opened) >= MAX_OPENS_PER_TURN:
                         break
                     try:
+                        if action.book.startswith("tass/"):
+                            path, text = self.own_file(action.book)
+                            opened.append(path)
+                            self.messages.append({"role": "user", "content":
+                                                  f"[FILE {path} — your own folder in {self.own_repo}, you opened it]\n"
+                                                  f"{text[:6000]}\n[Now continue. To change it, use CHANGE FILE: {path} "
+                                                  "with one FIND/ACTION/TEXT edit"
+                                                  + ("" if self.skill_learned("own-folder") else
+                                                     " (once you've done the lesson about your own folder)") + ".]"})
+                            self.emit("book", path=path, title=path, cells=0, kind="file")
+                            continue
                         book = self.mind.book(action.book)
                         opened.append(book.path)
                         self.messages.append({"role": "user", "content":
@@ -487,11 +534,20 @@ class Workspace:
                     self._send_discord(p, via="skill allowed")
                     return
             elif action.kind == "mind":
-                if not self.allow["mind changes"]:
-                    return self._refuse("mind changes", p["label"])
-                man = self.mind.manifest()
-                rec = man.get("files", {}).get(action.path, {})
-                repo, branch = rec.get("repo") or man.get("repo"), rec.get("branch") or man.get("branch")
+                own = action.path.startswith("tass/")
+                if own:
+                    if not action.path.startswith(self.own_dir + "/") or ".." in action.path.split("/"):
+                        raise ValueError(f"{action.path} is outside your own folder ({self.own_dir}/)")
+                    if not self.skill_learned("own-folder"):
+                        raise ValueError("You haven't learned to change your own folder yet: do the lesson "
+                                         f"{SKILLS['own-folder']['lesson']} with Dustin first.")
+                    repo, branch = self.own_repo, self.own_branch
+                else:
+                    if not self.allow["mind changes"]:
+                        return self._refuse("mind changes", p["label"])
+                    man = self.mind.manifest()
+                    rec = man.get("files", {}).get(action.path, {})
+                    repo, branch = rec.get("repo") or man.get("repo"), rec.get("branch") or man.get("branch")
                 if not repo:
                     raise ValueError("Mind isn't synced from GitHub yet, so there's no repo to propose a change to.")
                 cur_path = self.mind.files / action.path
@@ -509,6 +565,8 @@ class Workspace:
                     raise ValueError(f"That would remove most of {action.path} ({len(action.content)} of "
                                      f"{len(current)} characters left), so it was not proposed. "
                                      "Describe one edit with FIND/ACTION/TEXT instead.")
+                if len(action.content.encode()) > 64000:
+                    raise ValueError(f"{action.path}: that's more than 64 KB; keep files small")
                 if current.strip() == action.content.strip():
                     raise ValueError(f"{action.path}: the change doesn't alter anything (maybe it's already there)")
                 diff = "".join(difflib.unified_diff(current.splitlines(True), action.content.splitlines(True),
@@ -551,6 +609,11 @@ class Workspace:
         self.proposals[p["id"]] = p
         self.audit("proposed", p)
         self.emit("proposal", proposal=p)
+        if p.get("kind") == "mind" and p["path"].startswith("tass/") and self.skills_allowed.get("own-folder"):
+            self.emit("notice", text=f"TASS is opening a pull request for {p['path']} on his own (you allowed this "
+                                     "skill). You still decide by merging it on GitHub.")
+            self._send_mind(p, via="skill allowed")
+            return
         if self.full_auto:
             if self.auto_streak >= self.auto_limit:
                 self.emit("notice", text=f"Full auto paused: {self.auto_limit} automatic runs in a row. "
@@ -586,7 +649,7 @@ class Workspace:
             self._save()
             return p
         if p.get("kind") == "mind":
-            return self._send_mind(p)
+            return self._send_mind(p, via=via)
         if p.get("kind") == "say":
             return self._send_discord(p, via=via)
         if self.running:
@@ -650,18 +713,21 @@ class Workspace:
         self.messages.append({"role": "user", "content": f"[DISCORD: your message was {'delivered' if ok else 'NOT delivered: ' + why}]"})
         self._save()
 
-    def _send_mind(self, p: dict) -> dict:
+    def _send_mind(self, p: dict, via: str = "workspace") -> dict:
         """Owner approved a mind change: hand it to the Liaison (which has the token) as a PR request."""
         self.outbox.mkdir(parents=True, exist_ok=True)
         req = {"id": p["id"], "repo": p["repo"], "branch": p["branch"], "path": p["path"], "content": p["content"],
                "title": f"TASS: update {p['path']}",
-               "summary": f"TASS proposed this change in the workspace; Dustin approved it at {time.strftime('%H:%M')}.",
+               "summary": (f"TASS proposed this change in the workspace; Dustin approved it at {time.strftime('%H:%M')}."
+                           if via != "skill allowed" else
+                           "TASS opened this on his own: Dustin allowed the skill “Improve yourself in your own folder”. "
+                           "Merging is still Dustin's decision."),
                "approved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
         tmp = self.outbox / f".{p['id']}.tmp"
         tmp.write_text(json.dumps(req))
         tmp.replace(self.outbox / f"{p['id']}.json")
         p["status"] = "sent"
-        self.audit("approved", p)
+        self.audit("approved", p, via=via)
         self.emit("decision", pid=p["id"], status="sent")
         self.emit("notice", text=f"Sent to the Liaison: it will open a pull request for {p['path']} (usually within 30 s).")
         self._save()

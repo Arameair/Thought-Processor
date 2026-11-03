@@ -49,7 +49,7 @@ class Action:
         if self.kind == "say":
             return "SAY IN DISCORD"
         if self.kind == "mind":
-            return f"CHANGE MIND {self.path}"
+            return f"CHANGE {'FILE' if (self.path or '').startswith('tass/') else 'MIND'} {self.path}"
         if self.kind == "open":
             return f"OPEN {self.book or 'projects/' + str(self.project)}"
         if self.project:
@@ -57,16 +57,17 @@ class Action:
         return f"RUN {self.book}#{self.cell}" if self.book else "RUN own code"
 
 
-ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+|lessons/[^\s`*]+|projects/[\w.\-]+)/?`?", re.M | re.I)
+ACTION_OPEN = re.compile(r"^[ \t*_`>-]*OPEN[*_ ]*:[*_ ]*`?(library/[^\s`*]+|lessons/[^\s`*]+|tass/[^\s`*]+|projects/[\w.\-]+)/?`?", re.M | re.I)
 ACTION_RUN_PROJECT = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?projects/([\w.\-]+)/?`?[ \t]*$", re.M | re.I)
 ACTION_RUN_BOOK = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?((?:library|lessons)/[^\s#`*]+)#(\d+)`?", re.M | re.I)
 ACTION_RUN_CODE = re.compile(r"^[ \t*_`>-]*RUN[*_ ]*:[*_ ]*`?code`?[^\n]*\n+\s*```(?:python|py)?\s*\n(.*?)\n```",
                              re.M | re.I | re.S)
 
 
-ACTION_MIND = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*\n+\s*```(?:markdown|md)?[ \t]*\n(.*?)\n```",
+# CHANGE MIND: mind/<file>.md, or (a learned skill) CHANGE FILE: tass/<path> for his own folder in Developmnt.
+ACTION_MIND = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?(?:MIND|FILE)[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md|tass/(?:[\w.\-]+/)*[\w.\-]+)`?[^\n]*\n+\s*```[\w+-]*[ \t]*\n(.*?)\n```",
                          re.M | re.I | re.S)
-ACTION_MIND_HEAD = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?MIND[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md)`?[^\n]*$", re.M | re.I)
+ACTION_MIND_HEAD = re.compile(r"^[ \t*_`>-]*CHANGE[ _-]?(?:MIND|FILE)[*_ ]*:[*_ ]*`?(mind/[\w.\-]+\.md|tass/(?:[\w.\-]+/)*[\w.\-]+)`?[^\n]*$", re.M | re.I)
 # A learned skill (lesson "Talk in Discord"): everything after the colon, to the end of the reply, is the message.
 ACTION_SAY = re.compile(r"^[ \t*_`>-]*SAY[ _-]+IN[ _-]+DISCORD[*_ ]*:[*_ ]*", re.M | re.I)
 REMEMBER = re.compile(r"^[ \t*_`>-]*REMEMBER[*_ ]*:[*_ ]*(.+?)[*_ ]*$", re.M | re.I)

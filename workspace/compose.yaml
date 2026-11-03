@@ -72,11 +72,11 @@ services:
       IDENTITY_LIAISON_CHAT_PULSE: "30"
       IDENTITY_LIAISON_OWNERS: ${LIAISON_OWNERS:-Arameair}
       # Mirror TASS's mind (his own repo, listed first) and the team's library + projects into ./mirror.
-      IDENTITY_LIAISON_SYNC_SOURCES: ${TASS_SOURCES:-Arameair/TASS@alpha:mind/*.md;Arameair/Developmnt:library/*,projects/*,lessons/*}
+      IDENTITY_LIAISON_SYNC_SOURCES: ${TASS_SOURCES:-Arameair/TASS@alpha:mind/*.md;Arameair/Developmnt:library/*,projects/*,lessons/*,tass/*}
       IDENTITY_LIAISON_SYNC_DEST: /shared/mirror
       # Mind changes TASS proposes and the owner approves in the workspace become pull requests here.
       IDENTITY_LIAISON_OUTBOX: /shared/outbox
-      IDENTITY_LIAISON_WRITE_ALLOW: ${TASS_MIND_WRITE:-Arameair/TASS@*:mind/*.md}
+      IDENTITY_LIAISON_WRITE_ALLOW: ${TASS_MIND_WRITE:-Arameair/TASS@*:mind/*.md;Arameair/Developmnt@main:tass/*}
       # Direct TASS from GitHub: issues labelled "tass" here go to the running TASS; replies come back.
       IDENTITY_LIAISON_DIRECT_REPOS: ${TASS_DIRECT_REPOS:-Arameair/TASS}
       IDENTITY_LIAISON_INBOX: /shared/inbox
@@ -118,6 +118,7 @@ services:
       TASS_THINKING: ${TASS_THINKING:-1}
       TASS_AUTO_REFLECT: ${TASS_AUTO_REFLECT:-1}
       TASS_MAX_TOKENS: ${TASS_MAX_TOKENS:-4096}
+      TASS_OWN_FOLDER: ${TASS_OWN_FOLDER:-Arameair/Developmnt@main:tass}   # the one folder TASS may change (PRs you merge)
     user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
     volumes:
       - ./shared:/workspace/shared       # your shared space with TASS (also visible from WSL)

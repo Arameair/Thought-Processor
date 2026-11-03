@@ -174,7 +174,8 @@ function diffHtml(d) {
 }
 function proposalCard(p) {
   if (p.kind === "mind") {
-    const el = add(chat, `<h4>TASS wants to change his mind: <code>${esc(p.path)}</code> <span class="tag">needs your OK</span></h4>
+    const what = p.path.startsWith("tass/") ? "change a file in his own folder" : "change his mind";
+    const el = add(chat, `<h4>TASS wants to ${what}: <code>${esc(p.path)}</code> <span class="tag">needs your OK</span></h4>
       <div class="muted">${esc(p.source)}${p.new_file ? " · new file" : ""}</div>
       <pre class="diff">${diffHtml(p.diff)}</pre>
       <div class="row"><button class="approve">Approve → open pull request</button><button class="reject">Reject</button>

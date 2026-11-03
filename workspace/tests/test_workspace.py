@@ -49,6 +49,11 @@ def make_mirror(root: Path):
     (files / "lessons/claude/README.md").write_text("# not a lesson\n")
     (files / "lessons/claude/01-talk-in-discord.md").write_text(
         "# Talk in Discord\nby: Claude\n\nSay hello.\n\n## Step 1\n```python\nprint('hello')\n```\n")
+    (files / "lessons/claude/04-your-own-folder.md").write_text(
+        "# Improve yourself in your own folder\nby: Claude\n\nAsk for lessons.\n\n## Step 1\n```python\nprint('looked')\n```\n")
+    (files / "tass/requests").mkdir(parents=True)
+    (files / "tass/improvement-log.md").write_text("# Improvement log\n\n## Log\n- 2026-11-03: did Discord\n")
+    (files / "tass/requests/README.md").write_text("# Teach me requests\n")
     (files / "projects/hello-tass").mkdir(parents=True)
     (files / "projects/hello-tass/project.md").write_text(
         "# Hello TASS\n\nA first project that greets us.\n\nentry: main.py\n")
@@ -531,6 +536,47 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual([q for q in st["proposals"] if q["status"] == "pending"], [])
         self.assertEqual(len(list((box / "outbox").glob("tass-*.txt"))), 1)
         self.post("/api/skill", {"name": "discord", "allow": False})
+        self.wait_for(lambda s: not s["status"]["busy"])
+
+    def test_own_folder_skill(self):
+        lesson = "lessons/claude/04-your-own-folder.md"
+        outbox = self.root / "outbox"
+        before = set(outbox.glob("*.json")) if outbox.exists() else set()
+        # Before the lesson: he can read his folder, but a change is refused.
+        self.post("/api/message", {"text": "TASS, look at your log"})
+        self.wait_for(lambda s: any(e["type"] == "notice" and "haven't learned to change your own folder" in e["text"]
+                                    for e in s["timeline"]))
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.assertEqual(set(outbox.glob("*.json")) if outbox.exists() else set(), before)
+        with open(self.root / "data/audit.jsonl", "a") as f:
+            f.write(json.dumps({"event": "ran", "label": f"RUN {lesson}#1", "source": f"{lesson} · cell 1"}) + "\n")
+        # Learned: the edit becomes a card for Dustin, aimed at Developmnt main.
+        self.post("/api/reset", {})
+        self.post("/api/message", {"text": "TASS, look at your log"})
+        st = self.wait_for(lambda s: s["proposals"])
+        p = st["proposals"][0]
+        self.assertEqual((p["kind"], p["path"], p["repo"], p["branch"]),
+                         ("mind", "tass/improvement-log.md", "Arameair/Developmnt", "main"))
+        self.assertIn("- 2026-11-03: learned my own folder", p["content"])
+        self.assertIn("- 2026-11-03: did Discord", p["content"])         # an edit, not a rewrite
+        self.wait_for(lambda s: not s["status"]["busy"])
+        self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
+        req = json.loads((outbox / f"{p['id']}.json").read_text())
+        self.assertEqual((req["repo"], req["branch"], req["path"]), ("Arameair/Developmnt", "main", "tass/improvement-log.md"))
+        # Nothing outside the folder, even when learned.
+        self.post("/api/reset", {})
+        self.post("/api/message", {"text": "TASS, escape your folder"})
+        self.wait_for(lambda s: any(e["type"] == "notice" and "outside your own folder" in e["text"] for e in s["timeline"]))
+        self.wait_for(lambda s: not s["status"]["busy"])
+        # Allowed: the pull request request goes out without a card (Dustin still merges on GitHub).
+        self.post("/api/skill", {"name": "own-folder", "allow": True})
+        self.post("/api/reset", {})
+        n = len(list(outbox.glob("*.json")))
+        self.post("/api/message", {"text": "TASS, look at your log"})
+        self.wait_for(lambda s: any(e["type"] == "notice" and "on his own" in e["text"] for e in s["timeline"]))
+        self.assertEqual(len(list(outbox.glob("*.json"))), n + 1)
+        self.assertEqual(self.get("/api/state")["proposals"], [])
+        self.post("/api/skill", {"name": "own-folder", "allow": False})
         self.wait_for(lambda s: not s["status"]["busy"])
 
     def test_foreign_origin_is_refused(self):

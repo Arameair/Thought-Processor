@@ -20,6 +20,13 @@ def script(messages):
         first_line = bullets[0][2:] if bullets else ""
     if "[BOOK lessons/claude/01-make-a-tool" in last:
         return ("Step 1 writes a tool file.", "Step 1 writes our tool into tools/.\nRUN: lessons/claude/01-make-a-tool-and-check-it.md#1")
+    if last.startswith("[FILE tass/improvement-log.md"):
+        return ("Add a line under Log.", "I'll add what I learned.\nCHANGE FILE: tass/improvement-log.md\n"
+                "FIND: ## Log\nACTION: after\n<<<TEXT\n- 2026-11-03: learned my own folder\nTEXT>>>")
+    if "look at your log" in last.lower():
+        return ("Open my log.", "OPEN: tass/improvement-log.md")
+    if "escape your folder" in last.lower():
+        return ("Try it.", "CHANGE FILE: tass/../mind/who-i-am.md\n```markdown\n# nope\n```")
     if "say hi in discord" in last.lower():
         return ("Dustin wants a hello in Discord.", "Sure.\nSAY IN DISCORD: Hi Dustin, TASS here in Discord!")
     if "let's do the lesson" in last.lower():
