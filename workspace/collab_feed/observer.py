@@ -121,12 +121,56 @@ class Publisher:
         return len(lines)
 
 
+def process_owner_briefs(brief_dir: Path, outbox: Path, issue: int) -> int:
+    """Route explicit user-reviewed task briefs; never copy chat history or code."""
+    if not brief_dir.is_dir():
+        return 0
+    done = 0
+    for request in sorted(brief_dir.glob("brief-*.json"))[:12]:
+        try:
+            raw = json.loads(request.read_text("utf-8"))
+            task = raw.get("task")
+            if (raw.get("kind") != "owner_task_brief" or
+                not isinstance(task, str) or not 1 <= len(task.strip()) <= 1200):
+                raise ValueError("not a valid owner task brief")
+            if SECRET.search(task):
+                raise ValueError("credential-like content is not allowed")
+            body = ("<!-- tass-atrium:owner-brief:v1 -->\n"
+                    "**Owner-shared build request** — shared explicitly from Atrium.\n\n"
+                    "### What Dustin wants to build\n\n"
+                    + task.strip().replace("\\r", " ").replace("\\x00", "") +
+                    "\n\n**Status:** Request only; no execution or test result is implied. "
+                    "TASS may propose one safe step, but the owner approves actual runs in Workshop.\n"
+                    "ChatGPT can review this thread when Dustin asks in ChatGPT.")
+            outbox.mkdir(parents=True, exist_ok=True)
+            rid = raw.get("id")
+            if not isinstance(rid, str) or not re.fullmatch(r"brief-[0-9]+-[0-9a-f]{10}", rid):
+                raise ValueError("invalid brief ID")
+            payload = {"id": rid, "type": "comment",
+                       "repo": ISSUE_REPO, "issue": issue, "body": body}
+            tmp = outbox / f".{rid}.tmp"
+            dest = outbox / f"{rid}.json"
+            tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, dest)
+            os.replace(request, request.with_name(request.name + ".queued"))
+            done += 1
+        except (OSError, ValueError, KeyError, TypeError):
+            # Bad requests do not reach GitHub; keep them for owner investigation
+            # without logging their text. Mark with a suffix so they don't retry forever.
+            try:
+                os.replace(request, request.with_name(request.name + ".rejected"))
+            except OSError:
+                pass
+    return done
+
+
 def main() -> None:
     cli = argparse.ArgumentParser(description="Opt-in evidence feed; no GitHub credentials")
     cli.add_argument("--issue", type=int, required=True)
     cli.add_argument("--data", type=Path, default=Path("/workspace/data"))
     cli.add_argument("--outbox", type=Path, default=Path("/shared/outbox"))
     cli.add_argument("--state", type=Path, default=Path("/collab/state"))
+    cli.add_argument("--briefs", type=Path, default=Path("/collab/requests"))
     cli.add_argument("--include-conversation-text", action="store_true",
                      help="Send bounded user/TASS messages too. Do not use for private conversations.")
     cli.add_argument("--once", action="store_true", help="One pulse for testing")
@@ -138,6 +182,9 @@ def main() -> None:
     publisher = Publisher(args.data, args.outbox, args.state, args.issue, share_text)
     print("Owner-started private GitHub activity feed; no old conversations exported.", flush=True)
     while True:
+        briefs = process_owner_briefs(args.briefs, args.outbox, args.issue)
+        if briefs:
+            print(f"Queued {briefs} owner-approved build briefs for Identity Liaison.", flush=True)
         count = publisher.pulse()
         if count:
             print(f"Queued {count} allowlisted activity records for Identity Liaison.", flush=True)
