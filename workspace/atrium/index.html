@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d18">
+  <meta name="playground-csrf" content="__PLAYGROUND_CSRF__">
+  <title>TASS / The Atrium — Companion Playground</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body data-scene="aurora">
+  <div class="ambient ambient-a" aria-hidden="true"></div>
+  <div class="ambient ambient-b" aria-hidden="true"></div>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="TASS Atrium">
+        <div class="brand-mark"><span>✳</span></div>
+        <div class="brand-copy"><b>TASS<span class="brand-slash"> / </span>ATRIUM</b><small>THE COLLABORATION PLAYGROUND</small></div>
+      </div>
+      <div class="top-mid"><span class="top-spark">✦</span> A space beyond the Workshop <span class="top-spark">✦</span></div>
+      <div class="top-actions">
+        <div class="connection" id="connection" role="status" aria-live="polite"><span class="status-dot"></span><span id="connectionLabel">Checking TASS...</span></div>
+        <a class="top-button" href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer" aria-label="Open original Workshop in another tab"><span aria-hidden="true">↗</span> Workshop</a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="side-section-label">YOUR SPACE <span>01 / 03</span></div>
+        <div class="identity-card">
+          <div class="identity-avatar" aria-hidden="true"><div class="avatar-core">T</div><div class="avatar-orbit"></div></div>
+          <div class="identity-text"><strong id="identityName">TASS</strong><span id="identitySubtitle">Local companion</span></div>
+          <span class="identity-flare" aria-hidden="true">✧</span>
+        </div>
+        <div class="side-caption">Where ideas become capabilities. The real TASS session stays in your existing Workshop.</div>
+
+        <div class="side-section-label nav-label">EXPLORE</div>
+        <nav class="nav-list" aria-label="Playground views">
+          <button class="nav-item is-active" data-view="cosmos"><span class="nav-symbol">◎</span><span>Living map</span><span class="nav-tail">01</span></button>
+          <button class="nav-item" data-view="ideas"><span class="nav-symbol">✦</span><span>Idea garden</span><span class="nav-tail">02</span></button>
+          <button class="nav-item" data-view="lab"><span class="nav-symbol">⬡</span><span>Experience lab</span><span class="nav-tail">03</span></button>
+        </nav>
+
+        <div class="side-section-label resource-label">CONNECTED RESOURCES</div>
+        <div class="resource-grid">
+          <div class="resource-chip"><span class="resource-icon">◈</span><div><small>Library books</small><b id="bookCount">—</b></div></div>
+          <div class="resource-chip"><span class="resource-icon">▤</span><div><small>Projects</small><b id="projectCount">—</b></div></div>
+        </div>
+        <div class="side-bottom">
+          <div class="muted-kicker">PRIVATE BY DESIGN</div>
+          <p>This page has no cloud assets. It talks only to your local playground server; GitHub remains in the existing TASS environment.</p>
+          <span class="local-chip">⌁ LOCALHOST ONLY</span>
+        </div>
+      </aside>
+
+      <main class="center-panel" id="centerPanel">
+        <div class="center-topline"><span class="eyebrow">OUR NEW CORNER OF THE UNIVERSE</span><span class="edition">EXPERIMENT 001 <span class="star">✳</span></span></div>
+        <section class="hero" aria-labelledby="heroTitle">
+          <span class="hero-orbit">✳</span>
+          <h1 id="heroTitle">What shall we <em>make</em> today?</h1>
+          <p>Ideas, tools, little worlds — built together, one real step at a time.</p>
+          <div class="hero-chips"><span>✧ Imagine</span><span>◇ Connect</span><span>✦ Create</span><span>◉ Verify</span></div>
+        </section>
+
+        <section class="view is-visible" id="view-cosmos" aria-label="Living map">
+          <div class="panel-heading"><div><span class="eyebrow">INTERACTIVE SYSTEM MAP</span><h2>The living constellation</h2></div><div class="panel-heading-meta"><span class="mini-dot"></span>Click any node to explore</div></div>
+          <div class="constellation" id="constellation">
+            <canvas id="stars" aria-hidden="true"></canvas>
+            <svg id="connections" viewBox="0 0 1000 530" preserveAspectRatio="none" aria-hidden="true">
+              <path class="orbital orbital-one" d="M165 275 Q350 47 650 155 T 875 310" />
+              <path class="orbital orbital-two" d="M170 370 Q490 490 790 220" />
+              <path class="link link-identity" d="M500 268 L218 144" />
+              <path class="link link-model" d="M500 268 L757 138" />
+              <path class="link link-library" d="M500 268 L152 363" />
+              <path class="link link-projects" d="M500 268 L773 370" />
+              <path class="link link-workshop" d="M500 268 L510 472" />
+            </svg>
+            <div class="center-sun" aria-hidden="true"><div class="sun-ring ring-one"></div><div class="sun-ring ring-two"></div><div class="sun-glow"></div><div class="sun-letter">T</div><div class="sun-label">TASS</div></div>
+            <button class="node node-identity" data-node="identity" aria-label="Explore Identity"><span class="node-icon">◈</span><span class="node-text">Identity<small>Authority</small></span></button>
+            <button class="node node-model" data-node="model" aria-label="Explore Local Model"><span class="node-icon">✶</span><span class="node-text">Local model<small>Thinking</small></span></button>
+            <button class="node node-library" data-node="library" aria-label="Explore Library"><span class="node-icon">▤</span><span class="node-text">Library<small>Abilities</small></span></button>
+            <button class="node node-projects" data-node="projects" aria-label="Explore Projects"><span class="node-icon">⬡</span><span class="node-text">Projects<small>Builds</small></span></button>
+            <button class="node node-workshop" data-node="workshop" aria-label="Explore Workshop"><span class="node-icon">◎</span><span class="node-text">Workshop<small>Execution</small></span></button>
+            <span class="constellation-label top-left">DRAG IDEAS INTO REALITY</span>
+            <span class="constellation-label bottom-right">REPRESENTATIVE MAP · VERIFIED STATE IN INSPECTOR</span>
+          </div>
+          <div class="node-inspector" id="nodeInspector"><div class="inspector-badge" id="inspectorIcon">✳</div><div class="inspector-text"><strong id="inspectorTitle">Select a connection</strong><p id="inspectorBody">Explore how TASS, Identity, the model, the library and the Workshop fit together.</p></div><span class="inspector-state" id="inspectorState">MAP</span></div>
+        </section>
+
+        <section class="view" id="view-ideas" aria-label="Idea garden">
+          <div class="panel-heading"><div><span class="eyebrow">A NOTEBOOK THAT FEELS ALIVE</span><h2>Plant an idea</h2></div><span class="garden-count" id="gardenCount">0 ideas</span></div>
+          <p class="section-description">These ideas stay in this browser session until you explicitly send one to TASS or export them as a file.</p>
+          <form class="idea-form" id="ideaForm"><label for="ideaInput" class="sr-only">Your idea</label><input id="ideaInput" maxlength="240" placeholder="A little tool, a new room, a curious question..."><button class="primary-btn" type="submit">Plant idea <span>↗</span></button></form>
+          <div id="ideaCards" class="idea-grid"></div>
+          <div class="garden-actions"><button type="button" class="subtle-btn" id="exportIdeas">⇩ Export ideas as JSON</button><button type="button" class="subtle-btn" id="clearIdeas">Clear garden</button></div>
+        </section>
+
+        <section class="view" id="view-lab" aria-label="Experience lab">
+          <div class="panel-heading"><div><span class="eyebrow">A TINY STUDIO FOR POSSIBILITIES</span><h2>Change the atmosphere</h2></div><span class="edition">NO MODEL OR CODE EXECUTION</span></div>
+          <p class="section-description">This part is a working browser-only experiment. Design a look, explore the changing environment, and send TASS an idea about it.</p>
+          <div class="scene-choices" id="sceneChoices"><button class="scene-card chosen" type="button" data-scene="aurora"><span class="scene-disc aurora-disc"></span><b>Aurora</b><small>Electric & alive</small></button><button class="scene-card" type="button" data-scene="blueprint"><span class="scene-disc blueprint-disc"></span><b>Blueprint</b><small>Draw the system</small></button><button class="scene-card" type="button" data-scene="ember"><span class="scene-disc ember-disc"></span><b>Afterglow</b><small>Warm & creative</small></button></div>
+          <div class="scene-preview"><span class="eyebrow">LIVE LOCAL PREVIEW</span><div class="preview-horizon"><div class="preview-moon"></div><div class="preview-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="preview-message">OUR WORLD, ONE PIECE AT A TIME</div></div></div>
+          <button id="sendScene" class="primary-btn" type="button">Describe this look to TASS <span>↗</span></button>
+        </section>
+
+        <section class="inspiration" aria-label="Things to try">
+          <div class="inspiration-top"><div><span class="eyebrow">FIRST MISSIONS</span><h3>Start with a spark</h3></div><span class="inspiration-hint">Click to draft · nothing runs automatically</span></div>
+          <div class="mission-cards">
+            <button class="mission" data-prompt="TASS, let's design a small interactive homepage for our shared space. Tell me your first step and propose only one safe action."><span class="mission-emoji">✹</span><span><b>Build our first room</b><small>Turn an idea into a page</small></span><span class="mission-arrow">↗</span></button>
+            <button class="mission" data-prompt="TASS, tell me what library books and projects you can really see right now, and which one could help us create something visual."><span class="mission-emoji">▤</span><span><b>Explore your abilities</b><small>See the real tools available</small></span><span class="mission-arrow">↗</span></button>
+            <button class="mission" data-prompt="TASS, propose a safe, reusable way to show a local page in my Windows browser. Explain what you can verify and what you still need from the Workshop."><span class="mission-emoji">◇</span><span><b>Open a new window</b><small>Bridge ideas to the desktop</small></span><span class="mission-arrow">↗</span></button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="conversation-panel" aria-label="Live TASS conversation">
+        <div class="conversation-heading"><div class="eyebrow">THE CONVERSATION ROOM</div><div class="conversation-headline"><h2>Talk to TASS<span class="talk-star"> ✳</span></h2><span class="reply-marker" id="chatMode">LOCAL</span></div><p>The same mind, another window.</p></div>
+        <div class="chat-stream" id="chatStream" aria-live="polite" aria-relevant="additions text"><div class="welcome-message"><span class="sparkle">✧</span><b>The conversation lives here.</b><p>When your Workshop is running, this panel connects to that very same TASS. Until then, explore the map and build ideas without pretending a model is replying.</p></div></div>
+        <div class="pending-review" id="pendingReview" hidden><span>◉</span><div><b id="pendingCount">1 action needs review</b><small>Approve or reject in the original Workshop.</small></div><a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer">Review ↗</a></div>
+        <div class="composer-area"><div class="composer-hint" id="composerHint">Checking for your running TASS...</div><form id="chatForm" class="chat-form"><label class="sr-only" for="messageInput">Message for TASS</label><textarea id="messageInput" maxlength="4000" rows="2" placeholder="Ask TASS to imagine something..." spellcheck="true"></textarea><div class="composer-controls"><span>↵ Send · ⇧↵ New line</span><button class="send-button" id="sendButton" type="submit" disabled aria-label="Send message">➤</button></div></form></div>
+        <div class="activity-panel"><div class="activity-heading"><span class="eyebrow">LIVE SIGNALS</span><span id="signalLabel">NOT CONNECTED</span></div><div id="activityStream" class="activity-stream"><div class="quiet-activity">◌ Awaiting live events from the Workshop.</div></div></div>
+      </aside>
+    </div>
+    <footer class="footer"><span>✧ Built for curious humans and growing local companions.</span><span><b>NO FAKE REPLIES.</b> &nbsp; REAL EXECUTION REQUIRES WORKSHOP APPROVAL.</span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
