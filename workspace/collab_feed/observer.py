@@ -138,7 +138,7 @@ def process_owner_briefs(brief_dir: Path, outbox: Path, issue: int) -> int:
             body = ("<!-- tass-atrium:owner-brief:v1 -->\n"
                     "**Owner-shared build request** — shared explicitly from Atrium.\n\n"
                     "### What Dustin wants to build\n\n"
-                    + task.strip().replace("\\r", " ").replace("\\x00", "") +
+                    + task.strip().replace("\r", " ").replace("\x00", "") +
                     "\n\n**Status:** Request only; no execution or test result is implied. "
                     "TASS may propose one safe step, but the owner approves actual runs in Workshop.\n"
                     "ChatGPT can review this thread when Dustin asks in ChatGPT.")
