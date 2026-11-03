@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import socket
 import sys
@@ -78,7 +79,8 @@ def safe_status(status: dict) -> dict:
         "mind": {
             "synced_at": mind.get("synced_at"),
             "mind": [{"path": str(x.get("path", ""))[:150]} for x in (mind.get("mind") or [])[:30] if isinstance(x, dict)],
-            "library": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120]}
+            "library": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120],
+                         "cells": x.get("cells") if isinstance(x.get("cells"), int) and 0 <= x["cells"] <= 200 else None}
                         for x in (mind.get("library") or [])[:30] if isinstance(x, dict)],
             "projects": [{"path": str(x.get("path", ""))[:150], "title": str(x.get("title", ""))[:120]}
                          for x in (mind.get("projects") or [])[:30] if isinstance(x, dict)],
@@ -98,6 +100,31 @@ def safe_state(raw: dict) -> dict:
             for p in (proposals or [])[:30] if isinstance(p, dict)
         ],
     }
+
+
+def safe_evidence(raw) -> list[dict]:
+    """Only executor outcome records, without code, stdout, memory or secrets."""
+    if not isinstance(raw, list):
+        return []
+    evidence = []
+    for entry in raw[-150:]:
+        if not isinstance(entry, dict) or entry.get("event") not in ("ran", "failed"):
+            continue
+        label = str(entry.get("label") or "")
+        source = str(entry.get("source") or "")
+        match = re.search(r"(library/[\\w.\\-]+\\.(?:md|ipynb))#(\\d+)", label)
+        if not match:
+            match = re.search(r"(library/[\\w.\\-]+\\.(?:md|ipynb))\\s*·\\s*cell\\s*(\\d+)", source)
+        if not match:
+            continue
+        digest = entry.get("code_sha256")
+        evidence.append({
+            "book": match.group(1), "cell": int(match.group(2)),
+            "outcome": "pass" if entry["event"] == "ran" else "fail",
+            "sha256": digest[:12] if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None,
+            "at": str(entry.get("at", ""))[:25],
+        })
+    return evidence[-100:]
 
 
 def create_handler(backend_port: int, csrf: str, server_port: int):
@@ -178,6 +205,13 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                         "identity": "not confirmed",
                         "next_step": "Check that the Workshop opens at http://127.0.0.1:8790/ and inspect its existing service logs."
                     })
+            if path == "/bridge/evidence":
+                try:
+                    with self._upstream("/api/audit") as response:
+                        body = response.read(200_000)
+                    return self._json(200, {"records": safe_evidence(json.loads(body))})
+                except (OSError, ValueError, HTTPError, URLError):
+                    return self._json(503, {"error": "Workshop audit not available"})
             if path == "/bridge/state":
                 try:
                     with self._upstream("/api/state") as response:
