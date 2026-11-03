@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const csrf = document.querySelector('meta[name="playground-csrf"]').content;
 const session = {
-  ready:false, busy:false, lastId:0, seen:new Set(), started:false, eventStream:null,
+  ready:false, busy:false, fullAuto:false, lastId:0, seen:new Set(), started:false, eventStream:null,
   request:'', requestStart:Infinity, asked:false, answered:false, proposed:false, executed:false,
   library:[], audit:[], streaming:null, shareAvailable:false,
 };
@@ -11,11 +11,11 @@ function notify(message) {
   clearTimeout(notify.timeout); notify.timeout=setTimeout(()=>node.hidden=true,4800);
 }
 function renderStatus() {
-  $('modelStatus').textContent=session.ready ? (session.busy?'◌ TASS is working':'● TASS connected') : '○ TASS unavailable';
+  $('modelStatus').textContent=session.ready ? (session.fullAuto?'⚠ FULL AUTO IS ON':session.busy?'◌ TASS is working':'● TASS connected') : '○ TASS unavailable';
   $('modelStatus').classList.toggle('live',session.ready);
   $('modelStatus').classList.toggle('offline',!session.ready);
-  $('askTass').disabled=!session.ready || session.busy;
-  $('streamStatus').textContent=session.ready ? (session.busy?'TASS is thinking':'Listening for real results') : 'No live model — work is not simulated';
+  $('askTass').disabled=!session.ready || session.busy || session.fullAuto;
+  $('streamStatus').textContent=session.fullAuto?'Disable Full Auto in Workshop before building':session.ready ? (session.busy?'TASS is thinking':'Listening for real results') : 'No live model — work is not simulated';
 }
 function updateProgress() {
   const flags={asked:session.asked,answered:session.answered,proposed:session.proposed,executed:session.executed};
@@ -118,7 +118,7 @@ async function poll() {
     const res=await fetch('/bridge/state',{cache:'no-store'});
     if(!res.ok)throw Error('Workshop unreachable');
     const data=await res.json();const stat=data.status||{};
-    session.ready=stat.model_ok===true;session.busy=stat.busy===true;
+    session.ready=stat.model_ok===true;session.busy=stat.busy===true;session.fullAuto=stat.full_auto===true;
     session.library=stat.mind?.library||[];
     renderStatus();renderProposals(data.proposals);
     if(!session.started) {
@@ -153,6 +153,7 @@ async function askTass(ev) {
   if(!task)return notify('Describe one thing you would like to build.');
   if(!session.ready)return notify('TASS is offline; open the Workshop before sending.');
   if(session.busy)return notify('TASS is already working on another request.');
+  if(session.fullAuto)return notify('Full Auto is enabled. Turn it off in Workshop so you can approve code first.');
   $('askTass').disabled=true;
   const message='TASS, I want to build this with you: '+task+
     '\nPlease tell me what existing library or project ability could help, and propose ONE concrete, safe step that I can review. Do not execute code without my approval. Do not claim work was done until there is a real Workshop result.';
