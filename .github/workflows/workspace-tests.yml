@@ -19,6 +19,10 @@ jobs:
       - name: Tests (fake model + real Jupyter kernel)
         working-directory: workspace
         run: python -m unittest discover -s tests -v
+      - name: Atrium bridge tests (simulated TASS)
+        run: python -m unittest discover -s workspace/atrium/tests -v
+      - name: Atrium standalone container builds
+        run: docker build -t tass-atrium:ci workspace/atrium
       - name: Workspace image builds and starts
         working-directory: workspace
         run: |
