@@ -112,9 +112,9 @@ def safe_evidence(raw) -> list[dict]:
             continue
         label = str(entry.get("label") or "")
         source = str(entry.get("source") or "")
-        match = re.search(r"(library/[\\w.\\-]+\\.(?:md|ipynb))#(\\d+)", label)
+        match = re.search(r"(library/[\w.\-]+\.(?:md|ipynb))#(\d+)", label)
         if not match:
-            match = re.search(r"(library/[\\w.\\-]+\\.(?:md|ipynb))\\s*·\\s*cell\\s*(\\d+)", source)
+            match = re.search(r"(library/[\w.\-]+\.(?:md|ipynb))\s*·\s*cell\s*(\d+)", source)
         if not match:
             continue
         digest = entry.get("code_sha256")
