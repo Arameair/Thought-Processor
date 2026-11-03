@@ -189,10 +189,10 @@ function render(ev, replay) {
     case "book": step("book", ev.kind === "project" ? "Opened project" : "Opened book",
       `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
     case "proposal": proposalCard(ev.proposal); break;
-    case "decision": { const el = $("p-" + ev.id); if (el) settle(el, ev.status);
+    case "decision": { const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.status);
       $("stop").style.display = ev.status === "running" ? "" : "none"; break; }
     case "result": {
-      const el = $("p-" + ev.id); if (el) settle(el, ev.ok ? "ran" : "failed");
+      const el = $("p-" + (ev.pid || ev.id)); if (el) settle(el, ev.ok ? "ran" : "failed");
       $("stop").style.display = "none"; refresh();
       const imgs = (ev.images || []).map(b => `<img src="data:image/png;base64,${b}">`).join("");
       add(chat, `<h4>${ev.ok ? "✓" : "✗"} Result · ${esc(ev.label)} <span class="muted">${ev.seconds}s</span></h4>

@@ -105,6 +105,30 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual((a.kind, a.project), ("open", "hello-tass"))
 
 
+class RestartTests(unittest.TestCase):
+    def test_starts_with_a_saved_timeline_from_an_older_version(self):
+        # Before the fix, decision/result events saved a proposal id (text) as "id", and the next start crashed.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            make_mirror(root / "mirror")
+            (root / "data").mkdir()
+            (root / "data/timeline.json").write_text(json.dumps([
+                {"id": 1, "type": "user", "text": "hi"}, {"id": "a1b2c3d4", "type": "decision", "status": "running"},
+                {"id": 7, "type": "reply", "text": "ok"}]))
+            old = dict(os.environ)
+            os.environ.update(TASS_MIRROR=str(root / "mirror"), TASS_SHARED=str(root / "shared"),
+                              TASS_DATA=str(root / "data"), TASS_JUPYTER="0")
+            try:
+                from tass_workspace.server import Workspace
+                ws = Workspace()
+                self.assertEqual(ws.next_id, 8)
+                ev = ws.emit("decision", pid="ffff0000", status="ran", id="should-not-win")
+                self.assertEqual((ev["id"], ev["pid"]), (8, "ffff0000"))
+            finally:
+                os.environ.clear()
+                os.environ.update(old)
+
+
 class EndToEndTests(unittest.TestCase):
     """Real server + real (private) Jupyter kernel + scripted fake model."""
 
@@ -192,8 +216,8 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(p["files"], ["data/notes.txt", "main.py", "project.md"])
         self.assertIn("print('Hello from hello-tass", p["code"])
         self.post("/api/proposal", {"id": p["id"], "decision": "approve"})
-        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == p["id"] for e in s["timeline"]))
-        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == p["id"])
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e.get("pid") == p["id"] for e in s["timeline"]))
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e.get("pid") == p["id"])
         self.assertTrue(res["ok"], res)
         self.assertIn("Hello from hello-tass in hello-tass", res["text"])        # ran inside its folder
         dest = self.root / "shared/projects/hello-tass"
@@ -219,13 +243,13 @@ class EndToEndTests(unittest.TestCase):
         self.post("/api/proposal", {"id": pid, "decision": "approve"})
         self.wait_for(lambda s: s["status"]["running"])
         self.post("/api/stop", {})
-        st = self.wait_for(lambda s: any(e["type"] == "result" and e["id"] == pid for e in s["timeline"]), 30)
-        res = next(e for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)
+        st = self.wait_for(lambda s: any(e["type"] == "result" and e.get("pid") == pid for e in s["timeline"]), 30)
+        res = next(e for e in st["timeline"] if e["type"] == "result" and e.get("pid") == pid)
         self.assertFalse(res["ok"])
         self.assertIn("KeyboardInterrupt", res["error"] or res["text"])
         time.sleep(1.5)
         st = self.get("/api/state")
-        after = st["timeline"][[e.get("id") for e in st["timeline"]].index(next(e["id"] for e in st["timeline"] if e["type"] == "result" and e["id"] == pid)):]
+        after = st["timeline"][[e.get("id") for e in st["timeline"]].index(next(e["id"] for e in st["timeline"] if e["type"] == "result" and e.get("pid") == pid)):]
         self.assertFalse(any(e["type"] == "spark" and e.get("kind") == "result" for e in after))
         self.post("/api/settings", {"autonomy": True})
 

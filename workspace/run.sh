@@ -100,7 +100,17 @@ if "${DOCKER[@]}" ps --format '{{.Names}}' | grep -q '^identity-liaison-'; then
 fi
 
 echo "Building and starting… (first time: downloads llama.cpp + JupyterLab, give it a few minutes)"
-dc up -d --build --wait
+if ! dc up -d --build --wait; then
+  echo
+  echo "Something didn't start. Last lines from the workspace:"
+  "${DOCKER[@]}" logs --tail 25 tass-workspace-workspace-1 2>&1 || true
+  echo "Paste this to Claude, or run  ./run.sh logs  for everything."
+  exit 1
+fi
+if ! curl -s -m 5 -o /dev/null "http://127.0.0.1:${TASS_PORT:-8790}/api/status"; then
+  echo "The page isn't answering on 127.0.0.1:${TASS_PORT:-8790} yet. Try again in a moment, or run  ./run.sh logs"
+  exit 1
+fi
 echo
 echo "Ready. Open:  http://127.0.0.1:${TASS_PORT:-8790}"
 echo "  JupyterLab:  use the 'Open JupyterLab' button on that page (it carries the login token)"
