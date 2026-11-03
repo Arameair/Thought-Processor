@@ -136,6 +136,7 @@ services:
       context: ./atrium
     image: tass-atrium:local
     init: true
+    user: "${TASS_UID:-1000}:${TASS_GID:-1000}"
     depends_on:
       workspace:
         condition: service_healthy
