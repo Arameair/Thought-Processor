@@ -51,6 +51,7 @@ var identityTestMention = regexp.MustCompile(`(?i)(^|[^[:alnum:]_-])@identity-te
 const MemoryKeep = 200
 
 type Config struct {
+	ChatOnly   bool          // forced chat-only (TASS_CHAT_ONLY=on): no actions, tasks or pulse, whatever the owner's switch
 	DataDir    string        // local home: tass.md, tass.base.md, identity-policy.json, state.json, logs
 	Identity   string        // owner/repo@branch:path of Identity's policy
 	Label      string        // issues with this label are messages to TASS
@@ -799,6 +800,9 @@ func (c *Core) Say(text string) (string, error) {
 
 // SubmitTask queues work for the coordination pulse (it runs on a pulse, not right away).
 func (c *Core) SubmitTask(text string) (string, error) {
+	if c.chatOnly() {
+		return "", errors.New("CHAT_ONLY: turn Autonomous on (page switch) to give the pulse tasks")
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", errors.New("empty task")
@@ -823,6 +827,9 @@ func (c *Core) SubmitTask(text string) (string, error) {
 // Start/Resume turn the pulse setting ON and Pause turns it off, so the
 // pulse stays the way the owner left it across restarts. Step runs one tick and changes no setting.
 func (c *Core) PulseControl(action string) (map[string]any, error) {
+	if c.chatOnly() && action != "pause" {
+		return nil, errors.New("CHAT_ONLY: turn Autonomous on (page switch) to run the work pulse")
+	}
 	out, err := c.engine.PulseControl(action)
 	if err == nil && c.cfg.IdentitySvc != nil && action != "step" {
 		s := c.GetSettings()
@@ -993,8 +1000,8 @@ func (c *Core) Answer(m Incoming) {
 
 	id := engine.NewRequestID()
 	actions := Actions
-	if lessonContext != "" {
-		// Lesson retrieval cannot select any executable tool, even a read-entity tool.
+	if lessonContext != "" || c.chatOnly() {
+		// Lesson retrieval and chat-only mode offer no executable tool, not even a read-entity tool.
 		actions = nil
 	}
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
@@ -1029,30 +1036,34 @@ func (c *Core) Answer(m Incoming) {
 	// The proposed action runs only if Identity allows it at this moment.
 	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
 	if prop.Action != "NONE" {
-		if lessonContext != "" {
+		if c.chatOnly() {
+			out = engine.Outcome{Status: "NOT_AUTHORIZED",
+				Detail:   "CHAT_ONLY: model-proposed actions run only while the owner has Autonomous on",
+				Executor: "thought-processor"}
+		} else if lessonContext != "" {
 			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: "reference-only GitHub lesson: no execution",
 				Executor: "thought-processor"}
 		} else {
-		// A model proposal is never an authorization. Independently require the
-		// matching, persisted, locked numeric prediction before the Identity check.
-		digest, hashErr := hex.DecodeString(prop.Prediction.SHA256)
-		if prop.Prediction.State != "LOCKED" || prop.Prediction.Value == nil ||
-			prop.Prediction.LockedAt.IsZero() || hashErr != nil || len(digest) != sha256.Size {
-			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: "action refused: prediction not locked with a valid digest",
-				Executor: "thought-processor"}
-		} else if ok, why := c.allowedNow(identity.ReadTass); !ok {
-			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: why, Executor: "thought-processor", Authorized: why}
-		} else {
-			c.fileMu.Lock()
-			doc, _ := c.read("tass.md")
-			c.fileMu.Unlock()
-			v, err := measure(prop.Action, doc)
-			out = engine.Outcome{Status: "EXECUTED", Value: &v, Executor: "thought-processor (read-only, local tass.md)",
-				ExecutedAt: c.now().UTC(), Authorized: why, Detail: prop.Action + " on tass.md (" + hash(doc) + ")"}
-			if err != nil {
-				out = engine.Outcome{Status: "FAILED", Detail: err.Error(), Executor: "thought-processor", Authorized: why}
+			// A model proposal is never an authorization. Independently require the
+			// matching, persisted, locked numeric prediction before the Identity check.
+			digest, hashErr := hex.DecodeString(prop.Prediction.SHA256)
+			if prop.Prediction.State != "LOCKED" || prop.Prediction.Value == nil ||
+				prop.Prediction.LockedAt.IsZero() || hashErr != nil || len(digest) != sha256.Size {
+				out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: "action refused: prediction not locked with a valid digest",
+					Executor: "thought-processor"}
+			} else if ok, why := c.allowedNow(identity.ReadTass); !ok {
+				out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: why, Executor: "thought-processor", Authorized: why}
+			} else {
+				c.fileMu.Lock()
+				doc, _ := c.read("tass.md")
+				c.fileMu.Unlock()
+				v, err := measure(prop.Action, doc)
+				out = engine.Outcome{Status: "EXECUTED", Value: &v, Executor: "thought-processor (read-only, local tass.md)",
+					ExecutedAt: c.now().UTC(), Authorized: why, Detail: prop.Action + " on tass.md (" + hash(doc) + ")"}
+				if err != nil {
+					out = engine.Outcome{Status: "FAILED", Detail: err.Error(), Executor: "thought-processor", Authorized: why}
+				}
 			}
-		}
 		} // only a normal separately authorized action may reach the executor
 	}
 	if done, err := c.engine.FinishCycle(id, out); err != nil {
@@ -1063,8 +1074,10 @@ func (c *Core) Answer(m Incoming) {
 	c.keepCycle(cy)
 
 	text := strings.TrimSpace(prop.Reply)
-	if mm := nowRe.FindStringSubmatch(text); mm != nil {
-		_ = c.write("now.txt", mm[1]+"\n")
+	if !c.chatOnly() {
+		if mm := nowRe.FindStringSubmatch(text); mm != nil {
+			_ = c.write("now.txt", mm[1]+"\n")
+		}
 	}
 	text = strings.TrimSpace(nowRe.ReplaceAllString(rememberRe.ReplaceAllString(text, ""), ""))
 	remember := strings.TrimSpace(prop.Remember)
@@ -1073,7 +1086,7 @@ func (c *Core) Answer(m Incoming) {
 			remember = mm[1]
 		}
 	}
-	if remember != "" {
+	if remember != "" && !c.chatOnly() {
 		c.addMemory(remember, id, m.From)
 		c.event("sync", "TASS noted in his memory journal: "+remember)
 	}
@@ -1182,6 +1195,7 @@ func (c *Core) recentMemories(n int) []Memory {
 //	UNKNOWN  (shown by callers that can't reach the core at all)
 type Health struct {
 	State        string    `json:"state"`
+	ActionMode   string    `json:"action_mode"` // CHAT_ONLY until Issue #50 integrity gates verified
 	Reasons      []string  `json:"reasons,omitempty"`
 	Version      string    `json:"version"`
 	EngineUp     bool      `json:"engine_reachable"`
@@ -1199,7 +1213,10 @@ func (c *Core) Health(version string) Health {
 	valid, why := c.allowedNow(identity.ModelRequest)
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending}
+		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending, ActionMode: "LEGACY_UNVERIFIED"}
+	if c.chatOnly() {
+		h.ActionMode = "CHAT_ONLY"
+	}
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {

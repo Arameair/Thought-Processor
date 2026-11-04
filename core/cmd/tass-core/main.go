@@ -102,6 +102,13 @@ func main() {
 			log.Fatal(err)
 		}
 		cfg.IdentitySvc = ids
+		// Chat-only unless the owner turns Autonomous on (page switch, kept in settings.json).
+		// Issue #50's checks (same cycle ID, locked prediction with digest) now guard every action
+		// either way. TASS_CHAT_ONLY=on forces chat-only whatever the switch says.
+		cfg.ChatOnly = strings.EqualFold(os.Getenv("TASS_CHAT_ONLY"), "on")
+		if cfg.ChatOnly {
+			log.Printf("CHAT_ONLY forced (TASS_CHAT_ONLY=on): no model actions, tasks or work pulse")
+		}
 		cfg.Identity = "tass-identity at " + u
 		// GitHub only when the owner set a repository for THIS installation (nothing is built in).
 		cfg.Repo = strings.TrimSpace(os.Getenv("TASS_REPO"))

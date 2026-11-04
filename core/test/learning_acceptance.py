@@ -31,8 +31,12 @@ def gh_put(p, text):
     urllib.request.urlopen(r).read()
 
 
-def lessons():
+def all_lessons():
     return {l["path"]: l for l in (status().get("learning") or {}).get("lessons") or []}
+
+
+def lessons():  # the Markdown lessons the app teaches (notebook lessons run in JupyterLab)
+    return {p: l for p, l in all_lessons().items() if p.endswith(".md")}
 
 
 def main():
@@ -62,29 +66,27 @@ def main():
     check("pulse setting off: no lessons looked at, pulse PAUSED",
           not any("git/trees" in x for x in gh_log()["requests"]) and status()["pulse"]["control"] == "PAUSED", status()["pulse"]["control"])
 
-    code, r = core_post("/api/settings", {"pulse": True, "learn": True})
-    check("turn the pulse setting ON", code == 200 and r["pulse"], json.dumps(r))
+    code, r = core_post("/api/settings", {"autonomous": True, "pulse": True, "learn": True})
+    check("turn Autonomous ON (pulse + learning)", code == 200 and r["autonomous"] and r["pulse"], json.dumps(r))
     ok = wait("RUNNING", lambda: status()["pulse"]["control"] == "RUNNING", 30)
     check("the engine pulse is RUNNING (a tick every 20 s)", bool(ok), status()["pulse"]["control"])
     found = wait("lessons", lambda: (lambda ls: ls if len(ls) >= 3 else None)(lessons()), 60)
     check("a pulse found the 3 lessons on GitHub", bool(found), ", ".join(sorted(lessons())))
+    nb = all_lessons().get("lessons/claude/00-find-and-run-a-lesson.ipynb", {})
+    check("the notebook lesson is listed, marked to run in JupyterLab", nb.get("status") == "NEEDS_WORKSPACE", nb.get("note", "not listed"))
     t0 = time.time()
-    done = wait("all passed", lambda: (lambda ls: ls if ls and all(l["status"] == "PASSED" for l in ls.values()) else None)(lessons()), 600, 5)
+    done = wait("all learned", lambda: (lambda ls: ls if ls and all(l["status"] == "LEARNED" for l in ls.values()) else None)(lessons()), 600, 5)
     ls = lessons()
     for p, l in sorted(ls.items()):
         log(f"   {l['status']:7} {p}  {l['right']}/{l['checks']} attempts {l['attempts']}  remembers: {l.get('remember', '')}")
         for x in l.get("results") or []:
             log(f"            {'✓' if x['right'] else '✗'} {x['check']} → {x['given']}")
-    check("each lesson was studied on the pulse and graded by the app: all 3 PASSED", bool(done), f"in {time.time() - t0:.0f} s")
+    check("each lesson was studied on the pulse, graded by the app, and auto-approved (Autonomous): all 3 LEARNED",
+          bool(done) and all("auto-approved" in l.get("note", "") for l in ls.values()), f"in {time.time() - t0:.0f} s")
     retry = ls.get("lessons/claude/02-how-i-learn.md", {})
     check("a wrong answer made the entity try again (attempt 2 passed)", retry.get("attempts") == 2, f"attempts {retry.get('attempts')}")
     jobs = status()["pulse"]["jobs"]
     check("one lesson at a time, each job started once", len({j["job_id"] for j in jobs if j["job_id"].startswith("lesson_")}) == 4, f"{len(jobs)} jobs")
-    check("nothing counts as learned before approval", "## Learned" not in gh_file("tass.md"), "")
-
-    for p in sorted(ls):
-        code, _ = core_post("/api/lessons/approve", {"path": p})
-        check(f"owner approves {p.split('/')[-1]}", code == 200, str(code))
     remote = wait("synced", lambda: (lambda t: t if t.count("(lesson `lessons/") == 3 else None)(gh_file("tass.md")), 60)
     log("tass.md on GitHub now ends:\n    " + "\n    ".join((remote or gh_file("tass.md")).rstrip().splitlines()[-5:]))
     check("the 3 learned lessons are in the Learned section on GitHub", bool(remote), "")
@@ -97,9 +99,10 @@ def main():
     check("after unlock the pulse comes back ON by itself (setting kept)", bool(ok), status()["pulse"]["control"])
     ls = lessons()
     check("learned lessons are remembered, not studied again", all(l["status"] == "LEARNED" for l in ls.values()) and len(ls) == 3, "")
+    check("Autonomous is still ON after restart", status()["learning"]["settings"]["autonomous"], "")
 
     gh_put("lessons/claude/04-new.md", "# A new thing\nby: Dustin\n\nAnswer a question.\n\n## Step 1: Colors\nTeach: The sky is blue.\nCheck: What color is the sky?\nAnswer: blue\n")
-    new = wait("new lesson", lambda: (lambda l: l if l and l["status"] == "PASSED" else None)(lessons().get("lessons/claude/04-new.md")), 180, 5)
+    new = wait("new lesson", lambda: (lambda l: l if l and l["status"] == "LEARNED" else None)(lessons().get("lessons/claude/04-new.md")), 180, 5)
     check("a lesson added to GitHub later is found on a pulse and studied", bool(new), (new or {}).get("status", "not found"))
     trees = [x for x in gh_log()["requests"] if "git/trees" in x]
     check("GitHub is checked cheaply (304 Not Modified when nothing changed)", gh_log()["requests"].count("  -> 304") > 0, f"{len(trees)} tree requests")

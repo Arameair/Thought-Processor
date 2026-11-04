@@ -30,9 +30,12 @@ jobs:
         working-directory: core
         run: |
           docker network create tass-workspace_default
+          # This workflow predates PR #53's one-app Compose fields; validate the
+          # actual external-model configuration without starting any containers.
           CORE_IMAGE=tass-core:ci ENGINE_IMAGE=tass-engine:ci IDENTITY_IMAGE=tass-identity:ci \
-          APP_UID=1000 APP_GID=1000 APP_DATA=/tmp/tass-ci-data APP_SECRETS=/tmp/tass-ci-secrets \
-          MODEL_ARGS=unused docker compose -p tass-core -f compose.yaml config -q && echo compose-ok
+          APP_UID=1000 APP_GID=1000 APP_DATA=/tmp/t APP_SECRETS=/tmp/s MODEL_ARGS=unused \
+          MODEL_NETWORK=tass-workspace_default MODEL_URL=http://model:8081 \
+          docker compose -p tass-core -f compose.yaml -f compose.external-model.yaml config -q && echo compose-ok
       - name: Management script syntax
         working-directory: core
         run: bash -n tass.sh && bash -n start.sh

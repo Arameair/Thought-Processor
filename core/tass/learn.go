@@ -29,8 +29,21 @@ import (
 
 // Settings the owner turns on and off on the page. Kept in settings.json, applied every 20 s.
 type Settings struct {
-	Pulse bool `json:"pulse"` // the 20-s work pulse runs (and comes back on after every restart)
-	Learn bool `json:"learn"` // each pulse looks for new lessons on GitHub and studies them
+	// Autonomous is the master switch. Off (the default on a new install) is chat-only: no model action,
+	// no pulse task, no work pulse. On, the entity works on its own: the 20-s pulse, lessons from GitHub,
+	// read-only actions that pass the locked-prediction and Identity checks, and lessons that pass every
+	// check are approved automatically (marked "auto-approved").
+	Autonomous bool `json:"autonomous"`
+	Pulse      bool `json:"pulse"` // the 20-s work pulse runs (and comes back on after every restart)
+	Learn      bool `json:"learn"` // each pulse looks for new lessons on GitHub and studies them
+}
+
+// chatOnly: no actions, tasks or pulse. Forced by TASS_CHAT_ONLY=on, or the owner's Autonomous switch is off.
+func (c *Core) chatOnly() bool {
+	if c.cfg.ChatOnly {
+		return true
+	}
+	return c.cfg.IdentitySvc != nil && !c.GetSettings().Autonomous
 }
 
 // LessonState is what the core knows about one lesson.
@@ -102,7 +115,7 @@ func (c *Core) SetSettings(s Settings) error {
 	b, _ := json.Marshal(s)
 	err := os.WriteFile(c.file("settings.json"), b, 0o600)
 	c.learnMu.Unlock()
-	c.event("sync", fmt.Sprintf("Settings: work pulse %s · learn from GitHub %s.", onOff(s.Pulse), onOff(s.Learn)))
+	c.event("sync", fmt.Sprintf("Settings: autonomous %s · work pulse %s · learn from GitHub %s.", onOff(s.Autonomous), onOff(s.Pulse), onOff(s.Learn)))
 	c.applySettings()
 	return err
 }
@@ -120,7 +133,7 @@ func (c *Core) applySettings() {
 	if c.cfg.IdentitySvc == nil {
 		return
 	}
-	want := c.GetSettings().Pulse
+	want := c.GetSettings().Pulse && !c.chatOnly()
 	ps, err := c.engine.PulseStatus()
 	if err != nil {
 		return
@@ -142,7 +155,7 @@ func (c *Core) applySettings() {
 
 func (c *Core) learningOn() bool {
 	s := c.GetSettings()
-	return s.Pulse && s.Learn && c.cfg.Repo != ""
+	return s.Pulse && s.Learn && c.cfg.Repo != "" && !c.chatOnly()
 }
 
 func (c *Core) lessonsDir() string {
@@ -333,6 +346,12 @@ func (c *Core) collect(ls *LessonState) {
 	}
 	l := lessons.Parse(string(text))
 	now := c.now().UTC()
+	autoApprove := ""
+	defer func() { // runs after the unlock below (defers run last-in, first-out)
+		if autoApprove != "" {
+			_ = c.ApproveLesson(autoApprove)
+		}
+	}()
 	c.learnMu.Lock()
 	defer c.learnMu.Unlock()
 	ls.CycleID, ls.StudiedAt, ls.Reply, ls.Remember = job.CycleID, &now, job.Result, job.Remember
@@ -346,6 +365,13 @@ func (c *Core) collect(ls *LessonState) {
 	switch {
 	case job.State == "DONE" && ls.Right == ls.Checks:
 		ls.Status = "PASSED"
+		if c.settings.Autonomous {
+			ls.Note = "auto-approved (Autonomous on): every check was right"
+			c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d checks right. Autonomous: approving it.", ls.Title, ls.Right, ls.Checks))
+			c.saveLearningLocked()
+			autoApprove = ls.Path // approved after learnMu is released (deferred below)
+			return
+		}
 		c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d checks right. Waiting for your approval.", ls.Title, ls.Right, ls.Checks))
 	case ls.Attempts >= maxAttempts:
 		ls.Status = "STUCK"

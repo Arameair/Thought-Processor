@@ -63,7 +63,13 @@ func TestLessonsLoopFromGitHubToLearned(t *testing.T) {
 		t.Fatalf("setting off: doc %q, tree calls %d, jobs %d", local(t, dir), gh.treeCalls, len(eng.jobs))
 	}
 	// Turn the pulse on: the engine pulse starts, the next sync finds the lessons and queues ONE.
-	if err := c.SetSettings(Settings{Pulse: true, Learn: true}); err != nil {
+	// Autonomous off (the default): the pulse setting alone does nothing.
+	c.SetSettings(Settings{Pulse: true, Learn: true})
+	c.SyncOnce()
+	if eng.control == "RUNNING" || gh.treeCalls != 0 {
+		t.Fatal("chat-only (Autonomous off): no pulse and no lessons, whatever the pulse switch says")
+	}
+	if err := c.SetSettings(Settings{Autonomous: true, Pulse: true, Learn: true}); err != nil {
 		t.Fatal(err)
 	}
 	if eng.control != "RUNNING" {
@@ -101,18 +107,12 @@ func TestLessonsLoopFromGitHubToLearned(t *testing.T) {
 	eng.finish(eng.jobs[1]["job_id"].(string), "DONE", "I studied it.\nANSWER 1: twenty\nANSWER 2: Identity", "my pulse ticks every 20 s and Identity decides")
 	c.SyncOnce()
 	got := lessonAt(c, "lessons/claude/01-pulse.md")
-	if got.Status != "PASSED" || got.Right != 2 {
-		t.Fatalf("passed: %+v", got)
+	// Autonomous: a lesson that passes every check is approved automatically.
+	if got.Status != "LEARNED" || got.Right != 2 || !strings.Contains(got.Note, "auto-approved") {
+		t.Fatalf("auto-approved: %+v", got)
 	}
-	if strings.Contains(local(t, dir), "## Learned") {
-		t.Fatal("nothing counts as learned before the owner approves")
-	}
-	// Owner approves → LEARNED, written to the document, synced to GitHub.
 	if err := c.ApproveLesson("lessons/claude/00-old.md"); err == nil {
 		t.Fatal("a lesson that didn't pass can't be approved")
-	}
-	if err := c.ApproveLesson(got.Path); err != nil {
-		t.Fatal(err)
 	}
 	c.SyncOnce()
 	remote := gh.get("Mira/home@live:tass.md")
@@ -124,7 +124,7 @@ func TestLessonsLoopFromGitHubToLearned(t *testing.T) {
 	}
 	// Settings survive a restart.
 	c2 := newLearningCore(t, dir, ids, gh, eng)
-	if s := c2.GetSettings(); !s.Pulse || !s.Learn || c2.Learning().Counts["LEARNED"] != 1 {
+	if s := c2.GetSettings(); !s.Autonomous || !s.Pulse || !s.Learn || c2.Learning().Counts["LEARNED"] != 1 {
 		t.Fatalf("after restart: %+v %+v", s, c2.Learning().Counts)
 	}
 }
@@ -135,7 +135,7 @@ func TestLockedIdentityHoldsGitHubAndLessons(t *testing.T) {
 	gh.set("Mira/home@live:lessons/a.md", lessonPulse)
 	dir := t.TempDir()
 	c := newLearningCore(t, dir, ids, gh, eng)
-	c.SetSettings(Settings{Pulse: true, Learn: true})
+	c.SetSettings(Settings{Autonomous: true, Pulse: true, Learn: true})
 	c.SyncOnce()
 	if fileExists(filepath.Join(dir, "tass.md")) || gh.treeCalls != 0 || len(eng.jobs) != 0 || eng.control == "RUNNING" {
 		t.Fatal("LOCKED: no GitHub sync, no lessons, no pulse")
@@ -184,5 +184,32 @@ func TestRepoDocumentIsNeverOverwrittenByAStarter(t *testing.T) {
 	c2.SyncOnce()
 	if !strings.HasPrefix(gh2.get("Mira/home@live:tass.md"), "# Mira") || !strings.HasPrefix(local(t, dir2), "# Mira") {
 		t.Fatalf("starter created in the repo: %q", gh2.get("Mira/home@live:tass.md"))
+	}
+}
+
+func TestOwnerApprovesWhenNotAutonomous(t *testing.T) {
+	ids, eng, gh := newFakeIdentitySvc(), newFakeEngine(), newFakeGH()
+	ids.set("UNLOCKED")
+	gh.set("Mira/home@live:tass.md", entityDoc)
+	gh.set("Mira/home@live:lessons/a.md", lessonPulse)
+	dir := t.TempDir()
+	c := newLearningCore(t, dir, ids, gh, eng)
+	c.SetSettings(Settings{Autonomous: true, Pulse: true, Learn: true})
+	c.SyncOnce()
+	c.SyncOnce()
+	// The owner turns Autonomous off while the lesson is being studied: it then waits for approval.
+	c.learnMu.Lock()
+	c.settings.Autonomous = false
+	c.learnMu.Unlock()
+	eng.finish(eng.jobs[0]["job_id"].(string), "DONE", "ANSWER 1: 20\nANSWER 2: Identity", "x")
+	c.SyncOnce()
+	if ls := lessonAt(c, "lessons/a.md"); ls.Status != "PASSED" {
+		t.Fatalf("waits for the owner: %+v", ls)
+	}
+	if eng.control == "RUNNING" {
+		t.Fatal("Autonomous off pauses the pulse")
+	}
+	if err := c.ApproveLesson("lessons/a.md"); err != nil || lessonAt(c, "lessons/a.md").Status != "LEARNED" {
+		t.Fatal(err)
 	}
 }

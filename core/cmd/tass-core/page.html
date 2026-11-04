@@ -45,6 +45,9 @@
   .lesson { border-top:1px solid var(--line); padding:8px 0; font-size:13.5px; }
   .lesson .t { font-weight:500; } .lesson .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .lesson button { padding:2px 10px; font-size:12.5px; }
+  .topbtn { padding:6px 14px; border-radius:999px; font-weight:500; }
+  .topbtn.on { background:#1f3b30; border-color:#2e5a49; color:var(--tass); }
+  .topbtn.off { background:#2a1b1b; border-color:#5a2e2e; color:#f2b3ad; }
 </style>
 </head>
 <body>
@@ -52,6 +55,10 @@
   <h1><span id="name">TASS</span> <small>core · thinks on this computer</small></h1>
   <span id="engine" class="chip unk">Thought Engine</span><span id="model" class="chip unk">Nemotron</span>
   <span id="pulse" class="chip unk">pulse</span><span id="gh" class="chip unk">GitHub</span><span id="busy" class="chip">listening</span>
+  <span style="flex:1"></span>
+  <span id="workchip" class="chip unk" title="the 20-second work pulse">work pulse UNKNOWN</span>
+  <button id="btnPulse" class="topbtn">Pulse: …</button>
+  <button id="btnAuto" class="topbtn">Autonomous: …</button>
 </header>
 <div id="idbar"></div>
 <main>
@@ -66,6 +73,7 @@
   </section>
   <section class="card">
     <h2>Learning <small>every pulse looks for new lessons on GitHub; you approve what counts</small></h2>
+    <label class="switch"><input type="checkbox" id="setAuto"> <b>Autonomous</b> <span class="dim">(off = chat only. On: the pulse runs, it learns from GitHub, and lessons that pass every check are approved for you)</span></label>
     <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
     <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
     <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
@@ -92,6 +100,7 @@
   </section>
 </main>
 <script>
+let CUR = {};
 const TOKEN = "__PAGE_TOKEN__";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -133,7 +142,7 @@ async function refresh() {
   $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
   $("model").className = "chip " + (p ? (p.model_ok ? "ok" : "off") : "unk");
   $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron UNKNOWN"; $("model").title = (p && p.error) || "";
-  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "engine pulse " + ago(p.at) : "pulse UNKNOWN";
+  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "model checked " + ago(p.at) : "pulse UNKNOWN";
   $("gh").className = "chip " + (st.github_online ? "ok" : "off");
   $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) + (st.github_messages ? "" : " · messages paused") : "GitHub not syncing: TASS runs locally";
   $("gh").title = st.sync_problem || "";
@@ -149,6 +158,9 @@ async function refresh() {
   }
   const pu = st.pulse;
   if (pu) {
+    const lt = (pu.ticks || [])[0];
+    $("workchip").className = "chip " + (pu.control === "RUNNING" ? "ok" : "off");
+    $("workchip").textContent = pu.control === "RUNNING" ? `working · ${pu.state} · tick ${lt ? ago(lt.at) : "soon"}` : "work pulse paused";
     $("pstate").className = "tag " + (pu.state === "BLOCKED" ? "bad" : pu.state === "READY" || pu.state === "WORKING" ? "good" : "unk");
     $("pstate").textContent = (pu.control || "?") + " · " + (pu.state || "UNKNOWN");
     $("jobs").innerHTML = (pu.jobs || []).slice(0, 6).map(j => `<div>${tag(j.state)} <b>${esc(j.job_id)}</b> ${esc(j.request)} ${j.result ? "→ " + esc(j.result) : ""} <span class="dim">${j.cycle_id ? esc(j.cycle_id) : ""}</span></div>`).join("") || "(no tasks yet)";
@@ -156,7 +168,14 @@ async function refresh() {
   } else { $("pstate").textContent = "pulse UNKNOWN (engine not answering)"; }
   const L = st.learning;
   if (L) {
+    CUR = L.settings;
+    if (document.activeElement !== $("setAuto")) $("setAuto").checked = !!L.settings.autonomous;
     if (document.activeElement !== $("setPulse")) $("setPulse").checked = !!L.settings.pulse;
+    $("btnAuto").textContent = "Autonomous: " + (L.settings.autonomous ? "ON" : "off (chat only)");
+    $("btnAuto").className = "topbtn " + (L.settings.autonomous ? "on" : "off");
+    const pon = L.settings.pulse && L.settings.autonomous;
+    $("btnPulse").textContent = "Pulse: " + (pon ? "ON" : "off");
+    $("btnPulse").className = "topbtn " + (pon ? "on" : "off");
     if (document.activeElement !== $("setLearn")) $("setLearn").checked = !!L.settings.learn;
     $("ghinfo").innerHTML = L.repo
       ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
@@ -200,9 +219,12 @@ $("tf").onsubmit = async ev => {
   refresh();
 };
 async function saveSettings() {
-  const r = await post("/api/settings", {pulse: $("setPulse").checked, learn: $("setLearn").checked});
+  const r = await post("/api/settings", {autonomous: $("setAuto").checked, pulse: $("setPulse").checked, learn: $("setLearn").checked});
   alertLine(r.ok ? "Settings saved." : (r.body.error || "not saved")); refresh();
 }
+$("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnPulse").onclick = () => { const on = !CUR.pulse; $("setPulse").checked = on; if (on) $("setAuto").checked = true; saveSettings(); };
 $("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
 $("lessons").onclick = async ev => {
   const a = ev.target.dataset.approve, t = ev.target.dataset.retry;

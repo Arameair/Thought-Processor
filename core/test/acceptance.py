@@ -169,6 +169,10 @@ def main():
     check("the entity has its own starter document (no one else's)", doc.startswith("# Mira") and "Dustin" not in doc and "TASS" not in doc, doc.splitlines()[0])
 
     # ---------------------------------------------------------------- the work pulse
+    code, r = core_post("/api/tasks", {"text": "count your sections"})
+    check("Autonomous off (default): chat only, no task can be queued", code == 409 and "CHAT_ONLY" in str(r), f"{code} {r}")
+    code, r = core_post("/api/settings", {"autonomous": True, "pulse": False, "learn": False})
+    check("owner turns Autonomous on", code == 200 and r["autonomous"], json.dumps(r))
     before_req = fixture_requests()
     code, r = core_post("/api/tasks", {"text": "slow: count your sections"})
     job = r.get("job_id", "")

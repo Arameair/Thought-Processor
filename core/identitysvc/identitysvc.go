@@ -82,41 +82,46 @@ func (c *Client) Authorize(action, detail string) Decision {
 	return d
 }
 
-
 // ApprovedLesson is a read-only, bounded reference supplied by Identity.
 // The GitHub access token never crosses into Core; this request uses only the
 // existing Identity Core service key. All failures deny reference retrieval.
 type ApprovedLesson struct {
-    Skill string `json:"skill"`
-    Repository string `json:"repository"`
-    Issue int `json:"issue"`
-    CommentID int64 `json:"comment_id"`
-    Source string `json:"source"`
-    Mode string `json:"mode"`
-    Body string `json:"body"`
+	Skill      string `json:"skill"`
+	Repository string `json:"repository"`
+	Issue      int    `json:"issue"`
+	CommentID  int64  `json:"comment_id"`
+	Source     string `json:"source"`
+	Mode       string `json:"mode"`
+	Body       string `json:"body"`
 }
 
 func (c *Client) GetApprovedLesson() (ApprovedLesson, error) {
-    var lesson ApprovedLesson
-    req, err := http.NewRequest(http.MethodGet, c.URL+"/v1/github/lesson", nil)
-    if err != nil { return lesson, err }
-    req.Header.Set("Authorization", "Bearer "+c.Key)
-    client := *c.HTTP
-    if client.Timeout < 20*time.Second { client.Timeout = 20*time.Second }
-    resp, err := client.Do(req)
-    if err != nil { return lesson, fmt.Errorf("Identity lesson endpoint unavailable: %w", err) }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        return lesson, fmt.Errorf("Identity has not approved a readable lesson (HTTP %d)", resp.StatusCode)
-    }
-    if err := json.NewDecoder(io.LimitReader(resp.Body, 12<<10)).Decode(&lesson); err != nil {
-        return ApprovedLesson{}, fmt.Errorf("invalid Identity lesson response")
-    }
-    if lesson.Skill != "@identity-test" || lesson.Repository != "Arameair/Thought-Processor" ||
-        lesson.Issue != 51 || lesson.CommentID != 6636766875 ||
-        lesson.Source != "https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875" ||
-        lesson.Mode != "reference_only" || len(lesson.Body) == 0 || len(lesson.Body) > 8192 {
-        return ApprovedLesson{}, fmt.Errorf("Identity lesson provenance did not match")
-    }
-    return lesson, nil
+	var lesson ApprovedLesson
+	req, err := http.NewRequest(http.MethodGet, c.URL+"/v1/github/lesson", nil)
+	if err != nil {
+		return lesson, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Key)
+	client := *c.HTTP
+	if client.Timeout < 20*time.Second {
+		client.Timeout = 20 * time.Second
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return lesson, fmt.Errorf("Identity lesson endpoint unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return lesson, fmt.Errorf("Identity has not approved a readable lesson (HTTP %d)", resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 12<<10)).Decode(&lesson); err != nil {
+		return ApprovedLesson{}, fmt.Errorf("invalid Identity lesson response")
+	}
+	if lesson.Skill != "@identity-test" || lesson.Repository != "Arameair/Thought-Processor" ||
+		lesson.Issue != 51 || lesson.CommentID != 6636766875 ||
+		lesson.Source != "https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875" ||
+		lesson.Mode != "reference_only" || len(lesson.Body) == 0 || len(lesson.Body) > 8192 {
+		return ApprovedLesson{}, fmt.Errorf("Identity lesson provenance did not match")
+	}
+	return lesson, nil
 }

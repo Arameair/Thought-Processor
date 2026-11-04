@@ -193,15 +193,15 @@ func (f *fakeGH) say(issue int, who, body string) {
 // (The real engine's cycle is tested in the Thought-engine repo; this stands in for its HTTP contract.)
 
 type fakeEngine struct {
-	control  string
-	jobState map[string]map[string]any
-	mu       sync.Mutex
-	reqs     []map[string]any
-	outcomes []map[string]any
-	pulse    []string
-	jobs     []map[string]any
-	srv      *httptest.Server
-	mismatchCycleID string
+	control            string
+	jobState           map[string]map[string]any
+	mu                 sync.Mutex
+	reqs               []map[string]any
+	outcomes           []map[string]any
+	pulse              []string
+	jobs               []map[string]any
+	srv                *httptest.Server
+	mismatchCycleID    string
 	unlockedPrediction bool
 	unreadableProposal bool
 }

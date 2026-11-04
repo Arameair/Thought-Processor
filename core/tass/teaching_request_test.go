@@ -35,20 +35,34 @@ func TestTeachingDraftRemainsUnsent(t *testing.T) {
 		return time.Date(2026, 11, 4, 19, 0, 0, 0, time.UTC)
 	}}
 	id, err := c.createTeachingDraft("learn how to inspect one verified Developer connection")
-	if err != nil { t.Fatal(err) }
-	if !strings.HasPrefix(id, "teach_") { t.Fatalf("bad draft id %q", id) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(id, "teach_") {
+		t.Fatalf("bad draft id %q", id)
+	}
 	f, err := os.Open(filepath.Join(dir, "teaching-requests.jsonl"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer f.Close()
 	scan := bufio.NewScanner(f)
-	if !scan.Scan() { t.Fatal("no durable teaching draft") }
+	if !scan.Scan() {
+		t.Fatal("no durable teaching draft")
+	}
 	var rec teachingDraft
-	if err := json.Unmarshal(scan.Bytes(), &rec); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(scan.Bytes(), &rec); err != nil {
+		t.Fatal(err)
+	}
 	if rec.ID != id || rec.Status != "DRAFT_NOT_SENT" || rec.To != "ChatGPT" {
 		t.Fatalf("draft unexpectedly claimed delivery: %+v", rec)
 	}
-	if scan.Scan() { t.Fatal("unexpected extra record") }
-	if err := scan.Err(); err != nil { t.Fatal(err) }
+	if scan.Scan() {
+		t.Fatal("unexpected extra record")
+	}
+	if err := scan.Err(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTeachingDraftRejectsOversizedMessage(t *testing.T) {
