@@ -168,9 +168,11 @@ class CardStore:
                 doc["cards"]["NOTEBOOK-IDENTITY-LAB"] = make_card(CATALOG["NOTEBOOK-IDENTITY-LAB"])
             for key, card in doc["cards"].items():
                 spec = CATALOG[key]
-                for field in ("id", "sha", "repository", "operation", "argv", "subdir",
-                              *("notebook_path", "notebook_blob_sha", "cell_id",
-                                "cell_sha256", "capability") if key == "NOTEBOOK-IDENTITY-LAB" else ()):
+                fields = ("id", "sha", "repository", "operation", "argv", "subdir")
+                if key == "NOTEBOOK-IDENTITY-LAB":
+                    fields += ("notebook_path", "notebook_blob_sha", "cell_id",
+                               "cell_sha256", "capability")
+                for field in fields:
                     if card.get(field) != spec[field]:
                         raise ValueError(f"definition changed for {key}")
                 if card.get("status") not in {"PROPOSED", "APPROVED", "QUEUED", "WORKING", *FINAL}:
