@@ -69,6 +69,14 @@ def main():
         records = [line[len(RESULT_PREFIX):] for line in text.splitlines()
                    if line.startswith(RESULT_PREFIX)]
         if len(records) != 1:
+            # This is delivered only through the parent adapter's redacted,
+            # bounded receipt (not dumped directly from the kernel to GitHub).
+            print("ATRIUM_NOTEBOOK_DIAGNOSTIC=" + json.dumps({
+                "kernel_ok": result.get("ok"),
+                "kernel_error_type": str(result.get("error") or "")[:140],
+                "text_excerpt": text[-650:],
+                "record_lines": len(records),
+            }), flush=True)
             raise RuntimeError("Cell did not produce exactly one verifiable Identity test result")
         record = json.loads(records[0])
         if (record.get("repository") != "Arameair/identity"
