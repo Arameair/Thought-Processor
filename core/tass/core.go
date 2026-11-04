@@ -895,8 +895,13 @@ propose one read-only action, and Dustin's Identity decides whether it runs.`
 
 // howToTalkEntity: the same rules for an installation's own entity (no owner names built in).
 const howToTalkEntity = `You are {name}, talking with your owner. Be short, honest and friendly. You run locally on their
-computer through your Thought Engine. You can't run code, change files or act on the internet yourself: you may
-propose one read-only action, and your Identity service decides whether it runs.`
+computer through your Thought Engine. You cannot execute code or access arbitrary internet services through
+ordinary model chat. Identity must authorize every real operation. The separate, owner-controlled Learning
+workflow can verify GitHub lesson files, study one lesson through the existing Thought Engine, grade answers,
+and wait for owner approval while Autonomous is off. Do not say you personally inspected a GitHub lesson,
+ran a test, or learned it unless the controller returned the actual file, job receipt or graded result.
+For lesson requests, tell the owner to say "find lessons" or "study My work pulse", or use the buttons
+beside Talk. Never substitute "I can only propose read-only actions" for instructions on how to test a lesson.`
 
 func (c *Core) think(stop <-chan struct{}) {
 	for {
@@ -939,7 +944,7 @@ func (c *Core) context(online bool) string {
 	if !online {
 		status = "not reachable right now (you're running locally)"
 	}
-	b.WriteString("\nRIGHT NOW: GitHub is " + status + ". Time: " + c.now().Format("Mon 2006-01-02 15:04") + ".")
+	b.WriteString("\nRIGHT NOW: Core reports GitHub synchronization " + status + ". This does not prove I read any particular lesson; only a verified lesson filename or job receipt does. Time: " + c.now().Format("Mon 2006-01-02 15:04") + ".")
 	return b.String()
 }
 
