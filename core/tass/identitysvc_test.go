@@ -21,6 +21,8 @@ type fakeIdentitySvc struct {
 	mu        sync.Mutex
 	state     string
 	lessonEnabled bool
+	lessonCommentID int64
+	lessonSource string
 	decisions []string
 	srv       *httptest.Server
 }
@@ -39,8 +41,12 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			if f.state != "UNLOCKED" || !f.lessonEnabled {
 				w.WriteHeader(http.StatusForbidden); return
 			}
+			commentID := f.lessonCommentID
+			if commentID == 0 { commentID = 6636766875 }
+			source := f.lessonSource
+			if source == "" { source = "https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875" }
 			json.NewEncoder(w).Encode(map[string]any{"skill":"@identity-test", "repository":"Arameair/Thought-Processor",
-				"issue":51, "comment_id":6636766875, "source":"https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875",
+				"issue":51, "comment_id":commentID, "source":source,
 				"mode":"reference_only", "body":"Owner-approved @identity-test is a proposed notebook skill reference, not authority to execute."})
 		case "/v1/state":
 			json.NewEncoder(w).Encode(map[string]any{"state": f.state, "reason": "owner hasn't unlocked", "entity": ent})
@@ -158,7 +164,14 @@ func TestIdentityApprovedGitHubLessonIsReferenceOnly(t *testing.T) {
     c := newIdentityCore(t, t.TempDir(), ids, eng)
     c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
     if eng.count() != 0 { t.Fatal("no model cycle before an owner-approved lesson") }
-    ids.mu.Lock(); ids.lessonEnabled = true; ids.mu.Unlock()
+    // Legacy design comment and forged provenance must never enter model context.
+    ids.mu.Lock(); ids.lessonEnabled = true; ids.lessonCommentID = 6634742721; ids.mu.Unlock()
+    c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
+    if eng.count() != 0 { t.Fatal("legacy design comment incorrectly authorized") }
+    ids.mu.Lock(); ids.lessonCommentID = 6636766875; ids.lessonSource = "https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6634742721"; ids.mu.Unlock()
+    c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
+    if eng.count() != 0 { t.Fatal("forged lesson source incorrectly authorized") }
+    ids.mu.Lock(); ids.lessonSource = ""; ids.mu.Unlock()
     c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
     if eng.count() != 1 { t.Fatalf("approved lesson did not reach model: %d",eng.count()) }
     req := eng.reqs[0]
