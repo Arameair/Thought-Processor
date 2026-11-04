@@ -25,7 +25,26 @@ The owner primarily talks with TASS. Avoid making the owner transfer text betwee
 
 **NOT RUN:** owner-machine real authorized 20-second pulse through action/evaluation; real Nemotron selection and constrained Jupyter execution; complete GitHub read/write learning loop; independent Issue #50 integrity acceptance.
 
-**P1 experimental candidate:** Identity PR #33 `163e898` + Core PR #58 `86e2681` passed fixture CI, not owner-machine OAuth/model test. Owner's running TASS not updated. P1 runbook pins older Issue #51 comment `6634742721` (design note), whereas the structured TASS Lesson 01 is `6636766875`; reconcile code, tests and documentation before deployment. P1 deliberately provides **one owner-approved read-only lesson**, NOT automatic GitHub issue scanning, 20-second retrieval or posting.
+## November 4 integration repair ledger — draft source, not deployed
+
+**Owner baseline (real WSL, before these candidates):** Core `7d24043e0c20`, Engine `38e2e7bbe9e0`, Identity `8b175c8`. Docker / Identity startup PASS, real Nemotron greeting and a NO_ACTION evaluation PASS. Two owner lesson prompts FAIL with `plan response unreadable after one retry`, even though event classification and Trace PASS. Pulse remains PAUSED. No claim of general conversation reliability.
+
+**Exact GitHub lesson source repaired in code (owner NOT RUN):**
+- Old design/skill-comment `6634742721` is **not** Lesson 01 and is now rejected by Core's provenance check. Intended structured owner lesson: [Issue #51 comment 6636766875](https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875). The read-only lesson remains pending delivery until the owner approves and the actual app confirms it was received.
+- Identity **draft PR #33**, candidate `f5281f4ad1e3e6cb2bad1f64902dff99b88b0cad`: changed only allowlisted fetch, the service response source/comment ID and fixture. Existing GitHub device authorization, memory-only token, owner approval, and lock/disconnect invalidation retained.
+- Thought-Processor **draft PR #58**: exact-provenance validation and negative regression for the legacy comment/forged source, revised runbook, updated immutable Identity pin. No broad GitHub sync.
+
+**Engine conversation and pulse source candidate (owner NOT RUN):**
+- Thought-engine **draft PR #10** on existing Engine PR #9, candidate `5bd472e848bcc4e7bd9a6b654026a99d9a6563e9`. Reuses the one model slot, existing Spark/Trace/Thought and existing work pulse. After two unreadable structured plans, *only* a `thought-processor:*` owner conversation may ask for one additional text-only response with zero actions/remember/predictions. Failed plan format is retained in redacted shape diagnostics and `action_note`. A malformed or unavailable recovery remains FAILED. Pulse jobs never get conversation recovery.
+- The existing Engine pulse now checks cycle ID, state, locked numeric prediction, lock timestamp and recomputed digest before any proposed read-only measurement, *in addition to* Identity action authorization. Unlocked/mismatched prediction yields NOT_AUTHORIZED with no measurement.
+- Core's existing `core/tass.sh` pins this Engine candidate. **No update has been run**, and the old owner installation, data, backup, external Nemotron, GitHub sync OFF and PAUSED pulse remain unchanged.
+
+**Verification ledger:** Prior PR #9, #33 and #58 baseline fixture CI previously PASS on their *earlier* heads. Updated CI on these new heads was queued when these notes were authored: **NOT RUN / no PASS claimed yet**. New Engine fixture regressions use the *exact* owner-failed multi-sentence lesson, verify strict classification-vs-plan distinction, safe no-action chat recovery and redacted errors, and cover pulse idle/pause/resume plus no action without a locked prediction. Owner real Nemotron fallback, 10 wall-clock 20s ticks, live GitHub OAuth / source read, independent Issue #50 security review and notebooks remain **NOT RUN/BLOCKED**.
+
+**First owner action (non-deploying):** Run `cd ~/tass-one-app/core && ./tass.sh status`. PASS if the installed Core, Engine and Identity revisions, actual Identity lock state, model reachability and pulse state are displayed without changing anything; FAIL/UNKNOWN if the command errors or status contradicts the documented baseline. Share only sanitized status with the team. **Do not update, start pulse, execute notebooks or sign in to GitHub as part of this step.**
+
+**Reuse inventory:** Existing Engine `pulse.go` / `pulse_test.go` are the one coordination scheduler; do not replace with Atrium #52's independent experimental card timer. Atrium PR #52 contributes receipt/idempotency patterns; PR #54 contributes pinned notebook/cell hash and constrained Jupyter adapter, but neither is deployed/integrated into Go TASS. Existing Python Workshop `workspace/tass_workspace/kernel.py` has a shared Jupyter kernel; it is not an execution authority. `Arameair/nemotronTASS` `experiment/tass-alpha-20261102` `run.sh` starts its own model/Jupyter and is **not** an integration target. Reuse concepts or proven components selectively after the Thought Engine milestone and explicit Identity acceptance.
+
 
 ## Working protocol
 
