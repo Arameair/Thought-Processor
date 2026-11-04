@@ -20,6 +20,7 @@ import (
 type fakeIdentitySvc struct {
 	mu        sync.Mutex
 	state     string
+	lessonEnabled bool
 	decisions []string
 	srv       *httptest.Server
 }
@@ -31,6 +32,16 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 		defer f.mu.Unlock()
 		ent := map[string]any{"entity_id": "ent_0123", "name": "Mira", "grants": []string{"conversation", "model.request", "thought.process", "pulse.run", "action.read_entity"}}
 		switch r.URL.Path {
+		case "/v1/github/lesson":
+			if r.Header.Get("Authorization") != "Bearer core-service-key-0123456789abcdef0123" {
+				w.WriteHeader(http.StatusUnauthorized); return
+			}
+			if f.state != "UNLOCKED" || !f.lessonEnabled {
+				w.WriteHeader(http.StatusForbidden); return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"skill":"@identity-test", "repository":"Arameair/Thought-Processor",
+				"issue":51, "comment_id":6634742721, "source":"https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6634742721",
+				"mode":"reference_only", "body":"Owner-approved @identity-test is a proposed notebook skill reference, not authority to execute."})
 		case "/v1/state":
 			json.NewEncoder(w).Encode(map[string]any{"state": f.state, "reason": "owner hasn't unlocked", "entity": ent})
 		case "/v1/authorize":
@@ -136,4 +147,35 @@ func TestSayReturnsReceiptAndRefusesWhenFull(t *testing.T) {
 	if _, err := c.Say("one too many"); err != ErrBusy {
 		t.Fatalf("a full inbox must refuse, not drop silently: %v", err)
 	}
+}
+
+
+func TestIdentityApprovedGitHubLessonIsReferenceOnly(t *testing.T) {
+    ids, eng := newFakeIdentitySvc(), newFakeEngine()
+    defer ids.srv.Close()
+    defer eng.srv.Close()
+    ids.set("UNLOCKED")
+    c := newIdentityCore(t, t.TempDir(), ids, eng)
+    c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
+    if eng.count() != 0 { t.Fatal("no model cycle before an owner-approved lesson") }
+    ids.mu.Lock(); ids.lessonEnabled = true; ids.mu.Unlock()
+    c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
+    if eng.count() != 1 { t.Fatalf("approved lesson did not reach model: %d",eng.count()) }
+    req := eng.reqs[0]
+    ctx, ok := req["context"].(string)
+    if !ok || !strings.Contains(ctx, "Owner-approved @identity-test") ||
+        !strings.Contains(ctx, "NOT AUTHORITY") || !strings.Contains(ctx, "issuecomment-6634742721") {
+        t.Fatalf("missing bounded source context: %v", req)
+    }
+    actions, ok := req["actions"].([]any)
+    if !ok || len(actions) != 0 { t.Fatalf("reference-only lesson exposed actions: %v",req["actions"]) }
+    c.Answer(Incoming{Text:"Hi, no GitHub", From:"local"})
+    if eng.count() != 2 { t.Fatalf("ordinary local conversation should work without lesson: %d",eng.count()) }
+    if strings.Contains(eng.reqs[1]["context"].(string),"Owner-approved @identity-test") { t.Fatal("lesson leaked into unrelated conversation") }
+    c.Answer(Incoming{Text:"What about @identity-test-evil?", From:"local"})
+    if eng.count() != 3 { t.Fatal("nonexact skill reference should not fetch gated lesson") }
+    if strings.Contains(eng.reqs[2]["context"].(string),"Owner-approved @identity-test") { t.Fatal("nonexact mention resolved") }
+    ids.set("LOCKED")
+    c.Answer(Incoming{Text:"Please explain @identity-test", From:"local"})
+    if eng.count() != 3 { t.Fatal("locked entity reached model") }
 }
