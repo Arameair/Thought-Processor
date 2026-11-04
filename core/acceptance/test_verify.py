@@ -30,14 +30,29 @@ def fake_cycle():
         ("evaluation", {"forecast": "PREDICTION_CORRECT", "goal": "GOAL_MET",
                         "evaluator": "deterministic", "at": stamp(5)}),
     ]
-    return cid, [{"cycle_id": cid, "step": step, "at": stamp(i+1), "data": data}
-                 for i, (step, data) in enumerate(cases)]
+    rows = [{"cycle_id": cid, "step": step, "at": stamp(i+1), "data": data}
+            for i, (step, data) in enumerate(cases)]
+    prop = rows[2]["data"]
+    prop["prediction"]["text"] = "4"
+    prop["prediction"]["sha256"] = verify.prediction_hash(
+        cid, prop["action"], prop["prediction"])
+    return cid, rows
 
 
 class CycleEvidenceTests(unittest.TestCase):
     def test_complete_fixture_passes_ledger_checks(self):
         cid, rows = fake_cycle()
         self.assertTrue(all(passed for _, passed, _ in verify.cycle_checks(rows, cid)))
+
+    def test_prediction_digest_tampering_is_rejected(self):
+        cid, rows = fake_cycle()
+        rows[2]["data"]["prediction"]["sha256"] = "0"*64
+        self.assertFalse(all(p for _, p, _ in verify.cycle_checks(rows, cid)))
+
+    def test_forged_evaluation_result_is_rejected(self):
+        cid, rows = fake_cycle()
+        rows[4]["data"]["forecast"] = "PREDICTION_INCORRECT"
+        self.assertFalse(all(p for _, p, _ in verify.cycle_checks(rows, cid)))
 
     def test_missing_evaluation_fails_closed(self):
         cid, rows = fake_cycle()
