@@ -10,6 +10,7 @@ import os
 import re
 import tempfile
 import threading
+from datetime import date
 from pathlib import Path
 
 DAY = "2026-11-04"
@@ -90,8 +91,15 @@ def starter_board():
 
 
 def validate_board(value):
-    if not isinstance(value, dict) or value.get("version") != 1 or value.get("day") != DAY:
-        raise InvalidBoard("invalid board format or mission date")
+    if not isinstance(value, dict) or value.get("version") != 1:
+        raise InvalidBoard("invalid board format")
+    day = value.get("day")
+    if not isinstance(day, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise InvalidBoard("invalid board date")
+    try:
+        date.fromisoformat(day)
+    except ValueError as exc:
+        raise InvalidBoard("invalid board date") from exc
     revision = value.get("revision")
     if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
         raise InvalidBoard("invalid revision")
@@ -123,7 +131,7 @@ def validate_board(value):
     selected = value.get("selected")
     if selected not in ids:
         raise InvalidBoard("selected task not found")
-    return {"version": 1, "day": DAY, "revision": revision,
+    return {"version": 1, "day": day, "revision": revision,
             "selected": selected, "tasks": clean_tasks}
 
 
