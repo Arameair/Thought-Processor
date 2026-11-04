@@ -1,14 +1,14 @@
 # P1 — Optional GitHub sign-in + first read-only TASS lesson (experimental)
 
-**Stack**: Identity branch `experiment/tass-github-lesson-20261104` on Identity PR #32;
-Core branch `experiment/tass-github-lesson-20261104` on Core PR #57.
+**Stack**: Identity branch `experiment/tass-github-lesson-20261104` on Identity draft PR #33 (stacked on PR #32);
+Core branch `experiment/tass-github-lesson-20261104` on Core draft PR #58 (stacked on the separate P0 PR #57).
 No merge/deploy by this PR; the running owner's installation is untouched. Pulse stays PAUSED.
 
 ## Implemented flow
 
 1. The Identity page derives **Talk to your entity** from `IDENTITY_CORE_URL` (provided by Compose using the configured `CORE_PORT`, default 8795). Identity validates scheme, loopback host, path, and port. No arbitrary URL is accepted.
 2. GitHub is optional. An unlocked owner presses **Connect GitHub**, follows GitHub's official device flow, and sees actual `waiting`, `verified`, `signed_out` or error status. The original `internal/github` client and publisher public Client ID are reused. The token lives in Identity memory only. **Disconnect** erases it locally and cancels pending authorization; server-side revocation must be done in GitHub's authorized applications settings if required. Restart requires signing in again.
-3. Once verified, the owner approves the **one** initial allowlisted source: `Arameair/Thought-Processor`, Issue **#51**, owner-authored comment **6634742721**, skill **`@identity-test`**. Approval is ephemeral, never a blanket GitHub/Identity grant, never a general repo browser.
+3. Once verified, the owner approves the **one** initial allowlisted source: `Arameair/Thought-Processor`, Issue **#51**, owner-authored comment **6636766875**, skill **`@identity-test`**. Approval is ephemeral, never a blanket GitHub/Identity grant, never a general repo browser.
 4. A Core service-key-authenticated GET asks Identity for **that pinned comment only**. Identity checks UNLOCKED, Core identity, in-memory approval, verified GitHub session, exact comment author, source and size, and rechecks unlock after fetching. Core receives **only the lesson text and provenance; never the access token**.
 5. When the owner says **"TASS, explain @identity-test to me"** in the existing local conversation, Core places the read-only source text in model context with an explicit **untrusted/reference-only** boundary. The normal Core→Engine→Nemotron path handles the reply. All action proposals from that reference-only cycle are refused. The `@identity-test` skill is **not installed**, executable or approved as a Jupyter capability. Other conversations work locally as before with GitHub disconnected.
 
