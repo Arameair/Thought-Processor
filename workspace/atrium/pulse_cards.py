@@ -453,6 +453,8 @@ class PulseCoordinator:
                     raise CardError("Explicit card-specific owner acknowledgement is required", 403)
                 if card["status"] != "PROPOSED":
                     raise CardError("Only PROPOSED cards can be approved", 409)
+                if card_id == "NOTEBOOK-IDENTITY-LAB" and not card.get("model_proposal"):
+                    raise CardError("Notebook cell selection has not been proposed by a model actor", 403)
                 card["approval"] = {"at": utc(), "kind": "LOCAL_UI_ATTESTATION_NOT_IDENTITY"}
                 card["status"] = "APPROVED"
             elif action == "queue":
