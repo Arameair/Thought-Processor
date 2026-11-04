@@ -1,0 +1,28 @@
+.pulse-area{margin:28px 0 6px;scroll-margin-top:24px}
+.pulse-panel{padding:22px;background:#121d2e;border:1px solid #35526a;border-radius:16px}
+.pulse-control{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}
+.pulse-control h2{font-size:21px;letter-spacing:-.02em;margin:4px 0 8px}
+.pulse-control p{color:var(--muted);max-width:700px;margin:0;font-size:12px}
+.pulse-ops{display:flex;gap:8px;flex-wrap:wrap}
+.pulse-state{color:#b8d4df;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.pulse-warning{padding:10px 13px;border-radius:9px;background:#3b2a23;color:#f5d1a9;border:1px solid #6b4d37;font-size:12px}
+.pulse-warning.enabled{background:#1b3636;color:#b3f3de;border-color:#367264}
+.pulse-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}
+.pulse-card{min-width:0;padding:17px;border:1px solid #354760;background:#11192a;border-radius:12px}
+.pulse-card-head{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.pulse-card-head strong{font-size:15px;line-height:1.35}
+.pulse-status{border:1px solid #4b6173;color:#d1e1f3;padding:3px 8px;border-radius:16px;font-size:10px;font-weight:800;white-space:nowrap}
+.pulse-fail .pulse-status{color:#ffc0ca;border-color:#8c4556}
+.pulse-card p{color:#b2c3d6;font-size:12px;overflow-wrap:anywhere}
+.pulse-card .pulse-scope{color:#a9ebdd;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all}
+.pulse-card .pulse-command{background:#0a1220;border:1px solid #304459;padding:9px 11px;border-radius:8px;color:#c6d7e5;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
+.pulse-metadata{display:flex;flex-wrap:wrap;gap:8px 18px;color:#8399b5;font-size:10px;overflow-wrap:anywhere}
+.pulse-buttons{display:flex;align-items:center;gap:8px;margin-top:16px}
+.pulse-caption{color:#9db4c9;font-size:11px}
+.pulse-reason{color:#ffc0ca!important}
+.pulse-proof{margin-top:15px;padding:13px;border:1px solid #4b6373;border-radius:9px;background:#18293c}
+.pulse-proof strong{font-size:12px;color:#e2ecff;overflow-wrap:anywhere}
+.pulse-proof p{font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.pulse-output{margin:6px 0 0;max-height:200px;overflow:auto;background:#0b1423;border-radius:7px;padding:11px;color:#cbdaec;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.pulse-note{font-size:11px;color:var(--muted);margin:16px 0 0}
+@media(max-width:870px){.pulse-list{grid-template-columns:1fr}}
