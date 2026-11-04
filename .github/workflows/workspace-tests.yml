@@ -26,6 +26,7 @@ jobs:
           node --check workspace/atrium/assets/app.js
           node --check workspace/atrium/assets/build.js
           node --check workspace/atrium/assets/today.js
+          bash -n workspace/atrium/start_today.sh
       - name: Atrium standalone container builds
         run: docker build -t tass-atrium:ci workspace/atrium
       - name: Collaboration feed tests (no network, no GitHub token)
