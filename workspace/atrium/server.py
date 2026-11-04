@@ -20,6 +20,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 from urllib.parse import urlsplit
 from desk_state import BoardStore, InvalidBoard, StaleBoard
+from pulse_cards import CardError, LocalTestAdapter, PulseCoordinator
 
 HERE = Path(__file__).resolve().parent
 OPENER = build_opener(ProxyHandler({}))
@@ -30,6 +31,8 @@ ALLOWED_ASSETS = {
     "/assets/build.css": (HERE / "assets/build.css", "text/css; charset=utf-8"),
     "/assets/today.js": (HERE / "assets/today.js", "text/javascript; charset=utf-8"),
     "/assets/today.css": (HERE / "assets/today.css", "text/css; charset=utf-8"),
+    "/assets/pulse.js": (HERE / "assets/pulse.js", "text/javascript; charset=utf-8"),
+    "/assets/pulse.css": (HERE / "assets/pulse.css", "text/css; charset=utf-8"),
 }
 
 
@@ -134,7 +137,7 @@ def safe_evidence(raw) -> list[dict]:
     return evidence[-100:]
 
 
-def create_handler(backend_port: int, csrf: str, server_port: int):
+def create_handler(backend_port: int, csrf: str, server_port: int, *, pulse=None):
     backend = os.environ.get("TASS_ATRIUM_BACKEND_URL", f"http://127.0.0.1:{backend_port}").rstrip("/")
     valid_hosts = {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}
     share_dir = Path(os.environ.get("TASS_ATRIUM_COLLAB_REQUESTS", "/collab/requests"))
@@ -190,6 +193,13 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
             if path in ALLOWED_ASSETS:
                 p, ctype = ALLOWED_ASSETS[path]
                 return self._send(200, p.read_bytes(), ctype)
+            if path == "/tests/state":
+                if pulse is None:
+                    return self._json(503, {"error": "Test-card controller not configured"})
+                try:
+                    return self._json(200, pulse.view())
+                except (CardError, OSError):
+                    return self._json(503, {"error": "Test-card ledger unavailable; no execution authorized"})
             if path == "/desk/state":
                 try:
                     return self._json(200, desk_store.read())
@@ -278,7 +288,7 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
             if not self._valid_host():
                 return self._json(403, {"error": "invalid host"})
             target = urlsplit(self.path).path
-            if target not in ("/bridge/message", "/bridge/share-brief", "/desk/state"):
+            if target not in ("/bridge/message", "/bridge/share-brief", "/desk/state", "/tests/action"):
                 return self._json(404, {"error": "not found"})
             origin = self.headers.get("Origin")
             if origin and origin not in (f"http://127.0.0.1:{server_port}", f"http://localhost:{server_port}"):
@@ -294,6 +304,19 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 obj = json.loads(self.rfile.read(n))
                 if not isinstance(obj, dict):
                     return self._json(400, {"error": "expected JSON object"})
+                if target == "/tests/action":
+                    if pulse is None:
+                        return self._json(503, {"error": "Test-card controller not configured"})
+                    # Only a fixed verb/card/ack. Untrusted bodies cannot select a command,
+                    # repository, revision, tool argument or environment variable.
+                    if set(obj) - {"action", "card_id", "ack"}:
+                        return self._json(400, {"error": "Unknown test-card field"})
+                    try:
+                        return self._json(200, pulse.action(obj.get("action"), obj.get("card_id"), obj.get("ack")))
+                    except CardError as exc:
+                        return self._json(exc.code, {"error": str(exc)[:180]})
+                    except (OSError, ValueError):
+                        return self._json(503, {"error": "Test-card storage unavailable; no work queued"})
                 if target == "/desk/state":
                     try:
                         return self._json(200, desk_store.write(obj))
@@ -360,12 +383,16 @@ def main():
         cli.error("ports must be between 1024 and 65535")
     if args.port == args.backend_port:
         cli.error("playground port must be different from the Workshop port")
-    handler = create_handler(args.backend_port, secrets.token_urlsafe(32), args.port)
+    pulse_path = os.getenv("TASS_ATRIUM_PULSE_STATE", "/state/test-cards.json")
+    pulse = PulseCoordinator(pulse_path, adapter=LocalTestAdapter(),
+                             interval=int(os.getenv("TASS_ATRIUM_PULSE_INTERVAL", "20")))
+    handler = create_handler(args.backend_port, secrets.token_urlsafe(32), args.port, pulse=pulse)
     try:
         httpd = ThreadingHTTPServer((os.environ.get("TASS_ATRIUM_BIND_HOST", "127.0.0.1"), args.port), handler)
     except OSError as exc:
         cli.error(f"Cannot listen on port {args.port}: {exc}")
     httpd.daemon_threads = True
+    pulse.start()
     print(f"TASS Atrium ready at http://127.0.0.1:{args.port}/", flush=True)
     print("Existing TASS Workshop is unchanged. Stop with Ctrl+C.", flush=True)
     try:
@@ -374,6 +401,7 @@ def main():
         pass
     finally:
         httpd.server_close()
+        pulse.close()
 
 
 if __name__ == "__main__":
