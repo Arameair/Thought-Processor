@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 from urllib.parse import urlsplit
+from desk_state import BoardStore, InvalidBoard, StaleBoard
 
 HERE = Path(__file__).resolve().parent
 OPENER = build_opener(ProxyHandler({}))
@@ -27,6 +28,8 @@ ALLOWED_ASSETS = {
     "/assets/app.js": (HERE / "assets/app.js", "text/javascript; charset=utf-8"),
     "/assets/build.js": (HERE / "assets/build.js", "text/javascript; charset=utf-8"),
     "/assets/build.css": (HERE / "assets/build.css", "text/css; charset=utf-8"),
+    "/assets/today.js": (HERE / "assets/today.js", "text/javascript; charset=utf-8"),
+    "/assets/today.css": (HERE / "assets/today.css", "text/css; charset=utf-8"),
 }
 
 
@@ -135,6 +138,7 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
     backend = os.environ.get("TASS_ATRIUM_BACKEND_URL", f"http://127.0.0.1:{backend_port}").rstrip("/")
     valid_hosts = {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}
     share_dir = Path(os.environ.get("TASS_ATRIUM_COLLAB_REQUESTS", "/collab/requests"))
+    desk_store = BoardStore(os.environ.get("TASS_ATRIUM_DESK_STATE", "/state/desk.json"))
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "TASSAtrium/0.1"
@@ -178,14 +182,19 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
             if not self._valid_host():
                 return self._json(403, {"error": "invalid host"})
             path = urlsplit(self.path).path
-            if path in ("/", "/build"):
-                file_name = "build.html" if path == "/build" else "index.html"
+            if path in ("/", "/today", "/build", "/explore"):
+                file_name = {"/": "today.html", "/today": "today.html", "/build": "build.html", "/explore": "index.html"}[path]
                 raw = (HERE / file_name).read_text("utf-8")
                 data = raw.replace("__PLAYGROUND_CSRF__", csrf).encode("utf-8")
                 return self._send(200, data, "text/html; charset=utf-8")
             if path in ALLOWED_ASSETS:
                 p, ctype = ALLOWED_ASSETS[path]
                 return self._send(200, p.read_bytes(), ctype)
+            if path == "/desk/state":
+                try:
+                    return self._json(200, desk_store.read())
+                except (ValueError, OSError, json.JSONDecodeError):
+                    return self._json(503, {"error": "Local task board is unreadable; existing data was not overwritten."})
             if path == "/bridge/health":
                 return self._json(200, {"playground": "ready", "backend": "unverified"})
             if path == "/bridge/share-status":
@@ -269,7 +278,7 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
             if not self._valid_host():
                 return self._json(403, {"error": "invalid host"})
             target = urlsplit(self.path).path
-            if target not in ("/bridge/message", "/bridge/share-brief"):
+            if target not in ("/bridge/message", "/bridge/share-brief", "/desk/state"):
                 return self._json(404, {"error": "not found"})
             origin = self.headers.get("Origin")
             if origin and origin not in (f"http://127.0.0.1:{server_port}", f"http://localhost:{server_port}"):
@@ -280,11 +289,20 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 return self._json(415, {"error": "JSON required"})
             try:
                 n = int(self.headers.get("Content-Length", "0"))
-                if not 0 < n <= 8192:
+                if not 0 < n <= (50000 if target == "/desk/state" else 8192):
                     return self._json(413, {"error": "message too large"})
                 obj = json.loads(self.rfile.read(n))
                 if not isinstance(obj, dict):
                     return self._json(400, {"error": "expected JSON object"})
+                if target == "/desk/state":
+                    try:
+                        return self._json(200, desk_store.write(obj))
+                    except StaleBoard as exc:
+                        return self._json(409, {"error": str(exc)})
+                    except InvalidBoard as exc:
+                        return self._json(400, {"error": str(exc)})
+                    except (OSError, ValueError):
+                        return self._json(503, {"error": "Task board storage unavailable; no change recorded."})
                 if target == "/bridge/share-brief":
                     if not share_dir.is_dir():
                         return self._json(503, {"error": "Sharing not configured. Enable the optional collaboration feed."})
