@@ -15,7 +15,7 @@ here="$(pwd)"
 
 # The Thought Engine is pinned to a reviewed commit (never a moving branch head).
 ENGINE_REPO="Arameair/Thought-engine"
-ENGINE_COMMIT="${ENGINE_COMMIT:-9b55d1d107cc668e93c4a9313de802a50f98d3ff}"
+ENGINE_COMMIT="${ENGINE_COMMIT:-4924de6f1b8504abcab4fed98c0e191057f4e277}"
 TASS_HOME="${TASS_DATA:-$HOME/.tass}"
 ENGINE_DATA="${ENGINE_DATA:-$HOME/.thought-engine/tass}"
 ENGINE_PORT="${ENGINE_PORT:-7798}"
@@ -60,7 +60,7 @@ preflight() {   # read-only
     warn "The Python workspace's liaison is running: it also answers 'tass' issues on GitHub."
     say  "         The Go core will start with GitHub messages PAUSED so TASS doesn't answer twice. Nothing is stopped."
   fi
-  if [[ -s "$TASS_HOME/identity-grant.json" ]]; then ok "Identity policy cached locally (from the last sync)"
+  if [[ -s "$TASS_HOME/grant/identity-grant.json" ]]; then ok "Identity policy cached locally (from the last sync)"
   else warn "No Identity policy yet: TASS won't act until policies/tass.json is on Arameair/identity main (PR #31, owner review)."; fi
   [[ "$ENGINE_COMMIT" =~ ^[0-9a-f]{40}$ ]] && ok "Thought Engine pinned to $ENGINE_COMMIT" || { bad "ENGINE_COMMIT isn't a full commit SHA"; blockers=1; }
   return $blockers
@@ -127,7 +127,7 @@ say "Built: Thought Engine ${ENGINE_COMMIT:0:12}, tass-core $(git rev-parse --sh
 stop_one tass-core; stop_one thought-engine
 mkdir -p "$ENGINE_DATA" && chmod 700 "$ENGINE_DATA"
 PORT="$ENGINE_PORT" nohup bin/thought-engine -data "$ENGINE_DATA" -model "$MODEL_URL" -worker nemotron \
-  -identity-policy "$TASS_HOME/identity-grant.json" >>"$LOGS/thought-engine.log" 2>&1 &
+  -identity-policy "$TASS_HOME/grant/identity-grant.json" >>"$LOGS/thought-engine.log" 2>&1 &
 echo $! > "$LOGS/thought-engine.pid"
 for _ in $(seq 40); do curl -sf -o /dev/null "http://127.0.0.1:$ENGINE_PORT/api/model" && break; sleep 0.25; done
 curl -sf -o /dev/null "http://127.0.0.1:$ENGINE_PORT/api/model" || { bad "The Thought Engine didn't start:"; tail -n 20 "$LOGS/thought-engine.log"; exit 1; }
