@@ -68,6 +68,15 @@ class BoardTests(unittest.TestCase):
             self.store.write(other)
         self.assertEqual(self.store.read()["tasks"][0]["title"], "First tab")
 
+    def test_daily_edition_does_not_erase_previous_work(self):
+        board = self.store.read()
+        board["day"] = "2026-11-03"
+        board["tasks"][0]["notes"] = "Protected previous-day work"
+        self.store.write(board)
+        loaded = BoardStore(self.file).read()
+        self.assertEqual(loaded["day"], "2026-11-03")
+        self.assertEqual(loaded["tasks"][0]["notes"], "Protected previous-day work")
+
     def test_corrupt_file_fails_closed(self):
         self.file.parent.mkdir(parents=True)
         self.file.write_text("unreadable json", encoding="utf-8")
