@@ -60,9 +60,17 @@
     const meta = add(box, 'div', 'pulse-metadata');
     add(meta, 'span', '', card.job_id ? 'Job '+card.job_id : 'Not queued');
     add(meta, 'span', '', card.started_at ? 'Started '+card.started_at : 'No execution started');
+    if (card.model_proposal) {
+      add(box, 'p', 'pulse-caption', 'Cell selected by '+card.model_proposal.actor+
+        ' · not an authorization grant');
+      add(box, 'p', 'pulse-caption', 'Prediction: '+card.model_proposal.expected_result);
+    } else if (card.id === 'NOTEBOOK-IDENTITY-LAB') {
+      add(box, 'p', 'pulse-caption', 'AWAITING MODEL CELL SELECTION · real Nemotron not connected');
+    }
     if (card.reason) add(box, 'p', 'pulse-reason', card.reason);
     const actions = add(box, 'div', 'pulse-buttons');
-    if (card.status === 'PROPOSED') btn(actions, 'Approve this exact test', 'approve', card, false);
+    if (card.status === 'PROPOSED') btn(actions, 'Approve this exact test', 'approve', card,
+      card.id === 'NOTEBOOK-IDENTITY-LAB' && !card.model_proposal);
     if (card.status === 'APPROVED') btn(actions, 'Queue once', 'queue', card, !state.execution_enabled);
     if (card.status === 'QUEUED') add(actions, 'span', 'pulse-caption', 'Queued · awaiting next enabled pulse');
     if (card.status === 'WORKING') add(actions, 'span', 'pulse-caption', 'WORKING · later pulses will not start it twice');
@@ -73,6 +81,8 @@
       add(proof, 'p', '', 'Receipt '+receipt.receipt_id+' · exit '+(receipt.exit_code === null ? 'N/A' : receipt.exit_code));
       add(proof, 'p', '', 'Started '+receipt.started_at+' · finished '+receipt.finished_at);
       add(proof, 'p', '', 'SHA '+receipt.sha+' · output SHA-256 '+(receipt.output_sha256 || 'N/A'));
+      if (receipt.cell_id) add(proof, 'p', '', 'Notebook cell '+receipt.cell_id+' · cell SHA-256 '+receipt.cell_sha256);
+      if (receipt.notebook_blob_sha) add(proof, 'p', '', 'Notebook Git blob '+receipt.notebook_blob_sha);
       if (receipt.output_excerpt) {
         add(proof, 'span', 'pulse-caption', 'Bounded, redacted test output');
         add(proof, 'pre', 'pulse-output', receipt.output_excerpt);

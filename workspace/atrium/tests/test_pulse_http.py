@@ -55,7 +55,7 @@ class TestCardHTTP(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertFalse(state["execution_enabled"])
         self.assertTrue(state["paused"])
-        self.assertEqual({c["id"] for c in state["cards"]}, {"IDENTITY-014", "INTEGRITY-050"})
+        self.assertEqual({c["id"] for c in state["cards"]}, {"IDENTITY-014", "INTEGRITY-050", "NOTEBOOK-IDENTITY-LAB"})
         self.assertFalse(any(c["status"] == "WORKING" for c in state["cards"]))
         self.assertNotIn("env_key", json.dumps(state))
         self.assertNotIn(self.temp.name, json.dumps(state))

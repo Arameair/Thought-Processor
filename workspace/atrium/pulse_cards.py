@@ -24,6 +24,7 @@ from pathlib import Path
 
 IDENTITY_SHA = "b0c7267b47f6111c5024c9bba8a4135e2357b432"
 INTEGRITY_SHA = "aa800af3eee5d026521395bde3236737285e6287"
+NOTEBOOK_SHA = "25fe25bb57b9306e1e7b312e1d28e75152f5d28e"
 CATALOG = {
     "IDENTITY-014": {
         "id": "IDENTITY-014",
@@ -46,6 +47,22 @@ CATALOG = {
         "argv": ["go", "test", "-race", "-tags=acceptance", "./tass", "-run=^TestAcceptanceRejects", "-count=1", "-v"],
         "subdir": "core",
         "env_key": "TASS_ATRIUM_TEST_INTEGRITY_CHECKOUT",
+    },
+    "NOTEBOOK-IDENTITY-LAB": {
+        "id": "NOTEBOOK-IDENTITY-LAB",
+        "objective": "Use a versioned Jupyter lesson to run the approved Identity package test cell.",
+        "expected": "A real isolated Jupyter cell reports Go Identity package results; a passing kernel alone is not PASS.",
+        "repository": "Arameair/Thought-Processor",
+        "sha": NOTEBOOK_SHA,
+        "operation": "notebook_identity_test_v1",
+        "argv": ["python3", "-I", "notebook_cell_worker.py", "--cell", "identity-go-packages"],
+        "subdir": "workspace/atrium/lessons",
+        "notebook_path": "workspace/atrium/lessons/identity_test.ipynb",
+        "notebook_blob_sha": "72d2a86db4209b18afe34b26a130ddce00676f07",
+        "cell_id": "identity-go-packages",
+        "cell_sha256": "822f3b33168b95887c4b0b66fdbb783e8659850b67f8e3f1213a4113fe840d65",
+        "capability": "test.identity.packages",
+        "env_key": "TASS_ATRIUM_TEST_NOTEBOOK_CHECKOUT",
     },
 }
 FINAL = {"PASS", "FAIL", "ERROR", "BLOCKED"}
@@ -101,6 +118,7 @@ class CardStore:
         self.path = Path(file_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._mutex = threading.RLock()
+        self._migrating = False
         self._lockfile = os.open(str(self.path) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
         try:
             fcntl.flock(self._lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -110,7 +128,7 @@ class CardStore:
         try:
             with self._mutex:
                 doc = self._read()
-                changed = False
+                changed = self._migrating
                 for card in doc["cards"].values():
                     if card["status"] == "WORKING":
                         if card.get("pending_receipt"):
@@ -139,11 +157,22 @@ class CardStore:
             raise CardError("Test-card state too large; existing data not overwritten", 503)
         try:
             doc = json.loads(raw)
-            if doc["schema"] != 1 or set(doc["cards"]) != set(CATALOG):
+            if doc["schema"] != 1 or not isinstance(doc["cards"], dict):
                 raise ValueError("schema or cards do not match")
+            keys = set(doc["cards"])
+            legacy_keys = set(CATALOG) - {"NOTEBOOK-IDENTITY-LAB"}
+            if keys not in (legacy_keys, set(CATALOG)):
+                raise ValueError("unknown test-card set; never overwrite")
+            if keys == legacy_keys:
+                self._migrating = True  # Existing two-card ledger: strictly additive migration.
+                doc["cards"]["NOTEBOOK-IDENTITY-LAB"] = make_card(CATALOG["NOTEBOOK-IDENTITY-LAB"])
             for key, card in doc["cards"].items():
                 spec = CATALOG[key]
-                for field in ("id", "sha", "repository", "operation", "argv", "subdir"):
+                fields = ("id", "sha", "repository", "operation", "argv", "subdir")
+                if key == "NOTEBOOK-IDENTITY-LAB":
+                    fields += ("notebook_path", "notebook_blob_sha", "cell_id",
+                               "cell_sha256", "capability")
+                for field in fields:
                     if card.get(field) != spec[field]:
                         raise ValueError(f"definition changed for {key}")
                 if card.get("status") not in {"PROPOSED", "APPROVED", "QUEUED", "WORKING", *FINAL}:
@@ -424,6 +453,8 @@ class PulseCoordinator:
                     raise CardError("Explicit card-specific owner acknowledgement is required", 403)
                 if card["status"] != "PROPOSED":
                     raise CardError("Only PROPOSED cards can be approved", 409)
+                if card_id == "NOTEBOOK-IDENTITY-LAB" and not card.get("model_proposal"):
+                    raise CardError("Notebook cell selection has not been proposed by a model actor", 403)
                 card["approval"] = {"at": utc(), "kind": "LOCAL_UI_ATTESTATION_NOT_IDENTITY"}
                 card["status"] = "APPROVED"
             elif action == "queue":
@@ -508,8 +539,9 @@ class PulseCoordinator:
             # Only allowlisted receipt fields can be persisted/displayed.
             keys = ("receipt_id", "job_id", "card_id", "operation", "repository", "sha",
                     "argv", "started_at", "finished_at", "exit_code", "outcome", "executed",
-                    "environment", "output_sha256", "output_excerpt", "reason")
-            receipt = {key: receipt.get(key) for key in keys}
+                    "environment", "output_sha256", "output_excerpt", "reason",
+                    "cell_id", "cell_sha256", "notebook_blob_sha")
+            receipt = {key: receipt.get(key) for key in keys if key in receipt}
             if self.store._lockfile is None:
                 return  # Never write from an old worker after process shutdown/restart.
             receipt["output_excerpt"] = redact(receipt.get("output_excerpt") or "")
