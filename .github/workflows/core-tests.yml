@@ -30,8 +30,9 @@ jobs:
         working-directory: core
         run: |
           docker network create tass-workspace_default
-          CORE_IMAGE=tass-core:ci ENGINE_IMAGE=tass-engine:ci TASS_UID=1000 TASS_GID=1000 TASS_DATA=/tmp/t \
-          ENGINE_DATA=/tmp/e TOKEN_FILE=/tmp/tok docker compose -p tass-core -f compose.yaml config -q && echo compose-ok
+          CORE_IMAGE=tass-core:ci ENGINE_IMAGE=tass-engine:ci IDENTITY_IMAGE=tass-identity:ci \
+          APP_UID=1000 APP_GID=1000 APP_DATA=/tmp/tass-ci-data APP_SECRETS=/tmp/tass-ci-secrets \
+          MODEL_ARGS=unused docker compose -p tass-core -f compose.yaml config -q && echo compose-ok
       - name: Management script syntax
         working-directory: core
         run: bash -n tass.sh && bash -n start.sh

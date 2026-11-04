@@ -873,7 +873,21 @@ func (c *Core) Answer(m Incoming) {
 		c.event("problem", "Thinking failed (cycle "+id+"): "+err.Error())
 		return
 	}
+	// A proposal cannot be shown or executed for the wrong cycle or when the
+	// Engine did not return a readable answer. Issue #50: correlate at the executor.
+	if cy == nil || cy.CycleID != id || cy.State != "awaiting_outcome" || cy.Proposal == nil {
+		c.appendLog("conversation.jsonl", map[string]any{"at": c.now().UTC(), "cycle_id": id,
+			"error": "uncorrelated or incomplete Thought Engine cycle; no action executed"})
+		c.event("problem", "Thought Engine returned an uncorrelated or incomplete cycle; nothing was executed.")
+		return
+	}
 	prop := cy.Proposal
+	if prop.Format != "READ" || strings.TrimSpace(prop.Reply) == "" {
+		c.appendLog("conversation.jsonl", map[string]any{"at": c.now().UTC(), "cycle_id": id,
+			"error": "unreadable or empty proposal; no action executed"})
+		c.event("problem", "Nemotron's reply did not meet the conversation format; nothing was executed.")
+		return
+	}
 	if prop.Reasoning != "" {
 		c.event("thought", prop.Reasoning)
 	}
@@ -881,7 +895,14 @@ func (c *Core) Answer(m Incoming) {
 	// The proposed action runs only if Identity allows it at this moment.
 	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
 	if prop.Action != "NONE" {
-		if ok, why := c.allowedNow(identity.ReadTass); !ok {
+		// A model proposal is never an authorization. Independently require the
+		// matching, persisted, locked numeric prediction before the Identity check.
+		digest, hashErr := hex.DecodeString(prop.Prediction.SHA256)
+		if prop.Prediction.State != "LOCKED" || prop.Prediction.Value == nil ||
+			prop.Prediction.LockedAt.IsZero() || hashErr != nil || len(digest) != sha256.Size {
+			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: "action refused: prediction not locked with a valid digest",
+				Executor: "thought-processor"}
+		} else if ok, why := c.allowedNow(identity.ReadTass); !ok {
 			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: why, Executor: "thought-processor", Authorized: why}
 		} else {
 			c.fileMu.Lock()
