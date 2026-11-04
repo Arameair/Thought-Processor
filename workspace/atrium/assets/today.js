@@ -27,7 +27,11 @@ function setDirty(value) {
 function fillForm() {
   const task = current();
   if (!task) return;
-  for (const field of fields) $(formIds[field]).value = task[field] || (field === 'result' ? 'unverified' : 'planned');
+  for (const field of fields) {
+    const value = task[field];
+    $(formIds[field]).value = value === undefined || value === null
+      ? (field === 'status' ? 'planned' : field === 'result' ? 'unverified' : '') : value;
+  }
   setDirty(false);
   showSaved();
   prepareAsk();
@@ -110,7 +114,7 @@ async function saveTask(e) {
   if(target.result==='reported_pass'&&!target.evidence){
     notice('A reported PASS requires observed evidence and source revision.');$('taskEvidence').focus();return;
   }
-  try{await saveBoard(proposed);notice('Task notes saved locally. No code or GitHub files changed.');}
+  try{await saveBoard(proposed);prepareAsk();prepareBrief();notice('Task notes saved locally. No code or GitHub files changed.');}
   catch(err){notice('Not saved: '+err.message);}
 }
 async function addTask(e) {
@@ -132,6 +136,7 @@ async function addTask(e) {
   }catch(err){notice('Idea not saved: '+err.message);}
 }
 function prepareAsk() {
+  if(ui.dirty){notice('Save your task changes before preparing a TASS request.');return;}
   const task=current();if(!task)return;
   const instruction=[
     'TASS, I want to collaborate on one existing project task. Please investigate, do not execute.',
@@ -146,6 +151,7 @@ function prepareAsk() {
   $('askText').value=instruction.slice(0,3000);
 }
 function prepareBrief() {
+  if(ui.dirty){notice('Save task changes before preparing a GitHub brief.');return;}
   const task=current();if(!task)return;
   const brief=[
     'Atrium 2026-11-04 — owner-reviewed task brief',
