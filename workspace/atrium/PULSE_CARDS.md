@@ -72,7 +72,7 @@ python3 -m py_compile workspace/atrium/server.py workspace/atrium/pulse_cards.py
 
 The test modules validate explicit approval, no execution by default, unknown commands and paths denied, local CSRF/Origin checks, simulated four-tick long-running work without duplication, pause/resume/step/stop, actual fixture child output and exit code, known FAIL not reclassified as PASS, sanitized receipts, corrupt state fail-closed, one-writer lock and crash recovery. Four ticks use a **manual simulated clock progression**, not 80 elapsed seconds.
 
-CI workflow \`.github/workflows/atrium-pulse-evidence.yml\` performs actual pinned Go tests in a disposable runner with \`persist-credentials: false\`; uploads a JSON receipt artifact. The expected P0 FAIL of INTEGRITY-050 **does not make the workflow fail** if it is the actual known regression assertion, not a compilation error. Evidence includes exact commit, exit, digest and one-shot job count. IDENTITY-014 must actually exit 0; otherwise the CI workflow fails. Consult the final run logs before treating any case as PASS.
+CI workflow \`.github/workflows/atrium-pulse-evidence.yml\` performs actual pinned Go tests in a disposable runner with \`persist-credentials: false\`; uploads a JSON receipt artifact. The expected P0 FAIL of INTEGRITY-050 **does not make the workflow fail** if it is the actual known regression assertion, not a compilation error. Evidence includes exact commit, exit, digest and one-shot job count. IDENTITY-014 must actually exit 0; otherwise the CI workflow fails. Verified CI run: https://github.com/Arameair/Thought-Processor/actions/runs/41856885738 (success). The artifact `atrium-two-pinned-go-card-receipts` contains both redacted execution receipts. Its logs show IDENTITY-014 PASS and INTEGRITY-050 FAIL, each with one attempt; after controller restart, both receipts remain and no job reexecutes.
 
 ## PASS / FAIL / NOT RUN
 
@@ -82,8 +82,8 @@ CI workflow \`.github/workflows/atrium-pulse-evidence.yml\` performs actual pinn
 | Duplicate queue, four simulated pulses while WORKING, pause/step/stop | PASS (fixture CI) | \`test_pulse_cards.py\` |
 | Durable receipt and unknown-inflight restart without reexec | PASS (fixture CI) | \`test_pulse_cards.py\` |
 | Unknown repo/args/path, missing CSRF/Origin, redaction | PASS (fixture CI) | \`test_pulse_cards.py\`, \`test_pulse_http.py\` |
-| Actual pinned Go Identity packages | CI gate, confirm latest run | \`atrium-pulse-execution-evidence\` |
-| Actual pinned Go integrity regression | **FAIL (required known P0)**, receipt validates CI execution | PR #49 / Issue #50 |
+| Actual pinned Go Identity packages | **PASS (CI, exit 0, one attempt)** | GitHub Actions 41856885738 |
+| Actual pinned Go integrity regression | **FAIL (known P0 assertions reproduced; exit nonzero, one attempt)** | GitHub Actions 41856885738; PR #49 / Issue #50 |
 | Owner’s local Atrium Docker running approved Go tests | NOT RUN; disabled until isolation and Identity authorization are reviewed | owner acceptance needed |
 | Ten real wall-clock 20s coordination ticks under load | NOT RUN | fixture uses manual ticks; no owner run |
 | Go Thought Engine pulse, live Identity authorization, Nemotron GPU inference | NOT IMPLEMENTED here | separate engineering tracks |
