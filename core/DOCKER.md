@@ -1,121 +1,178 @@
-# TASS's Go core in Docker (Thought-Processor #44)
+# TASS as one Docker application (Thought-Processor #44, one-app directive)
 
-One system you can **check, start, inspect, update and recover**. It runs the Thought Engine and tass-core as two containers, and uses the **Nemotron model container that is already running** in the workspace stack.
+One application you **check, start, use, update and recover** with one script. It is four containers in one Compose project, `tass-app`:
 
 ```
- your browser ──127.0.0.1:8795──►┌──────── network namespace of "engine" ─────────┐
-                                 │  core (tass-core)  ──127.0.0.1:7798──► engine   │──► model:8081  (existing
-                                 │  page, GitHub sync, Identity checks   (Thought  │     tass-workspace-model-1,
-                                 │                                        Engine)  │     same GPU, no second copy)
-                                 └──────────────────────────────────────────────────┘
- The engine listens only on 127.0.0.1 INSIDE that namespace: none of its routes, including the older
- unauthenticated ones, can be reached from your computer or from any other container.
+ your browser ──127.0.0.1:8796──► identity  (tass-identity, Go)   create YOUR entity · unlock · lock
+      │                              ▲  authorizes every action (service keys)
+      │                              │
+      └──────127.0.0.1:8795──►┌──── network namespace of "engine" ───────────────┐
+                              │ core (tass-core)  ──127.0.0.1:7798──► engine      │──► model:8081
+                              │ page · tasks ·                        (Thought    │    llama.cpp, ONE per
+                              │ pulse controls                         Engine,    │    computer, internal
+                              │                                        20-s pulse)│    network only
+                              └───────────────────────────────────────────────────┘
 ```
 
 | Piece | What it is |
 | --- | --- |
-| `docker/core.Dockerfile` | Multi-stage Go build. Static binary, `USER 65532` (compose runs it as your own user ID), version in a label and in `/api/health`. |
-| `docker/engine.Dockerfile` | The same pattern for the Thought Engine, built from its **pinned commit** (`ENGINE_COMMIT_PIN` in `tass.sh`). |
-| `compose.yaml` | Project `tass-core`, two services. Both containers: read-only root filesystem, all capabilities dropped, no-new-privileges, healthchecks run by their own binaries. The model is reached on the existing `tass-workspace_default` network. |
-| `tass.sh` | Every command below. |
+| `docker/identity.Dockerfile` | tass-identity from the Identity repo at `IDENTITY_COMMIT_PIN`. |
+| `docker/engine.Dockerfile` | Thought Engine at `ENGINE_COMMIT_PIN`. |
+| `docker/core.Dockerfile` | tass-core from this checkout. |
+| `compose.yaml` | The four services. Every Go container: read-only root filesystem, all capabilities dropped, no-new-privileges, your own user ID, healthchecks. The model is on an **internal** network: no published port and no internet. |
+| `compose.gpu.yaml` | Added automatically when Docker can use an NVIDIA GPU. |
+| `compose.external-model.yaml` | Added when `MODEL_MODE=external`: use a model that's already running instead of starting one. |
+| `tass.sh` | All commands. Settings in `~/.tass-app/app.env`. |
+| `test/` | The clean-host acceptance driver and a **TEST FIXTURE** model image (never used for a real install). |
+
+Nothing depends on the Python workspace, the liaison or the `tass-workspace` network. Everything lives in `~/.tass-app` (data, keys, backups, build checkouts), never in `~/.tass`.
+
+## First run
+
+```bash
+cd core
+./tass.sh check        # writes ~/.tass-app/app.env the first time; otherwise read-only
+nano ~/.tass-app/app.env   # MODEL_DIR + MODEL_FILE (your .gguf), or MODEL_MODE=external
+                           # GITHUB_REPO=owner/repo to connect GitHub (token from gh auth token)
+./tass.sh check        # must end with "Ready"
+./tass.sh start        # builds the pinned version, starts the 4 services, validates them
+```
+
+Then open **http://127.0.0.1:8796**, create your own entity (a name and a passphrase), and open **http://127.0.0.1:8795** to talk to it and run the work pulse.
+
+- **A fresh install has no entity.** Nothing is downloaded or built in: no one else's entity, identity, memory, document or policy. The core says BLOCKED ("Identity NO_ENTITY") until you create one.
+- **LOCKED after every restart.** Unlocking is held in memory only. After any restart or update, unlock again with your passphrase. While LOCKED, nothing reaches the model and no task can be queued.
+- **Keys are made on your computer.** `tass.sh start` generates the service keys in `~/.tass-app/secrets` (0600). They're mounted read-only and are never in an image or in Git; the acceptance run searches every image layer for them.
 
 ## Commands
 
 ```bash
-cd ~/tass-workspace && git fetch && git checkout experiment/go-core-docker-20261104 && cd core
-./tass.sh check          # read-only preflight and inventory: writes nothing, stops nothing
-./tass.sh start          # first time: builds this checkout's version, then starts it and validates it
-./tass.sh status         # READY / WORKING / BUSY / BLOCKED / UNKNOWN, versions, pulse, GitHub sync
+./tass.sh check          # read-only preflight: Docker, CPUs/memory/disk, GPU, model file, ports, other models, data
+./tass.sh start
+./tass.sh status         # Identity state, READY/WORKING/BUSY/BLOCKED/UNKNOWN, last pulse tick, versions
 ./tass.sh logs
-./tass.sh check-update   # current vs candidate (branch head), commit list, engine pin change. Applies nothing.
-./tass.sh update [SHA]   # asks first. Backup → build → switch → validate → restore on failure.
-./tass.sh rollback       # back to the previous version. Data untouched; add --restore-data <backup> to restore it.
+./tass.sh check-update   # current vs candidate and what changed; applies nothing
+./tass.sh update [REF]   # asks first; backup → build → switch → validate → automatic restore on failure
+./tass.sh rollback       # previous version (add --restore-data <backup> to restore data too)
 ./tass.sh backup
-./tass.sh stop           # stops only the two Go containers
+./tass.sh stop           # only this application's containers
 ```
 
-- **State meanings.**
-  - READY: idle; the engine and model answer, and the Identity policy is valid now.
-  - WORKING: a thought cycle is running.
-  - BUSY: the engine's model slot is busy.
-  - BLOCKED: something is missing, and `status` says what (no or expired policy, engine or model down).
-  - UNKNOWN: the core isn't answering.
-- **The model.** `./tass.sh` never starts or stops it. If it isn't running, `check` says so and `start` refuses.
-- **The Python workspace, liaison and Atrium are untouched.** While the Python liaison runs, the Go core keeps **GitHub messages paused**, so TASS never answers twice. Cutting over needs your explicit OK.
-- **The host-process core** (`./start.sh`) uses the same port. `start` asks before stopping it.
+**Validation** (after start, update and rollback) passes only if all of these hold:
+- all services are healthy;
+- exactly one model container is running (bundled mode);
+- the running core reports exactly the expected commit;
+- the entity is the same one as before;
+- a LOCKED Identity makes the core BLOCKED; with an UNLOCKED Identity, the state is no worse than before;
+- no record file shrank or disappeared.
 
-## How an update works (and fails safely)
+A failed update puts back the previous version **and** the data from the backup taken just before. The data that was there is moved to `~/.tass-app/deploy/failed/`, never deleted.
 
-1. `check-update` fetches the tracked branch (`TASS_TRACK`, default `experiment/go-core-docker-20261104`). It only fetches into the remote-tracking ref; **your working tree and branches are never touched**. It shows:
-   - the current and candidate SHAs;
-   - the commits in `core/`;
-   - a diff summary;
-   - whether the engine pin changes.
-2. `update` asks before doing anything. Then:
-   1. builds the candidate from a separate checkout (`~/.tass-deploy/src/core-<sha>`, a git worktree) and the engine at the candidate's pin;
-   2. stops the Go containers;
-   3. **backs up `~/.tass` and `~/.thought-engine/tass`** (`~/.tass-deploy/backups/`, mode 600);
-   4. switches to the candidate and validates it:
-      - both containers healthy;
-      - `/api/health` reports the **candidate's exact SHA**;
-      - the state is **no worse than before** (READY stays READY);
-      - **no record file shrank or disappeared**.
-3. **If validation fails,** the previous version comes back, together with your data from the backup. What was there is **moved** to `~/.tass-deploy/failed/<time>/`, never deleted. Then the previous version is validated again.
-4. Nothing deploys itself. There are no automatic merges, branch switches or resets, and no "new commit, so redeploy".
+## One model per computer
 
-Records:
-- versions: `~/.tass-deploy/current.env` and `previous.env`, holding SHAs, image tags, image IDs, and the compose file used;
-- history: `~/.tass-deploy/history.log`.
+- **Bundled** (`MODEL_MODE=bundled`): the app runs llama.cpp with your weights mounted read-only from `MODEL_DIR`. It uses the GPU when Docker can use it (`MODEL_GPU=auto`), otherwise the CPU.
+  - `check` stops if any other model server is already running.
+- **External** (`MODEL_MODE=external`, `MODEL_NETWORK`, `MODEL_URL`): the engine joins that model's Docker network and nothing new starts.
+  - On a PC where the workspace's Nemotron already runs: `MODEL_NETWORK=tass-workspace_default` and `MODEL_URL=http://model:8081`. That container isn't stopped or changed.
 
-Old images and build checkouts are kept, so rollback works offline.
+## GitHub and the lessons loop
 
-## Data and secrets
+Set `GITHUB_REPO` (and `GITHUB_BRANCH`, default `live`) in `~/.tass-app/app.env`. At start, `tass.sh` saves a token from `gh auth token` (or `GITHUB_TOKEN`) as `~/.tass-app/secrets/github_token` (0600). It's mounted read-only and is never in an image. Without `GITHUB_REPO`, everything stays on this computer.
 
-| Where | What | Who sees it |
-| --- | --- | --- |
-| `~/.tass` (0700) | `tass.md`, `memory.jsonl`, `conversation.jsonl`, `sync.jsonl`, `conflicts/`, `state.json`, `api-key` | core (read-write) |
-| `~/.tass/grant/` | Identity's (prototype) policy with its confirmation time | core writes it; the **engine reads only this folder** (read-only) |
-| `~/.thought-engine/tass` (0700) | `cycles.jsonl`, `pulse.jsonl`, `model-requests.jsonl`, `calls.jsonl`, `api-key` | engine (read-write). The core gets **only the key file**, read-only. |
-| `~/.tass-deploy/secrets/github_token` (0600) | GitHub token, copied from `gh auth token` | **core only**, mounted read-only at `/run/secrets` |
-| `~/.tass-deploy/backups/` (0700) | backups. They include the key files, so treat them as private. | you |
+- **Document:** the entity's `tass.md` comes from the repo. The app syncs it every 20 s with ETags and a section-by-section merge. If both sides changed the same section, it opens a pull request instead of choosing. A repo without the file gets the entity's own starter, but a local starter is never merged over a real document.
+- **Lessons:** turn on **Work pulse every 20 seconds** and **Learn new lessons from GitHub** on the page (8795). Then each pulse:
+  1. Looks at `lessons/` in the repo. One request, usually a free 304 when nothing changed.
+  2. Downloads new or changed lessons and keeps them locally.
+  3. Hands **one** lesson at a time to the engine's pulse. The entity studies it **without** the expected answers.
+  4. The **app grades** the answers against each step's `Answer:`. A wrong answer means another try on a later pulse, up to 3; then the lesson is STUCK until you press **Try again**.
+  5. A lesson that passes waits for **Approve**. Approved, it's LEARNED: one line in `## Learned` of `tass.md`, synced to GitHub. The entity is given its learned lessons in conversation.
+- **The setting sticks.** The pulse comes back on by itself after every restart, as soon as you unlock Identity.
+- **Identity decides each step.** LOCKED means no GitHub sync, no lessons and no pulse.
+- **Lesson format:** `lessons/README.md` in the TASS repo (Teach / Check / Answer). The app never runs code from a lesson. Older code-cell lessons show up as "needs the workspace".
 
-Nothing secret is in an image, a build argument, the repository or a log. Containers run as **your** user ID, so every file stays yours.
+## The work pulse
 
-## Evidence (2026-11-04)
+Every 20 s (`PULSE_EVERY`) the engine runs one tick: it observes pending work, decides, starts or continues one authorized job, observes results and reports. Each tick is a line in `~/.tass-app/data/engine/ticks.jsonl` and appears on the page.
 
-| # | Check | Where | Result |
+- **States:** READY, WORKING, BUSY (model slot in use) and BLOCKED (Identity said no). UNKNOWN appears on the page when the engine doesn't answer.
+- **Controls:** the pulse starts PAUSED after every start. Use **Start**, **Pause**, **Resume** and **Step once** on the page or via `POST /api/pulse`.
+- **No duplicate runs.** A job is saved as RUNNING before it starts. Later ticks say CONTINUE and never start it again. A job cut off by a restart becomes INTERRUPTED and is not re-run on its own.
+- **Other entities' work is refused.** A job for any entity other than this installation's is refused at submit. If one is found queued, it's marked REFUSED, so it never blocks the queue.
+- **Conversation stays available.** Talking doesn't go through the pulse. A message gets a receipt, or `429` if the inbox is full (#46: never silently dropped).
+
+## Threat model and its limits (#47)
+
+- **What protects the two pages:**
+  - They listen on 127.0.0.1 only.
+  - Each page embeds a token that's new for every process start. POSTs need that token, JSON and a local Origin.
+  - The token is a **CSRF and other-website defense, not authentication**. Any program running as you on this computer can read the page and get the token. Identity's passphrase is what authenticates the owner.
+- **Identity owner routes** (create, unlock, lock) also require `Host: 127.0.0.1` or `localhost`. Services inside the app reach Identity as `identity:8796` and are refused there. The acceptance run proves this from inside the core container.
+- **Services** authenticate to Identity with their own keys. Identity returns a decision ID, which is recorded in `decisions.jsonl`. Every decision fails closed when Identity can't be reached.
+- **At rest**, the entity's credential and verifier are protected by file permissions (0600/0700) only, not encryption. Anyone with your user account or root can copy them. A copied `entity.json` without its matching `credential` stays LOCKED. A copied pair plus the passphrase is a full copy of that entity.
+- **Not covered:**
+  - remote access;
+  - multiple users on one computer;
+  - a compromised Docker daemon or host;
+  - side channels in the model;
+  - memory and training (separate future components).
+
+## Results (clean-host acceptance)
+
+See `docs/evidence/one-app-clean-host-20261104.txt` for the full run. "Fixture" means the sandbox run with the TEST FIXTURE model and stand-in base images (Docker Hub isn't reachable there).
+
+| Acceptance item | Fixture (sandbox) | CI | Owner's PC (real Nemotron) |
 | --- | --- | --- | --- |
-| 1 | `check` writes nothing (file listing before and after) and reports the model, liaison, ports, policy and data | sandbox, Docker 29.9.2 / compose 5.6.1 | PASS |
-| 2 | Go images build (core + engine at the pin) | Sandbox: both, with **stand-in base images** (Docker Hub isn't reachable there). GitHub CI run 41847703616: the core image with the real `golang:1.24-alpine` / `alpine:3.20` bases (label = commit, `user=65532:65532`), plus compose validated. The engine image isn't built in CI because Thought-engine is private. | PASS |
-| 3 | `start` with a running "liaison" and "model": nothing of theirs stopped; messages paused; exactly one model container | sandbox, **simulated** workspace containers | PASS |
-| 4 | The engine reaches the existing model container by network (`model:8081`) | sandbox, **fixture model** | PASS |
-| 5 | Stop, then start: every record kept (cycles 6 → 12, conversation 1 → 2), the policy still valid, READY | sandbox | PASS |
-| 6 | GitHub cut: still READY, a cycle ran, failed syncs recorded; reconnects by itself | sandbox, GitHub reads through a local proxy | PASS |
-| 7 | Update to a good candidate (PASS). Update to a **deliberately broken** candidate: FAIL detected, previous version **and data** restored (counts and `tass.md` checksum identical), failed data moved aside. Update with an engine pin change (PASS). Rollback twice (PASS). | sandbox, `docs/evidence/docker-update-20261104.txt` | PASS |
-| 7b | The engine refuses on its own when the Identity grant file is missing (cycle `denied`, **no model request made**) | sandbox | PASS |
-| 8 | Keys: status without key → 401; the engine isn't reachable from the host or from another container | sandbox | PASS |
-| 9 | **Real Nemotron thought cycle, on your PC** | — | **NOT RUN**: owner test below |
+| Clean install: 4 services healthy, one start command | PASS (re-run on 8208895: 37/37) | NOT RUN (CI builds only the core image) | NOT RUN |
+| Exactly one model; preflight refuses a second; external mode starts none | PASS | NOT RUN | NOT RUN |
+| No Python workspace, liaison or tass-workspace dependency | PASS | — | NOT RUN |
+| No keys inside any image (every layer searched) | PASS | — | NOT RUN |
+| Fresh install: NO_ENTITY → BLOCKED, nothing personal | PASS | — | NOT RUN |
+| Can't impersonate: no service key → 401; no page token → 403; from inside the app → 403; other entity's work refused (unit test) | PASS | — | NOT RUN |
+| Enrollment: create own entity, wrong passphrase refused, unlock → READY | PASS | — | NOT RUN |
+| Conversation with receipt; available while a long job runs (queued for the one model slot) | PASS | — | NOT RUN |
+| Work pulse: PAUSED until Start; 10 ticks ~20 s apart; 45-s job, 1 START, 2 CONTINUE, result reported on a later tick | PASS | — | NOT RUN |
+| Restart: same entity, LOCKED → BLOCKED, records persisted, pulse PAUSED | PASS | — | NOT RUN |
+| Good update; broken update auto-restored (version + data); manual rollback | PASS | — | NOT RUN |
+| GPU overlay (`compose.gpu.yaml`) and the real llama.cpp image | NOT RUN (no GPU, no Docker Hub) | — | NOT RUN |
+| Real Nemotron answers through the app | NOT RUN | — | NOT RUN: owner verifies |
 
-## Owner acceptance (about 15 minutes)
+Found and fixed by this run: a failed update overwrote the rollback target (`tass.sh` now keeps it).
 
-You need the workspace model running as usual. Identity PR #31 can stay unmerged for steps 1–3: you'll see BLOCKED, which is correct.
+Lessons loop (`docs/evidence/lessons-loop-clean-host-20261104.txt`, TEST FIXTURE GitHub and model): **23 PASS, 0 FAIL**:
+- token handling;
+- document from the repo;
+- chat;
+- setting off → nothing looked at;
+- setting on → the pulse runs, 3 lessons found, studied one at a time, graded by the app, one retry after a wrong answer;
+- approval → Learned on GitHub;
+- restart → the pulse comes back on by itself and nothing is studied again;
+- a lesson added later is picked up;
+- 304s when nothing changed.
 
-1. `./tass.sh check`. Expected: `[ok]` lines, plus notes. Your Python stack keeps running (`docker ps`).
-2. `./tass.sh start`. Expected: `PASS: both healthy … version …`. Run `docker ps` again: still **one** model container, and the workspace containers are still up.
-3. `./tass.sh status`. Expected: BLOCKED with "no Identity policy yet" until #31 is merged; otherwise READY.
-4. *(After reviewing and merging #31.)* Open http://127.0.0.1:8795 and ask **How many sections does your tass.md have?**
+Against your real GitHub and Nemotron: NOT RUN.
 
-   Expected: a real Nemotron reply and a cycle card showing a Spark, a **LOCKED** prediction, EXECUTED and an evaluation. Paste the last line of `~/.thought-engine/tass/cycles.jsonl` into #44.
-5. `./tass.sh stop`, then `./tass.sh start`, then `./tass.sh status`. Expected: READY, and the earlier cycle is still on the page.
-6. Turn your network off, then ask TASS something. Expected: he answers; `status` shows GitHub not synced. Turn the network back on; within a few minutes, `GitHub synced True`.
-7. `./tass.sh check-update`. Expected: "Up to date", or a candidate with its commit list. Apply it only if you want to: `./tass.sh update`.
-8. `./tass.sh rollback`, then `./tass.sh rollback` again. Expected: each step ends with PASS, and you finish on the version you started with.
+## Owner acceptance (on your PC, about 15 minutes)
 
-## Known limits
+Your existing containers aren't touched. Because your workspace's Nemotron is already running, use external mode so the PC still runs ONE model.
 
-- Containerization keeps the existing pulse: a 20-second **model health pulse**, plus thought cycles **on demand**. **Start/Pause/Resume/Step Once, the 10 observable ticks and Correct-a-result are not built yet.** The issue allows staging them after real-model acceptance.
-- Identity is still the **prototype policy file** (PR #31, owner review). It is not a live Identity grant.
-- The engine's older routes are unauthenticated. Here they are reachable **only inside its own container**.
-- Base images are pinned by tag, not digest. Image IDs are recorded in `current.env` at build time.
-- The engine reports its git commit as "unknown" in its own log. The pinned commit is in the image label and in `current.env`.
-- Real-model behaviour, the GPU and your Windows/WSL Docker were **not** exercised here.
+```bash
+cd ~/tass-workspace && git fetch origin && git worktree add ~/tass-one-app origin/experiment/one-app-20261104
+cd ~/tass-one-app/core
+./tass.sh check                        # creates ~/.tass-app/app.env; it will [stop] on "Another model is already running"
+nano ~/.tass-app/app.env               # MODEL_MODE=external  MODEL_NETWORK=tass-workspace_default  MODEL_URL=http://model:8081
+./tass.sh check                        # must end "Ready"
+sudo -v; ./tass.sh start               # don't run the script itself with sudo: it calls "sudo -n docker" when needed
+                                       # ends with "PASS … Identity NO_ENTITY"
+```
+
+In `app.env`, also set `GITHUB_REPO=Arameair/TASS` (branch `live`). Merge TASS PR #23 (the starter lessons) first, or the pulse won't find any lessons.
+
+1. Open http://127.0.0.1:8795: the red bar says NO_ENTITY and BLOCKED.
+2. Open http://127.0.0.1:8796 and create your entity: a name and a passphrase only you know. With `GITHUB_REPO=Arameair/TASS`, its document is TASS's `tass.md` from `live`, so name it TASS. The download never does this for anyone: it's your choice on your PC.
+3. Back on 8795, say "hi". Expected: a real Nemotron reply and a full thought cycle.
+4. In Work pulse, queue "count your sections", press **Start**, and watch at least 10 ticks. Expected: START once, then CONTINUE while it runs, then OBSERVED. Then **Pause**.
+5. In **Learning**, tick both switches. Within a minute or two, the three lessons appear and get studied one by one. Read the answers, then press **Approve** on each lesson that passed. Check that `tass.md` on `live` now has a `## Learned` section.
+6. Run `./tass.sh stop && ./tass.sh start`. Expected: same entity, LOCKED and BLOCKED until you unlock. After unlock, the pulse comes back on by itself, and learned lessons stay learned.
+7. Run `./tass.sh status` and paste the output into #44 with PASS or FAIL for each step.
+
+To remove the test app afterwards, run `./tass.sh stop`. Your data stays in `~/.tass-app` until you delete it yourself.
