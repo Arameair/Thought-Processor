@@ -29,6 +29,7 @@ services:
       IDENTITY_LISTEN: 0.0.0.0:8796
       IDENTITY_SERVICE_KEYS: /run/tass-secrets/service-keys
       IDENTITY_UNLOCK_HOURS: ${IDENTITY_UNLOCK_HOURS:-12}
+      IDENTITY_CORE_URL: http://127.0.0.1:${CORE_PORT:-8795}/ # owner-facing; validated by Identity
     volumes:
       - ${APP_DATA:?}/identity:/data/identity                  # entity.json, credential, decisions.jsonl
       - ${APP_SECRETS:?}/service-keys:/run/tass-secrets/service-keys:ro
