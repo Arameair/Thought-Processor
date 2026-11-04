@@ -961,6 +961,12 @@ func (c *Core) Answer(m Incoming) {
 		}
 	}
 
+	// Explicit owner lesson requests dispatch the real learning controller,
+	// with Identity checks and job receipts, not speculative model replies.
+	if c.handleLessonChat(m) {
+		return
+	}
+
 	// A direct chat request may prepare a local teaching draft. This does not
 	// authorize a GitHub write, call ChatGPT or perform an Engine action.
 	if m.From == "local" {
