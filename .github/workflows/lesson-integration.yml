@@ -1,0 +1,22 @@
+name: TASS lesson-integration verification
+on:
+  push:
+    branches:
+      - experiment/learning-core-integrated-gpt6-20261104
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  go-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+      - name: Compile production packages
+        working-directory: core
+        run: go build ./...
+      - name: Run all unit tests
+        working-directory: core
+        run: go test ./...
