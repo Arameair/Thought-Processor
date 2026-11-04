@@ -10,6 +10,12 @@ Atrium Today's desk now includes two **fixed, owner-approved Go test cards** wit
 
 Runbook, exact targets, security boundary, fixture/real CI evidence and acceptance procedure: [PULSE_CARDS.md](PULSE_CARDS.md).
 
+**Notebook laboratory experiment:** [NOTEBOOK_LAB.md](NOTEBOOK_LAB.md) documents
+the third, hash-pinned Identity notebook lesson card, Jupyter/Discord source
+inventory, CI evidence, model-fixture limitations and unapproved @identity-test
+lookup. The actual Nemotron teaching loop is NOT RUN; no live Jupyter or Docker
+deployment is enabled by this change.
+
 ## What it can do
 - Show the local model's reachability, available books and projects, and the genuine Workshop conversation timeline.
 - Send one user-written message through `/api/message` and display actual replies from the Workshop's `/api/events`.
