@@ -400,7 +400,9 @@ cmd_update() {
   if [[ $yes == 0 ]]; then read -r -p "Apply this update? Data and keys are backed up first. [y/N] " yn; [[ "$yn" == [yY]* ]] || { say "Nothing changed."; return 0; }; fi
   prepare
   build_version "$cand" "$DEPLOY/candidate.env"
-  local was before ent bk; was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
+  local was before ent bk had_running
+  had_running="$(ours)"  # preserve whether this project was actually running before update
+  was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
   compose "$DEPLOY/current.env" stop >/dev/null 2>&1 || true
   bk="$(backup "before-${cand:0:12}")"; say "Backup: $bk"
   [[ -f "$DEPLOY/previous.env" ]] && cp "$DEPLOY/previous.env" "$DEPLOY/previous.env.keep" || rm -f "$DEPLOY/previous.env.keep"
@@ -419,6 +421,13 @@ cmd_update() {
   # the rollback target stays what it was before this failed attempt
   if [[ -f "$DEPLOY/previous.env.keep" ]]; then cp "$DEPLOY/previous.env.keep" "$DEPLOY/previous.env"; else rm -f "$DEPLOY/previous.env"; fi
   restore_data "$bk"
+  if [[ -z "$had_running" ]]; then
+    # Fresh first-start recovery: old images were not running before the failed
+    # candidate. Preserve the old env/data, but do NOT boot an unguarded Core.
+    echo "$(date -u +%FT%TZ) update: → $cand FAILED; previous record/data preserved; application remains stopped" >>"$DEPLOY/history.log"
+    say "ROLLED BACK deployment record and data; the new application remains stopped (nothing was running before this attempt)."
+    return 1
+  fi
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
   if validate "$DEPLOY/current.env" "$before" "$was" "$ent"; then
     echo "$(date -u +%FT%TZ) update: → $cand FAILED, restored $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA") and data ($bk)" >>"$DEPLOY/history.log"
