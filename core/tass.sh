@@ -19,7 +19,7 @@ cd "$(dirname "$0")"
 here="$(pwd)"
 
 # Pinned Thought Engine for THIS version of the core (an update changes this line, never a branch head).
-ENGINE_COMMIT_PIN="dee1f5332a072f662defc23440e7b5ebe7034684"
+ENGINE_COMMIT_PIN="4924de6f1b8504abcab4fed98c0e191057f4e277"
 
 TRACK="${TASS_TRACK:-experiment/go-core-docker-20261104}"   # branch check-update looks at
 DEPLOY="${TASS_DEPLOY:-$HOME/.tass-deploy}"                  # versions, backups, build sources, token copy

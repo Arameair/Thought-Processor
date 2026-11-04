@@ -15,7 +15,7 @@ here="$(pwd)"
 
 # The Thought Engine is pinned to a reviewed commit (never a moving branch head).
 ENGINE_REPO="Arameair/Thought-engine"
-ENGINE_COMMIT="${ENGINE_COMMIT:-dee1f5332a072f662defc23440e7b5ebe7034684}"
+ENGINE_COMMIT="${ENGINE_COMMIT:-4924de6f1b8504abcab4fed98c0e191057f4e277}"
 TASS_HOME="${TASS_DATA:-$HOME/.tass}"
 ENGINE_DATA="${ENGINE_DATA:-$HOME/.thought-engine/tass}"
 ENGINE_PORT="${ENGINE_PORT:-7798}"
