@@ -136,6 +136,17 @@ class LauncherSafety(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("CORE_IMAGE=tass-core:", self.dockerlog.read_text())
 
+    def test_old_unguarded_deployment_is_refused_before_any_mutation(self):
+        record = self.deployed()
+        old = record.read_text().replace(self.sha, "84583b23ddeced339d98a73af374b41f73414842")
+        record.write_text(old)
+        p = self.run_script("start", TEST_FORCE_SUDO=1)
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("not this CHAT_ONLY safety build", p.stderr)
+        self.assertEqual(record.read_text(), old)
+        self.assertFalse((self.app / "secrets").exists())
+        self.assertFalse(self.dockerlog.exists() and "compose " in self.dockerlog.read_text())
+
     def test_failed_engine_clone_does_not_launch_or_create_current(self):
         cur = self.deployed(include=False)
         p = self.run_script("start", TEST_FORCE_SUDO=1, TEST_FAIL_CLONE=1)
