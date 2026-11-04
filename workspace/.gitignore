@@ -9,3 +9,6 @@ outbox/
 inbox/
 collab_requests/
 collab_state/
+
+# Atrium operator task notes (not TASS memory)
+atrium_state/
