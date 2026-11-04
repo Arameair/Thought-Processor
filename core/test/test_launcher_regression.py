@@ -48,6 +48,7 @@ class LauncherSafety(unittest.TestCase):
               version) echo 29.0.0;;
               network) exit 0;;
               ps) exit 0;;
+              inspect) echo healthy;;
               image) [[ "${TEST_IMAGE_MISSING:-0}" != 1 ]];;
               compose)
                 printf 'compose %s\n' "$*" >>"$TEST_LOG"
@@ -112,9 +113,9 @@ class LauncherSafety(unittest.TestCase):
                 f"COMPOSE_FILE={CORE}/compose.yaml\nDEPLOYED_AT=2026-11-04T00:00:00Z\n")
         return f
 
-    def run_script(self, subcmd, **overrides):
+    def run_script(self, subcmd, *args, **overrides):
         env = {**self.env, **{k: str(v) for k, v in overrides.items()}}
-        return call(["bash", str(CORE / "tass.sh"), subcmd], env=env)
+        return call(["bash", str(CORE / "tass.sh"), subcmd, *args], env=env)
 
     def test_compose_receives_every_interpolation_variable_after_sudo_reset(self):
         self.deployed()
@@ -156,6 +157,22 @@ class LauncherSafety(unittest.TestCase):
         self.assertFalse((cur.parent / "history.log").exists())
         self.assertNotIn("compose ", self.dockerlog.read_text())
         self.assertNotIn("build ", self.dockerlog.read_text())
+
+    def test_failed_first_start_update_restores_without_old_image_restart(self):
+        cur = self.deployed()
+        oldsha = call(["/usr/bin/git", "rev-parse", "HEAD~1"], cwd=ROOT).stdout.strip()
+        self.assertEqual(len(oldsha), 40)
+        old = cur.read_text().replace(self.sha, oldsha)
+        cur.write_text(old)
+        p = self.run_script("update", self.sha, "--yes", TEST_FORCE_SUDO=1)
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("remains stopped", p.stdout)
+        self.assertEqual(cur.read_text(), old)
+        events = self.dockerlog.read_text()
+        self.assertEqual(events.count(" up -d --force-recreate"), 1, events)
+        self.assertEqual(events.count(" down"), 1, events)
+        # The previous unguarded Core must NOT be started as rollback.
+        self.assertTrue((self.app / "deploy" / "history.log").is_file())
 
     def test_each_failed_image_build_keeps_old_deployment_unchanged(self):
         for target in ("core", "engine", "identity"):
