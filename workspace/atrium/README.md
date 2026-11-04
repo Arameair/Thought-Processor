@@ -6,12 +6,12 @@ It is the actual TASS Atrium playground: living constellation, idea garden, expe
 
 ## What it can do
 - Show the local model's reachability, available books and projects, and the genuine Workshop conversation timeline.
-- Send one user-written message through `/api/message` and display actual replies from the Workshop's `/api/events`.
+- Send chat-only messages through `/api/message` and display real Workshop replies. Each accepted request ID matches the Workshop user/reply/error events. Messages do not create action proposals, even under Full Auto.
 - Show when a run requires review, with a link to the original Workshop at **http://127.0.0.1:8790/**.
 - Run browser-only idea and visual experiments without pretending they came from the model.
 
 ## What it cannot do
-- Approve a proposal, run notebook code, restart a kernel, change settings, access arbitrary files or open host browser windows on TASS's behalf.
+- Approve a proposal, run notebook code, write memory, restart a kernel, change settings, access arbitrary files or open host browser windows on TASS's behalf.
 - Grant Identity permissions, verify owner login, or independently prove that an execution was correct.
 - Expose the model externally; ports bind to `127.0.0.1` on the host. **Loopback-only is not authentication.** The existing Workshop's authentication and authorization gaps remain open.
 
@@ -55,7 +55,7 @@ Atrium also has **Try a real task**. It drafts a request for TASS to inspect `pr
 - From the Workshop, click **✦ Atrium**: it should open a new tab at port 8791.
 - The Atrium status should say **LIVE TASS CONNECTED** only if the model is reachable.
 - Send a distinctive, harmless prompt in Atrium. Observe the *real* reply and the same conversation appearing at port 8790.
-- Ask TASS to propose a harmless notebook action. Atrium must NOT offer approval/execution; the original Workshop must display the review card.
+- Ask TASS in Atrium to describe a harmless notebook action. No proposal or execution should result from this chat, even while Full Auto is ON. Initiate actionable work separately in Workshop.
 - Stop the model: Atrium should switch to its offline playground mode rather than invent a reply.
 
 Tests: `python3 -m unittest discover -s workspace/atrium/tests -v` from the repository root. These cover a simulated backend, **not** the owner's local model.
