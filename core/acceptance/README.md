@@ -41,7 +41,7 @@ When the UI displays a completed cycle, copy its tp_* ID and run (example placeh
 
     python3 acceptance/verify.py cycle tp_REPLACE_WITH_REAL_CYCLE_ID
 
-The verifier reads ~/.thought-engine/tass/cycles.jsonl (append-only) and calls the Engine API to check the same ID. It requires the Spark/Trace, model plan, locked SHA-256 prediction, authorized EXECUTED read-only action, timestamps in order, and scored evaluation. A simple hello with NO_ACTION cannot pass the executable-action gate. A model reply with format UNREADABLE also cannot pass. If the Spark is too weak to create a Trace, try another appropriate owner-approved request and report it honestly.
+The verifier reads ~/.thought-engine/tass/cycles.jsonl (append-only) and calls the Engine API to check the same ID. It requires the Spark/Trace, model plan, locked SHA-256 prediction, authorized EXECUTED read-only action, timestamps in order, and scored evaluation. The verifier also independently measures the current ~/.tass/tass.md against the read-only action receipt and its action-time document hash; if the document has changed since execution, it reports NOT RUN for independent measurement rather than fabricating success. Its SHA-256 is an integrity checksum, not a signed or tamper-proof execution receipt. A simple hello with NO_ACTION cannot pass the executable-action gate. A model reply with format UNREADABLE also cannot pass. If the Spark is too weak to create a Trace, try another appropriate owner-approved request and report it honestly.
 
 To test chat intake with one new, identifiable harmless message:
 
