@@ -28,6 +28,13 @@ jobs:
           ref: aa800af3eee5d026521395bde3236737285e6287
           path: test-checkouts/integrity
           persist-credentials: false
+      - name: Exact separate Identity alpha checkout (public repository, no grant changes)
+        uses: actions/checkout@v4
+        with:
+          repository: Arameair/identity
+          ref: b0c7267b47f6111c5024c9bba8a4135e2357b432
+          path: test-checkouts/identity
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
@@ -47,51 +54,57 @@ jobs:
               enabled=True,
               sandbox_confirmed=True,  # Ephemeral CI runner; not a live owner Identity grant
               root=str(root),
-              roots={"INTEGRITY-050": str(root / "integrity"), "IDENTITY-014": ""},
+              roots={"INTEGRITY-050": str(root / "integrity"), "IDENTITY-014": str(root / "identity")},
           )
           state = Path("/tmp/atrium-acceptance.json")
           p = PulseCoordinator(state, adapter=adapter, interval=20)
           try:
-              p.action("approve", "INTEGRITY-050", "APPROVE INTEGRITY-050")
-              p.action("queue", "INTEGRITY-050")
-              p.action("step")
-              deadline = time.monotonic() + 180
-              while not p.store.read()["cards"]["INTEGRITY-050"]["pending_receipt"]:
-                  assert time.monotonic() < deadline, "Real Go regression run did not finish"
-                  time.sleep(.25)
-              p.tick()  # receipt on subsequent pulse, not on approval
-              card = p.store.read()["cards"]["INTEGRITY-050"]
-              receipt = card["receipt"]
-              assert card["status"] == "FAIL", card
-              assert receipt["executed"] is True and receipt["exit_code"] != 0, receipt
-              assert receipt["sha"] == INTEGRITY_SHA and receipt["job_id"] == card["job_id"], receipt
-              assert receipt["output_sha256"] and len(receipt["output_sha256"]) == 64
-              assert "TestAcceptanceRejects" in receipt["output_excerpt"], receipt
-              for _ in range(4):
-                  p.tick()
-              assert card["attempts"] == 1, card
-              evidence = {"test_id": card["id"], "revision": card["sha"],
-                          "state": card["status"], "attempts": card["attempts"],
-                          "receipt": receipt,
-                          "assertion": "KNOWN_P0_REMAINS_RED_AS_REQUIRED",
-                          "environment": "GITHUB_ACTIONS_EPHEMERAL_RUNNER_NOT_OWNER_GPU"}
-              print("ACTUAL PINNED GO EXECUTION: " + json.dumps(
-                  {k: evidence[k] for k in ("test_id", "revision", "state", "attempts", "assertion", "environment")}))
-              state.with_suffix(".evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+              results = {}
+              for card_id, expected in (("IDENTITY-014", "PASS"), ("INTEGRITY-050", "FAIL")):
+                  p.action("approve", card_id, "APPROVE " + card_id)
+                  p.action("queue", card_id)
+                  p.action("step")
+                  deadline = time.monotonic() + 180
+                  while not p.store.read()["cards"][card_id]["pending_receipt"]:
+                      assert time.monotonic() < deadline, "Go test did not finish: " + card_id
+                      time.sleep(.25)
+                  p.tick()  # receipt on subsequent pulse, not on approval
+                  card = p.store.read()["cards"][card_id]
+                  receipt = card["receipt"]
+                  assert card["status"] == expected, {"id": card_id, "receipt": receipt}
+                  assert receipt["executed"] is True, receipt
+                  assert (receipt["exit_code"] == 0) == (expected == "PASS"), receipt
+                  assert receipt["sha"] == card["sha"] and receipt["job_id"] == card["job_id"]
+                  assert receipt["output_sha256"] and len(receipt["output_sha256"]) == 64
+                  assert receipt["output_excerpt"], receipt
+                  if card_id == "INTEGRITY-050":
+                      assert "TestAcceptanceRejects" in receipt["output_excerpt"], receipt
+                  for _ in range(4):
+                      p.tick()
+                  assert card["attempts"] == 1, card
+                  results[card_id] = {"revision": card["sha"], "state": card["status"],
+                                      "attempts": card["attempts"], "receipt": receipt,
+                                      "environment": "GITHUB_ACTIONS_EPHEMERAL_RUNNER_NOT_OWNER_GPU"}
+                  print("ACTUAL PINNED GO EXECUTION: " + json.dumps(
+                      {"id": card_id, "revision": card["sha"], "state": card["status"], "attempts": 1}))
+              state.with_suffix(".evidence.json").write_text(json.dumps(results, indent=2) + "\n")
           finally:
               p.close()
           reread = PulseCoordinator(state, adapter=adapter)
           try:
               assert reread.store.read()["cards"]["INTEGRITY-050"]["status"] == "FAIL"
-              assert reread.store.read()["cards"]["INTEGRITY-050"]["attempts"] == 1
-              reread.tick(force=True)
-              assert reread.store.read()["cards"]["INTEGRITY-050"]["attempts"] == 1
-              print("RESTART: RECEIPT KEPT, EXACTLY ONE ATTEMPT")
+              assert reread.store.read()["cards"]["IDENTITY-014"]["status"] == "PASS"
+              for cid in ("IDENTITY-014", "INTEGRITY-050"):
+                  before = reread.store.read()["cards"][cid]["receipt"]
+                  reread.tick(force=True)
+                  card = reread.store.read()["cards"][cid]
+                  assert card["attempts"] == 1 and card["receipt"] == before, cid
+              print("RESTART: BOTH RECEIPTS KEPT, EXACTLY ONE ATTEMPT EACH")
           finally:
               reread.close()
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: atrium-integrity-050-evidence
+          name: atrium-two-pinned-go-card-receipts
           path: /tmp/atrium-acceptance.evidence.json
           if-no-files-found: error
