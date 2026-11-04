@@ -8,6 +8,8 @@
   <title>Atrium / Daily Mission — Nov 4</title>
   <link rel="stylesheet" href="/assets/today.css">
   <script defer src="/assets/today.js"></script>
+  <link rel="stylesheet" href="/assets/pulse.css">
+  <script defer src="/assets/pulse.js"></script>
 </head>
 <body>
   <div class="ambient"></div>
@@ -15,6 +17,7 @@
     <a class="wordmark" href="/today" aria-label="Atrium Daily Mission"><span class="asterisk">✳</span><span><strong>ATRIUM</strong><small>THE DAILY WORKSTATION</small></span></a>
     <nav aria-label="Workspace navigation">
       <a href="/today" class="active">Today's desk</a>
+      <a href="#pulseCards">Test cards</a>
       <a href="/build">Build Room</a>
       <a href="/explore">Service map</a>
       <a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer">Workshop ↗</a>
@@ -126,6 +129,33 @@
         <a class="subtle-link" href="https://github.com/Arameair/TASS/issues/20" target="_blank" rel="noopener noreferrer">Talk to TASS through GitHub #20 ↗</a>
       </section>
     </div>
+    <section class="pulse-area" id="pulseCards" aria-labelledby="pulseTitle">
+      <div class="section-label">
+        <h2 id="pulseTitle">06 / VERIFIED TEST CARDS</h2>
+        <span>Independent restricted adapter · not the Thought Engine pulse</span>
+      </div>
+      <div class="pulse-panel">
+        <div class="pulse-control">
+          <div>
+            <span class="caps">COORDINATION PULSE</span>
+            <h2>Approve once. Inspect actual evidence.</h2>
+            <p>Two fixed checks only. Execution requires a separate, isolated owner-controlled runner. Atrium's browser token is not an Identity grant.</p>
+          </div>
+          <div class="pulse-ops" role="group" aria-label="Pulse controls">
+            <button id="pulsePause" class="secondary" type="button">Pause</button>
+            <button id="pulseStop" class="secondary" type="button">Stop test</button>
+            <button id="pulseResume" class="secondary" type="button">Resume</button>
+            <button id="pulseStep" class="primary" type="button">Step once</button>
+          </div>
+        </div>
+        <p id="pulseState" class="pulse-state" role="status">Loading the separate test-card ledger…</p>
+        <p id="pulseGate" class="pulse-warning">Execution disabled until a verified isolated runner is explicitly configured.</p>
+        <div id="pulseCardList" class="pulse-list" aria-live="polite">
+          <div class="empty">No test cards loaded yet.</div>
+        </div>
+        <p class="pulse-note">An observed FAIL remains FAIL even if it is a known expected regression. A stopped or restarted unknown test is never silently rerun. No model can submit a shell command here.</p>
+      </div>
+    </section>
     <footer><span>ATRIUM / DAILY MISSION · 2026-11-04</span><span>Experimental · no memory repo · no automatic changes · Claude's workspace untouched</span></footer>
   </main>
   <div id="toast" class="toast" hidden role="status"></div>
