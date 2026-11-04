@@ -1,6 +1,7 @@
 """TEST FIXTURES ONLY: validate the acceptance verifier against good and bad
 records. Passing these tests does not prove live Nemotron or any Go deployment."""
 import datetime as dt
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +55,20 @@ class CycleEvidenceTests(unittest.TestCase):
         cid, rows = fake_cycle()
         rows[4]["data"]["forecast"] = "PREDICTION_INCORRECT"
         self.assertFalse(all(p for _, p, _ in verify.cycle_checks(rows, cid)))
+
+    def test_local_document_action_is_independently_measured(self):
+        cid, rows = fake_cycle()
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "tass.md")
+            doc = "# TASS\\n## A\\n## B\\n## C\\n## D\\n".replace("\\\\n", "\\n")
+            path.write_text(doc)
+            digest = hashlib.sha256(doc.strip().encode()).hexdigest()[:12]
+            rows[3]["data"]["detail"] = f"tass_sections on tass.md ({digest})"
+            self.assertTrue(all(p for _, p, _ in
+                verify.current_document_action_checks(rows, cid, path)))
+            path.write_text("# TASS\\n## A\\n".replace("\\\\n", "\\n"))
+            self.assertFalse(all(p for _, p, _ in
+                verify.current_document_action_checks(rows, cid, path)))
 
     def test_missing_evaluation_fails_closed(self):
         cid, rows = fake_cycle()
