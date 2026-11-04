@@ -1,0 +1,43 @@
+name: independent-integrity-gates
+on:
+  push:
+    paths:
+      - "core/tass/independent_integrity_acceptance_test.go"
+      - "core/acceptance/INDEPENDENT_INTEGRATION.md"
+      - ".github/workflows/independent-integrity-gates.yml"
+  pull_request:
+    paths:
+      - "core/tass/independent_integrity_acceptance_test.go"
+      - "core/acceptance/INDEPENDENT_INTEGRATION.md"
+      - ".github/workflows/independent-integrity-gates.yml"
+  workflow_dispatch:
+
+jobs:
+  core-fixture-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Go vet and existing fixture suite
+        working-directory: core
+        run: |
+          go vet ./...
+          go test -race ./...
+      - name: Point-of-use authorization recheck (scripted Engine/GitHub)
+        working-directory: core
+        run: |
+          go test -race -tags acceptance ./tass -run '^TestAcceptanceRechecksRevokedActionGrantAfterModelWait$' -count=1 -v
+
+  strict-integrity-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Enforcement gates (EXPECTED FAIL until Core is fixed)
+        working-directory: core
+        run: |
+          go test -race -tags acceptance ./tass -run '^TestAcceptanceRejects' -count=1 -v
