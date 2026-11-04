@@ -23,6 +23,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 from urllib.parse import urlsplit
 from desk_state import BoardStore, InvalidBoard, StaleBoard
 from pulse_cards import CardError, LocalTestAdapter, PulseCoordinator
+from notebook_lab import NotebookTestAdapter
 
 HERE = Path(__file__).resolve().parent
 OPENER = build_opener(ProxyHandler({}))
@@ -386,7 +387,7 @@ def main():
     if args.port == args.backend_port:
         cli.error("playground port must be different from the Workshop port")
     pulse_path = os.getenv("TASS_ATRIUM_PULSE_STATE", "/state/test-cards.json")
-    pulse = PulseCoordinator(pulse_path, adapter=LocalTestAdapter(),
+    pulse = PulseCoordinator(pulse_path, adapter=NotebookTestAdapter(),
                              interval=int(os.getenv("TASS_ATRIUM_PULSE_INTERVAL", "20")))
     handler = create_handler(args.backend_port, secrets.token_urlsafe(32), args.port, pulse=pulse)
     try:
