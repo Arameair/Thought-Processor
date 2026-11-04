@@ -224,13 +224,14 @@ class LocalTestAdapter:
         if not self.root or not source or not Path(self.root).is_absolute() or not Path(source).is_absolute():
             raise CardError("An explicit isolated checkout root and source are required", 403)
         base, checkout = Path(self.root).resolve(strict=True), Path(source).resolve(strict=True)
-        if checkout == base or not checkout.is_relative_to(base) or checkout != Path(source):
+        if base != Path(self.root) or checkout == base or not checkout.is_relative_to(base) or checkout != Path(source):
             raise CardError("Checkout must be a direct non-symlink path below the isolated test root", 403)
-        if not checkout.is_dir() or not (checkout / ".git").exists():
+        if not checkout.is_dir() or not (checkout / ".git").is_dir() or (checkout / ".git").is_symlink():
             raise CardError("Checkout missing Git metadata", 403)
         clean_env = self._git_env()
         def git(*argv):
-            r = subprocess.run(["git", "-C", str(checkout), *argv], capture_output=True,
+            r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+                                "-C", str(checkout), *argv], capture_output=True,
                                text=True, timeout=8, env=clean_env, check=False)
             if r.returncode:
                 raise CardError("Cannot verify checkout revision and repository", 403)
