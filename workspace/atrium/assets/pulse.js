@@ -73,6 +73,8 @@
       add(proof, 'p', '', 'Receipt '+receipt.receipt_id+' · exit '+(receipt.exit_code === null ? 'N/A' : receipt.exit_code));
       add(proof, 'p', '', 'Started '+receipt.started_at+' · finished '+receipt.finished_at);
       add(proof, 'p', '', 'SHA '+receipt.sha+' · output SHA-256 '+(receipt.output_sha256 || 'N/A'));
+      if (receipt.cell_id) add(proof, 'p', '', 'Notebook cell '+receipt.cell_id+' · cell SHA-256 '+receipt.cell_sha256);
+      if (receipt.notebook_blob_sha) add(proof, 'p', '', 'Notebook Git blob '+receipt.notebook_blob_sha);
       if (receipt.output_excerpt) {
         add(proof, 'span', 'pulse-caption', 'Bounded, redacted test output');
         add(proof, 'pre', 'pulse-output', receipt.output_excerpt);
