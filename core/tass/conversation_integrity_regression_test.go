@@ -64,7 +64,8 @@ func TestConversationReadOnlyNoActionStillReplies(t *testing.T) {
 	if len(eng.outcomes) != 1 || eng.outcomes[0]["status"] != "NO_ACTION" {
 		t.Fatalf("normal conversation must not execute an action: %+v", eng.outcomes)
 	}
-	if len(c.Status().Cycles) != 1 || !strings.Contains(c.Status().Cycles[0].Request, "hello") {
-		t.Fatalf("normal conversation did not preserve the cycle: %+v", c.Status().Cycles)
+	if len(c.Status().Cycles) != 1 || len(c.history) != 2 ||
+		!strings.Contains(c.history[1].Content, "heard hello") {
+		t.Fatalf("normal conversation did not display and preserve reply: cycles=%+v history=%+v", c.Status().Cycles, c.history)
 	}
 }
