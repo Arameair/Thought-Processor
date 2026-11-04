@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import resource
 import signal
 import subprocess
 import sys
@@ -154,6 +155,15 @@ class NotebookTestAdapter(LocalTestAdapter):
         return {"notebook": notebook, "identity": identity_dir, "kernel": kernel_module,
                 "source_dir": note_dir}
 
+    @staticmethod
+    def _kernel_limits():
+        # Jupyter/IPython imports and kernel sockets need more than PR52's
+        # Go-only 64-descriptor limit; keep a bounded 512 FD ceiling instead.
+        resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT, TIMEOUT + 10))
+        _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        cap = 512 if hard == resource.RLIM_INFINITY else min(512, hard)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (cap, cap))
+
     def execute(self, card, job_id, cancel=None):
         if card.get("id") != LESSON_ID:
             return super().execute(card, job_id, cancel=cancel)
@@ -183,7 +193,7 @@ class NotebookTestAdapter(LocalTestAdapter):
                     [sys.executable, "-I", str(WORKER), "--cell", spec["cell_id"]],
                     cwd=d, env=env, stdin=subprocess.DEVNULL,
                     stdout=output, stderr=subprocess.STDOUT, shell=False,
-                    start_new_session=True, preexec_fn=self._limits,
+                    start_new_session=True, preexec_fn=self._kernel_limits,
                 )
                 cancelled, timeout, oversized = False, False, False
                 deadline = time.monotonic() + TIMEOUT
