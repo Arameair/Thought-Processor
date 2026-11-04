@@ -60,13 +60,13 @@ class CycleEvidenceTests(unittest.TestCase):
         cid, rows = fake_cycle()
         with tempfile.TemporaryDirectory() as d:
             path = Path(d, "tass.md")
-            doc = "# TASS\\n## A\\n## B\\n## C\\n## D\\n".replace("\\\\n", "\\n")
+            doc = "# TASS\n## A\n## B\n## C\n## D\n"
             path.write_text(doc)
             digest = hashlib.sha256(doc.strip().encode()).hexdigest()[:12]
             rows[3]["data"]["detail"] = f"tass_sections on tass.md ({digest})"
             self.assertTrue(all(p for _, p, _ in
                 verify.current_document_action_checks(rows, cid, path)))
-            path.write_text("# TASS\\n## A\\n".replace("\\\\n", "\\n"))
+            path.write_text("# TASS\n## A\n")
             self.assertFalse(all(p for _, p, _ in
                 verify.current_document_action_checks(rows, cid, path)))
 
