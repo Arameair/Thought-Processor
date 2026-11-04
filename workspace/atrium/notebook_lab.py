@@ -144,6 +144,16 @@ class NotebookTestAdapter(LocalTestAdapter):
     def preflight(self, card):
         if card.get("id") != LESSON_ID:
             return super().preflight(card)
+        proposal = card.get("model_proposal")
+        spec = CATALOG[LESSON_ID]
+        if (not isinstance(proposal, dict)
+                or proposal.get("skill") != SKILL
+                or proposal.get("cell_id") != spec["cell_id"]
+                or proposal.get("cell_sha256") != spec["cell_sha256"]
+                or proposal.get("source_sha") != spec["sha"]
+                or proposal.get("execution_authorized") is not False
+                or proposal.get("actor") not in {"MODEL_FIXTURE", "NEMOTRON_UNVERIFIED"}):
+            raise CardError("No valid, non-authorizing notebook cell selection recorded", 403)
         # Both independent inputs are checked as exact clean source trees.
         note_dir = super().preflight(card)
         identity_dir = super().preflight(CATALOG["IDENTITY-014"])
