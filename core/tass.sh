@@ -340,7 +340,10 @@ validate() { # $1 = env file that should now run; $2 = inventory before; $3 = st
   h="$(health)" || { say "  FAIL: the core's /api/health doesn't answer"; return 1; }
   state="$(json_field state <<<"$h")"; ver="$(json_field version <<<"$h")"
   # A healthy but unguarded old Core is NOT acceptance for this one-app trial.
-  [[ "$(json_field action_mode <<<"$h")" == CHAT_ONLY ]] || { say "  FAIL: Core is not in CHAT_ONLY safety mode (Issue #50)"; return 1; }
+  case "$(json_field action_mode <<<"$h")" in
+    CHAT_ONLY|AUTONOMOUS_GUARDED) ;;   # both enforce the Issue #50 checks; older builds report neither
+    *) say "  FAIL: Core doesn't report a guarded action mode (Issue #50 safety build required)"; return 1 ;;
+  esac
   [[ "$ver" == "$CORE_SHA" ]] || { say "  FAIL: running core reports version $ver, expected $CORE_SHA"; return 1; }
   local ids now_ent ids_state; ids="$(id_state)" || { say "  FAIL: Identity doesn't answer"; return 1; }
   now_ent="$(json_field entity.entity_id <<<"$ids")"; ids_state="$(json_field state <<<"$ids")"
@@ -403,7 +406,7 @@ cmd_status() {
   else
     say "State: $(json_field state <<<"$h")  $(json_field reasons <<<"$h")"
     say "  engine reachable $(json_field engine_reachable <<<"$h") · model ok $(json_field model_ok <<<"$h")"
-    say "  action gate: $(json_field action_mode <<<"$h") (CHAT_ONLY required until Issue #50 fixed)"
+    say "  action gate: $(json_field action_mode <<<"$h") (CHAT_ONLY = Autonomous off · AUTONOMOUS_GUARDED = on, Issue #50 checks enforced)"
   fi
   say "  last pulse tick: $(tail -n 1 "$APP_DATA/engine/ticks.jsonl" 2>/dev/null | cut -c1-200 || echo none)"
 }
