@@ -404,6 +404,7 @@ func (c *Core) ApproveLesson(p string) error {
 	now := c.now().UTC()
 	ls.Status, ls.LearnedAt = "LEARNED", &now
 	title, remember, cycle := ls.Title, ls.Remember, ls.CycleID
+	auto := strings.HasPrefix(ls.Note, "auto-approved")
 	c.saveLearningLocked()
 	c.learnMu.Unlock()
 	line := fmt.Sprintf("- %s: %s (lesson `%s`, %d/%d, approved %s)", title, firstNonEmpty(oneLine(remember, 200), "learned"), p,
@@ -414,6 +415,11 @@ func (c *Core) ApproveLesson(p string) error {
 	c.fileMu.Unlock()
 	if err != nil {
 		return err
+	}
+	if auto {
+		c.addMemory("learned "+title, cycle, "Autonomous: every check right")
+		c.event("sync", fmt.Sprintf("Lesson %q LEARNED (auto-approved: Autonomous ON, every check right). Added to my document's Learned section.", title))
+		return nil
 	}
 	c.addMemory("learned "+title, cycle, "owner approval")
 	c.event("sync", fmt.Sprintf("Lesson %q LEARNED (you approved it). Added to my document's Learned section.", title))
