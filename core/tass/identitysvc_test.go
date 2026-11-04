@@ -40,7 +40,7 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 				w.WriteHeader(http.StatusForbidden); return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"skill":"@identity-test", "repository":"Arameair/Thought-Processor",
-				"issue":51, "comment_id":6634742721, "source":"https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6634742721",
+				"issue":51, "comment_id":6636766875, "source":"https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875",
 				"mode":"reference_only", "body":"Owner-approved @identity-test is a proposed notebook skill reference, not authority to execute."})
 		case "/v1/state":
 			json.NewEncoder(w).Encode(map[string]any{"state": f.state, "reason": "owner hasn't unlocked", "entity": ent})
@@ -164,7 +164,7 @@ func TestIdentityApprovedGitHubLessonIsReferenceOnly(t *testing.T) {
     req := eng.reqs[0]
     ctx, ok := req["context"].(string)
     if !ok || !strings.Contains(ctx, "Owner-approved @identity-test") ||
-        !strings.Contains(ctx, "NOT AUTHORITY") || !strings.Contains(ctx, "issuecomment-6634742721") {
+        !strings.Contains(ctx, "NOT AUTHORITY") || !strings.Contains(ctx, "issuecomment-6636766875") {
         t.Fatalf("missing bounded source context: %v", req)
     }
     if value := req["actions"]; value != nil {
