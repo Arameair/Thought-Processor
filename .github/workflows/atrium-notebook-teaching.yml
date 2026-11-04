@@ -56,7 +56,8 @@ jobs:
           sys.path.insert(0, "workspace/atrium")
           from pulse_cards import PulseCoordinator, CATALOG
           from notebook_lab import (NotebookTestAdapter, LESSON_ID, lesson_prompt,
-                                    validate_model_selection, propose_skill_candidate)
+                                    validate_model_selection, record_model_selection,
+                                    propose_skill_candidate)
           source_root = Path(os.environ["GITHUB_WORKSPACE"]) / "test-checkouts"
           adapter = NotebookTestAdapter(
               enabled=True,
@@ -77,6 +78,8 @@ jobs:
           state = Path("/tmp/atrium-notebook-lab.json")
           coordinator = PulseCoordinator(state, adapter=adapter, interval=20)
           try:
+              stored = record_model_selection(coordinator, fixture_reply, actor="MODEL_FIXTURE")
+              assert stored["cell_id"] == "identity-go-packages" and not stored["execution_authorized"]
               coordinator.action("approve", LESSON_ID, "APPROVE " + LESSON_ID)
               coordinator.action("queue", LESSON_ID)
               coordinator.action("step")
