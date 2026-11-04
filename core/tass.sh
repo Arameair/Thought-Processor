@@ -373,6 +373,7 @@ cmd_update() {
   local was before ent bk; was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
   compose "$DEPLOY/current.env" stop >/dev/null 2>&1 || true
   bk="$(backup "before-${cand:0:12}")"; say "Backup: $bk"
+  [[ -f "$DEPLOY/previous.env" ]] && cp "$DEPLOY/previous.env" "$DEPLOY/previous.env.keep" || rm -f "$DEPLOY/previous.env.keep"
   cp "$DEPLOY/current.env" "$DEPLOY/previous.env"
   cp "$DEPLOY/candidate.env" "$DEPLOY/current.env"
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
@@ -385,6 +386,8 @@ cmd_update() {
   compose "$DEPLOY/current.env" logs --tail 20 2>/dev/null | sed 's/^/    /' || true
   compose "$DEPLOY/current.env" down >/dev/null 2>&1 || true
   cp "$DEPLOY/previous.env" "$DEPLOY/current.env"
+  # the rollback target stays what it was before this failed attempt
+  if [[ -f "$DEPLOY/previous.env.keep" ]]; then cp "$DEPLOY/previous.env.keep" "$DEPLOY/previous.env"; else rm -f "$DEPLOY/previous.env"; fi
   restore_data "$bk"
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
   if validate "$DEPLOY/current.env" "$before" "$was" "$ent"; then

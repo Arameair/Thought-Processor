@@ -108,9 +108,12 @@ def main():
     check("4 services healthy (identity, model, engine, core)", names.count("(healthy)") == 4, names.replace("\n", "; "))
     models = docker("ps", "-q", "--filter", "label=com.docker.compose.service=model")
     check("exactly one model container on this host", len(models.split()) == 1, f"{len(models.split())} model container(s)")
-    nets = docker("network", "ls", "--format", "{{.Name}}")
-    check("no Python workspace / liaison / tass-workspace network or container",
-          "tass-workspace" not in nets and "liaison" not in docker("ps", "-a", "--format", "{{.Names}}"), nets.replace("\n", ", "))
+    attached = set()
+    for c in names.split("\n"):
+        attached |= set(json.loads(docker("inspect", c.split()[0], "--format", "{{json .NetworkSettings.Networks}}")).keys())
+    check("the app uses only its own networks (no Python workspace, liaison or tass-workspace)",
+          attached <= {"tass-app_app", "tass-app_front"} and not docker("ps", "-q", "--filter", "name=liaison"),
+          "attached: " + ", ".join(sorted(attached)) + " (engine-namespace core has none of its own)")
     st = http("GET", IDN + "/v1/state")[1]
     h = health()
     check("fresh install has NO entity and nothing personal", st["state"] == "NO_ENTITY" and not os.path.exists(f"{APP_HOME}/data/core/tass.md"), json.dumps(st))
