@@ -1,0 +1,97 @@
+name: atrium-pulse-execution-evidence
+on:
+  push:
+    paths:
+      - "workspace/atrium/pulse_cards.py"
+      - "workspace/atrium/tests/test_pulse_cards.py"
+      - ".github/workflows/atrium-pulse-evidence.yml"
+  pull_request:
+    paths:
+      - "workspace/atrium/pulse_cards.py"
+      - ".github/workflows/atrium-pulse-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-fixture-and-pinned-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact separate checkout of PR49 (no merge, no repo writes)
+        uses: actions/checkout@v4
+        with:
+          repository: Arameair/Thought-Processor
+          ref: aa800af3eee5d026521395bde3236737285e6287
+          path: test-checkouts/integrity
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Execute INTEGRITY-050 ONCE through real allowlisted adapter
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time
+          from pathlib import Path
+          sys.path.insert(0, "workspace/atrium")
+          from pulse_cards import LocalTestAdapter, PulseCoordinator, INTEGRITY_SHA
+          root = Path(os.environ["GITHUB_WORKSPACE"]) / "test-checkouts"
+          assert (root / "integrity").is_dir()
+          adapter = LocalTestAdapter(
+              enabled=True,
+              sandbox_confirmed=True,  # Ephemeral CI runner; not a live owner Identity grant
+              root=str(root),
+              roots={"INTEGRITY-050": str(root / "integrity"), "IDENTITY-014": ""},
+          )
+          state = Path("/tmp/atrium-acceptance.json")
+          p = PulseCoordinator(state, adapter=adapter, interval=20)
+          try:
+              p.action("approve", "INTEGRITY-050", "APPROVE INTEGRITY-050")
+              p.action("queue", "INTEGRITY-050")
+              p.action("step")
+              deadline = time.monotonic() + 180
+              while not p.store.read()["cards"]["INTEGRITY-050"]["pending_receipt"]:
+                  assert time.monotonic() < deadline, "Real Go regression run did not finish"
+                  time.sleep(.25)
+              p.tick()  # receipt on subsequent pulse, not on approval
+              card = p.store.read()["cards"]["INTEGRITY-050"]
+              receipt = card["receipt"]
+              assert card["status"] == "FAIL", card
+              assert receipt["executed"] is True and receipt["exit_code"] != 0, receipt
+              assert receipt["sha"] == INTEGRITY_SHA and receipt["job_id"] == card["job_id"], receipt
+              assert receipt["output_sha256"] and len(receipt["output_sha256"]) == 64
+              assert "TestAcceptanceRejects" in receipt["output_excerpt"], receipt
+              for _ in range(4):
+                  p.tick()
+              assert card["attempts"] == 1, card
+              evidence = {"test_id": card["id"], "revision": card["sha"],
+                          "state": card["status"], "attempts": card["attempts"],
+                          "receipt": receipt,
+                          "assertion": "KNOWN_P0_REMAINS_RED_AS_REQUIRED",
+                          "environment": "GITHUB_ACTIONS_EPHEMERAL_RUNNER_NOT_OWNER_GPU"}
+              print("ACTUAL PINNED GO EXECUTION: " + json.dumps(
+                  {k: evidence[k] for k in ("test_id", "revision", "state", "attempts", "assertion", "environment")}))
+              state.with_suffix(".evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+          finally:
+              p.close()
+          reread = PulseCoordinator(state, adapter=adapter)
+          try:
+              assert reread.store.read()["cards"]["INTEGRITY-050"]["status"] == "FAIL"
+              assert reread.store.read()["cards"]["INTEGRITY-050"]["attempts"] == 1
+              reread.tick(force=True)
+              assert reread.store.read()["cards"]["INTEGRITY-050"]["attempts"] == 1
+              print("RESTART: RECEIPT KEPT, EXACTLY ONE ATTEMPT")
+          finally:
+              reread.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atrium-integrity-050-evidence
+          path: /tmp/atrium-acceptance.evidence.json
+          if-no-files-found: error
