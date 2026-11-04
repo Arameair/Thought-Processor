@@ -6,7 +6,8 @@ const formIds = {
   title:'taskTitle', why:'taskWhy', next_step:'taskNext', expected:'taskExpected',
   status:'taskStatus', result:'taskResult', notes:'taskNotes', evidence:'taskEvidence'
 };
-const ui = { board:null, dirty:false, inFlight:false, live:null, sharing:false, lastTimeline:[] };
+const ui = { board:null, dirty:false, inFlight:false, live:null, sharing:false, lastTimeline:[],
+  sending:false, pendingRequest:null };
 
 function notice(message) {
   const node = $('toast');
@@ -169,19 +170,23 @@ async function askTass() {
   if(!message){notice('Write a message before sending.');return;}
   if(!ui.live?.model_ok){notice('Workshop has not reported a ready model; no message sent.');return;}
   if(ui.live.busy){notice('TASS is busy; wait for the current turn.');return;}
-  if(ui.live.full_auto){notice('Disable Full Auto in Workshop before collaborating.');return;}
-  $('askTass').disabled=true;text('askState','Sending a text request only; no execution authority.');
+  if(ui.sending||ui.pendingRequest){notice('Wait for the current request outcome.');return;}
+  ui.sending=true;updateAskButton();
+  text('askState','Sending a chat-only request; no execution authority.');
   try{
     const r=await fetch('/bridge/message',{method:'POST',headers:{
       'Content-Type':'application/json','X-Playground-CSRF':csrf
     },body:JSON.stringify({text:message})});
     const data=await r.json();
     if(!r.ok)throw Error(data.error||'TASS did not accept the request');
-    text('askState','Request accepted by Workshop. Waiting for real reply; no result verified.');
-    notice('Message submitted to Workshop. Review any proposal there.');
+    if(data.accepted!==true||!(/^[0-9a-f]{16}$/).test(data.request_id||''))
+      throw Error('Workshop did not confirm a request ID');
+    ui.pendingRequest=data.request_id;
+    text('askState','Request '+data.request_id+' ACCEPTED. Waiting for a real model reply.');
+    notice('Chat-only request accepted. Full Auto and Autonomy unchanged.');
     await pollLive();
   }catch(e){text('askState','Message not sent: '+e.message);notice('TASS request failed.');}
-  finally{updateAskButton();}
+  finally{ui.sending=false;updateAskButton();}
 }
 function setSignal(prefix,status,detail,kind='') {
   text(prefix+'Value',status);text(prefix+'Detail',detail);
@@ -190,7 +195,7 @@ function setSignal(prefix,status,detail,kind='') {
 }
 function updateAskButton() {
   const s=ui.live;
-  $('askTass').disabled=!(s&&s.model_ok===true&&!s.busy&&!s.full_auto);
+  $('askTass').disabled=!(s&&s.model_ok===true&&!s.busy&&!ui.sending&&!ui.pendingRequest);
 }
 function renderEvents(timeline) {
   const host=$('eventStream');host.replaceChildren();
@@ -204,7 +209,8 @@ function renderEvents(timeline) {
     const title=document.createElement('strong');title.textContent=ev.type==='result'
       ?'Workshop executor reported '+(ev.ok===true?'OK':'FAIL')
       :ev.type.toUpperCase().replace('_',' ');
-    const id=document.createElement('span');id.className='event-id';id.textContent=Number.isInteger(ev.id)?'#'+ev.id:'';
+    const id=document.createElement('span');id.className='event-id';
+    id.textContent=(Number.isInteger(ev.id)?'#'+ev.id:'')+(ev.request_id?' · req '+ev.request_id:'');
     const body=document.createElement('p');
     const detail=ev.text||ev.error||ev.kind||ev.label||(
       ev.type==='trace'?'Workshop trace; authoritative Engine integration unverified':
@@ -234,9 +240,20 @@ async function pollLive() {
     const proposals=Array.isArray(data.proposals)?data.proposals:[];
     $('pendingActions').hidden=!proposals.some(p=>!p.status||p.status==='pending');
     renderEvents(ui.lastTimeline);
+    if(ui.pendingRequest){
+      const rid=ui.pendingRequest;
+      const outcome=ui.lastTimeline.filter(e=>e.request_id===rid&&['reply','error'].includes(e.type)).at(-1);
+      if(outcome){
+        text('askState','Request '+rid+(outcome.type==='reply'&&outcome.text?.trim()
+          ?' REPLIED — real model response visible in the event stream.'
+          :' FAILED — '+(outcome.text||'No model reply was received.')));
+        ui.pendingRequest=null;
+      }else text('askState','Request '+rid+' ACCEPTED — awaiting a real reply; not verified.');
+    }
     text('lastChecked','Checked '+new Date().toLocaleTimeString());
   }catch(_){
     ui.live=null;ui.lastTimeline=[];
+    if(ui.pendingRequest)text('askState','Request '+ui.pendingRequest+' status UNKNOWN — Workshop unreachable; no reply verified.');
     setSignal('workshop','UNREACHABLE','Workshop bridge did not respond','failed');
     setSignal('model','UNKNOWN','No model status while Workshop unavailable');
     setSignal('identity','UNKNOWN','No mirror source available');
