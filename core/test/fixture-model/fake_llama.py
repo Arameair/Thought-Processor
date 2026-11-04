@@ -5,7 +5,7 @@
 import json, os, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DELAY = float(os.environ.get("FIXTURE_DELAY", "45"))
+DELAY = float(os.environ.get("FIXTURE_DELAY") or 45)
 lock = threading.Lock()
 count = 0
 
