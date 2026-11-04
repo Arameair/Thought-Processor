@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/Arameair/Thought-Processor/core/engine"
 	"github.com/Arameair/Thought-Processor/core/lessons"
@@ -133,7 +132,3 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	return id, nil
 }
 
-// ManualStop is deliberately absent: the normal PAUSE control keeps the
-// background pulse off. Owner-triggered lesson study uses only single steps.
-// The sync loop may collect a completed job even while Autonomous is off.
-var _ = strings.TrimSpace
