@@ -267,7 +267,7 @@ class LocalTestAdapter:
         # Memory and network must be limited by the EXTERNAL sandbox/cgroup.
         # Go's race runtime needs high virtual address space; RLIMIT_AS is unsafe here.
 
-    def execute(self, card, job_id):
+    def execute(self, card, job_id, cancel=None):
         started = utc()
         cwd = self.preflight(card)  # Check SHA AGAIN just before launching.
         with tempfile.TemporaryDirectory(prefix="atrium-test-") as tmp:
@@ -285,12 +285,24 @@ class LocalTestAdapter:
                                         stdin=subprocess.DEVNULL, stdout=output,
                                         stderr=subprocess.STDOUT, shell=False,
                                         start_new_session=True, preexec_fn=self._limits)
-                timeout = False
-                try:
-                    proc.wait(timeout=TIMEOUT)
-                except subprocess.TimeoutExpired:
-                    timeout = True
-                    os.killpg(proc.pid, signal.SIGKILL)
+                deadline = time.monotonic() + TIMEOUT
+                timeout, cancelled = False, False
+                while proc.poll() is None:
+                    if cancel is not None and cancel.is_set():
+                        cancelled = True
+                        break
+                    if time.monotonic() >= deadline:
+                        timeout = True
+                        break
+                    try:
+                        proc.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        continue
+                if timeout or cancelled:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     proc.wait(timeout=10)
                 output.seek(0)
                 digest = hashlib.sha256()
@@ -299,17 +311,17 @@ class LocalTestAdapter:
                     digest.update(chunk)
                     if len(preview) < 8192:
                         preview.extend(chunk[:8192 - len(preview)])
-        result = "ERROR" if timeout else ("PASS" if proc.returncode == 0 else "FAIL")
+        result = "ERROR" if (timeout or cancelled) else ("PASS" if proc.returncode == 0 else "FAIL")
         return {
             "receipt_id": "receipt-" + uuid.uuid4().hex,
             "job_id": job_id, "card_id": card["id"], "operation": card["operation"],
             "repository": card["repository"], "sha": card["sha"],
             "argv": list(card["argv"]), "started_at": started,
-            "finished_at": utc(), "exit_code": None if timeout else proc.returncode,
+            "finished_at": utc(), "exit_code": None if (timeout or cancelled) else proc.returncode,
             "outcome": result, "executed": True, "environment": "OWNER_SANDBOX",
             "output_sha256": digest.hexdigest(),
             "output_excerpt": redact(preview.decode("utf-8", "replace")),
-            "reason": "Test timed out and process group was killed" if timeout else None,
+            "reason": ("Test timed out; process group killed" if timeout else "Owner stopped test; process group killed" if cancelled else None),
         }
 
 
@@ -324,12 +336,18 @@ class PulseCoordinator:
         self.store = CardStore(path)
         self._stop = threading.Event()
         self._thread = None
+        self._cancels = {}
+        self._workers = {}
         self.next_tick_at = time.monotonic() + self.interval
         if auto:
             self.start()
 
     def close(self):
         self._stop.set()
+        for event in list(self._cancels.values()):
+            event.set()
+        for worker in list(self._workers.values()):
+            worker.join(timeout=3)
         if self._thread is not None:
             self._thread.join(timeout=2)
         self.store.close()
@@ -357,11 +375,12 @@ class PulseCoordinator:
             "authority": "LOCAL_SANDBOX_PILOT_NOT_IDENTITY",
             "paused": doc["paused"], "tick_sequence": doc["tick_sequence"],
             "last_tick": doc["last_tick"], "last_pulse_id": doc["last_pulse_id"],
-            "cards": list(doc["cards"].values()),
+            "cards": [{k: v for k, v in card.items() if k != "pending_receipt"}
+                      for card in doc["cards"].values()],
         }
 
     def action(self, action, card_id=None, ack=None):
-        if action not in {"approve", "queue", "pause", "resume", "step"}:
+        if action not in {"approve", "queue", "pause", "resume", "step", "stop"}:
             raise CardError("Unsupported test-card action", 403)
         if action == "step":
             self.tick(force=True)
@@ -371,8 +390,17 @@ class PulseCoordinator:
         if action == "queue" and not (self.adapter.enabled and self.adapter.sandbox_confirmed):
             raise CardError("Execution is disabled or isolation is not confirmed", 403)
         def change(doc):
-            if action in {"pause", "resume"}:
-                doc["paused"] = action == "pause"
+            if action in {"pause", "resume", "stop"}:
+                doc["paused"] = action != "resume"
+                if action == "stop":
+                    for card in doc["cards"].values():
+                        if card["status"] == "WORKING":
+                            event = self._cancels.get(card["job_id"])
+                            if event is not None:
+                                event.set()
+                        if card["status"] == "QUEUED":
+                            card.update(status="BLOCKED", reason="Stopped by owner before dispatch",
+                                        finished_at=utc())
                 return
             card = doc["cards"][card_id]
             if action == "approve":
@@ -424,10 +452,12 @@ class PulseCoordinator:
                 card["status"] = "WORKING"
                 card["started_at"] = utc()
                 chosen = (card_id, card["job_id"], dict(card))
+                self._cancels[card["job_id"]] = threading.Event()
                 break
         self.store.mutate(dispatch)
         if chosen:
             worker = threading.Thread(target=self._execute, args=chosen, daemon=True, name="atrium-card-worker")
+            self._workers[chosen[1]] = worker
             try:
                 worker.start()
             except RuntimeError as exc:
@@ -451,7 +481,7 @@ class PulseCoordinator:
 
     def _execute(self, card_id, job_id, card):
         try:
-            receipt = self.adapter.execute(card, job_id)
+            receipt = self.adapter.execute(card, job_id, cancel=self._cancels.get(job_id))
             if (receipt.get("card_id") != card_id or receipt.get("job_id") != job_id
                     or receipt.get("sha") != card["sha"] or receipt.get("outcome") not in {"PASS", "FAIL", "ERROR"}):
                 raise CardError("Adapter receipt mismatch")
@@ -469,3 +499,6 @@ class PulseCoordinator:
             self.store.mutate(record)
         except Exception as exc:
             self._failure(card_id, job_id, type(exc).__name__ + ": " + str(exc))
+        finally:
+            self._cancels.pop(job_id, None)
+            self._workers.pop(job_id, None)
