@@ -176,6 +176,8 @@ type fakeEngine struct {
 	mu       sync.Mutex
 	reqs     []map[string]any
 	outcomes []map[string]any
+	pulse    []string
+	jobs     []map[string]any
 	srv      *httptest.Server
 }
 
@@ -189,6 +191,25 @@ func newFakeEngine() *fakeEngine {
 		}
 		if r.Header.Get("Authorization") != "Bearer testkey" {
 			http.Error(w, `{"error":"missing or wrong engine key"}`, 401)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/pulse") {
+			e.mu.Lock()
+			e.pulse = append(e.pulse, r.URL.Path)
+			e.mu.Unlock()
+			if r.Method == "GET" {
+				json.NewEncoder(w).Encode(map[string]any{"control": "PAUSED", "state": "READY"})
+				return
+			}
+			var in map[string]any
+			json.NewDecoder(r.Body).Decode(&in)
+			if r.URL.Path == "/api/pulse/jobs" {
+				e.mu.Lock()
+				e.jobs = append(e.jobs, in)
+				e.mu.Unlock()
+				w.WriteHeader(202)
+			}
+			json.NewEncoder(w).Encode(in)
 			return
 		}
 		var in map[string]any

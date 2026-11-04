@@ -257,3 +257,58 @@ func firstNonEmpty(s ...string) string {
 	}
 	return ""
 }
+
+// Job is work queued for the engine's coordination pulse.
+type Job struct {
+	JobID    string   `json:"job_id"`
+	Identity string   `json:"identity"`
+	Request  string   `json:"request"`
+	Context  string   `json:"context,omitempty"`
+	Actions  []Action `json:"actions,omitempty"`
+}
+
+// SubmitJob queues a job; the pulse starts it on a later tick (never right away).
+func (c *Client) SubmitJob(j Job) error {
+	var raw map[string]any
+	code, err := c.post("/api/pulse/jobs", j, &raw)
+	if err != nil {
+		return err
+	}
+	if code != 202 {
+		return fmt.Errorf("Thought Engine refused the job (%d): %s", code, errorOf(raw))
+	}
+	return nil
+}
+
+// PulseControl sends start | pause | resume | step.
+func (c *Client) PulseControl(action string) (map[string]any, error) {
+	var raw map[string]any
+	code, err := c.post("/api/pulse/control", map[string]string{"action": action}, &raw)
+	if err != nil {
+		return nil, err
+	}
+	if code != 200 {
+		return raw, fmt.Errorf("Thought Engine refused %q (%d): %s", action, code, errorOf(raw))
+	}
+	return raw, nil
+}
+
+// Pulse returns the coordination pulse's status (control, state, ticks, jobs).
+func (c *Client) Pulse() (map[string]any, error) {
+	req, _ := http.NewRequest("GET", c.URL+"/api/pulse", nil)
+	req.Header.Set("Authorization", "Bearer "+c.Key)
+	hc := &http.Client{Timeout: 3 * time.Second}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("pulse status %d", resp.StatusCode)
+	}
+	return out, nil
+}

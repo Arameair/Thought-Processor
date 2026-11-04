@@ -32,6 +32,7 @@ import (
 	"github.com/Arameair/Thought-Processor/core/engine"
 	"github.com/Arameair/Thought-Processor/core/github"
 	"github.com/Arameair/Thought-Processor/core/identity"
+	"github.com/Arameair/Thought-Processor/core/identitysvc"
 	"github.com/Arameair/Thought-Processor/core/tassmd"
 )
 
@@ -53,6 +54,10 @@ type Config struct {
 	SyncEvery  time.Duration // GitHub sync interval when all is well (20 s)
 	MaxBackoff time.Duration // longest wait between attempts while GitHub is unreachable
 	Messages   bool          // read GitHub messages (off while another program answers them)
+	// IdentitySvc: the installation's Identity service (tass-identity). When set, it is the only
+	// authority (the prototype policy file isn't used) and GitHub sync is off unless GitHub is set.
+	IdentitySvc *identitysvc.Client
+	GitHub      bool
 }
 
 // grantFile is what GrantFile holds.
@@ -92,9 +97,10 @@ type Event struct {
 
 // Incoming is a message for TASS.
 type Incoming struct {
-	Text  string
-	From  string // "local" or "github"
-	Issue int
+	Text    string
+	From    string // "local" or "github"
+	Issue   int
+	Receipt string
 }
 
 type Core struct {
@@ -167,6 +173,36 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
+// entityName: who this core thinks for. With the Identity service it is the installation's own
+// entity (never a built-in name); with the prototype policy file it is the policy's identity.
+func (c *Core) entityName() string {
+	if c.cfg.IdentitySvc != nil {
+		if st := c.cfg.IdentitySvc.State(); st.Entity != nil {
+			return st.Entity.Name
+		}
+		return ""
+	}
+	if p := c.pol(); p != nil {
+		return p.Identity
+	}
+	return ""
+}
+
+// ensureDocument gives a new entity its own starter document (never anyone else's).
+func (c *Core) ensureDocument(name string) {
+	if name == "" || fileExists(c.file("tass.md")) {
+		return
+	}
+	doc := "# " + name + "\n\n<!-- This entity's own document. It lives only on this computer. -->\n\n## Who I am\n\nI am " + name +
+		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Now\n\nJust created.\n"
+	c.fileMu.Lock()
+	defer c.fileMu.Unlock()
+	if !fileExists(c.file("tass.md")) {
+		_ = c.write("tass.md", doc)
+		c.event("sync", "Created "+name+"'s own starter document on this computer.")
+	}
+}
+
 func (c *Core) pol() *identity.Policy {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -176,6 +212,16 @@ func (c *Core) pol() *identity.Policy {
 // allowedNow: Identity's policy allows the action AND was confirmed recently enough. A cached policy
 // older than its offline limit authorizes nothing (fail closed until GitHub confirms it again).
 func (c *Core) allowedNow(action string) (bool, string) {
+	if c.cfg.IdentitySvc != nil {
+		if action == identity.ReadTass {
+			action = "action.read_entity"
+		}
+		d := c.cfg.IdentitySvc.Authorize(action, "thought-processor")
+		if !d.Allow {
+			return false, "Identity " + d.DecisionID + ": " + d.Reason
+		}
+		return true, "Identity " + d.DecisionID + ": " + action + " allowed for " + d.EntityName
+	}
 	c.mu.Lock()
 	p, at := c.policy, c.confirmed
 	c.mu.Unlock()
@@ -266,9 +312,14 @@ func (c *Core) Run(stop <-chan struct{}) {
 		c.event("sync", "No local tass.md yet: it comes from GitHub on the first sync.")
 	}
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go func() { defer wg.Done(); c.think(stop) }()
-	go func() { defer wg.Done(); c.syncLoop(stop) }()
+	if c.cfg.IdentitySvc == nil || c.cfg.GitHub {
+		wg.Add(1)
+		go func() { defer wg.Done(); c.syncLoop(stop) }()
+	} else {
+		c.event("sync", "GitHub sync is off for this installation: everything stays on this computer.")
+	}
 	wg.Wait()
 }
 
@@ -606,14 +657,19 @@ func (c *Core) readMessages() error {
 	return nil
 }
 
-func (c *Core) queue(m Incoming) {
+// ErrBusy: the inbox is full; the message was NOT accepted (Thought-Processor #46).
+var ErrBusy = errors.New("TASS is busy: too many messages are waiting; try again shortly")
+
+func (c *Core) queue(m Incoming) error {
 	select {
 	case c.inbox <- m:
 		if m.From == "github" {
 			c.event("github", fmt.Sprintf("Message from GitHub, issue #%d", m.Issue))
 		}
+		return nil
 	default:
-		c.event("problem", "Too many messages waiting; one was dropped.")
+		c.event("problem", "A message was refused: too many waiting.")
+		return ErrBusy
 	}
 }
 
@@ -643,14 +699,45 @@ func (c *Core) flushOutbox() error {
 	return nil
 }
 
-// Say is a message from the local page. It never needs the internet.
-func (c *Core) Say(text string) error {
+// Say is a message from the local page. It never needs the internet. It returns a receipt ID,
+// or ErrBusy (nothing accepted) when the inbox is full.
+func (c *Core) Say(text string) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return errors.New("empty message")
+		return "", errors.New("empty message")
 	}
-	c.queue(Incoming{Text: text, From: "local"})
-	return nil
+	id := "msg_" + c.now().UTC().Format("20060102T150405") + "_" + hash(text + c.now().String())[:6]
+	if err := c.queue(Incoming{Text: text, From: "local", Receipt: id}); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// SubmitTask queues work for the coordination pulse (it runs on a pulse, not right away).
+func (c *Core) SubmitTask(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", errors.New("empty task")
+	}
+	name := c.entityName()
+	if ok, why := c.allowedNow("pulse.run"); !ok {
+		return "", fmt.Errorf("not queued: %s", why)
+	}
+	c.ensureDocument(name)
+	c.fileMu.Lock()
+	doc, _ := c.read("tass.md")
+	c.fileMu.Unlock()
+	id := "job_" + c.now().UTC().Format("20060102T150405") + "_" + hash(text + c.now().String())[:6]
+	if err := c.engine.SubmitJob(engine.Job{JobID: id, Identity: name, Request: text, Context: doc, Actions: Actions}); err != nil {
+		return "", err
+	}
+	c.event("sync", "Task "+id+" queued for the pulse: "+text)
+	return id, nil
+}
+
+// PulseControl: start | pause | resume | step, passed to the Thought Engine.
+func (c *Core) PulseControl(action string) (map[string]any, error) {
+	return c.engine.PulseControl(action)
 }
 
 // ------------------------------------------------------------- thinking ----
@@ -700,6 +787,11 @@ const howToTalk = `You are TASS, talking with Dustin. Be short, honest and frien
 through your Thought Engine (Nemotron). You can't run code, change files or act on GitHub yourself: you may
 propose one read-only action, and Dustin's Identity decides whether it runs.`
 
+// howToTalkEntity: the same rules for an installation's own entity (no owner names built in).
+const howToTalkEntity = `You are {name}, talking with your owner. Be short, honest and friendly. You run locally on their
+computer through your Thought Engine. You can't run code, change files or act on the internet yourself: you may
+propose one read-only action, and your Identity service decides whether it runs.`
+
 func (c *Core) think(stop <-chan struct{}) {
 	for {
 		select {
@@ -720,7 +812,11 @@ func (c *Core) context(online bool) string {
 	}
 	var b strings.Builder
 	b.WriteString(doc)
-	b.WriteString("\n\n---\n" + howToTalk + "\n")
+	talk := howToTalk
+	if c.cfg.IdentitySvc != nil {
+		talk = strings.ReplaceAll(howToTalkEntity, "{name}", c.entityName())
+	}
+	b.WriteString("\n\n---\n" + talk + "\n")
 	if mem := c.recentMemories(20); len(mem) > 0 {
 		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
 		for _, m := range mem {
@@ -743,13 +839,18 @@ func (c *Core) context(online bool) string {
 // outcome back to the engine, which evaluates the prediction → reply.
 func (c *Core) Answer(m Incoming) {
 	c.event("you", m.Text)
-	for _, a := range []string{identity.ModelRequest, identity.ThoughtProcess} {
+	name := c.entityName()
+	c.ensureDocument(name)
+	checks := []string{identity.ModelRequest, identity.ThoughtProcess}
+	if c.cfg.IdentitySvc != nil {
+		checks = append([]string{"conversation"}, checks...)
+	}
+	for _, a := range checks {
 		if ok, why := c.allowedNow(a); !ok {
 			c.event("problem", "Not sent to the Thought Engine: "+why+".")
 			return
 		}
 	}
-	p := c.pol()
 	c.mu.Lock()
 	online := c.online
 	hist := append([]engine.Message(nil), c.history...)
@@ -762,7 +863,7 @@ func (c *Core) Answer(m Incoming) {
 	}()
 
 	id := engine.NewRequestID()
-	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: p.Identity, Source: "thought-processor:" + m.From,
+	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
 		Request: m.Text, Context: c.context(online), History: hist, Actions: Actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
 	if err != nil {
@@ -930,6 +1031,7 @@ type Health struct {
 	Messages     bool      `json:"github_messages"`
 	LastSync     time.Time `json:"last_sync"`
 	Pending      int       `json:"replies_waiting"`
+	Identity     string    `json:"identity,omitempty"` // NO_ENTITY | LOCKED | UNLOCKED | UNKNOWN (with the Identity service)
 }
 
 func (c *Core) Health(version string) Health {
@@ -943,6 +1045,14 @@ func (c *Core) Health(version string) Health {
 	if es.LastPulse != nil {
 		ok := es.LastPulse.ModelOK
 		h.ModelOK = &ok
+	}
+	if c.cfg.IdentitySvc != nil {
+		st := c.cfg.IdentitySvc.State()
+		h.Identity = st.State
+		if st.State != "UNLOCKED" {
+			valid = false
+			why = "Identity " + st.State + ": " + st.Reason
+		}
 	}
 	if !valid {
 		h.Reasons = append(h.Reasons, why)
@@ -970,30 +1080,41 @@ func (c *Core) Health(version string) Health {
 // ---------------------------------------------------------------- status ---
 
 type Status struct {
-	GitHubOnline bool           `json:"github_online"`
-	LastSync     time.Time      `json:"last_sync"`
-	NextSync     time.Time      `json:"next_sync"`
-	SyncProblem  string         `json:"sync_problem"`
-	Messages     bool           `json:"github_messages"`
-	Policy       string         `json:"policy"`
-	PolicyValid  bool           `json:"policy_valid_now"`
-	Busy         bool           `json:"busy"`
-	Engine       engine.Status  `json:"engine"`
-	Cycles       []engine.Cycle `json:"cycles"`
-	Memories     []Memory       `json:"memories"`
-	Pending      int            `json:"replies_waiting"`
-	TassMD       string         `json:"tass_md"`
-	Events       []Event        `json:"events"`
+	GitHubOnline bool               `json:"github_online"`
+	LastSync     time.Time          `json:"last_sync"`
+	NextSync     time.Time          `json:"next_sync"`
+	SyncProblem  string             `json:"sync_problem"`
+	Messages     bool               `json:"github_messages"`
+	Policy       string             `json:"policy"`
+	PolicyValid  bool               `json:"policy_valid_now"`
+	Busy         bool               `json:"busy"`
+	Engine       engine.Status      `json:"engine"`
+	Cycles       []engine.Cycle     `json:"cycles"`
+	Memories     []Memory           `json:"memories"`
+	Identity     *identitysvc.State `json:"identity,omitempty"`
+	Pulse        map[string]any     `json:"pulse,omitempty"`
+	Pending      int                `json:"replies_waiting"`
+	TassMD       string             `json:"tass_md"`
+	Events       []Event            `json:"events"`
 }
 
 func (c *Core) Status() Status {
 	es := c.engine.Status()
+	pulse, _ := c.engine.Pulse()
+	var ids *identitysvc.State
+	if c.cfg.IdentitySvc != nil {
+		st := c.cfg.IdentitySvc.State()
+		ids = &st
+	}
 	c.fileMu.Lock()
 	doc, _ := c.read("tass.md")
 	c.fileMu.Unlock()
 	mem := c.recentMemories(10)
 	valid, why := c.allowedNow(identity.ModelRequest)
 	pol := "none yet: Identity hasn't authorized TASS (" + c.cfg.Identity + ")"
+	if c.cfg.IdentitySvc != nil {
+		pol = "Identity service (tass-identity) decides every action"
+	}
 	if p := c.pol(); p != nil {
 		allowed := []string{}
 		for k, v := range p.Allow {
@@ -1017,7 +1138,11 @@ func (c *Core) Status() Status {
 	for i := range c.cycles {
 		cys[len(c.cycles)-1-i] = c.cycles[i]
 	}
-	return Status{GitHubOnline: c.online, LastSync: c.lastSync, NextSync: c.nextSync, SyncProblem: c.syncErr,
+	out := Status{GitHubOnline: c.online, LastSync: c.lastSync, NextSync: c.nextSync, SyncProblem: c.syncErr,
 		Messages: c.cfg.Messages, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
-		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...)}
+		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...), Pulse: pulse}
+	if ids != nil {
+		out.Identity = ids
+	}
+	return out
 }
