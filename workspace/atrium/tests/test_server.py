@@ -15,12 +15,17 @@ from server import create_handler, safe_state, safe_event, safe_evidence
 OPENER=build_opener(ProxyHandler({}))
 
 class FakeTASS(BaseHTTPRequestHandler):
+    last_request_id = 'abcdef1234567890'
+    busy = False
+    offline = False
     def log_message(self, *args): pass
     def respond(self, obj, status=200):
         data=json.dumps(obj).encode()
         self.send_response(status); self.send_header('Content-Type','application/json')
         self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def do_GET(self):
+        if FakeTASS.offline and self.path in ('/api/status', '/api/state'):
+            return self.respond({'error': 'fixture model unavailable'}, 503)
         if self.path == '/api/audit':
             return self.respond([
               {'event':'ran','label':'RUN library/01-look-around.md#1',
@@ -34,18 +39,24 @@ class FakeTASS(BaseHTTPRequestHandler):
                'code_sha256':'b'*64}
             ])
         if self.path == '/api/status':
-            return self.respond({'model_ok': True, 'busy': False, 'identity': {'repo': 'Arameair/TASS'},
+            return self.respond({'model_ok': True, 'busy': FakeTASS.busy,
+                'full_auto': True, 'autonomy': True, 'identity': {'repo': 'Arameair/TASS'},
                 'jupyter': 'http://127.0.0.1:8888/?token=SECRET'})
         if self.path == '/api/state':
             return self.respond({
                 'status': {
-                    'model_ok':True,'busy':False,'jupyter':'http://127.0.0.1:8888/?token=SECRET',
+                    'model_ok':True,'busy':FakeTASS.busy,'full_auto':True,'autonomy':True,
+                    'jupyter':'http://127.0.0.1:8888/?token=SECRET',
                     'identity':{'name':'TASS','repo':'Arameair/TASS','branch':'alpha'},
                     'mind':{'library':[{'title':'Look around','path':'library/01.md'}],
                             'projects':[{'title':'Hello TASS','path':'projects/hello-tass'}],
                             'mind':[{'path':'mind/who-i-am.md'}]}
                 },
-                'timeline':[{'type':'reply','id':4,'text':'Hello from the real test model'}],
+                'timeline':[{'type':'reply','id':4,'text':'Hello from the simulated backend'},
+                            {'type':'user','id':5,'text':'fixture prompt',
+                             'request_id':FakeTASS.last_request_id},
+                            {'type':'reply','id':6,'text':'Fixture-only response',
+                             'request_id':FakeTASS.last_request_id}],
                 'proposals':[{'id':'p12','kind':'run','source':'library/01.md#1','code':'TOP SECRET CODE'}]
             })
         if self.path == '/api/events':
@@ -56,10 +67,16 @@ class FakeTASS(BaseHTTPRequestHandler):
         self.respond({'error':'not found'},404)
     def do_POST(self):
         if self.path == '/api/message':
+            if FakeTASS.offline:
+                return self.respond({'error':'fixture model unavailable'},503)
+            if FakeTASS.busy:
+                return self.respond({'error':'TASS is thinking; message was not accepted'},409)
             n=int(self.headers.get('Content-Length',0))
             body=json.loads(self.rfile.read(n))
             FakeTASS.last_message=body['text']
-            return self.respond({'ok': True},202)
+            FakeTASS.last_chat_only=body.get('chat_only')
+            return self.respond({'ok':True, 'request_id':FakeTASS.last_request_id,
+                                 'status':'accepted'},202)
         self.respond({'error':'not found'},404)
 
 class ServerTest(unittest.TestCase):
@@ -161,7 +178,10 @@ class ServerTest(unittest.TestCase):
         payload=json.loads(data)
         self.assertEqual(payload['status']['identity']['repo'],'Arameair/TASS')
         self.assertEqual(len(payload['status']['mind']['library']),1)
-        self.assertEqual(payload['timeline'][0]['text'],'Hello from the real test model')
+        self.assertEqual(payload['timeline'][0]['text'],'Hello from the simulated backend')
+        self.assertTrue(payload['status']['full_auto'])
+        self.assertTrue(payload['status']['autonomy'])
+        self.assertEqual(payload['timeline'][-1]['request_id'], FakeTASS.last_request_id)
         self.assertEqual(len(payload['proposals']),1)
         self.assertNotIn('token=',data.decode())
         self.assertNotIn('TOP SECRET',data.decode())
@@ -197,8 +217,34 @@ class ServerTest(unittest.TestCase):
         status,_,data=self.req('/bridge/message',method='POST',body=body,headers=headers)
         self.assertEqual(status,202)
         self.assertEqual(FakeTASS.last_message,'Hello from Atrium')
-        self.assertTrue(json.loads(data)['accepted'])
+        response=json.loads(data)
+        self.assertTrue(response['accepted'])
+        self.assertEqual(response['status'], 'accepted')
+        self.assertEqual(response['request_id'], FakeTASS.last_request_id)
+        self.assertTrue(FakeTASS.last_chat_only)
         self.assertEqual(self.req('/api/proposal',method='POST',body={'decision':'approve'},headers=headers)[0],404)
+
+    def test_busy_and_offline_report_failures_without_fake_success(self):
+        headers={'Content-Type':'application/json','X-Playground-CSRF':'test-csrf',
+                 'Origin':self.origin}
+        FakeTASS.busy=True
+        try:
+            code,_,data=self.req('/bridge/message',method='POST',
+                                  body={'text':'try while busy'},headers=headers)
+            self.assertEqual(code,409)
+            self.assertIn(b'not accepted',data)
+            self.assertNotIn(b'accepted": true',data)
+        finally:
+            FakeTASS.busy=False
+        FakeTASS.offline=True
+        try:
+            code,_,data=self.req('/bridge/message',method='POST',
+                                  body={'text':'try offline'},headers=headers)
+            self.assertEqual(code,503)
+            self.assertNotIn(b'accepted": true',data)
+            self.assertEqual(self.req('/bridge/state')[0],503)
+        finally:
+            FakeTASS.offline=False
 
     def test_event_stream_filtered(self):
         req=Request(self.origin+'/bridge/events')
