@@ -73,3 +73,38 @@ Through **Thought Processor**, the owner talks to TASS and gets a consistently r
 - Notebook lesson and coordination: Thought-Processor Issue #51
 - Original Go Identity GitHub device flow: Arameair/identity (`internal/github`)
 - Current candidate: Arameair/identity PR #33 and Arameair/Thought-Processor PR #58
+
+## Owner UX target — living Thought Processor and connected Developer workstation (2026-11-04)
+
+**Goal:** Bring separately developed components together as **one TASS experience**, without discarding proven work or creating more independent prototype applications.
+
+### Thought Processor: Netflix-like live thinking surface
+
+- The main owner-facing screen is visually inviting and easy to read. **Every nominal 20 seconds**, the featured thought window advances to the actual current pulse/cycle. The screen shows genuine notebook/lesson source, current TASS thought or decision, progress/action/test, outcome and status. If nothing new happened, say **IDLE / NO NEW THOUGHT**, not a fabricated activity card.
+- Conversation with TASS remains accessible even when the featured thought changes. The owner can select an older cycle without losing the current live context.
+- The 20-second pulse is a coordination/update rhythm, not a forced 20-second inference deadline or an instruction to execute tools without Identity approval.
+- Selecting a thought provides stable references: cycle ID, source provenance, job/receipt, status, and genuine relations. Distinguish actual facts from any model-generated explanation.
+
+### Developer / Workstation: TheBrain-like connected working view
+
+- The **existing `Arameair/developer` repo** is the reference starting point: its `experiment/nemotron-workstation-slice-20261102` UI includes a draggable SVG idea graph, editable linked notes, selected-thought inspector, local-model discussion, local Git workspace read evidence, owner-supervised GitHub checks/updates, and isolated experimental workstation preview/test controls.
+- Reuse those working UI patterns, but note the **current graph represents local manually curated notes and keyword suggestions**, NOT authoritative live Thought Engine cycles or verified repo/test relationships.
+- For one selected real TASS thought, the intended workstation will show *verified* connections to repo, branch, file, notebook, issue, skill, test, service, cycle and outcome when those links actually exist. Clicking a connection should open the corresponding real source/evidence; missing links are explicitly unverified.
+- Developer is a **workstation responsibility / view in the one-app experience**, not permission to run a second autonomous scheduler or invent a new companion. Engineering may initially reuse its isolated components without merging runtime deployments. Preserve original prototypes while testing integration.
+- Long-term only: TASS may revisit an old thought and explain what happened using captured immutable records. Do not implement speculative thought replay in the first slice.
+
+### Focused first acceptance — not a full UI redesign
+
+1. Read the actual running Thought Processor / Engine schemas and Developer graph APIs. Identify the smallest adapter for one **real, existing cycle** (including a failed or idle cycle).
+2. Show a current featured thought in Thought Processor, sourced from Engine, with accurate timestamp, cycle ID, status and evidence. Refresh or advance at the genuine 20-second boundary; do not animate fake activity.
+3. Select that thought and show one verified relationship in the Developer-style inspector (e.g. its real cycle-to-issue or notebook-source relation). Where a relationship is not recorded, display **UNKNOWN / NOT LINKED**, not an inferred URL.
+4. Retain TASS conversation access. Test manual selection vs live refresh so the screen doesn't unexpectedly abandon the thought the owner is inspecting.
+5. Test with the owner's running app only after review/approval; record actual PASS/FAIL/NOT RUN and actionable failures. No model duplication, new scheduler, broad GitHub access, automatic software modifications or new feature development as part of this UX slice.
+
+### Current-state distinction and handoff
+
+- **Existing Developer code verified in repository:** graph, notes/links, inspector, local-model chat, workspace files/read, supervised GitHub update, isolated sandbox. No live integration to TASS Thought Engine verified.
+- **Existing TASS owner evidence:** one short Nemotron conversation PASS; longer lesson plans FAIL twice; Trace classification PASS. The pulse/real notebook learning integration remains owner-acceptance **NOT RUN**. Do not assert live changing Netflix screen exists already.
+- **Not an execution directive to TASS:** these notes are guidance for the team and future authorized TASS read access. Repo note availability != TASS receipt; current GitHub pilot is restricted to one Issue #51 lesson.
+
+**Next conversation with owner:** inspect the exact version currently running and identify what already shows on its screens before designing any more features.
