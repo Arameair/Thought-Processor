@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""A localhost-only, read-and-chat companion for the existing TASS Workshop.
+"""A localhost-only owner desk and restricted Workshop chat bridge.
 
-No execution approvals, settings changes, GitHub tokens, or general filesystem serving.
-The existing Workshop remains the execution/approval surface.
+Workshop proposal execution/approval stays in the Workshop. Atrium's separate
+test-card control records local owner UI attestations; its allowlisted subprocess
+adapter is disabled by default and is NOT a live Identity authorization service.
+No GitHub token, general filesystem serving or arbitrary command endpoint.
 """
 from __future__ import annotations
 
