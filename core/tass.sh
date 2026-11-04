@@ -25,7 +25,7 @@ here="$(pwd)"
 
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
-ENGINE_COMMIT_PIN="0031029"
+ENGINE_COMMIT_PIN="a847385"
 IDENTITY_COMMIT_PIN="8b175c8"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
@@ -164,13 +164,13 @@ check() {
     if use_gpu; then ok "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) (the model runs on it)"
     elif [[ "${MODEL_GPU:-auto}" == on ]]; then bad "MODEL_GPU=on but Docker can't use an NVIDIA GPU here (install the NVIDIA Container Toolkit)"; blockers=1
     else note "No usable GPU from Docker: the model runs on the CPU (slow). Set MODEL_GPU=off to silence this."; fi
-    if [[ $docker_ok == 1 ]]; then
-      local others; others="$(other_models)"
-      if [[ -n "$others" ]]; then
-        bad "Another model is already running: $others. One computer runs ONE model: set MODEL_MODE=external, MODEL_NETWORK and MODEL_URL to use it (nothing of it is stopped)."
-        blockers=1
-      else ok "No other model server running: the application starts exactly one"; fi
-    fi
+  fi
+  if [[ "${MODEL_MODE:-bundled}" != external && $docker_ok == 1 ]]; then
+    local others; others="$(other_models)"
+    if [[ -n "$others" ]]; then
+      bad "Another model is already running: $others. One computer runs ONE model: set MODEL_MODE=external, MODEL_NETWORK and MODEL_URL in $APP_HOME/app.env to use it (nothing of it is stopped)."
+      blockers=1
+    else ok "No other model server running: the application starts exactly one"; fi
   fi
   for p in "$CORE_PORT" "$IDENTITY_PORT"; do
     if port_busy "$p" && [[ -z "$( [[ $docker_ok == 1 ]] && ours)" ]]; then bad "Port $p is used by another program (set CORE_PORT / IDENTITY_PORT in app.env)"; blockers=1
@@ -304,7 +304,11 @@ validate() { # $1 = env file that should now run; $2 = inventory before; $3 = st
     if [[ "$n" != missing && ( "$cur" == missing || "$cur" -lt "$n" ) ]]; then say "  FAIL: $f had $n lines, now $cur"; return 1; fi
   done <<<"$before"
   say "  PASS: all healthy · version $(short "$ver") · Identity $ids_state${now_ent:+ ($now_ent)} · state $state · no records lost"
-  [[ "$ids_state" == UNLOCKED ]] || say "  Identity is $ids_state: unlock at http://127.0.0.1:$IDENTITY_PORT to let it work."
+  case "$ids_state" in
+    NO_ENTITY) say "  No entity yet: create your own at http://127.0.0.1:$IDENTITY_PORT" ;;
+    UNLOCKED) ;;
+    *) say "  Identity is $ids_state: unlock at http://127.0.0.1:$IDENTITY_PORT to let it work." ;;
+  esac
 }
 
 current_state() { local h; h="$(health || true)"; [[ -n "$h" ]] && json_field state <<<"$h" || echo UNKNOWN; }
