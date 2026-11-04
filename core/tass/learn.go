@@ -163,8 +163,8 @@ func (c *Core) lessonsDir() string {
 }
 
 // syncLessons: one conditional request for the branch's file list; download what's new or changed.
-func (c *Core) syncLessons() error {
-	if !c.learningOn() {
+func (c *Core) syncLessons(manual bool) error {
+	if !manual && !c.learningOn() {
 		return nil
 	}
 	if ok, why := c.allowedNow("lesson.learn"); !ok {

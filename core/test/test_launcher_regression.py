@@ -143,7 +143,7 @@ class LauncherSafety(unittest.TestCase):
         record.write_text(old)
         p = self.run_script("start", TEST_FORCE_SUDO=1)
         self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
-        self.assertIn("not this CHAT_ONLY safety build", p.stderr)
+        self.assertIn("predates the Issue #50 safety fix", p.stderr)
         self.assertEqual(record.read_text(), old)
         self.assertFalse((self.app / "secrets").exists())
         self.assertFalse(self.dockerlog.exists() and "compose -p " in self.dockerlog.read_text())

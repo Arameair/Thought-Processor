@@ -72,10 +72,12 @@
     <div id="cycles"><div class="dim">No cycles yet. Say something to TASS.</div></div>
   </section>
   <section class="card">
-    <h2>Learning <small>every pulse looks for new lessons on GitHub; you approve what counts</small></h2>
-    <label class="switch"><input type="checkbox" id="setAuto"> <b>Autonomous</b> <span class="dim">(off = chat only. On: the pulse runs, it learns from GitHub, and lessons that pass every check are approved for you)</span></label>
+    <h2>Learning <small>Manual: Find → Study → Review → Approve · Autonomous: scheduled and auto-approved</small></h2>
+    <label class="switch"><input type="checkbox" id="setAuto"> <b>Autonomous</b> <span class="dim">(OFF: manual lesson control and approval. ON: scheduled pulse and auto-approval of passed lessons)</span></label>
     <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
     <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
+    <div class="ctl"><button id="findLessons">Find lessons (manual)</button><span class="dim">Autonomous OFF: choose Study on a lesson, review the answers, then Approve</span></div>
+    <div id="lessonMessage" class="dim" aria-live="polite"></div>
     <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
     <div id="lessons" class="dim">(no lessons yet)</div>
   </section>
@@ -171,7 +173,7 @@ async function refresh() {
     CUR = L.settings;
     if (document.activeElement !== $("setAuto")) $("setAuto").checked = !!L.settings.autonomous;
     if (document.activeElement !== $("setPulse")) $("setPulse").checked = !!L.settings.pulse;
-    $("btnAuto").textContent = "Autonomous: " + (L.settings.autonomous ? "ON" : "off (chat only)");
+    $("btnAuto").textContent = "Autonomous: " + (L.settings.autonomous ? "ON" : "off (manual)");
     $("btnAuto").className = "topbtn " + (L.settings.autonomous ? "on" : "off");
     const pon = L.settings.pulse && L.settings.autonomous;
     $("btnPulse").textContent = "Pulse: " + (pon ? "ON" : "off");
@@ -180,10 +182,14 @@ async function refresh() {
     $("ghinfo").innerHTML = L.repo
       ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
       : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
+    if ((st.sync_hold || L.last_note || "").includes("no grant")) {
+      $("lessonMessage").innerHTML = '<a style="color:var(--you)" href="http://127.0.0.1:8796/" target="_blank" rel="noopener">Identity must authorize learning. Open Identity to enable permissions.</a>';
+    }
     const ls = L.lessons || [];
     $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
       <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
       ${l.checks ? `<span class="dim">${l.status === "NEW" || l.status === "QUEUED" ? "" : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
+      ${!L.settings.autonomous && (l.status === "NEW" || l.status === "RETRY" || l.status === "QUEUED") ? `<button data-study="${esc(l.path)}">${l.status === "QUEUED" ? "Step again" : "Study (manual)"}</button>` : ""}
       ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
       ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" ? `<button data-retry="${esc(l.path)}">Try again</button>` : ""}</div>
       ${l.goal ? `<div class="dim">${esc(l.goal)}</div>` : ""}
@@ -224,13 +230,21 @@ async function saveSettings() {
 }
 $("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
 $("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
-$("btnPulse").onclick = () => { const on = !CUR.pulse; $("setPulse").checked = on; if (on) $("setAuto").checked = true; saveSettings(); };
+$("btnPulse").onclick = () => { $("setPulse").checked = !CUR.pulse; saveSettings(); };
 $("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
+$("findLessons").onclick = async () => {
+  const r = await post("/api/lessons/discover", {});
+  $("lessonMessage").textContent = r.ok ? "Lesson search complete. Choose Study on a NEW lesson." : (r.body.error || "Discovery refused");
+  refresh();
+};
 $("lessons").onclick = async ev => {
-  const a = ev.target.dataset.approve, t = ev.target.dataset.retry;
-  if (!a && !t) return;
-  const r = await post(a ? "/api/lessons/approve" : "/api/lessons/retry", {path: a || t});
-  alertLine(r.ok ? (a ? "Approved: it's in the Learned section now, and syncs to GitHub." : "It will study it again on a pulse.") : (r.body.error || "refused"));
+  const a = ev.target.dataset.approve, t = ev.target.dataset.retry, study = ev.target.dataset.study;
+  if (!a && !t && !study) return;
+  const mode = study ? "study" : a ? "approve" : "retry";
+  const r = await post("/api/lessons/" + mode, {path: study || a || t});
+  $("lessonMessage").textContent = r.ok ? (mode === "study"
+    ? "Study queued: " + (r.body.receipt || "") + ". Check results and approve only after PASSED."
+    : mode === "approve" ? "Owner approved: now LEARNED." : "Ready for another attempt.") : (r.body.error || "refused");
   refresh();
 };
 document.querySelectorAll(".ctl button").forEach(b => b.onclick = async () => {
