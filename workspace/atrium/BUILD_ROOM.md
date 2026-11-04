@@ -6,7 +6,7 @@
 
 1. A human writes a task and clicks **Ask TASS**. It sends a user message to the **real** Workshop `/api/message` through Atrium's existing restricted bridge. No simulated TASS text.
 2. The page displays actual Workshop conversation, proposals, and executor result events. It polls `/bridge/state` as a fallback if SSE disconnects.
-3. If TASS proposes Python, the page links to **Workshop** at port 8790 for the owner to inspect and decide. Atrium cannot approve or execute. The Build Room **disables new build requests when Workshop Full Auto is enabled**; the owner must turn it off in Workshop first.
+3. **All Atrium messages are chat-only**, even while Full Auto and Autonomy remain enabled. Workshop enforces suppression of model-generated OPEN, RUN, CHANGE MIND and REMEMBER instructions from Atrium chat. Atrium cannot create or approve a proposal. To request execution, initiate it separately in Workshop, where the existing Full Auto/approval behavior applies. Busy inference returns HTTP 409; accepted requests receive a request ID that appears with their Workshop reply/error.
 4. The **Real abilities** panel reads actual mirrored library books plus the sanitized Workshop audit. `Executor reported OK` does **not** prove all side effects without further inspection.
 5. The human can explicitly share a **previewed request** in the right-hand panel. This is NOT an automatic full-conversation upload. Sharing queues one bounded task (max 1,200 characters) in a dedicated local `collab_requests/` directory. No GitHub token goes into Atrium; the opt-in `collab-feed` service forwards it through the existing Identity Liaison to private `Arameair/TASS#19`.
 6. The owner can then ask ChatGPT in this conversation to inspect the latest private issue comment. ChatGPT cannot continuously watch localhost and will not independently know a new brief appeared until the issue is read. The optional feed can separately queue filtered execution metadata. **GitHub comments are not a live API connection to ChatGPT.**
@@ -59,7 +59,7 @@ docker compose --profile collaboration stop collab-feed
 - [ ] TASS proposes one small action; Build Room shows the pending state but exposes no execution endpoint.
 - [ ] Owner approves in Workshop and Build Room displays the real executor outcome.
 - [ ] The library evidence list reflects real audited cells, not placeholder statuses.
-- [ ] Full Auto ON disables Build Room's new task submission.
+- [ ] Full Auto and Autonomy stay ON while a Build Room chat receives a real reply without initiating an action or memory write.
 - [ ] With sharing disabled, no task is automatically published. With the collaboration observer enabled and one approved brief shared, a **new** comment appears in the private GitHub issue. There are no secrets, full conversation logs, code bodies, or thoughts.
 - [ ] Stopping collab-feed stops publishing, without disrupting TASS.
 
