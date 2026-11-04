@@ -11,6 +11,7 @@ func TestManualFindStudyReviewApproveWithoutAutonomous(t *testing.T) {
 	gh.set("Mira/home@live:tass.md", entityDoc)
 	gh.set("Mira/home@live:lessons/claude/01-pulse.md", lessonPulse)
 	c := newLearningCore(t, t.TempDir(), ids, gh, eng)
+	c.SyncOnce() // bring the real repo document local before studying
 	if s := c.GetSettings(); s.Autonomous || s.Pulse { t.Fatalf("should start supervised: %+v", s) }
 	if err := c.DiscoverLessons(); err != nil { t.Fatal(err) }
 	if len(c.Learning().Lessons) != 1 || gh.treeCalls != 1 || len(eng.jobs) != 0 {
