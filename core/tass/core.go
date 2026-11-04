@@ -855,6 +855,20 @@ func (c *Core) Answer(m Incoming) {
 		}
 	}
 
+	// A direct chat request may prepare a local teaching draft. This does not
+	// authorize a GitHub write, call ChatGPT or perform an Engine action.
+	if m.From == "local" {
+		if topic := requestedTeachingTopic(m.Text); topic != "" {
+			id, err := c.createTeachingDraft(topic)
+			if err != nil {
+				c.event("problem", "Teaching request not saved: "+err.Error())
+			} else {
+				c.event("tass", "I saved teaching request "+id+" locally about: "+topic+". It has NOT been sent to GitHub or ChatGPT. The approved writer and reply channel are not connected yet.")
+			}
+			return
+		}
+	}
+
 	// @identity-test is a reference lookup, NEVER an execution request.
 	// No GitHub sync, write, notebook kernel, or action capability is enabled.
 	lessonContext := ""
