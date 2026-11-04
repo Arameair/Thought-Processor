@@ -20,3 +20,19 @@ jobs:
       - name: Build
         working-directory: core
         run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
+      - name: Core image builds (real golang:1.24-alpine / alpine:3.20 bases)
+        working-directory: core
+        run: |
+          docker build --build-arg VERSION=${{ github.sha }} -f docker/core.Dockerfile -t tass-core:ci .
+          docker run --rm --entrypoint /usr/local/bin/tass-core tass-core:ci -healthcheck || test $? -eq 1   # binary runs; nothing to check yet
+          docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }} user={{ .Config.User }}' tass-core:ci
+      - name: Compose file is valid (engine image is private, so it isn't built here)
+        working-directory: core
+        run: |
+          docker network create tass-workspace_default
+          CORE_IMAGE=tass-core:ci ENGINE_IMAGE=tass-engine:ci TASS_UID=1000 TASS_GID=1000 TASS_DATA=/tmp/t \
+          ENGINE_DATA=/tmp/e TOKEN_FILE=/tmp/tok docker compose -p tass-core -f compose.yaml config -q && echo compose-ok
+      - name: Management script syntax
+        working-directory: core
+        run: bash -n tass.sh && bash -n start.sh
+
