@@ -132,7 +132,8 @@ cd ~/tass-one-app/core
 ./tass.sh check                        # creates ~/.tass-app/app.env; it will [stop] on "Another model is already running"
 nano ~/.tass-app/app.env               # MODEL_MODE=external  MODEL_NETWORK=tass-workspace_default  MODEL_URL=http://model:8081
 ./tass.sh check                        # must end "Ready"
-sudo ./tass.sh start                   # (sudo only if your docker needs it); ends "PASS … Identity NO_ENTITY"
+sudo -v; ./tass.sh start               # don't run the script itself with sudo: it calls "sudo -n docker" when needed
+                                       # ends with "PASS … Identity NO_ENTITY"
 ```
 
 1. Open http://127.0.0.1:8795: the red bar says NO_ENTITY and BLOCKED.
