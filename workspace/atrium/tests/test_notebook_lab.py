@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from notebook_cell_worker import cell_from_fixed_notebook
 from notebook_lab import (SKILL, LESSON_ID, lesson_prompt, resolve_skill,
                           validate_model_selection, propose_skill_candidate, NotebookTestAdapter)
 from pulse_cards import CATALOG, CardError, CardStore, initial, PulseCoordinator
@@ -124,6 +125,18 @@ class NotebookLabTests(unittest.TestCase):
             self.assertEqual(p.store.read()["cards"][LESSON_ID]["attempts"], 0)
         finally:
             p.close()
+
+    def test_real_lesson_cell_is_exactly_pinned_and_tampering_fails(self):
+        path = Path(__file__).resolve().parents[1] / "lessons/identity_test.ipynb"
+        code = cell_from_fixed_notebook(path)
+        import hashlib
+        self.assertEqual(hashlib.sha256(code.encode()).hexdigest(),
+                         CATALOG[LESSON_ID]["cell_sha256"])
+        original = path.read_text()
+        broken = Path(self.temp.name) / "tampered.ipynb"
+        broken.write_text(original.replace("identity-go-packages", "unsafe-shell", 1))
+        with self.assertRaises(ValueError):
+            cell_from_fixed_notebook(broken)
 
     def test_trusted_notebook_must_be_inside_approved_checkout(self):
         adapter = NotebookTestAdapter(enabled=True, sandbox_confirmed=True,
