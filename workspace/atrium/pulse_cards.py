@@ -262,7 +262,8 @@ class LocalTestAdapter:
     @staticmethod
     def _limits():
         resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT, TIMEOUT + 10))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (2 << 20, 2 << 20))
+        # Never set RLIMIT_FSIZE: it also breaks Go compiler output archives.
+        # Bound the captured stdout file in the parent loop instead.
         resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
         # Memory and network must be limited by the EXTERNAL sandbox/cgroup.
         # Go's race runtime needs high virtual address space; RLIMIT_AS is unsafe here.
@@ -286,7 +287,7 @@ class LocalTestAdapter:
                                         stderr=subprocess.STDOUT, shell=False,
                                         start_new_session=True, preexec_fn=self._limits)
                 deadline = time.monotonic() + TIMEOUT
-                timeout, cancelled = False, False
+                timeout, cancelled, output_limited = False, False, False
                 while proc.poll() is None:
                     if cancel is not None and cancel.is_set():
                         cancelled = True
@@ -294,16 +295,22 @@ class LocalTestAdapter:
                     if time.monotonic() >= deadline:
                         timeout = True
                         break
+                    output.seek(0, os.SEEK_END)
+                    if output.tell() > 2 << 20:
+                        output_limited = True
+                        break
                     try:
                         proc.wait(timeout=0.2)
                     except subprocess.TimeoutExpired:
                         continue
-                if timeout or cancelled:
+                if timeout or cancelled or output_limited:
                     try:
                         os.killpg(proc.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
                     proc.wait(timeout=10)
+                output.seek(0, os.SEEK_END)
+                output_limited = output_limited or output.tell() > (2 << 20)
                 output.seek(0)
                 digest = hashlib.sha256()
                 preview = bytearray()
@@ -311,17 +318,21 @@ class LocalTestAdapter:
                     digest.update(chunk)
                     if len(preview) < 8192:
                         preview.extend(chunk[:8192 - len(preview)])
-        result = "ERROR" if (timeout or cancelled) else ("PASS" if proc.returncode == 0 else "FAIL")
+        raw_excerpt = preview.decode("utf-8", "replace")
+        test_build_failed = ("[build failed]" in raw_excerpt or "compile: " in raw_excerpt)
+        integrity_no_assertions = (card["id"] == "INTEGRITY-050" and proc.returncode != 0 and
+                                   "--- FAIL: TestAcceptanceRejects" not in raw_excerpt)
+        result = "ERROR" if (timeout or cancelled or output_limited or test_build_failed or integrity_no_assertions) else ("PASS" if proc.returncode == 0 else "FAIL")
         return {
             "receipt_id": "receipt-" + uuid.uuid4().hex,
             "job_id": job_id, "card_id": card["id"], "operation": card["operation"],
             "repository": card["repository"], "sha": card["sha"],
             "argv": list(card["argv"]), "started_at": started,
-            "finished_at": utc(), "exit_code": None if (timeout or cancelled) else proc.returncode,
+            "finished_at": utc(), "exit_code": None if (timeout or cancelled or output_limited) else proc.returncode,
             "outcome": result, "executed": True, "environment": "OWNER_SANDBOX",
             "output_sha256": digest.hexdigest(),
-            "output_excerpt": redact(preview.decode("utf-8", "replace")),
-            "reason": ("Test timed out; process group killed" if timeout else "Owner stopped test; process group killed" if cancelled else None),
+            "output_excerpt": redact(raw_excerpt),
+            "reason": ("Test timed out; process group killed" if timeout else "Owner stopped test; process group killed" if cancelled else "Output exceeded 2 MiB limit" if output_limited else "Go build failed or regression tests never ran" if (test_build_failed or integrity_no_assertions) else None),
         }
 
 
