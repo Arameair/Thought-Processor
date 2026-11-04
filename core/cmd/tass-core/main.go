@@ -102,6 +102,11 @@ func main() {
 			log.Fatal(err)
 		}
 		cfg.IdentitySvc = ids
+		// Mandatory in this experimental one-app build: Issue #50 proves Core
+		// can execute unlocked/mismatched Engine proposals. Chat remains usable,
+		// but no proposed action, pulse task or start/step can execute.
+		cfg.ChatOnly = true
+		log.Printf("CHAT_ONLY: model actions and autonomous work pulses disabled (Issue #50)")
 		cfg.Identity = "tass-identity at " + u
 		cfg.GitHub = strings.EqualFold(env("TASS_GITHUB", "off"), "on")
 		if !cfg.GitHub {
