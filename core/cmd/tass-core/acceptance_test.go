@@ -56,7 +56,7 @@ func TestAcceptanceLandingPageDoesNotExposeProgramKey(t *testing.T) {
     if err != nil { t.Fatal(err) }
     req := httptest.NewRequest("GET", "http://127.0.0.1:8795/", nil)
     w := httptest.NewRecorder()
-    handler(core, "ephemeral-page-key", "private-program-key")(w, req)
+    handler(core, "ephemeral-page-key", "private-program-key").ServeHTTP(w, req)
     if w.Code != http.StatusOK { t.Fatalf("landing page: HTTP %d", w.Code) }
     if strings.Contains(w.Body.String(), "private-program-key") { t.Fatal("program credential disclosed in page") }
     if !strings.Contains(w.Body.String(), "ephemeral-page-key") { t.Fatal("expected per-start page token is missing") }
