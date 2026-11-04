@@ -142,6 +142,7 @@ type Core struct {
 
 	syncHold string // why GitHub sync is on hold (app mode), e.g. Identity LOCKED
 
+	manualMu sync.Mutex // serialize owner-requested lesson starts
 	learnMu  sync.Mutex // lessons loop and settings (learn.go)
 	learn    learnState
 	settings Settings
@@ -380,7 +381,7 @@ func (c *Core) SyncOnce() time.Duration {
 		err = c.syncTass()
 		if err == nil {
 			steps = append(steps, "document")
-			err = c.syncLessons()
+			err = c.syncLessons(false)
 		}
 		if err == nil {
 			steps = append(steps, "lessons")
