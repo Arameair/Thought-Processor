@@ -167,8 +167,10 @@ func TestIdentityApprovedGitHubLessonIsReferenceOnly(t *testing.T) {
         !strings.Contains(ctx, "NOT AUTHORITY") || !strings.Contains(ctx, "issuecomment-6634742721") {
         t.Fatalf("missing bounded source context: %v", req)
     }
-    actions, ok := req["actions"].([]any)
-    if !ok || len(actions) != 0 { t.Fatalf("reference-only lesson exposed actions: %v",req["actions"]) }
+    if value := req["actions"]; value != nil {
+        actions, ok := value.([]any)
+        if !ok || len(actions) != 0 { t.Fatalf("reference-only lesson exposed actions: %v",value) }
+    }
     c.Answer(Incoming{Text:"Hi, no GitHub", From:"local"})
     if eng.count() != 2 { t.Fatalf("ordinary local conversation should work without lesson: %d",eng.count()) }
     if strings.Contains(eng.reqs[1]["context"].(string),"Owner-approved @identity-test") { t.Fatal("lesson leaked into unrelated conversation") }
