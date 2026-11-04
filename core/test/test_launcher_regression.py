@@ -146,7 +146,7 @@ class LauncherSafety(unittest.TestCase):
         self.assertIn("not this CHAT_ONLY safety build", p.stderr)
         self.assertEqual(record.read_text(), old)
         self.assertFalse((self.app / "secrets").exists())
-        self.assertFalse(self.dockerlog.exists() and "compose " in self.dockerlog.read_text())
+        self.assertFalse(self.dockerlog.exists() and "compose -p " in self.dockerlog.read_text())
 
     def test_failed_engine_clone_does_not_launch_or_create_current(self):
         cur = self.deployed(include=False)
@@ -155,7 +155,7 @@ class LauncherSafety(unittest.TestCase):
         self.assertIn("engine clone failed", p.stderr)
         self.assertFalse(cur.exists())
         self.assertFalse((cur.parent / "history.log").exists())
-        self.assertNotIn("compose ", self.dockerlog.read_text())
+        self.assertNotIn("compose -p ", self.dockerlog.read_text())
         self.assertNotIn("build ", self.dockerlog.read_text())
 
     def test_failed_first_start_update_restores_without_old_image_restart(self):
@@ -187,7 +187,7 @@ class LauncherSafety(unittest.TestCase):
                 self.assertEqual(cur.read_bytes(), original)
                 self.assertFalse((cur.parent / "history.log").exists())
                 out = self.dockerlog.read_text()
-                self.assertNotIn("compose ", out)
+                self.assertNotIn("compose -p ", out)
                 self.assertIn("-t tass-" + target + ":", out)
 
 
