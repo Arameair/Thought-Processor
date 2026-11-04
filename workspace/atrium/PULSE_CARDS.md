@@ -16,7 +16,15 @@ Open **Today's desk** (\`/today\`) and scroll to **06 / Verified Test Cards** or
 
 **Default:** paused, execution disabled, no source checkouts mounted and no Go compiler in the existing Atrium Docker image. The UI is usable for review/approval and status without granting execution. The 20-second scheduler uses no model inference and never calls Workshop's action routes.
 
-### The only two production operations
+### Stacked Notebook Lesson 01 experiment
+
+[NOTEBOOK_LAB.md](NOTEBOOK_LAB.md) documents the additively migrated third card
+NOTEBOOK-IDENTITY-LAB. It is a pinned, private-Jupyter cell pilot, not an expansion
+of the two existing Go test operations. Its owner approval is disabled until an
+attributed model selection is recorded; that selection itself never grants
+authorization. The normal Atrium Docker image still does not execute notebook code.
+
+## The original two Go-only production operations
 
 | Card | Exact checkout | Fixed subprocess argv (no shell) | Expected evidence |
 | --- | --- | --- | --- |
