@@ -7,6 +7,8 @@ The only mutating probe (owner chat) requires explicit --send.
 """
 import argparse
 import datetime as dt
+import hashlib
+from decimal import Decimal
 import json
 import pathlib
 import sys
@@ -52,6 +54,23 @@ def json_lines(path):
     return rows
 
 
+def prediction_hash(cycle_id, action, prediction):
+    """Recompute Engine cycles.go's unkeyed SHA-256 evidence checksum.
+
+    This checks accidental corruption, not authenticity against an attacker
+    with write access to the journal; no signed evidence exists yet.
+    """
+    val = prediction["value"]
+    number = format(Decimal(str(val)), "f")
+    if "." in number:
+        number = number.rstrip("0").rstrip(".")
+    payload = "|".join((
+        cycle_id, action, prediction.get("text", ""), number,
+        prediction["locked_at"],
+    ))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def cycle_checks(rows, cycle_id):
     """A strictly ordered append-only cycle is necessary, not sufficient,
     evidence for executed action and real inference."""
@@ -82,11 +101,17 @@ def cycle_checks(rows, cycle_id):
                         and bool(prop.get("reply"))
                         and "TEST FIXTURE" not in prop.get("reply", ""),
                         f"format={prop.get('format')}; model request ID present={bool(prop.get('model_request_id'))}"))
-    result.append(check("prediction committed with SHA-256",
+    try:
+        checksum_ok = (prediction.get("sha256") ==
+                       prediction_hash(cycle_id, prop.get("action", ""), prediction))
+    except (KeyError, ValueError, TypeError):
+        checksum_ok = False
+    result.append(check("prediction committed with matching SHA-256",
                         prediction.get("state") == "LOCKED"
-                        and len(str(prediction.get("sha256", ""))) == 64
-                        and prediction.get("value") is not None,
-                        f"prediction state={prediction.get('state')}"))
+                        and prop.get("action") in
+                            ("tass_sections", "tass_words", "tass_memory_lines")
+                        and prediction.get("value") is not None and checksum_ok,
+                        f"prediction state={prediction.get('state')}; checksum valid={checksum_ok}"))
     try:
         lock = instant(prediction.get("locked_at"))
         executed = instant(out.get("executed_at"))
@@ -108,11 +133,18 @@ def cycle_checks(rows, cycle_id):
                         and out.get("value") is not None
                         and out.get("executor", "").startswith("thought-processor"),
                         f"status={out.get('status')}; executor={out.get('executor')}"))
-    result.append(check("deterministic evaluation of actual result",
-                        ev.get("forecast") in ("PREDICTION_CORRECT", "PREDICTION_INCORRECT")
+    predicted, measured = prediction.get("value"), out.get("value")
+    try:
+        correct = abs(float(predicted) - float(measured)) < 1e-9
+        expected_forecast = "PREDICTION_CORRECT" if correct else "PREDICTION_INCORRECT"
+    except (TypeError, ValueError):
+        expected_forecast = None
+    result.append(check("deterministic evaluation matches measurement",
+                        expected_forecast is not None
+                        and ev.get("forecast") == expected_forecast
                         and ev.get("goal") == "GOAL_MET"
                         and bool(ev.get("evaluator")),
-                        f"forecast={ev.get('forecast')}; goal={ev.get('goal')}"))
+                        f"expected={expected_forecast}; forecast={ev.get('forecast')}; goal={ev.get('goal')}"))
     # A pass here does not verify the model was Nemotron. That requires real
     # owner hardware and an independent /v1/models/runtime identity check.
     return result
@@ -316,9 +348,17 @@ def probe_chat(args):
         if matches:
             c = matches[0]
             cid = c.get("cycle_id")
-            if c.get("state") == "evaluated" and c.get("proposal") is not None:
-                print(f"PASS | unique Go cycle {cid}, evaluated; no fake chat receipt inferred")
-                print("NOT RUN | Go Full Auto / Autonomy mode verification (no Go control/status contract)")
+            prop = c.get("proposal") or {}
+            if c.get("state") == "evaluated" and prop:
+                good = (prop.get("format") == "READ"
+                        and bool(prop.get("reply"))
+                        and bool(prop.get("model_request_id"))
+                        and "TEST FIXTURE" not in prop.get("reply", ""))
+                if not good:
+                    print(f"FAIL | cycle {cid} evaluated without a readable, non-fixture model reply")
+                    return FAILURE
+                print(f"PASS | Go transport: correlated completed cycle {cid}, readable reply")
+                print("NOT RUN | model/GPU identity and Go Full Auto/Autonomy (separate evidence required)")
                 return SUCCESS
             if c.get("state") in ("denied", "failed"):
                 print(f"FAIL | cycle {cid}: {c.get('state')}; {str(c.get('problem'))[:100]}")
