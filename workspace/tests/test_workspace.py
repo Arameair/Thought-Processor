@@ -161,6 +161,8 @@ class RestartTests(unittest.TestCase):
                 self.assertFalse(any(e["type"] == "reply" and e.get("request_id") == rid
                                      for e in ws.timeline))
                 self.assertFalse(ws.proposals)
+                self.assertTrue(any(r["event"] == "chat_failed" and r["id"] == rid
+                                    for r in ws.read_audit()))
             finally:
                 os.environ.clear()
                 os.environ.update(previous)
@@ -374,12 +376,14 @@ class EndToEndTests(unittest.TestCase):
         outbox = self.root / "outbox"
         initial_outbox = set(outbox.iterdir()) if outbox.exists() else set()
         self.post("/api/settings", {"full_auto": True, "autonomy": True})
+        request_ids = []
         try:
             for prompt in ("Hi TASS", "Try some of your own code please",
                            "How could you improve how you think?"):
                 accepted = self.post("/api/message", {"text": prompt, "chat_only": True})
                 self.assertTrue(accepted["ok"])
                 rid = accepted["request_id"]
+                request_ids.append(rid)
                 self.assertRegex(rid, r"^[0-9a-f]{16}$")
                 st = self.wait_for(lambda state: any(
                     e["type"] == "reply" and e.get("request_id") == rid
@@ -394,6 +398,11 @@ class EndToEndTests(unittest.TestCase):
             new_audit = self.get("/api/audit")[initial_audit:]
             self.assertFalse(any(r["event"] in ("proposed", "auto-approved", "remembered")
                                  for r in new_audit))
+            for rid in request_ids:
+                records = [r for r in new_audit if r.get("id") == rid]
+                self.assertEqual([r["event"] for r in records],
+                                 ["chat_accepted", "chat_replied"])
+                self.assertTrue(all(r.get("source") is None for r in records))
             self.assertEqual(memory.read_bytes() if memory.exists() else None, initial_memory)
             self.assertEqual(set(outbox.iterdir()) if outbox.exists() else set(), initial_outbox)
         finally:
