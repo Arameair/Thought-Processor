@@ -144,9 +144,11 @@ services:
       TASS_ATRIUM_BACKEND_URL: http://workspace:8790
       TASS_ATRIUM_BIND_HOST: 0.0.0.0
       TASS_ATRIUM_COLLAB_REQUESTS: /collab/requests
+      TASS_ATRIUM_DESK_STATE: /state/desk.json
     volumes:
-      # Only this dedicated bounded request queue; not the privileged Liaison outbox.
+      # Dedicated collaboration queue and non-executable local task notes.
       - ./collab_requests:/collab/requests
+      - ./atrium_state:/state
     ports:
       - "127.0.0.1:8791:8791"
     read_only: true
