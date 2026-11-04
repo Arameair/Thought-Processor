@@ -918,8 +918,10 @@ func (c *Core) Answer(m Incoming) {
 	c.keepCycle(cy)
 
 	text := strings.TrimSpace(prop.Reply)
-	if mm := nowRe.FindStringSubmatch(text); mm != nil {
-		_ = c.write("now.txt", mm[1]+"\n")
+	if !c.cfg.ChatOnly {
+		if mm := nowRe.FindStringSubmatch(text); mm != nil {
+			_ = c.write("now.txt", mm[1]+"\n")
+		}
 	}
 	text = strings.TrimSpace(nowRe.ReplaceAllString(rememberRe.ReplaceAllString(text, ""), ""))
 	remember := strings.TrimSpace(prop.Remember)
@@ -928,7 +930,7 @@ func (c *Core) Answer(m Incoming) {
 			remember = mm[1]
 		}
 	}
-	if remember != "" {
+	if remember != "" && !c.cfg.ChatOnly {
 		c.addMemory(remember, id, m.From)
 		c.event("sync", "TASS noted in his memory journal: "+remember)
 	}
