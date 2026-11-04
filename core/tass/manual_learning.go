@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Arameair/Thought-Processor/core/engine"
 	"github.com/Arameair/Thought-Processor/core/lessons"
@@ -103,6 +104,9 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	c.fileMu.Lock()
 	doc, _ := c.read("tass.md")
 	c.fileMu.Unlock()
+	if strings.TrimSpace(doc) == "" {
+		return "", errors.New("TASS document is not synced yet; wait for the next GitHub sync before studying")
+	}
 	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path+snapshot.SHA)[:10], snapshot.Attempts+1)
 	request := "Study this lesson: \"" + l.Title + "\". Read every step, then answer each check in your REPLY, " +
 		"one line per check, exactly like:\nANSWER 1: <your short answer>\nANSWER 2: <your short answer>\n" +
