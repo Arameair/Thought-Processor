@@ -318,20 +318,25 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			return
 		}
 		var err error
+		var receipt string
 		switch r.PathValue("action") {
-		case "approve": // the owner's approval: only from this page, with its token
+		case "discover": // explicit owner request; no pulse and no autonomous toggle
+			err = core.DiscoverLessons()
+		case "study": // exactly one selected Markdown lesson, then one pulse step
+			receipt, err = core.StudyLesson(body.Path)
+		case "approve": // owner's approval is separate from the grading
 			err = core.ApproveLesson(body.Path)
 		case "retry":
 			err = core.RetryLesson(body.Path)
 		default:
-			reply(w, http.StatusNotFound, map[string]string{"error": "approve or retry"})
+			reply(w, http.StatusNotFound, map[string]string{"error": "discover, study, approve or retry"})
 			return
 		}
 		if err != nil {
 			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
 		}
-		reply(w, http.StatusOK, core.Learning())
+		reply(w, http.StatusOK, map[string]any{"learning": core.Learning(), "receipt": receipt})
 	})
 	mux.HandleFunc("POST /api/pulse", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
