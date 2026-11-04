@@ -1,0 +1,136 @@
+name: atrium-notebook-teaching-evidence
+on:
+  push:
+    paths:
+      - "workspace/atrium/notebook_*.py"
+      - "workspace/atrium/lessons/**"
+      - "workspace/atrium/tests/test_notebook_lab.py"
+      - "workspace/atrium/pulse_cards.py"
+      - ".github/workflows/atrium-notebook-teaching.yml"
+  pull_request:
+    paths:
+      - "workspace/atrium/notebook_*.py"
+      - "workspace/atrium/lessons/**"
+      - "workspace/atrium/pulse_cards.py"
+      - ".github/workflows/atrium-notebook-teaching.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notebook-one-cell-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Candidate PR source (no credentials persisted)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin the authored notebook and existing SharedKernel
+        uses: actions/checkout@v4
+        with:
+          repository: Arameair/Thought-Processor
+          ref: 25fe25bb57b9306e1e7b312e1d28e75152f5d28e
+          path: test-checkouts/notebook
+          persist-credentials: false
+      - name: Pin the Identity test subject
+        uses: actions/checkout@v4
+        with:
+          repository: Arameair/identity
+          ref: b0c7267b47f6111c5024c9bba8a4135e2357b432
+          path: test-checkouts/identity
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Jupyter client and kernel (no Jupyter server launched)
+        run: python3 -m pip install jupyter_client ipykernel
+      - name: Strict lesson fixture + pinned Jupyter/Go execution + restart
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time
+          from pathlib import Path
+          sys.path.insert(0, "workspace/atrium")
+          from pulse_cards import PulseCoordinator, CATALOG
+          from notebook_lab import (NotebookTestAdapter, LESSON_ID, lesson_prompt,
+                                    validate_model_selection, propose_skill_candidate)
+          source_root = Path(os.environ["GITHUB_WORKSPACE"]) / "test-checkouts"
+          adapter = NotebookTestAdapter(
+              enabled=True,
+              sandbox_confirmed=True,  # Disposable CI, NOT the running owner's Identity grant
+              root=str(source_root),
+              roots={LESSON_ID: str(source_root / "notebook"),
+                     "IDENTITY-014": str(source_root / "identity"),
+                     "INTEGRITY-050": ""},
+          )
+          print("LESSON PREVIEW (teaching material, not a grant):", lesson_prompt()[:180])
+          # SCRIPTED model selection: proves parser and gating, not that Nemotron learned.
+          fixture_reply = json.dumps({
+              "skill": "@identity-test", "cell_id": "identity-go-packages",
+              "expectation": "The pinned Identity authority, pairing and entities package tests should exit zero.",
+          })
+          selection = validate_model_selection(fixture_reply, actor="MODEL_FIXTURE")
+          assert selection["execution_authorized"] is False
+          state = Path("/tmp/atrium-notebook-lab.json")
+          coordinator = PulseCoordinator(state, adapter=adapter, interval=20)
+          try:
+              coordinator.action("approve", LESSON_ID, "APPROVE " + LESSON_ID)
+              coordinator.action("queue", LESSON_ID)
+              coordinator.action("step")
+              deadline = time.monotonic() + 180
+              while not coordinator.store.read()["cards"][LESSON_ID].get("pending_receipt"):
+                  assert time.monotonic() < deadline, "Jupyter cell did not complete"
+                  time.sleep(.3)
+              coordinator.tick()
+              card = coordinator.store.read()["cards"][LESSON_ID]
+              receipt = card["receipt"]
+              assert card["status"] == "PASS", receipt
+              assert card["attempts"] == 1, card
+              assert receipt["executed"] is True and receipt["exit_code"] == 0, receipt
+              assert receipt["cell_sha256"] == CATALOG[LESSON_ID]["cell_sha256"]
+              assert receipt["notebook_blob_sha"] == CATALOG[LESSON_ID]["notebook_blob_sha"]
+              assert receipt["output_sha256"], receipt
+              print("REAL JUPYTER CELL RESULT:", json.dumps({
+                  "job_id": card["job_id"], "receipt_id": receipt["receipt_id"],
+                  "status": card["status"], "attempts": card["attempts"],
+                  "notebook_revision": card["sha"], "cell_id": receipt["cell_id"],
+                  "output_sha256": receipt["output_sha256"], "exit_code": receipt["exit_code"],
+              }))
+              # The reflection is a fixture because REAL Nemotron has NOT run this exercise.
+              fixture_reflection = ("The actual Identity package tests returned zero in the isolated "
+                                    "notebook. This verifies these packages, not every Identity permission.")
+              candidate = propose_skill_candidate(receipt, selection=selection,
+                                                   reflection=fixture_reflection)
+              assert candidate["state"] == "PROPOSED_FOR_OWNER_REVIEW"
+              assert candidate["learned_by_live_nemotron"] is False
+              artifact = {
+                  "environment": "GITHUB_ACTIONS_REAL_JUPYTER_AND_GO_WITH_SCRIPTED_MODEL_FIXTURE",
+                  "lesson_selection": selection,
+                  "execution_receipt": receipt,
+                  "skill_candidate": candidate,
+                  "nemotron_model_selection": "NOT_RUN",
+                  "nemotron_reflection": "NOT_RUN",
+                  "owner_runtime": "UNMODIFIED",
+              }
+              state.with_suffix(".evidence.json").write_text(json.dumps(artifact, indent=2) + "\n")
+          finally:
+              coordinator.close()
+          reopened = PulseCoordinator(state, adapter=adapter)
+          try:
+              before = reopened.store.read()["cards"][LESSON_ID]
+              assert before["status"] == "PASS"
+              reopened.tick(force=True)
+              after = reopened.store.read()["cards"][LESSON_ID]
+              assert after["attempts"] == 1 and after["receipt"] == before["receipt"]
+              print("RESTART: LAB RECEIPT PRESERVED; NO JUPYTER CELL REEXECUTED")
+          finally:
+              reopened.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atrium-identity-notebook-real-kernel-evidence
+          path: /tmp/atrium-notebook-lab.evidence.json
+          if-no-files-found: error
