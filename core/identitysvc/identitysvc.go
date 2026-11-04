@@ -113,7 +113,8 @@ func (c *Client) GetApprovedLesson() (ApprovedLesson, error) {
         return ApprovedLesson{}, fmt.Errorf("invalid Identity lesson response")
     }
     if lesson.Skill != "@identity-test" || lesson.Repository != "Arameair/Thought-Processor" ||
-        lesson.Issue != 51 || lesson.CommentID != 6634742721 ||
+        lesson.Issue != 51 || lesson.CommentID != 6636766875 ||
+        lesson.Source != "https://github.com/Arameair/Thought-Processor/issues/51#issuecomment-6636766875" ||
         lesson.Mode != "reference_only" || len(lesson.Body) == 0 || len(lesson.Body) > 8192 {
         return ApprovedLesson{}, fmt.Errorf("Identity lesson provenance did not match")
     }
