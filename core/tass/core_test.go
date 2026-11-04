@@ -201,6 +201,9 @@ type fakeEngine struct {
 	pulse    []string
 	jobs     []map[string]any
 	srv      *httptest.Server
+	mismatchCycleID string
+	unlockedPrediction bool
+	unreadableProposal bool
 }
 
 func newFakeEngine() *fakeEngine {
@@ -285,9 +288,20 @@ func newFakeEngine() *fakeEngine {
 		}
 		if strings.Contains(last, "sections") {
 			pred[id] = 6
-			prop["action"], prop["prediction"] = "tass_sections", map[string]any{"state": "LOCKED", "value": 6, "locked_at": time.Now()}
+			prop["action"], prop["prediction"] = "tass_sections", map[string]any{
+				"state": "LOCKED", "value": 6, "locked_at": time.Now(), "sha256": strings.Repeat("a", 64)}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"cycle_id": id, "state": "awaiting_outcome", "request": last,
+		if e.unlockedPrediction {
+			prop["prediction"] = map[string]any{"state": "NOT_PREDICTED"}
+		}
+		if e.unreadableProposal {
+			prop["format"] = "UNREADABLE"
+		}
+		responseID := id
+		if e.mismatchCycleID != "" {
+			responseID = e.mismatchCycleID
+		}
+		json.NewEncoder(w).Encode(map[string]any{"cycle_id": responseID, "state": "awaiting_outcome", "request": last,
 			"spark": map[string]any{"status": "done", "rating": 7, "topic": "fixture"}, "proposal": prop})
 	}))
 	return e

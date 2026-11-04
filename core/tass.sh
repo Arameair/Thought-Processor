@@ -25,8 +25,8 @@ here="$(pwd)"
 
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
-ENGINE_COMMIT_PIN="6741fd4"
-IDENTITY_COMMIT_PIN="14587c0"
+ENGINE_COMMIT_PIN="d820840"
+IDENTITY_COMMIT_PIN="d37757b"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"
@@ -126,15 +126,25 @@ compose() { # compose for the version in $1 (an env file)
   local envf="$1"; shift
   load_env "$envf" || die "no deployed version recorded ($envf)"
   model_files "$(dirname "$COMPOSE_FILE")"
-  APP_PROJECT="$APP_PROJECT" APP_UID="$(id -u)" APP_GID="$(id -g)" APP_DATA="$APP_DATA" APP_SECRETS="$APP_SECRETS" \
-  IDENTITY_IMAGE="$IDENTITY_IMAGE" ENGINE_IMAGE="$ENGINE_IMAGE" CORE_IMAGE="$CORE_IMAGE" \
-  MODEL_IMAGE="${MODEL_IMAGE:-}" MODEL_ARGS="$MODEL_ARGS" MODEL_DIR="${MODEL_DIR:-}" MODEL_URL="$RUN_MODEL_URL" \
-  MODEL_HEALTH_CMD="${MODEL_HEALTH_CMD:-}" MODEL_NETWORK="${MODEL_NETWORK:-}" FIXTURE_DELAY="${FIXTURE_DELAY:-}" \
-  GITHUB_REPO="${GITHUB_REPO:-}" GITHUB_BRANCH="${GITHUB_BRANCH:-live}" GITHUB_DOC="${GITHUB_DOC:-tass.md}" \
-  GITHUB_LESSONS="${GITHUB_LESSONS:-lessons}" TASS_GITHUB_API="${TASS_GITHUB_API:-}" \
-  CORE_PORT="$CORE_PORT" IDENTITY_PORT="$IDENTITY_PORT" PULSE_EVERY="${PULSE_EVERY:-20s}" \
-  IDENTITY_UNLOCK_HOURS="${IDENTITY_UNLOCK_HOURS:-12}" \
-    "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  local compose_env=(
+    "APP_PROJECT=$APP_PROJECT" "APP_UID=$(id -u)" "APP_GID=$(id -g)" "APP_DATA=$APP_DATA" "APP_SECRETS=$APP_SECRETS"
+    "IDENTITY_IMAGE=$IDENTITY_IMAGE" "ENGINE_IMAGE=$ENGINE_IMAGE" "CORE_IMAGE=$CORE_IMAGE"
+    "MODEL_IMAGE=${MODEL_IMAGE:-}" "MODEL_ARGS=$MODEL_ARGS" "MODEL_DIR=${MODEL_DIR:-}" "MODEL_URL=$RUN_MODEL_URL"
+    "MODEL_HEALTH_CMD=${MODEL_HEALTH_CMD:-}" "MODEL_NETWORK=${MODEL_NETWORK:-}" "FIXTURE_DELAY=${FIXTURE_DELAY:-}"
+    "CORE_PORT=$CORE_PORT" "IDENTITY_PORT=$IDENTITY_PORT" "PULSE_EVERY=${PULSE_EVERY:-20s}"
+    "IDENTITY_UNLOCK_HOURS=${IDENTITY_UNLOCK_HOURS:-12}"
+    "GITHUB_REPO=${GITHUB_REPO:-}" "GITHUB_BRANCH=${GITHUB_BRANCH:-live}" "GITHUB_DOC=${GITHUB_DOC:-tass.md}"
+    "GITHUB_LESSONS=${GITHUB_LESSONS:-lessons}" "TASS_GITHUB_API=${TASS_GITHUB_API:-}"
+  )
+  if [[ "${DOCKER[0]}" == sudo ]]; then
+    # sudo normally resets its environment. Put the Compose environment after sudo so `env`
+    # creates it for docker instead of relying on the caller's sudoers env_keep policy.
+    "${DOCKER[@]:0:${#DOCKER[@]}-1}" env "${compose_env[@]}" "${DOCKER[-1]}" \
+      compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  else
+    env "${compose_env[@]}" "${DOCKER[@]}" compose -p "$APP_PROJECT" \
+      "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  fi
 }
 
 ours() { "${DOCKER[@]}" ps -q --filter "label=com.docker.compose.project=$APP_PROJECT" 2>/dev/null; }
@@ -210,7 +220,9 @@ check() {
 # ------------------------------------------------------------------------------- build
 worktree_for() { # $1 = core commit → a build checkout outside your working tree
   local sha="$1" dir="$DEPLOY/src/core-${1:0:12}"
-  [[ -d "$dir" ]] || git -C "$REPO" worktree add --detach "$dir" "$sha" >/dev/null 2>&1 || die "can't check out $sha for building"
+  if [[ ! -d "$dir" ]]; then
+    git -C "$REPO" worktree add --detach "$dir" "$sha" >/dev/null 2>&1 || die "can't check out $sha for building"
+  fi
   [[ "$(git -C "$dir" rev-parse HEAD)" == "$sha" ]] || die "build checkout for $sha is not at $sha"
   printf '%s' "$dir"
 }
@@ -219,9 +231,13 @@ src_for() { # $1 = name, $2 = commit, $3 = local source or "", $4 = clone comman
   local name="$1" sha="$2" local_src="$3" dir="$DEPLOY/src/$1-${2:0:12}"
   if [[ ! -d "$dir/.git" ]]; then
     rm -rf "$dir.new"   # only our own half-finished clone
-    if [[ -n "$local_src" ]]; then git clone -q --no-checkout "$local_src" "$dir.new"; else eval "$4 \"$dir.new\""; fi
+    if [[ -n "$local_src" ]]; then
+      git clone -q --no-checkout "$local_src" "$dir.new" || die "can't clone $name source"
+    else
+      eval "$4 \"$dir.new\"" || die "can't clone $name source"
+    fi
     git -C "$dir.new" checkout -q "$sha" || die "$name commit $sha not found"
-    mv "$dir.new" "$dir"
+    mv "$dir.new" "$dir" || die "can't finish $name checkout"
   fi
   [[ "$(git -C "$dir" rev-parse HEAD)" == "$(git -C "$dir" rev-parse "$sha^{commit}")" ]] || die "$name checkout is not at $sha"
   printf '%s' "$dir"
@@ -230,19 +246,21 @@ src_for() { # $1 = name, $2 = commit, $3 = local source or "", $4 = clone comman
 pin_of() { git -C "$REPO" show "$1:core/tass.sh" 2>/dev/null | sed -n "s/^$2=\"\([0-9a-f]\{7,40\}\)\"$/\1/p"; }
 
 build_version() { # $1 = core commit; writes $2 (env file) describing the built version
-  local csha="$1" out="$2" esha isha src esrc isrc
+  local csha="$1" out="$2" esha isha src esrc isrc tmp
   esha="$(pin_of "$csha" ENGINE_COMMIT_PIN)"; isha="$(pin_of "$csha" IDENTITY_COMMIT_PIN)"
   [[ -n "$esha" && -n "$isha" ]] || die "core $csha has no engine/identity pins in core/tass.sh"
-  src="$(worktree_for "$csha")"
-  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "gh repo clone Arameair/Thought-engine -- -q --no-checkout")"
-  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "git clone -q --no-checkout https://github.com/Arameair/identity.git")"
-  esha="$(git -C "$esrc" rev-parse HEAD)"; isha="$(git -C "$isrc" rev-parse HEAD)"
+  src="$(worktree_for "$csha")" || die "can't prepare core checkout $csha"
+  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "gh repo clone Arameair/Thought-engine -- -q --no-checkout")" || die "can't prepare engine checkout $esha"
+  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "git clone -q --no-checkout https://github.com/Arameair/identity.git")" || die "can't prepare identity checkout $isha"
+  esha="$(git -C "$esrc" rev-parse HEAD)" || die "can't read engine checkout commit"
+  isha="$(git -C "$isrc" rev-parse HEAD)" || die "can't read identity checkout commit"
   local bargs=(); [[ -n "${GO_IMAGE:-}" ]] && bargs+=(--build-arg "GO_IMAGE=$GO_IMAGE"); [[ -n "${RUN_IMAGE:-}" ]] && bargs+=(--build-arg "RUN_IMAGE=$RUN_IMAGE")
   say "Building core $(short "$csha") · engine $(short "$esha") · identity $(short "$isha")…"
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null
-  cat >"$out" <<EOF
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null || die "core image build failed"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null || die "engine image build failed"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null || die "identity image build failed"
+  tmp="$out.new.$$"
+  cat >"$tmp" <<EOF
 CORE_SHA=$csha
 ENGINE_SHA=$esha
 IDENTITY_SHA=$isha
@@ -252,6 +270,7 @@ IDENTITY_IMAGE=tass-identity:$(short "$isha")
 COMPOSE_FILE=$src/core/compose.yaml
 DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
+  mv "$tmp" "$out" || die "can't record built version in $out"
 }
 
 # ------------------------------------------------------------------------------- data and keys
@@ -441,6 +460,8 @@ cmd_rollback() {
   echo "$(date -u +%FT%TZ) rollback: now core $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA")" >>"$DEPLOY/history.log"
   say "Rolled back. (./tass.sh rollback again returns to the version you just left.)"
 }
+
+if [[ "${TASS_LIB_ONLY:-0}" == 1 ]]; then return 0 2>/dev/null || exit 0; fi
 
 settings
 case "${1:-help}" in
