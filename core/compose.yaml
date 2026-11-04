@@ -1,0 +1,77 @@
+# TASS's Go core in Docker: the Thought Engine and tass-core, using the Nemotron model that is
+# ALREADY running in the workspace stack (project tass-workspace, service "model"). No second model.
+#
+# Don't run this file by hand: ./tass.sh start sets the pinned images, folders and keys.
+#
+#   engine  Thought Engine (Go): Spark/Trace/Thought on Nemotron, thought cycles, 20-s local pulse.
+#           Listens ONLY on 127.0.0.1 inside its own network namespace: none of its routes (including
+#           its older unauthenticated ones) can be reached from your computer or other containers.
+#   core    tass-core (Go): the page you talk to TASS on, GitHub sync, Identity checks.
+#           Shares the engine's network namespace (so it reaches the engine on 127.0.0.1);
+#           its page is published on 127.0.0.1:8795 only.
+name: tass-core
+services:
+  engine:
+    image: ${ENGINE_IMAGE:?use ./tass.sh start}
+    user: "${TASS_UID:?}:${TASS_GID:?}"
+    command: ["-data", "/data/engine", "-model", "${MODEL_URL:-http://model:8081}", "-worker", "nemotron",
+              "-identity-policy", "/data/grant/identity-grant.json"]
+    environment:
+      PORT: "7798"
+      HOME: /tmp
+    volumes:
+      - ${ENGINE_DATA:?}:/data/engine                 # cycles.jsonl, pulse.jsonl, model-requests.jsonl, api-key
+      - ${TASS_DATA:?}/grant:/data/grant:ro           # Identity's (prototype) policy, written by the core
+    networks: [default, model]
+    ports:
+      - "127.0.0.1:${CORE_PORT:-8795}:8795"           # the core's page (the core shares this namespace)
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/thought-engine", "-healthcheck"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  core:
+    image: ${CORE_IMAGE:?use ./tass.sh start}
+    user: "${TASS_UID:?}:${TASS_GID:?}"
+    network_mode: "service:engine"
+    depends_on:
+      engine:
+        condition: service_healthy
+    environment:
+      HOME: /tmp
+      TASS_DATA: /data/tass
+      TASS_LISTEN: 0.0.0.0:8795
+      TASS_ENGINE_URL: http://127.0.0.1:7798
+      TASS_ENGINE_KEY: /run/secrets/engine_key
+      TASS_TOKEN_FILE: /run/secrets/github_token
+      TASS_IDENTITY: ${TASS_IDENTITY:-Arameair/identity@main:policies/tass.json}
+      TASS_GITHUB_MESSAGES: ${TASS_GITHUB_MESSAGES:-off}
+      TASS_SYNC: ${TASS_SYNC:-20s}
+      TASS_GITHUB_API: ${TASS_GITHUB_API:-}           # tests only; empty = https://api.github.com
+    volumes:
+      - ${TASS_DATA:?}:/data/tass                     # tass.md, memory.jsonl, conversation.jsonl, sync.jsonl, conflicts/, grant/
+      - ${ENGINE_DATA:?}/api-key:/run/secrets/engine_key:ro
+      - ${TOKEN_FILE:?}:/run/secrets/github_token:ro
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tass-core", "-healthcheck"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  model:
+    external: true
+    name: ${MODEL_NETWORK:-tass-workspace_default}    # where the existing "model" service lives

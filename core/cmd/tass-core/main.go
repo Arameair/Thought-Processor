@@ -44,6 +44,9 @@ import (
 //go:embed page.html
 var page embed.FS
 
+// version is set at build time: -ldflags "-X main.version=<commit>".
+var version = "dev"
+
 func env(k, def string) string {
 	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 		return v
@@ -53,8 +56,20 @@ func env(k, def string) string {
 
 func main() {
 	once := flag.Bool("once", false, "one GitHub sync, print the result, exit")
+	healthcheck := flag.Bool("healthcheck", false, "ask a running tass-core for /api/health; exit 0 if it answers (container healthcheck)")
 	flag.Parse()
 	log.SetFlags(log.Ltime)
+	if *healthcheck {
+		addr := strings.Replace(env("TASS_LISTEN", "127.0.0.1:8795"), "0.0.0.0", "127.0.0.1", 1)
+		cl := &http.Client{Timeout: 4 * time.Second}
+		resp, err := cl.Get("http://" + addr + "/api/health")
+		if err != nil || resp.StatusCode != 200 {
+			fmt.Println("not answering:", err)
+			os.Exit(1)
+		}
+		resp.Body.Close()
+		return
+	}
 
 	home, _ := os.UserHomeDir()
 	every, err := time.ParseDuration(env("TASS_SYNC", "20s"))
@@ -116,8 +131,8 @@ func main() {
 	}
 	srv := &http.Server{Handler: handler(core, pageToken, apiKey), ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln)
-	log.Printf("TASS core: data in %s · Identity policy from %s · engine %s · GitHub sync every %s",
-		cfg.DataDir, cfg.Identity, eng.URL, every)
+	log.Printf("TASS core %s: data in %s · Identity policy from %s · engine %s · GitHub sync every %s",
+		version, cfg.DataDir, cfg.Identity, eng.URL, every)
 	log.Printf("Talk to TASS: http://%s", strings.Replace(listen, "0.0.0.0", "127.0.0.1", 1))
 
 	stop := make(chan struct{})
@@ -175,6 +190,15 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		return localHost(r) && got != "" && (subtle.ConstantTimeCompare([]byte(got), []byte(pageToken)) == 1 ||
 			subtle.ConstantTimeCompare([]byte(got), []byte(apiKey)) == 1)
 	}
+	// Operational state only (no conversation, no tass.md), for healthchecks and ./tass.sh status.
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r) {
+			http.Error(w, "host not allowed", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(core.Health(version))
+	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		if !authed(r) { // it holds conversation and tass.md: same key as writing
 			http.Error(w, "missing or wrong key", http.StatusUnauthorized)

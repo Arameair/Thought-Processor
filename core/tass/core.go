@@ -40,7 +40,8 @@ const Marker = "<!-- tass-core -->"
 
 // GrantFile is the local copy of Identity's policy with when it was last confirmed. The Thought
 // Engine reads it too. PROTOTYPE: a static policy file, not a live Identity grant.
-const GrantFile = "identity-grant.json"
+// It lives in its own folder so the engine can be given that folder (read-only) and nothing else.
+const GrantFile = "grant/identity-grant.json"
 
 // MemoryKeep bounds the local memory journal.
 const MemoryKeep = 200
@@ -148,6 +149,10 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 	if c.st.SeenComments == nil {
 		c.st.SeenComments = map[int64]bool{}
 	}
+	if old := c.file("identity-grant.json"); fileExists(old) && !fileExists(c.file(GrantFile)) {
+		_ = os.MkdirAll(filepath.Dir(c.file(GrantFile)), 0o700) // moved into its own folder (2026-11-04)
+		_ = os.Rename(old, c.file(GrantFile))
+	}
 	if b, err := os.ReadFile(c.file(GrantFile)); err == nil {
 		var g grantFile
 		if json.Unmarshal(b, &g) == nil {
@@ -159,6 +164,8 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 	c.pending = len(c.st.Outbox)
 	return c, nil
 }
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func (c *Core) pol() *identity.Policy {
 	c.mu.Lock()
@@ -193,7 +200,10 @@ func (c *Core) read(name string) (string, bool) {
 }
 
 func (c *Core) write(name, text string) error {
-	tmp := c.file("." + name + ".tmp")
+	if err := os.MkdirAll(filepath.Dir(c.file(name)), 0o700); err != nil {
+		return err
+	}
+	tmp := filepath.Join(filepath.Dir(c.file(name)), "."+filepath.Base(name)+".tmp")
 	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
 		return err
 	}
@@ -898,6 +908,63 @@ func (c *Core) recentMemories(n int) []Memory {
 		mem = mem[len(mem)-n:]
 	}
 	return mem
+}
+
+// ---------------------------------------------------------------- health ---
+
+// Health is the core's operational state, safe to show without the key (no conversation, no tass.md).
+//
+//	READY    idle, the engine and model answer, Identity's policy is valid now
+//	WORKING  a thought cycle is in progress
+//	BUSY     the engine's model slot is busy with other work
+//	BLOCKED  something TASS needs is missing: no valid Identity policy, engine or model down
+//	UNKNOWN  (shown by callers that can't reach the core at all)
+type Health struct {
+	State        string    `json:"state"`
+	Reasons      []string  `json:"reasons,omitempty"`
+	Version      string    `json:"version"`
+	EngineUp     bool      `json:"engine_reachable"`
+	ModelOK      *bool     `json:"model_ok"`
+	PolicyValid  bool      `json:"policy_valid_now"`
+	GitHubOnline bool      `json:"github_online"`
+	Messages     bool      `json:"github_messages"`
+	LastSync     time.Time `json:"last_sync"`
+	Pending      int       `json:"replies_waiting"`
+}
+
+func (c *Core) Health(version string) Health {
+	es := c.engine.Status()
+	valid, why := c.allowedNow(identity.ModelRequest)
+	c.mu.Lock()
+	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
+		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending}
+	busy := c.busy
+	c.mu.Unlock()
+	if es.LastPulse != nil {
+		ok := es.LastPulse.ModelOK
+		h.ModelOK = &ok
+	}
+	if !valid {
+		h.Reasons = append(h.Reasons, why)
+	}
+	if !es.Reachable {
+		h.Reasons = append(h.Reasons, "Thought Engine not reachable")
+	} else if h.ModelOK == nil {
+		h.Reasons = append(h.Reasons, "no engine pulse yet")
+	} else if !*h.ModelOK {
+		h.Reasons = append(h.Reasons, "Nemotron not ready: "+es.LastPulse.Error)
+	}
+	switch {
+	case busy:
+		h.State = "WORKING"
+	case len(h.Reasons) > 0:
+		h.State = "BLOCKED"
+	case es.Busy:
+		h.State = "BUSY"
+	default:
+		h.State = "READY"
+	}
+	return h
 }
 
 // ---------------------------------------------------------------- status ---

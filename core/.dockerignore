@@ -1,0 +1,6 @@
+bin/
+vendor/
+secrets/
+docs/
+.git
+*.md
