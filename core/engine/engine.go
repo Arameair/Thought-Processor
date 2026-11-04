@@ -312,3 +312,33 @@ func (c *Client) Pulse() (map[string]any, error) {
 	}
 	return out, nil
 }
+
+// JobStatus is one pulse job as the engine reports it.
+type JobStatus struct {
+	JobID    string `json:"job_id"`
+	State    string `json:"state"` // QUEUED | RUNNING | DONE | FAILED | INTERRUPTED | REFUSED
+	CycleID  string `json:"cycle_id"`
+	Result   string `json:"result"`
+	Remember string `json:"remember"`
+}
+
+// PulseState is the pulse's control (RUNNING | PAUSED), state and jobs.
+type PulseState struct {
+	Control string      `json:"control"`
+	State   string      `json:"state"`
+	Jobs    []JobStatus `json:"jobs"`
+}
+
+// PulseStatus is Pulse() decoded.
+func (c *Client) PulseStatus() (*PulseState, error) {
+	raw, err := c.Pulse()
+	if err != nil {
+		return nil, err
+	}
+	b, _ := json.Marshal(raw)
+	var ps PulseState
+	if err := json.Unmarshal(b, &ps); err != nil {
+		return nil, err
+	}
+	return &ps, nil
+}

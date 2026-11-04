@@ -236,3 +236,26 @@ func (c *Client) Comment(repo string, issue int, body string) error {
 	_, err := c.do("POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repo, issue), map[string]string{"body": body}, "")
 	return err
 }
+
+// TreeEntry is one file in a branch's tree.
+type TreeEntry struct {
+	Path string `json:"path"`
+	Type string `json:"type"` // blob | tree
+	SHA  string `json:"sha"`
+}
+
+// Tree lists every file on branch (one request; with a matching etag it returns NotModified).
+func (c *Client) Tree(repo, branch, etag string) ([]TreeEntry, *Got, error) {
+	g, err := c.do("GET", fmt.Sprintf("/repos/%s/git/trees/%s?recursive=1", repo, url.PathEscape(branch)), nil, etag)
+	if err != nil || g.NotModified {
+		return nil, g, err
+	}
+	var t struct {
+		Tree      []TreeEntry `json:"tree"`
+		Truncated bool        `json:"truncated"`
+	}
+	if err := json.Unmarshal(g.Body, &t); err != nil {
+		return nil, nil, err
+	}
+	return t.Tree, g, nil
+}

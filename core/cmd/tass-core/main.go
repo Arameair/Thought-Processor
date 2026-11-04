@@ -103,10 +103,13 @@ func main() {
 		}
 		cfg.IdentitySvc = ids
 		cfg.Identity = "tass-identity at " + u
-		cfg.GitHub = strings.EqualFold(env("TASS_GITHUB", "off"), "on")
-		if !cfg.GitHub {
-			cfg.Messages = false
-		}
+		// GitHub only when the owner set a repository for THIS installation (nothing is built in).
+		cfg.Repo = strings.TrimSpace(os.Getenv("TASS_REPO"))
+		cfg.Branch = env("TASS_BRANCH", "live")
+		cfg.DocPath = env("TASS_DOC", "tass.md")
+		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+		cfg.GitHub = cfg.Repo != ""
+		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
 	}
 	gh := github.New(token)
 	if b := os.Getenv("TASS_GITHUB_API"); b != "" { // tests and dry runs only
@@ -147,8 +150,14 @@ func main() {
 	}
 	srv := &http.Server{Handler: handler(core, pageToken, apiKey), ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln)
-	log.Printf("TASS core %s: data in %s · Identity policy from %s · engine %s · GitHub sync every %s",
-		version, cfg.DataDir, cfg.Identity, eng.URL, every)
+	gh_ := "GitHub sync every " + every.String()
+	if cfg.IdentitySvc != nil {
+		gh_ = "no GitHub repository set (local only)"
+		if cfg.Repo != "" {
+			gh_ = fmt.Sprintf("GitHub %s@%s (%s, lessons in %s/) every %s", cfg.Repo, cfg.Branch, cfg.DocPath, cfg.LessonsDir, every)
+		}
+	}
+	log.Printf("core %s: data in %s · authority %s · engine %s · %s", version, cfg.DataDir, cfg.Identity, eng.URL, gh_)
 	log.Printf("Talk to TASS: http://%s", strings.Replace(listen, "0.0.0.0", "127.0.0.1", 1))
 
 	stop := make(chan struct{})
@@ -282,6 +291,40 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			return
 		}
 		reply(w, http.StatusAccepted, map[string]string{"job_id": id})
+	})
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var body tass.Settings
+		if !pagePost(w, r, &body) {
+			return
+		}
+		if err := core.SetSettings(body); err != nil {
+			reply(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.GetSettings())
+	})
+	mux.HandleFunc("POST /api/lessons/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "approve": // the owner's approval: only from this page, with its token
+			err = core.ApproveLesson(body.Path)
+		case "retry":
+			err = core.RetryLesson(body.Path)
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "approve or retry"})
+			return
+		}
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.Learning())
 	})
 	mux.HandleFunc("POST /api/pulse", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

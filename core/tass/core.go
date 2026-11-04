@@ -58,6 +58,10 @@ type Config struct {
 	// authority (the prototype policy file isn't used) and GitHub sync is off unless GitHub is set.
 	IdentitySvc *identitysvc.Client
 	GitHub      bool
+	Repo        string // owner/repo the owner configured (app mode); "" = no GitHub
+	Branch      string // e.g. live
+	DocPath     string // the entity's document in that repo (default tass.md)
+	LessonsDir  string // lessons folder in that repo (default lessons)
 }
 
 // grantFile is what GrantFile holds.
@@ -131,6 +135,12 @@ type Core struct {
 
 	inbox   chan Incoming
 	replies chan outgoing
+
+	syncHold string // why GitHub sync is on hold (app mode), e.g. Identity LOCKED
+
+	learnMu  sync.Mutex // lessons loop and settings (learn.go)
+	learn    learnState
+	settings Settings
 }
 
 func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
@@ -149,6 +159,7 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 			return nil, fmt.Errorf("state.json is damaged (move it aside to start fresh): %w", err)
 		}
 	}
+	c.loadLearning()
 	if c.st.SeenIssues == nil {
 		c.st.SeenIssues = map[int]bool{}
 	}
@@ -192,6 +203,14 @@ func (c *Core) entityName() string {
 func (c *Core) ensureDocument(name string) {
 	if name == "" || fileExists(c.file("tass.md")) {
 		return
+	}
+	if c.cfg.Repo != "" { // the document comes from the owner's repository on the first sync
+		c.mu.Lock()
+		synced := !c.lastSync.IsZero()
+		c.mu.Unlock()
+		if !synced {
+			return
+		}
 	}
 	doc := "# " + name + "\n\n<!-- This entity's own document. It lives only on this computer. -->\n\n## Who I am\n\nI am " + name +
 		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Now\n\nJust created.\n"
@@ -314,12 +333,11 @@ func (c *Core) Run(stop <-chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() { defer wg.Done(); c.think(stop) }()
-	if c.cfg.IdentitySvc == nil || c.cfg.GitHub {
-		wg.Add(1)
-		go func() { defer wg.Done(); c.syncLoop(stop) }()
-	} else {
-		c.event("sync", "GitHub sync is off for this installation: everything stays on this computer.")
+	if c.cfg.IdentitySvc != nil && c.cfg.Repo == "" {
+		c.event("sync", "No GitHub repository is set for this installation: everything stays on this computer.")
 	}
+	wg.Add(1) // in app mode this loop also applies the pulse setting and moves lessons along
+	go func() { defer wg.Done(); c.syncLoop(stop) }()
 	wg.Wait()
 }
 
@@ -350,18 +368,38 @@ func (c *Core) SyncOnce() time.Duration {
 	}
 	start := c.now()
 	steps := []string{}
-	err := c.syncPolicy()
-	if err == nil {
-		steps = append(steps, "policy")
+	var err error
+	if c.cfg.IdentitySvc != nil && c.cfg.Repo == "" {
+		c.applySettings() // no GitHub here: only the pulse setting and lessons already downloaded
+		c.advanceLessons()
+		return c.cfg.SyncEvery
+	}
+	if c.cfg.IdentitySvc != nil {
+		// App mode: Identity decides; the document and lessons come from the owner's repository.
+		c.applySettings()
 		err = c.syncTass()
-	}
-	if err == nil {
-		steps = append(steps, "tass.md")
-		err = c.readMessages()
-	}
-	if err == nil {
-		steps = append(steps, "messages")
-		err = c.flushOutbox()
+		if err == nil {
+			steps = append(steps, "document")
+			err = c.syncLessons()
+		}
+		if err == nil {
+			steps = append(steps, "lessons")
+		}
+		c.advanceLessons()
+	} else {
+		err = c.syncPolicy()
+		if err == nil {
+			steps = append(steps, "policy")
+			err = c.syncTass()
+		}
+		if err == nil {
+			steps = append(steps, "tass.md")
+			err = c.readMessages()
+		}
+		if err == nil {
+			steps = append(steps, "messages")
+			err = c.flushOutbox()
+		}
 	}
 	c.saveState()
 	c.mu.Lock()
@@ -462,13 +500,40 @@ func (c *Core) syncPolicy() error {
 	return nil
 }
 
-func (c *Core) syncTass() error {
+// syncTarget: where the entity's document syncs. With the Identity service it is the repository
+// the owner configured for this installation (Identity must grant github.sync); otherwise the
+// prototype policy's tass_md. ok=false means "don't sync now" (not an error).
+func (c *Core) syncTarget() (repo, branch, path string, ok bool, err error) {
+	if c.cfg.IdentitySvc != nil {
+		if c.cfg.Repo == "" {
+			return "", "", "", false, nil
+		}
+		if allowed, why := c.allowedNow("github.sync"); !allowed {
+			c.mu.Lock()
+			c.syncHold = why
+			c.mu.Unlock()
+			return "", "", "", false, nil
+		}
+		c.mu.Lock()
+		c.syncHold = ""
+		c.mu.Unlock()
+		b := strings.ToLower(c.cfg.Branch)
+		if b == "main" || b == "alpha" || b == "stable" {
+			return "", "", "", false, fmt.Errorf("the entity's document may not sync straight onto %s; use its own branch (for example live)", c.cfg.Branch)
+		}
+		return c.cfg.Repo, c.cfg.Branch, firstNonEmpty(c.cfg.DocPath, "tass.md"), true, nil
+	}
 	p := c.pol()
 	if !p.Allowed(identity.SyncTassMD) {
-		return nil
+		return "", "", "", false, nil
 	}
-	repo, branch, path, err := p.Target()
-	if err != nil {
+	repo, branch, path, err = p.Target()
+	return repo, branch, path, err == nil, err
+}
+
+func (c *Core) syncTass() error {
+	repo, branch, path, ok, err := c.syncTarget()
+	if err != nil || !ok {
 		return err
 	}
 	c.fileMu.Lock()
@@ -565,7 +630,7 @@ func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) er
 	remoteCopy, _ := c.read("tass.base.md")
 	_ = os.WriteFile(filepath.Join(c.file("conflicts"), stamp+"-local.md"), []byte(mine), 0o600)
 	_ = os.WriteFile(filepath.Join(c.file("conflicts"), stamp+"-github.md"), []byte(remoteCopy), 0o600)
-	if !c.pol().Allowed(identity.AskOnConflict) {
+	if c.cfg.IdentitySvc == nil && !c.pol().Allowed(identity.AskOnConflict) {
 		c.st.ConflictKey = key
 		c.event("problem", "Both sides changed "+strings.Join(conflicts, ", ")+"; TASS uses the GitHub version "+
 			"(Identity doesn't allow him to open a pull request with his version).")
@@ -595,7 +660,7 @@ func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) er
 		return err
 	}
 	c.st.ConflictKey = key
-	c.event("sync", "Both sides changed "+strings.Join(conflicts, ", ")+": asked Dustin in "+url)
+	c.event("sync", "Both sides changed "+strings.Join(conflicts, ", ")+": asked the owner in "+url)
 	return nil
 }
 
@@ -736,8 +801,22 @@ func (c *Core) SubmitTask(text string) (string, error) {
 }
 
 // PulseControl: start | pause | resume | step, passed to the Thought Engine.
+// Start/Resume turn the pulse setting ON and Pause turns it off, so the
+// pulse stays the way the owner left it across restarts. Step runs one tick and changes no setting.
 func (c *Core) PulseControl(action string) (map[string]any, error) {
-	return c.engine.PulseControl(action)
+	out, err := c.engine.PulseControl(action)
+	if err == nil && c.cfg.IdentitySvc != nil && action != "step" {
+		s := c.GetSettings()
+		if on := action == "start" || action == "resume"; on != s.Pulse {
+			s.Pulse = on
+			c.learnMu.Lock()
+			c.settings = s
+			b, _ := json.Marshal(s)
+			_ = os.WriteFile(c.file("settings.json"), b, 0o600)
+			c.learnMu.Unlock()
+		}
+	}
+	return out, err
 }
 
 // ------------------------------------------------------------- thinking ----
@@ -817,6 +896,9 @@ func (c *Core) context(online bool) string {
 		talk = strings.ReplaceAll(howToTalkEntity, "{name}", c.entityName())
 	}
 	b.WriteString("\n\n---\n" + talk + "\n")
+	if l := c.learnedForContext(); l != "" {
+		b.WriteString("\nLESSONS YOU HAVE LEARNED (your owner approved them; use them):\n" + l)
+	}
 	if mem := c.recentMemories(20); len(mem) > 0 {
 		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
 		for _, m := range mem {
@@ -1093,6 +1175,8 @@ type Status struct {
 	Memories     []Memory           `json:"memories"`
 	Identity     *identitysvc.State `json:"identity,omitempty"`
 	Pulse        map[string]any     `json:"pulse,omitempty"`
+	Learning     *LearningStatus    `json:"learning,omitempty"`
+	SyncHold     string             `json:"sync_hold,omitempty"`
 	Pending      int                `json:"replies_waiting"`
 	TassMD       string             `json:"tass_md"`
 	Events       []Event            `json:"events"`
@@ -1128,6 +1212,11 @@ func (c *Core) Status() Status {
 			pol += " · NOT VALID NOW: " + why
 		}
 	}
+	var learning *LearningStatus
+	if c.cfg.IdentitySvc != nil {
+		l := c.Learning() // takes learnMu: before c.mu, never inside it
+		learning = &l
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ev := c.events
@@ -1143,6 +1232,8 @@ func (c *Core) Status() Status {
 		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...), Pulse: pulse}
 	if ids != nil {
 		out.Identity = ids
+		out.Learning = learning
+		out.SyncHold = c.syncHold // c.mu is held
 	}
 	return out
 }

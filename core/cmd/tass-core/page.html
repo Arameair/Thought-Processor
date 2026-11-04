@@ -40,6 +40,11 @@
   #idbar a { color:var(--you); }
   .ctl { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 10px; } .ctl button { padding:4px 12px; }
   table.ticks { width:100%; border-collapse:collapse; font:12px/1.45 var(--mono); } .ticks td { border-top:1px solid var(--line); padding:3px 6px 3px 0; vertical-align:top; }
+  .switch { display:flex; gap:10px; align-items:center; margin:4px 0; cursor:pointer; }
+  .switch input { width:18px; height:18px; }
+  .lesson { border-top:1px solid var(--line); padding:8px 0; font-size:13.5px; }
+  .lesson .t { font-weight:500; } .lesson .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .lesson button { padding:2px 10px; font-size:12.5px; }
 </style>
 </head>
 <body>
@@ -58,6 +63,13 @@
   <section class="card">
     <h2>Thought cycles <small>event → Spark → Trace/Thought → proposal → locked prediction → authorization → result → evaluation</small></h2>
     <div id="cycles"><div class="dim">No cycles yet. Say something to TASS.</div></div>
+  </section>
+  <section class="card">
+    <h2>Learning <small>every pulse looks for new lessons on GitHub; you approve what counts</small></h2>
+    <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
+    <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
+    <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
+    <div id="lessons" class="dim">(no lessons yet)</div>
   </section>
   <section class="card">
     <h2>Work pulse <small>every 20 s: observe → decide → start/continue → observe result → report</small></h2>
@@ -89,8 +101,8 @@ function ago(t) { if (!t || t.startsWith("0001")) return "never"; const s = Math
 const U = v => (v === undefined || v === null || v === "") ? '<span class="tag unk">UNKNOWN</span>' : esc(v);
 function tag(v) {
   if (!v) return '<span class="tag unk">UNKNOWN</span>';
-  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
-  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed/.test(v);
+  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$|^LEARNED$|^PASSED$|^UNLOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
+  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed|STUCK/.test(v);
   return `<span class="tag ${good ? "good" : bad ? "bad" : "unk"}">${esc(v)}</span>`;
 }
 function cycleHTML(c) {
@@ -139,9 +151,26 @@ async function refresh() {
   if (pu) {
     $("pstate").className = "tag " + (pu.state === "BLOCKED" ? "bad" : pu.state === "READY" || pu.state === "WORKING" ? "good" : "unk");
     $("pstate").textContent = (pu.control || "?") + " · " + (pu.state || "UNKNOWN");
-    $("jobs").innerHTML = (pu.jobs || []).slice(-6).reverse().map(j => `<div>${tag(j.state)} <b>${esc(j.job_id)}</b> ${esc(j.request)} ${j.result ? "→ " + esc(j.result) : ""} <span class="dim">${j.cycle_id ? esc(j.cycle_id) : ""}</span></div>`).join("") || "(no tasks yet)";
-    $("ticks").innerHTML = (pu.ticks || []).slice(-10).reverse().map(t => `<tr><td>${esc(t.pulse_id)}</td><td>${tag(t.state)}</td><td>${esc(t.decision)}${t.job_id ? " " + esc(t.job_id) : ""}</td><td class="dim">${esc(t.observed)}${t.outcome ? " · " + esc(t.outcome) : ""}${t.authorization ? " · " + esc(t.authorization) : ""}</td></tr>`).join("");
+    $("jobs").innerHTML = (pu.jobs || []).slice(0, 6).map(j => `<div>${tag(j.state)} <b>${esc(j.job_id)}</b> ${esc(j.request)} ${j.result ? "→ " + esc(j.result) : ""} <span class="dim">${j.cycle_id ? esc(j.cycle_id) : ""}</span></div>`).join("") || "(no tasks yet)";
+    $("ticks").innerHTML = (pu.ticks || []).slice(0, 10).map(t => `<tr><td>${esc(t.pulse_id)}</td><td>${tag(t.state)}</td><td>${esc(t.decision)}${t.job_id ? " " + esc(t.job_id) : ""}</td><td class="dim">${esc(t.observed)}${t.outcome ? " · " + esc(t.outcome) : ""}${t.authorization ? " · " + esc(t.authorization) : ""}</td></tr>`).join("");
   } else { $("pstate").textContent = "pulse UNKNOWN (engine not answering)"; }
+  const L = st.learning;
+  if (L) {
+    if (document.activeElement !== $("setPulse")) $("setPulse").checked = !!L.settings.pulse;
+    if (document.activeElement !== $("setLearn")) $("setLearn").checked = !!L.settings.learn;
+    $("ghinfo").innerHTML = L.repo
+      ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
+      : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
+    const ls = L.lessons || [];
+    $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
+      <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
+      ${l.checks ? `<span class="dim">${l.status === "NEW" || l.status === "QUEUED" ? "" : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
+      ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
+      ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" ? `<button data-retry="${esc(l.path)}">Try again</button>` : ""}</div>
+      ${l.goal ? `<div class="dim">${esc(l.goal)}</div>` : ""}
+      ${(l.results || []).map(r => `<div class="dim">${r.right ? "✓" : "✗"} ${esc(r.check)} → <i>${esc(r.given || "(no answer)")}</i></div>`).join("")}
+      ${l.remember ? `<div>Remembers: ${esc(l.remember)}</div>` : ""}${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
+  }
   $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
   $("md").textContent = st.tass_md || "(not here yet: it comes from GitHub on the first sync)";
   const cj = JSON.stringify(st.cycles || []);
@@ -168,6 +197,18 @@ $("tf").onsubmit = async ev => {
   const r = await post("/api/tasks", {text});
   alertLine(r.ok ? "Queued " + r.body.job_id + ": it starts on a pulse tick." : (r.body.error || "not queued"));
   if (r.ok) $("tt").value = "";
+  refresh();
+};
+async function saveSettings() {
+  const r = await post("/api/settings", {pulse: $("setPulse").checked, learn: $("setLearn").checked});
+  alertLine(r.ok ? "Settings saved." : (r.body.error || "not saved")); refresh();
+}
+$("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
+$("lessons").onclick = async ev => {
+  const a = ev.target.dataset.approve, t = ev.target.dataset.retry;
+  if (!a && !t) return;
+  const r = await post(a ? "/api/lessons/approve" : "/api/lessons/retry", {path: a || t});
+  alertLine(r.ok ? (a ? "Approved: it's in the Learned section now, and syncs to GitHub." : "It will study it again on a pulse.") : (r.body.error || "refused"));
   refresh();
 };
 document.querySelectorAll(".ctl button").forEach(b => b.onclick = async () => {
