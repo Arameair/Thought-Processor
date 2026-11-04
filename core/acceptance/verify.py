@@ -226,10 +226,12 @@ def request_json(base, path, key="", method="GET", body=None, timeout=5):
     url = base.rstrip("/") + path
     headers = {"Accept": "application/json"}
     if key:
-        headers["X-TASS-Token" if path.startswith("/api/say") or
-                (base.rstrip("/").endswith(":8795") and path == "/api/status")
-                else "Authorization"] = (
-                    key if base.rstrip("/").endswith(":8795") else "Bearer " + key)
+        if path.startswith("/api/say"):
+            # Core uses X-TASS-Token; never assume its port is 8795.
+            headers["X-TASS-Token"] = key
+        else:
+            # Both Core and Engine accept the Authorization bearer form.
+            headers["Authorization"] = "Bearer " + key
     payload = None
     if body is not None:
         payload = json.dumps(body).encode("utf-8")
