@@ -14,6 +14,7 @@ import threading
 import time
 import unittest
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -132,6 +133,39 @@ class RestartTests(unittest.TestCase):
             finally:
                 os.environ.clear()
                 os.environ.update(old)
+
+
+    def test_atrium_chat_only_offline_model_reports_correlated_error(self):
+        # Deterministic model failure: no reply, proposal, or fabricated success.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            make_mirror(root / "mirror")
+            (root / "shared").mkdir()
+            previous = dict(os.environ)
+            os.environ.update(TASS_MIRROR=str(root / "mirror"),
+                              TASS_SHARED=str(root / "shared"),
+                              TASS_DATA=str(root / "data"),
+                              TASS_JUPYTER="0")
+            try:
+                from tass_workspace.server import Workspace
+                ws = Workspace()
+                ws.model.measure = lambda messages: (16, 16384)
+
+                def offline(*args, **kwargs):
+                    raise ConnectionError("fixture model is offline")
+                ws.model.stream = offline
+                rid = "0123456789abcdef"
+                ws.turn("user", "Hello", chat_only=True, request_id=rid)
+                self.assertTrue(any(e["type"] == "error" and e.get("request_id") == rid
+                                    and "offline" in e["text"] for e in ws.timeline))
+                self.assertFalse(any(e["type"] == "reply" and e.get("request_id") == rid
+                                     for e in ws.timeline))
+                self.assertFalse(ws.proposals)
+                self.assertTrue(any(r["event"] == "chat_failed" and r["id"] == rid
+                                    for r in ws.read_audit()))
+            finally:
+                os.environ.clear()
+                os.environ.update(previous)
 
 
 class EndToEndTests(unittest.TestCase):
@@ -332,6 +366,64 @@ class EndToEndTests(unittest.TestCase):
         st = self.wait_for(lambda s: s["proposals"])
         time.sleep(1.5)
         self.assertEqual(self.get("/api/state")["proposals"][0]["status"], "pending")
+
+    def test_atrium_chat_only_full_auto_and_autonomy(self):
+        # The fixture deliberately emits OPEN, RUN, CHANGE MIND and REMEMBER;
+        # all of them must be ignored on Atrium's chat-only request path.
+        initial_audit = len(self.get("/api/audit"))
+        memory = self.root / "shared/memory/tass-memory.md"
+        initial_memory = memory.read_bytes() if memory.exists() else None
+        outbox = self.root / "outbox"
+        initial_outbox = set(outbox.iterdir()) if outbox.exists() else set()
+        self.post("/api/settings", {"full_auto": True, "autonomy": True})
+        request_ids = []
+        try:
+            for prompt in ("Hi TASS", "Try some of your own code please",
+                           "How could you improve how you think?"):
+                accepted = self.post("/api/message", {"text": prompt, "chat_only": True})
+                self.assertTrue(accepted["ok"])
+                rid = accepted["request_id"]
+                request_ids.append(rid)
+                self.assertRegex(rid, r"^[0-9a-f]{16}$")
+                st = self.wait_for(lambda state: any(
+                    e["type"] == "reply" and e.get("request_id") == rid
+                    for e in state["timeline"]))
+                events = [e for e in st["timeline"] if e.get("request_id") == rid]
+                self.assertEqual([e["type"] for e in events if e["type"] in ("user", "reply")],
+                                 ["user", "reply"])
+                self.assertFalse(st["proposals"])
+                self.assertTrue(st["status"]["full_auto"])
+                self.assertTrue(st["status"]["autonomy"])
+                self.wait_for(lambda state: not state["status"]["busy"])
+            new_audit = self.get("/api/audit")[initial_audit:]
+            self.assertFalse(any(r["event"] in ("proposed", "auto-approved", "remembered")
+                                 for r in new_audit))
+            for rid in request_ids:
+                records = [r for r in new_audit if r.get("id") == rid]
+                self.assertEqual([r["event"] for r in records],
+                                 ["chat_accepted", "chat_replied"])
+                self.assertTrue(all(r.get("source") is None for r in records))
+            self.assertEqual(memory.read_bytes() if memory.exists() else None, initial_memory)
+            self.assertEqual(set(outbox.iterdir()) if outbox.exists() else set(), initial_outbox)
+        finally:
+            self.post("/api/settings", {"full_auto": False})
+
+    def test_atrium_busy_model_rejects_without_queuing(self):
+        self.post("/api/settings", {"full_auto": True, "autonomy": True})
+        try:
+            first = self.post("/api/message", {"text": "Hi TASS", "chat_only": True})
+            with self.assertRaises(urllib.error.HTTPError) as rejected:
+                self.post("/api/message", {"text": "Second message", "chat_only": True})
+            self.assertEqual(rejected.exception.code, 409)
+            self.assertIn("not accepted", rejected.exception.read().decode())
+            st = self.wait_for(lambda state: any(
+                e["type"] == "reply" and e.get("request_id") == first["request_id"]
+                for e in state["timeline"]))
+            self.assertFalse(any(e["type"] == "user" and e.get("text") == "Second message"
+                                 for e in st["timeline"]))
+        finally:
+            self.wait_for(lambda state: not state["status"]["busy"])
+            self.post("/api/settings", {"full_auto": False})
 
     def test_full_auto_is_off_after_restart_by_design(self):
         self.assertFalse(self.get("/api/status")["full_auto"])

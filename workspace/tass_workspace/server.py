@@ -241,9 +241,11 @@ class Workspace:
                 return msgs, used, ctx
             history = history[2:] if len(history) > 3 and history[2]["role"] == "user" else history[1:]
 
-    def turn(self, kind: str, text: str, origin: dict | None = None, comment_prefix: str = ""):
+    def turn(self, kind: str, text: str, origin: dict | None = None, comment_prefix: str = "",
+             *, chat_only: bool = False, request_id: str | None = None, claimed: bool = False):
         # A user message never waits behind a running turn; follow-ups (results, mind changes) do, briefly.
-        if not self.turn_lock.acquire(blocking=kind != "user", timeout=-1 if kind == "user" else 60):
+        if not claimed and not self.turn_lock.acquire(blocking=kind != "user",
+                                                       timeout=-1 if kind == "user" else 60):
             self.emit("notice", text="TASS is still thinking; try again in a moment.")
             return
         try:
@@ -251,7 +253,7 @@ class Workspace:
             self.emit("busy", keep=False, busy=True)
             self._origin, self._turn_replies, self._turn_proposals = origin, [], []
             if kind == "user":
-                self.emit("user", text=text)
+                self.emit("user", text=text, request_id=request_id, chat_only=chat_only)
             if kind == "github":
                 self.emit("user", text=text, via=origin.get("url"), issue=f"{origin['repo']}#{origin['issue']}")
                 self.messages.append({"role": "user", "content":
@@ -274,6 +276,11 @@ class Workspace:
                            f"{self.public_url}/files/<path> (for example {self.public_url}/files/notes/). "
                            "When he asks for a link, give that full address, and only for a file that is in the "
                            "SHARED FOLDER list above. If a file isn't there yet, say so; don't claim you made it.")
+                if chat_only:
+                    system += ("\n\nCHAT-ONLY TURN: Answer in plain text. Do not issue OPEN, RUN, "
+                               "CHANGE MIND or REMEMBER instructions. Do not claim execution, "
+                               "file edits, memory writes or GitHub changes. Any action emitted "
+                               "will be ignored by the server.")
                 msgs, used, ctx = self._fit(system)
                 self.emit("trace", mind=[p for p, _ in mind_files], books=len(catalog), projects=len(projects),
                           opened=opened,
@@ -289,11 +296,24 @@ class Workspace:
                     out = out2
                 shown, action, memories = parse_reply(out["text"])
                 self.emit("thought", text=out["thought"], seconds=out["seconds"])
+                if chat_only:
+                    # Full Auto must never authorize action or memory output from Atrium chat.
+                    if action or memories:
+                        self.emit("notice", text="Chat-only: model action/memory instructions ignored.",
+                                  request_id=request_id)
+                    action, memories = None, []
+                    if not shown:
+                        self.emit("error", text="Model provided no conversational reply; no action was taken.",
+                                  request_id=request_id)
+                        self.audit("chat_failed", {"id": request_id, "label": "owner chat"})
+                        break
                 if shown:
                     self._turn_replies.append(shown)
                 self.emit("reply", text=shown, tokens=out["prompt_tokens"], context=out["context"],
-                          action=action.label() if action else None)
-                self.messages.append({"role": "assistant", "content": out["text"].strip()})
+                          action=action.label() if action else None, request_id=request_id)
+                if chat_only:
+                    self.audit("chat_replied", {"id": request_id, "label": "owner chat"})
+                self.messages.append({"role": "assistant", "content": shown if chat_only else out["text"].strip()})
                 self.remember(memories)
                 if action and action.kind == "open" and action.project:
                     if len(opened) >= MAX_OPENS_PER_TURN:
@@ -332,7 +352,9 @@ class Workspace:
                     self._propose(action)
                 break
         except Exception as e:  # noqa: BLE001
-            self.emit("error", text=str(e))
+            self.emit("error", text=str(e), request_id=request_id)
+            if chat_only:
+                self.audit("chat_failed", {"id": request_id, "label": "owner chat"})
         finally:
             if origin:
                 try:
@@ -755,14 +777,28 @@ def make_handler(ws: Workspace):
             path = urlparse(self.path).path
             try:
                 if path == "/api/message":
-                    ws.auto_streak = 0   # Dustin spoke: full auto may continue
-                    text = str(body.get("text", "")).strip()[:4000]
-                    if not text:
-                        return self._json(400, {"error": "empty message"})
-                    if ws.busy:
-                        return self._json(409, {"error": "TASS is thinking"})
-                    threading.Thread(target=ws.turn, args=("user", text), daemon=True).start()
-                    return self._json(202, {"ok": True})
+                    text = body.get("text")
+                    if not isinstance(text, str) or not text.strip() or len(text) > 4000:
+                        return self._json(400, {"error": "text required (max 4000 characters)"})
+                    # Reserve the inference lock before acknowledging. This also closes
+                    # the check-then-start race across simultaneous HTTP requests.
+                    if ws.busy or not ws.turn_lock.acquire(blocking=False):
+                        return self._json(409, {"error": "TASS is thinking; message was not accepted"})
+                    request_id = secrets.token_hex(8)
+                    try:
+                        ws.busy = True
+                        ws.auto_streak = 0  # Owner spoke; modes remain unchanged.
+                        if body.get("chat_only") is True:
+                            ws.audit("chat_accepted", {"id": request_id, "label": "owner chat"})
+                        threading.Thread(target=ws.turn, args=("user", text.strip()),
+                                         kwargs={"chat_only": body.get("chat_only") is True,
+                                                 "request_id": request_id, "claimed": True},
+                                         daemon=True).start()
+                    except Exception:
+                        ws.busy = False
+                        ws.turn_lock.release()
+                        raise
+                    return self._json(202, {"ok": True, "request_id": request_id, "status": "accepted"})
                 if path == "/api/proposal":
                     return self._json(200, ws.decide(str(body.get("id")), str(body.get("decision"))))
                 if path == "/api/settings":

@@ -37,8 +37,8 @@ def safe_event(event: dict) -> dict:
     """Allowlist event fields; strip code, image payloads, link tokens and secrets."""
     typ = event.get("type")
     keys = {
-        "user": ["text", "id"],
-        "reply": ["text", "id", "action"],
+        "user": ["text", "id", "request_id"],
+        "reply": ["text", "id", "action", "request_id"],
         "reply_delta": ["delta", "id"],
         "thought_delta": ["delta", "id"],
         "thought_start": ["id"],
@@ -50,10 +50,10 @@ def safe_event(event: dict) -> dict:
         "decision": ["status", "pid", "id"],
         "result": ["ok", "label", "text", "error", "seconds", "id"],
         "busy": ["busy", "id"],
-        "notice": ["text", "id"],
+        "notice": ["text", "id", "request_id"],
         "memory": ["id"],
         "mind_pr": ["id", "ok", "path"],
-        "error": ["text", "id"],
+        "error": ["text", "id", "request_id"],
     }
     if not isinstance(typ, str) or typ not in keys:
         return {}
@@ -80,6 +80,7 @@ def safe_status(status: dict) -> dict:
         "model_ok": status.get("model_ok") is True,
         "busy": status.get("busy") is True,
         "full_auto": status.get("full_auto") is True,
+        "autonomy": status.get("autonomy") is True,
         "kernel": str(status.get("kernel", "unknown"))[:90],
         "kernel_error": bool(status.get("kernel_error")),
         "identity": {key: str(identity.get(key, ""))[:120] for key in ("name", "repo", "branch")},
@@ -334,11 +335,17 @@ def create_handler(backend_port: int, csrf: str, server_port: int):
                 msg = obj.get("text")
                 if not isinstance(msg, str) or not msg.strip() or len(msg) > 4000:
                     return self._json(400, {"error": "text required (max 4000 characters)"})
-                data = json.dumps({"text": msg.strip()}).encode("utf-8")
+                # Atrium cannot request execution, even if Full Auto is enabled.
+                data = json.dumps({"text": msg.strip(), "chat_only": True}).encode("utf-8")
                 with self._upstream("/api/message", method="POST", data=data) as upstream:
                     status = upstream.status
                     response = json.loads(upstream.read(16_384))
-                return self._json(status, {"accepted": status == 202, "result": response.get("ok", False)})
+                rid = response.get("request_id") if isinstance(response, dict) else None
+                if (status != 202 or not isinstance(response, dict) or
+                    response.get("ok") is not True or not isinstance(rid, str) or
+                    not re.fullmatch(r"[0-9a-f]{16}", rid)):
+                    return self._json(502, {"error": "Workshop did not confirm an identifiable request"})
+                return self._json(202, {"accepted": True, "status": "accepted", "request_id": rid})
             except HTTPError as exc:
                 try:
                     description = json.loads(exc.read(4000)).get("error", "backend rejected message")
