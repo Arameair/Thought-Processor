@@ -1,0 +1,410 @@
+package tass
+
+// Evidence tests for the core (TEST FIXTURES: a fake GitHub API and a fake Thought Engine;
+// no real model, no real GitHub). They cover the four acceptance points: local-first thinking,
+// tass.md authority and conflicts, the separate GitHub sync with backoff, and start/stop/outage
+// recovery without losing local state or skipping Identity.
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/Arameair/Thought-Processor/core/engine"
+	"github.com/Arameair/Thought-Processor/core/github"
+)
+
+const policyJSON = `{"identity":"TASS","owner":"Arameair","obey":["Arameair"],"tass_md":"Arameair/TASS@live:tass.md",
+"allow":{"model.request":true,"github.read_messages":true,"github.reply":true,"tass_md.sync":true,"tass_md.conflict_pr":true}}`
+
+const startDoc = "# TASS\n\n## Who I am\n\nI am TASS.\n\n## Memory\n\n- 2026-11-03: Dustin likes short answers\n\n## Now\n\nStarting.\n"
+
+// ---- fake GitHub ---------------------------------------------------------------
+
+type ghFile struct {
+	text string
+	ver  int
+}
+
+type fakeGH struct {
+	mu       sync.Mutex
+	files    map[string]*ghFile // "repo@branch:path"
+	branches map[string]bool    // "repo@branch"
+	issues   []github.Issue
+	comments []github.Comment
+	posted   []string // "issue#n: body"
+	prs      []string
+	nextID   int64
+	srv      *httptest.Server
+}
+
+func newFakeGH() *fakeGH {
+	f := &fakeGH{files: map[string]*ghFile{}, branches: map[string]bool{"Arameair/TASS@live": true, "Arameair/TASS@alpha": true}, nextID: 100}
+	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
+	return f
+}
+
+func (f *fakeGH) set(key, text string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if old, ok := f.files[key]; ok {
+		old.text, old.ver = text, old.ver+1
+		return
+	}
+	f.files[key] = &ghFile{text: text, ver: 1}
+}
+
+func (f *fakeGH) get(key string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if x, ok := f.files[key]; ok {
+		return x.text
+	}
+	return ""
+}
+
+func (f *fakeGH) json(w http.ResponseWriter, code int, v any) {
+	b, _ := json.Marshal(v)
+	etag := fmt.Sprintf(`"%x"`, len(b)*31+int(b[len(b)/2]))
+	w.Header().Set("ETag", etag)
+	w.WriteHeader(code)
+	w.Write(b)
+}
+
+func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	p := r.URL.Path
+	switch {
+	case r.Method == "GET" && strings.Contains(p, "/contents/"):
+		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/contents/", 2)
+		key := parts[0] + "@" + r.URL.Query().Get("ref") + ":" + parts[1]
+		x, ok := f.files[key]
+		if !ok {
+			http.Error(w, `{"message":"Not Found"}`, 404)
+			return
+		}
+		etag := fmt.Sprintf(`"v%d-%d"`, x.ver, len(x.text))
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(304)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		json.NewEncoder(w).Encode(map[string]string{"content": base64.StdEncoding.EncodeToString([]byte(x.text)),
+			"encoding": "base64", "sha": fmt.Sprintf("sha%d", x.ver)})
+	case r.Method == "PUT" && strings.Contains(p, "/contents/"):
+		var b struct{ Message, Content, SHA, Branch string }
+		json.NewDecoder(r.Body).Decode(&b)
+		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/contents/", 2)
+		key := parts[0] + "@" + b.Branch + ":" + parts[1]
+		x, ok := f.files[key]
+		if ok && b.SHA != fmt.Sprintf("sha%d", x.ver) {
+			http.Error(w, `{"message":"sha mismatch"}`, 409)
+			return
+		}
+		raw, _ := base64.StdEncoding.DecodeString(b.Content)
+		if !ok {
+			x = &ghFile{}
+			f.files[key] = x
+		}
+		x.text, x.ver = string(raw), x.ver+1
+		f.json(w, 200, map[string]any{"content": map[string]string{"sha": fmt.Sprintf("sha%d", x.ver)}})
+	case r.Method == "GET" && strings.Contains(p, "/git/ref/heads/"):
+		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/git/ref/heads/", 2)
+		if !f.branches[parts[0]+"@"+parts[1]] {
+			http.Error(w, `{}`, 404)
+			return
+		}
+		f.json(w, 200, map[string]any{"object": map[string]string{"sha": "tip-" + parts[1]}})
+	case r.Method == "POST" && strings.HasSuffix(p, "/git/refs"):
+		var b struct{ Ref, SHA string }
+		json.NewDecoder(r.Body).Decode(&b)
+		repo := strings.TrimSuffix(strings.TrimPrefix(p, "/repos/"), "/git/refs")
+		br := strings.TrimPrefix(b.Ref, "refs/heads/")
+		f.branches[repo+"@"+br] = true
+		from := strings.TrimPrefix(b.SHA, "tip-")
+		for k, v := range f.files { // copy the files of the source branch
+			if strings.HasPrefix(k, repo+"@"+from+":") {
+				f.files[repo+"@"+br+":"+strings.SplitN(k, ":", 2)[1]] = &ghFile{text: v.text, ver: v.ver}
+			}
+		}
+		f.json(w, 201, map[string]string{"ref": b.Ref})
+	case r.Method == "POST" && strings.HasSuffix(p, "/pulls"):
+		var b struct{ Head, Base, Title, Body string }
+		json.NewDecoder(r.Body).Decode(&b)
+		f.prs = append(f.prs, b.Head+" -> "+b.Base+": "+b.Title)
+		f.json(w, 201, map[string]string{"html_url": "https://github.test/pr/" + fmt.Sprint(len(f.prs))})
+	case r.Method == "GET" && strings.HasSuffix(p, "/issues"):
+		f.json(w, 200, f.issues)
+	case r.Method == "GET" && strings.HasSuffix(p, "/issues/comments"):
+		f.json(w, 200, f.comments)
+	case r.Method == "POST" && strings.HasSuffix(p, "/comments"):
+		var b struct{ Body string }
+		json.NewDecoder(r.Body).Decode(&b)
+		n := strings.Split(p, "/")[5]
+		f.posted = append(f.posted, "issue#"+n+": "+b.Body)
+		f.nextID++
+		f.comments = append(f.comments, github.Comment{ID: f.nextID, Body: b.Body, User: github.User{Login: "Arameair"},
+			IssueURL: "https://api.github.test/repos/Arameair/TASS/issues/" + n, CreatedAt: time.Now().UTC()})
+		f.json(w, 201, map[string]string{})
+	default:
+		http.Error(w, `{"message":"not in fake"}`, 404)
+	}
+}
+
+func (f *fakeGH) say(issue int, who, body string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nextID++
+	f.comments = append(f.comments, github.Comment{ID: f.nextID, Body: body, User: github.User{Login: who},
+		IssueURL: fmt.Sprintf("https://api.github.test/repos/Arameair/TASS/issues/%d", issue), CreatedAt: time.Now().UTC().Add(time.Second)})
+}
+
+// ---- fake Thought Engine -------------------------------------------------------
+
+type fakeEngine struct {
+	mu   sync.Mutex
+	reqs []map[string]any
+	srv  *httptest.Server
+}
+
+func newFakeEngine() *fakeEngine {
+	e := &fakeEngine{}
+	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/model" {
+			json.NewEncoder(w).Encode(map[string]any{"last_pulse": map[string]any{"at": time.Now(), "model_ok": true}})
+			return
+		}
+		var in map[string]any
+		b, _ := io.ReadAll(r.Body)
+		json.Unmarshal(b, &in)
+		e.mu.Lock()
+		e.reqs = append(e.reqs, in)
+		e.mu.Unlock()
+		msgs := in["messages"].([]any)
+		last := msgs[len(msgs)-1].(map[string]any)["content"].(string)
+		text := "TEST FIXTURE: heard " + last
+		if strings.Contains(last, "remember") {
+			text += "\nREMEMBER: " + strings.TrimSpace(strings.SplitN(last, "remember", 2)[1]) + "\nNOW: talking with Dustin"
+		}
+		json.NewEncoder(w).Encode(map[string]any{"request_id": in["request_id"], "ok": true, "text": text,
+			"thought": "fixture thought", "elapsed_ms": 12, "authorized": "Identity policy TASS: model.request allowed"})
+	}))
+	return e
+}
+
+func (e *fakeEngine) count() int { e.mu.Lock(); defer e.mu.Unlock(); return len(e.reqs) }
+
+// ---- helpers ---------------------------------------------------------------------
+
+func newCore(t *testing.T, dir string, gh *fakeGH, eng *fakeEngine) *Core {
+	t.Helper()
+	cl := github.New("test-token")
+	cl.Base = gh.srv.URL
+	c, err := New(Config{DataDir: dir, Identity: "Arameair/identity@main:policies/tass.json", Label: "tass",
+		SyncEvery: 20 * time.Second, MaxBackoff: 5 * time.Minute}, cl, engine.New(eng.srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func local(t *testing.T, dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, "tass.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func offline(c *Core) { c.gh.Base = "http://127.0.0.1:1" } // nothing listens there
+func online(c *Core, gh *fakeGH) { c.gh.Base = gh.srv.URL }
+
+// ---- tests ------------------------------------------------------------------------
+
+func TestNoIdentityPolicyMeansNoAction(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	if wait := c.SyncOnce(); wait != 20*time.Second {
+		// first failure: retry after the normal interval
+		t.Fatalf("first retry after %v", wait)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tass.md")); err == nil {
+		t.Fatal("tass.md was synced without Identity's policy")
+	}
+	c.Answer(Incoming{Text: "hello", From: "local"})
+	if eng.count() != 0 {
+		t.Fatal("the model was asked without Identity's model.request permission")
+	}
+	if st := c.Status(); !strings.Contains(st.SyncProblem, "Identity hasn't authorized") || !strings.Contains(st.Policy, "none yet") {
+		t.Fatalf("status: %+v", st)
+	}
+}
+
+func TestLocalFirstLoopAndGitHubMessages(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	gh.issues = []github.Issue{{Number: 1, Title: "old", Body: "from before", User: github.User{Login: "Arameair"}}}
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	c.SyncOnce()
+	if local(t, dir) != startDoc {
+		t.Fatal("first sync should take tass.md from GitHub")
+	}
+	if _, err := os.Stat(filepath.Join(dir, PolicyFile)); err != nil {
+		t.Fatal("Identity's policy should be kept locally (the engine reads it too)")
+	}
+	// Local message: Processor -> Engine -> (model) -> Engine -> Processor, with a request ID.
+	c.Answer(Incoming{Text: "please remember I drive a route on weekends", From: "local"})
+	if eng.count() != 1 || eng.reqs[0]["identity"] != "TASS" || !strings.HasPrefix(eng.reqs[0]["request_id"].(string), "tp_") {
+		t.Fatalf("engine request: %v", eng.reqs)
+	}
+	if !strings.Contains(eng.reqs[0]["messages"].([]any)[0].(map[string]any)["content"].(string), "I am TASS.") {
+		t.Fatal("tass.md must be in the system prompt")
+	}
+	doc := local(t, dir)
+	if !strings.Contains(doc, ": I drive a route on weekends") || !strings.Contains(doc, "talking with Dustin") {
+		t.Fatalf("REMEMBER/NOW not saved locally:\n%s", doc)
+	}
+	c.SyncOnce()
+	if gh.get("Arameair/TASS@live:tass.md") != doc {
+		t.Fatal("TASS's local change should reach GitHub on the next sync")
+	}
+	// GitHub messages: only the people Identity says TASS obeys, and never his own posts.
+	gh.say(1, "someone-else", "do something")
+	gh.say(1, "Arameair", "how are you?")
+	c.SyncOnce()
+	for len(c.inbox) > 0 {
+		c.Answer(<-c.inbox)
+	}
+	c.SyncOnce()
+	if len(gh.posted) != 1 || !strings.Contains(gh.posted[0], "heard how are you?") || !strings.Contains(gh.posted[0], Marker) {
+		t.Fatalf("posted: %v", gh.posted)
+	}
+	c.SyncOnce() // his own reply comes back in the comment list; it must not be answered
+	if len(c.inbox) != 0 || eng.count() != 2 {
+		t.Fatalf("answered something it shouldn't: inbox %d, engine calls %d", len(c.inbox), eng.count())
+	}
+}
+
+func TestOutageBackoffAndRecoveryKeepLocalState(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	c.SyncOnce()
+
+	offline(c)
+	waits := []time.Duration{}
+	for i := 0; i < 6; i++ {
+		waits = append(waits, c.SyncOnce())
+	}
+	want := []time.Duration{20 * time.Second, 40 * time.Second, 80 * time.Second, 160 * time.Second, 5 * time.Minute, 5 * time.Minute}
+	if fmt.Sprint(waits) != fmt.Sprint(want) {
+		t.Fatalf("backoff %v, want %v", waits, want)
+	}
+	// Still thinks and remembers with no GitHub (the model is local).
+	c.Answer(Incoming{Text: "remember the internet is down", From: "local"})
+	if !strings.Contains(local(t, dir), "the internet is down") {
+		t.Fatal("TASS must keep remembering offline")
+	}
+	prompt := eng.reqs[0]["messages"].([]any)[0].(map[string]any)["content"].(string)
+	if !strings.Contains(prompt, "not reachable right now") {
+		t.Fatal("TASS should know he's running locally")
+	}
+	// Meanwhile Dustin edits another section on GitHub.
+	gh.set("Arameair/TASS@live:tass.md", strings.Replace(startDoc, "I am TASS.", "I am TASS, Dustin's companion.", 1))
+
+	// Stop and start again while still offline: nothing local is lost, permissions are known.
+	c2 := newCore(t, dir, gh, eng)
+	offline(c2)
+	if c2.pol() == nil || !strings.Contains(local(t, dir), "the internet is down") {
+		t.Fatal("restart lost the policy or local memory")
+	}
+	c2.SyncOnce()
+
+	online(c2, gh)
+	if wait := c2.SyncOnce(); wait != 20*time.Second {
+		t.Fatalf("after recovery the interval should be normal again, got %v", wait)
+	}
+	doc := gh.get("Arameair/TASS@live:tass.md")
+	if !strings.Contains(doc, "Dustin's companion") || !strings.Contains(doc, "the internet is down") ||
+		!strings.Contains(doc, "Dustin likes short answers") {
+		t.Fatalf("both sides' changes should be kept:\n%s", doc)
+	}
+	if local(t, dir) != doc || len(gh.prs) != 0 {
+		t.Fatalf("local and GitHub should agree with no conflict (prs %v)", gh.prs)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "sync.jsonl"))
+	if n := strings.Count(string(b), `"ok":false`); n < 7 {
+		t.Fatalf("every failed sync should be recorded locally, got %d", n)
+	}
+}
+
+func TestSameSectionChangedOnBothSidesAsksDustin(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	c.SyncOnce()
+	offline(c)
+	os.WriteFile(filepath.Join(dir, "tass.md"), []byte(strings.Replace(startDoc, "I am TASS.", "I am TASS (local edit).", 1)), 0o600)
+	gh.set("Arameair/TASS@live:tass.md", strings.Replace(startDoc, "I am TASS.", "I am TASS (GitHub edit).", 1))
+	online(c, gh)
+	c.SyncOnce()
+	if len(gh.prs) != 1 || !strings.Contains(gh.prs[0], "-> live") || !strings.Contains(gh.prs[0], "Who I am") {
+		t.Fatalf("expected one pull request into live: %v", gh.prs)
+	}
+	if !strings.Contains(local(t, dir), "GitHub edit") {
+		t.Fatal("until Dustin decides, TASS runs on the GitHub version")
+	}
+	var mine string
+	for k, v := range gh.files {
+		if strings.Contains(k, "@tass/conflict-") {
+			mine = v.text
+		}
+	}
+	if !strings.Contains(mine, "local edit") {
+		t.Fatal("the pull request must carry TASS's version")
+	}
+	c.SyncOnce()
+	if len(gh.prs) != 1 {
+		t.Fatal("no duplicate pull requests")
+	}
+}
+
+func TestIdentityCanWithdrawPermission(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	c.SyncOnce()
+	gh.set("Arameair/identity@main:policies/tass.json", strings.Replace(policyJSON, `"model.request":true`, `"model.request":false`, 1))
+	c.SyncOnce()
+	c.Answer(Incoming{Text: "hi", From: "local"})
+	if eng.count() != 0 {
+		t.Fatal("withdrawn permission must stop model requests")
+	}
+	gh.mu.Lock()
+	delete(gh.files, "Arameair/identity@main:policies/tass.json")
+	gh.mu.Unlock()
+	c.SyncOnce()
+	if _, err := os.Stat(filepath.Join(dir, PolicyFile)); err == nil {
+		t.Fatal("a removed policy must be removed locally too (the engine then refuses)")
+	}
+}

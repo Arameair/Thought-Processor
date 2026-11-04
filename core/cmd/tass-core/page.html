@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TASS · core</title>
+<style>
+  :root { --bg:#0f1316; --panel:#161c21; --line:#27323b; --text:#e9e4dc; --dim:#8f9ba5; --you:#6cb4ff; --tass:#8fd3b6;
+          --think:#b892ff; --sync:#f2b866; --bad:#ff8a80; --mono: ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; gap:12px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { font:500 22px Georgia, serif; margin:0; } h1 small { color:var(--dim); font:12px system-ui; margin-left:8px; }
+  .chip { font-size:12px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim); }
+  .chip.ok::before, .chip.off::before { content:"● "; } .chip.ok::before { color:var(--tass); } .chip.off::before { color:var(--bad); }
+  main { display:grid; grid-template-columns: 1fr 420px; gap:16px; padding:16px 20px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  #log { height:58vh; overflow-y:auto; }
+  .ev { margin:0 0 10px; white-space:pre-wrap; }
+  .ev .w { font-size:12px; color:var(--dim); }
+  .ev.you .w { color:var(--you); } .ev.tass .w { color:var(--tass); }
+  .ev.thought { color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:160px; overflow:auto; }
+  .ev.sync, .ev.github { color:var(--sync); font-size:13px; } .ev.problem { color:var(--bad); font-size:13px; }
+  #live { display:none; color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:140px; overflow:auto; margin-bottom:8px; white-space:pre-wrap; }
+  form { display:flex; gap:8px; margin-top:10px; }
+  textarea { flex:1; height:60px; resize:none; font:inherit; color:var(--text); background:#0f1418; border:1px solid var(--line); border-radius:9px; padding:8px 10px; }
+  button { font:inherit; color:var(--text); background:#1d252d; border:1px solid var(--line); border-radius:9px; padding:0 16px; cursor:pointer; }
+  pre { white-space:pre-wrap; font:12.5px/1.5 var(--mono); margin:0; max-height:70vh; overflow:auto; }
+  .dim { color:var(--dim); font-size:12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TASS <small>core · thinks on this computer, syncs with GitHub</small></h1>
+  <span id="engine" class="chip">Thought Engine</span><span id="model" class="chip">model</span><span id="pulse" class="chip">pulse</span>
+  <span id="gh" class="chip">GitHub</span><span id="busy" class="chip">listening</span>
+</header>
+<main>
+  <section class="card">
+    <div id="log"></div>
+    <div id="live"></div>
+    <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Works without internet."></textarea><button>Send</button></form>
+  </section>
+  <section class="card">
+    <div class="dim" id="policy">Identity policy</div>
+    <div class="dim" id="lastreq" style="margin:4px 0 10px"></div>
+    <div class="dim" id="where">tass.md</div>
+    <pre id="md"></pre>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const who = {you: "You", tass: "TASS", thought: "", sync: "", github: "", problem: ""};
+let shown = 0;
+function ago(t) { const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 60 ? s + " s ago" : Math.round(s / 60) + " min ago"; }
+async function refresh() {
+  let st;
+  try { st = await (await fetch("/api/status")).json(); } catch { $("gh").className = "chip off"; $("gh").textContent = "core not reachable"; return; }
+  const e = st.engine || {}, p = e.last_pulse;
+  $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
+  $("model").className = "chip " + (p && p.model_ok ? "ok" : "off");
+  $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron —"; $("model").title = (p && p.error) || "";
+  $("pulse").textContent = p ? "engine pulse " + ago(p.at) : "pulse —";
+  const synced = st.last_sync && !st.last_sync.startsWith("0001");
+  $("gh").className = "chip " + (st.github_online ? "ok" : "off");
+  $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) : (synced ? "GitHub: not syncing, TASS runs locally" : "GitHub —");
+  $("gh").title = st.sync_problem || "";
+  $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
+  $("policy").textContent = "Identity: " + st.policy;
+  const r = st.last_request;
+  $("lastreq").textContent = r ? `Last request ${r.request_id}: ${r.ok ? "ok" : "failed"} in ${(r.elapsed_ms / 1000).toFixed(1)} s · ${r.authorized}${r.error ? " · " + r.error : ""}` : "";
+  $("where").textContent = "tass.md · TASS runs on this local copy; GitHub keeps the versioned record";
+  $("md").textContent = st.tass_md || "(not created yet)";
+  const live = $("live"); live.style.display = st.busy && st.thinking ? "block" : "none"; live.textContent = st.thinking.slice(-1500); live.scrollTop = 1e9;
+  const evs = st.events || [];
+  if (evs.length !== shown) {
+    const keep = $("log").scrollTop + $("log").clientHeight >= $("log").scrollHeight - 30;
+    $("log").innerHTML = evs.map(e => `<div class="ev ${e.kind}">${who[e.kind] ? `<div class="w">${who[e.kind]} · ${new Date(e.at).toLocaleTimeString()}</div>` : ""}${esc(e.text)}</div>`).join("");
+    shown = evs.length;
+    if (keep) $("log").scrollTop = 1e9;
+  }
+}
+$("f").onsubmit = async e => {
+  e.preventDefault(); const text = $("t").value.trim(); if (!text) return; $("t").value = "";
+  await fetch("/api/say", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+  refresh();
+};
+$("t").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("f").requestSubmit(); } };
+refresh(); setInterval(refresh, 1000);
+</script>
+</body>
+</html>

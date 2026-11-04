@@ -1,0 +1,22 @@
+name: core-tests
+on:
+  push:
+    paths: ["core/**", ".github/workflows/core-tests.yml"]
+  pull_request:
+    paths: ["core/**"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Vet and test (race detector)
+        working-directory: core
+        run: |
+          go vet ./...
+          go test -race ./...
+      - name: Build
+        working-directory: core
+        run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
