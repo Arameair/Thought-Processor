@@ -1037,6 +1037,7 @@ func (c *Core) recentMemories(n int) []Memory {
 //	UNKNOWN  (shown by callers that can't reach the core at all)
 type Health struct {
 	State        string    `json:"state"`
+	ActionMode   string    `json:"action_mode"` // CHAT_ONLY until Issue #50 integrity gates verified
 	Reasons      []string  `json:"reasons,omitempty"`
 	Version      string    `json:"version"`
 	EngineUp     bool      `json:"engine_reachable"`
@@ -1054,7 +1055,10 @@ func (c *Core) Health(version string) Health {
 	valid, why := c.allowedNow(identity.ModelRequest)
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending}
+		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending, ActionMode: "LEGACY_UNVERIFIED"}
+	if c.cfg.ChatOnly {
+		h.ActionMode = "CHAT_ONLY"
+	}
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {
