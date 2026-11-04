@@ -4,6 +4,7 @@ package tass
 // converse with the existing model but may not grant the Core an action or
 // autonomous work pulse while Issue #50's integrity gates remain unresolved.
 import (
+    "os"
     "strings"
     "testing"
 )
@@ -58,6 +59,15 @@ func TestChatOnlyRejectsEvenMaliciousEngineActionAndPulse(t *testing.T) {
     eng.mu.Unlock()
     if _, err := c.PulseControl("pause"); err != nil {
         t.Fatalf("emergency pause should remain available: %v", err)
+    }
+    // The fake model can also supply NOW:/REMEMBER: directives. In chat-only
+    // mode these are treated as untrusted text, not authorization to write.
+    c.Answer(Incoming{Text: "remember how the model acted", From: "local"})
+    if got := memories(t, c.cfg.DataDir); got != "" {
+        t.Fatalf("model-directed memory changed in chat-only: %s", got)
+    }
+    if _, err := os.Stat(c.file("now.txt")); !os.IsNotExist(err) {
+        t.Fatalf("model-directed now.txt write occurred in chat-only: %v", err)
     }
     events := c.Status().Events
     seenReply := false
