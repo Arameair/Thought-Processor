@@ -610,6 +610,13 @@ func (c *Core) syncTass() error {
 		return err
 	}
 	if norm(merged) != norm(remote) {
+		// Reading approved lessons must never silently grant write authority.
+		if c.cfg.IdentitySvc != nil {
+			if ok, why := c.allowedNow("github.write"); !ok {
+				c.event("problem", "Local document changed; GitHub write held for Identity permission: "+why)
+				return nil
+			}
+		}
 		sha, err := c.gh.PutFile(repo, branch, path, merged, c.st.RemoteSHA, "TASS: update tass.md")
 		if errors.Is(err, github.ErrConflict) {
 			c.st.FileETag = ""
@@ -635,6 +642,12 @@ func (c *Core) syncTass() error {
 
 // askDustin opens one pull request offering TASS's version of the sections both sides changed.
 func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) error {
+	if c.cfg.IdentitySvc != nil {
+		if ok, why := c.allowedNow("github.write"); !ok {
+			c.event("problem", "Document conflict needs owner review; GitHub PR blocked by Identity: "+why)
+			return nil
+		}
+	}
 	key := hash(mine)
 	if c.st.ConflictKey == key {
 		return nil
