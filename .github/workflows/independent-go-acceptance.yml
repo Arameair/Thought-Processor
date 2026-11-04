@@ -1,0 +1,29 @@
+name: independent-go-acceptance-verifier
+
+on:
+  push:
+    paths:
+      - "core/acceptance/**"
+      - ".github/workflows/independent-go-acceptance.yml"
+  pull_request:
+    paths:
+      - "core/acceptance/**"
+      - "core/tass/integration_acceptance_test.go"
+      - "core/cmd/tass-core/acceptance_test.go"
+      - ".github/workflows/independent-go-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  evidence-verifier-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check script syntax
+        run: python3 -m py_compile core/acceptance/verify.py core/acceptance/test_verify.py
+      - name: Acceptance verifier self-tests (FIXTURES ONLY)
+        run: python3 -m unittest discover -s core/acceptance -p "test_verify.py" -v
+      - name: CLI help
+        run: python3 core/acceptance/verify.py --help
