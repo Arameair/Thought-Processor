@@ -305,11 +305,14 @@ class Workspace:
                     if not shown:
                         self.emit("error", text="Model provided no conversational reply; no action was taken.",
                                   request_id=request_id)
+                        self.audit("chat_failed", {"id": request_id, "label": "owner chat"})
                         break
                 if shown:
                     self._turn_replies.append(shown)
                 self.emit("reply", text=shown, tokens=out["prompt_tokens"], context=out["context"],
                           action=action.label() if action else None, request_id=request_id)
+                if chat_only:
+                    self.audit("chat_replied", {"id": request_id, "label": "owner chat"})
                 self.messages.append({"role": "assistant", "content": shown if chat_only else out["text"].strip()})
                 self.remember(memories)
                 if action and action.kind == "open" and action.project:
@@ -350,6 +353,8 @@ class Workspace:
                 break
         except Exception as e:  # noqa: BLE001
             self.emit("error", text=str(e), request_id=request_id)
+            if chat_only:
+                self.audit("chat_failed", {"id": request_id, "label": "owner chat"})
         finally:
             if origin:
                 try:
@@ -783,6 +788,8 @@ def make_handler(ws: Workspace):
                     try:
                         ws.busy = True
                         ws.auto_streak = 0  # Owner spoke; modes remain unchanged.
+                        if body.get("chat_only") is True:
+                            ws.audit("chat_accepted", {"id": request_id, "label": "owner chat"})
                         threading.Thread(target=ws.turn, args=("user", text.strip()),
                                          kwargs={"chat_only": body.get("chat_only") is True,
                                                  "request_id": request_id, "claimed": True},
