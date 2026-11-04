@@ -21,6 +21,7 @@ umask 077
 mkdir -p -- "$STATE_DIR"
 chmod 700 -- "$STATE_DIR"
 export TASS_ATRIUM_DESK_STATE="$STATE_DIR/desk.json"
+export TASS_ATRIUM_PULSE_STATE="$STATE_DIR/test-cards.json"
 export TASS_ATRIUM_BIND_HOST=127.0.0.1
 
 echo "ATRIUM DAILY DESK: http://127.0.0.1:$PORT/"
