@@ -92,6 +92,7 @@
     find('pulsePause').disabled = state.paused;
     find('pulseResume').disabled = !state.paused || !state.execution_enabled;
     find('pulseStep').disabled = !state.execution_enabled;
+    find('pulseStop').disabled = !(state.cards || []).some(c => c.status === 'WORKING' || c.status === 'QUEUED');
     const host = find('pulseCardList'); host.replaceChildren();
     for (const card of (state.cards || [])) host.append(cardView(card));
   }
@@ -109,6 +110,9 @@
   find('pulsePause').addEventListener('click', () => request('pause'));
   find('pulseResume').addEventListener('click', () => request('resume'));
   find('pulseStep').addEventListener('click', () => request('step'));
+  find('pulseStop').addEventListener('click', () => {
+    if (window.confirm('Stop the active test process group and block queued work?')) request('stop');
+  });
   refresh();
   setInterval(refresh, 3000);
 })();
