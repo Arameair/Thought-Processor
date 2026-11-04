@@ -174,10 +174,14 @@ class CardStore:
 
     def read(self):
         with self._mutex:
+            if self._lockfile is None:
+                raise CardError("Test-card store is closed", 503)
             return self._read()
 
     def mutate(self, fn):
         with self._mutex:
+            if self._lockfile is None:
+                raise CardError("Test-card store is closed", 503)
             doc = self._read()
             result = fn(doc)
             self._write(doc)
@@ -475,6 +479,8 @@ class PulseCoordinator:
                 self._failure(chosen[0], chosen[1], "Worker could not launch: " + str(exc))
 
     def _failure(self, card_id, job_id, message):
+        if self.store._lockfile is None:
+            return  # Prior instance no longer owns the file. Recovery owns reconciliation.
         finished = utc()
         def change(doc):
             card = doc["cards"][card_id]
@@ -501,6 +507,8 @@ class PulseCoordinator:
                     "argv", "started_at", "finished_at", "exit_code", "outcome", "executed",
                     "environment", "output_sha256", "output_excerpt", "reason")
             receipt = {key: receipt.get(key) for key in keys}
+            if self.store._lockfile is None:
+                return  # Never write from an old worker after process shutdown/restart.
             receipt["output_excerpt"] = redact(receipt.get("output_excerpt") or "")
             receipt["reason"] = redact(receipt.get("reason") or "") or None
             def record(doc):
