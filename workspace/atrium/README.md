@@ -4,6 +4,12 @@ This is a separate browser experience, served at **http://127.0.0.1:8791/** by a
 
 It is the actual TASS Atrium playground: living constellation, idea garden, experience lab and a read-and-chat area. It connects to the **same** existing TASS Workshop service through a restricted bridge to `http://workspace:8790` inside Docker.
 
+## Separate Pulse Test Cards pilot (Issue #51)
+
+Atrium Today's desk now includes two **fixed, owner-approved Go test cards** with evidence receipts and a configurable 20-second coordination pulse. This is separate from the Workshop code-approval workflow and from the existing task notes. **Execution is disabled by default** in the normal Atrium Docker image, and the local card acknowledgement is NOT Identity authentication. A separately isolated test runner is required to enable fixed tests. The normal Atrium Docker container has no Go toolchain/source checkouts and must not gain privileged access merely to run these cards.
+
+Runbook, exact targets, security boundary, fixture/real CI evidence and acceptance procedure: [PULSE_CARDS.md](PULSE_CARDS.md).
+
 ## What it can do
 - Show the local model's reachability, available books and projects, and the genuine Workshop conversation timeline.
 - Send one user-written message through `/api/message` and display actual replies from the Workshop's `/api/events`.
@@ -11,7 +17,7 @@ It is the actual TASS Atrium playground: living constellation, idea garden, expe
 - Run browser-only idea and visual experiments without pretending they came from the model.
 
 ## What it cannot do
-- Approve a proposal, run notebook code, restart a kernel, change settings, access arbitrary files or open host browser windows on TASS's behalf.
+- Approve a Workshop proposal, run notebook code, restart a kernel, change Workshop settings, access arbitrary files or open host browser windows on TASS's behalf. The separate test-card pilot never exposes arbitrary commands.
 - Grant Identity permissions, verify owner login, or independently prove that an execution was correct.
 - Expose the model externally; ports bind to `127.0.0.1` on the host. **Loopback-only is not authentication.** The existing Workshop's authentication and authorization gaps remain open.
 
