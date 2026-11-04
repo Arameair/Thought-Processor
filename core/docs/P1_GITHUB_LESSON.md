@@ -4,6 +4,14 @@
 Core branch `experiment/tass-github-lesson-20261104` on Core draft PR #58 (stacked on the separate P0 PR #57).
 No merge/deploy by this PR; the running owner's installation is untouched. Pulse stays PAUSED.
 
+## P0 conversation dependency — draft, not accepted
+
+The owner's actual short Nemotron greeting passed on Core `7d24043` / Engine `38e2e7b`, but the longer `identity-test` lesson prompt failed twice with unreadable plan outputs. That is a **FAIL**, not a lesson delivery success. Engine draft [PR #10](https://github.com/Arameair/Thought-engine/pull/10) adds content-free parse diagnostics and one separately generated, tool-free fallback **for local owner conversation only**, plus a prediction-lock guard on pulse measurements. Core `tass.sh` pins this candidate's exact Engine revision, `5bd472e848bcc4e7bd9a6b654026a99d9a6563e9`. CI on this revision and owner real-model acceptance remain unverified until results are recorded.
+
+**Pin alignment:** Identity draft [PR #33](https://github.com/Arameair/identity/pull/33) at `f5281f4ad1e3e6cb2bad1f64902dff99b88b0cad` reads **Lesson 01 comment `6636766875`**. Comment `6634742721` was an older design note and is not valid for delivery. Core now validates the exact lesson comment ID and source URL, with a negative test for the old ID and forged URL. Only this one reference is allowlisted. GitHub sync remains OFF.
+
+**First owner test — no deployment:** From the existing `~/tass-one-app/core` checkout run `./tass.sh status`. Inspect current installed revisions, model health and PAUSED pulse. Share sanitized output without tokens or personal conversation text. This status check does **not** activate these branches; no change/update/authorization is implied. The multi-step procedure below is for a *later, separately authorized* deployment and must not be run merely because it is documented.
+
 ## Implemented flow
 
 1. The Identity page derives **Talk to your entity** from `IDENTITY_CORE_URL` (provided by Compose using the configured `CORE_PORT`, default 8795). Identity validates scheme, loopback host, path, and port. No arbitrary URL is accepted.
@@ -20,7 +28,7 @@ No merge/deploy by this PR; the running owner's installation is untouched. Pulse
 - Core: exact `@identity-test` routing, nonexact name refusal, no action list on the lesson cycle, missing authorization blocked, unrelated conversation unchanged, locked entity blocked.
 - GitHub fixture tests are **not** proof of real account sign-in or owner's Nemotron. No real owner credentials or private prompts in test data.
 
-## One safe owner procedure (only AFTER reviewing and explicitly approving the two experimental PRs)
+## One safe owner procedure (only AFTER reviewing and explicitly approving the three experimental PRs)
 
 **Preconditions**: retain the existing external Nemotron; leave the work pulse PAUSED; back up with `./tass.sh backup`. Inspect Identity and Core PR diffs and CI first. Do not paste a passphrase, GitHub code, or token into a GitHub issue or log.
 
