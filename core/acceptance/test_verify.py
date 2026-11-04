@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import verify
 
@@ -120,6 +121,19 @@ class PulseEvidenceTests(unittest.TestCase):
 
 
 class SafetyTests(unittest.TestCase):
+    def test_chat_authentication_does_not_depend_on_default_port(self):
+        with patch.object(verify.urllib.request, "urlopen") as http:
+            resp = http.return_value.__enter__.return_value
+            resp.status = 202
+            resp.read.return_value = b"{}"
+            code, _ = verify.request_json(
+                "http://127.0.0.1:9500", "/api/say", "test-key",
+                method="POST", body={"text": "fixture"})
+            self.assertEqual(code, 202)
+            req = http.call_args.args[0]
+            self.assertEqual(req.get_header("X-tass-token"), "test-key")
+            self.assertIsNone(req.get_header("Authorization"))
+
     def test_chat_never_sends_without_explicit_opt_in(self):
         self.assertEqual(verify.probe_chat(SimpleNamespace(send=False)), verify.NOT_RUN)
 
