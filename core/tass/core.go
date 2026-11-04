@@ -6,10 +6,12 @@
 //     unreachable): Identity's policy, the GitHub copy of tass.md, messages and replies.
 //   - Identity's policy decides before anything happens. No policy, no action.
 //
-// Authority for tass.md: the local copy is what TASS runs on; the GitHub copy is the versioned
-// record. Each sync merges them section by section; when the same section changed on both sides,
-// TASS keeps running on the GitHub version of it and a pull request offers his version: Dustin
-// merges or closes it.
+// Authority for tass.md: TASS runs on the local copy; the GitHub copy is the reviewed, versioned
+// record. The core never writes tass.md itself: it merges edits made on either side, section by
+// section. When the same section changed on both sides, TASS runs on the GitHub version of it,
+// both versions are kept locally (conflicts/), and a pull request offers the local version:
+// Dustin merges or closes it. TASS's own memories go to a local journal (memory.jsonl) with
+// provenance, not into tass.md.
 package tass
 
 import (
@@ -22,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,8 +38,12 @@ import (
 // Marker on everything TASS posts, so he never answers himself.
 const Marker = "<!-- tass-core -->"
 
-// PolicyFile is the local copy of Identity's policy (the Thought Engine reads it too).
-const PolicyFile = "identity-policy.json"
+// GrantFile is the local copy of Identity's policy with when it was last confirmed. The Thought
+// Engine reads it too. PROTOTYPE: a static policy file, not a live Identity grant.
+const GrantFile = "identity-grant.json"
+
+// MemoryKeep bounds the local memory journal.
+const MemoryKeep = 200
 
 type Config struct {
 	DataDir    string        // local home: tass.md, tass.base.md, identity-policy.json, state.json, logs
@@ -44,10 +51,21 @@ type Config struct {
 	Label      string        // issues with this label are messages to TASS
 	SyncEvery  time.Duration // GitHub sync interval when all is well (20 s)
 	MaxBackoff time.Duration // longest wait between attempts while GitHub is unreachable
+	Messages   bool          // read GitHub messages (off while another program answers them)
+}
+
+// grantFile is what GrantFile holds.
+type grantFile struct {
+	Prototype bool            `json:"prototype"`
+	Note      string          `json:"note"`
+	Source    string          `json:"source"`
+	FetchedAt time.Time       `json:"fetched_at"`
+	Policy    json.RawMessage `json:"policy"`
 }
 
 type state struct {
 	PolicyETag   string         `json:"policy_etag"`
+	PolicyHash   string         `json:"policy_hash"`
 	FileETag     string         `json:"file_etag"`
 	RemoteSHA    string         `json:"remote_sha"`
 	IssuesETag   string         `json:"issues_etag"`
@@ -89,18 +107,20 @@ type Core struct {
 	// owned by the sync loop
 	st state
 
-	mu         sync.Mutex // fields below
-	policy     *identity.Policy
-	online     bool
-	lastSync   time.Time
-	nextSync   time.Time
-	syncErr    string
-	failures   int
-	events     []Event
-	busy       bool
-	lastResult *engine.Result
-	history    []engine.Message
-	pending    int
+	mu        sync.Mutex // fields below
+	policy    *identity.Policy
+	confirmed time.Time // when the policy was last confirmed from GitHub
+	online    bool
+	lastSync  time.Time
+	nextSync  time.Time
+	syncErr   string
+	failures  int
+	events    []Event
+	busy      bool
+	lastCycle *engine.Cycle
+	cycles    []engine.Cycle
+	history   []engine.Message
+	pending   int
 
 	inbox   chan Incoming
 	replies chan outgoing
@@ -128,9 +148,12 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 	if c.st.SeenComments == nil {
 		c.st.SeenComments = map[int64]bool{}
 	}
-	if b, err := os.ReadFile(c.file(PolicyFile)); err == nil {
-		if p, err := identity.Parse(b); err == nil {
-			c.policy = p // last good policy: TASS knows his permissions offline
+	if b, err := os.ReadFile(c.file(GrantFile)); err == nil {
+		var g grantFile
+		if json.Unmarshal(b, &g) == nil {
+			if p, err := identity.Parse(g.Policy); err == nil {
+				c.policy, c.confirmed = p, g.FetchedAt // last good policy: permissions hold offline, for a limited time
+			}
 		}
 	}
 	c.pending = len(c.st.Outbox)
@@ -141,6 +164,25 @@ func (c *Core) pol() *identity.Policy {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.policy
+}
+
+// allowedNow: Identity's policy allows the action AND was confirmed recently enough. A cached policy
+// older than its offline limit authorizes nothing (fail closed until GitHub confirms it again).
+func (c *Core) allowedNow(action string) (bool, string) {
+	c.mu.Lock()
+	p, at := c.policy, c.confirmed
+	c.mu.Unlock()
+	if p == nil {
+		return false, "no Identity policy yet"
+	}
+	if !p.Allowed(action) {
+		return false, "Identity's policy doesn't allow " + action
+	}
+	if age := c.now().Sub(at); age > p.OfflineLimit() {
+		return false, fmt.Sprintf("Identity's policy was last confirmed %s ago, longer than its offline limit (%s)",
+			age.Round(time.Minute), p.OfflineLimit())
+	}
+	return true, fmt.Sprintf("Identity policy (prototype) %s: %s allowed, confirmed %s", p.Identity, action, at.Format("15:04:05"))
 }
 
 func (c *Core) file(name string) string { return filepath.Join(c.cfg.DataDir, name) }
@@ -296,7 +338,8 @@ func (c *Core) SyncOnce() time.Duration {
 	return wait
 }
 
-// syncPolicy fetches Identity's policy (conditional, so unchanged = no rate-limit cost).
+// syncPolicy fetches Identity's policy (conditional, so unchanged = no rate-limit cost) and
+// records when it was confirmed. A missing policy removes the local copy: nothing is allowed.
 func (c *Core) syncPolicy() error {
 	repo, rest, _ := strings.Cut(c.cfg.Identity, "@")
 	branch, path, _ := strings.Cut(rest, ":")
@@ -313,30 +356,48 @@ func (c *Core) syncPolicy() error {
 		c.policy = nil
 		c.mu.Unlock()
 		c.st.PolicyETag = ""
-		_ = os.Remove(c.file(PolicyFile))
+		_ = os.Remove(c.file(GrantFile))
 		return fmt.Errorf("no Identity policy at %s (Identity hasn't authorized TASS yet)", c.cfg.Identity)
 	}
 	if err != nil {
 		return err
 	}
+	var raw []byte
+	var p *identity.Policy
 	if got.NotModified {
-		return nil
+		p = c.pol()
+		b, err := os.ReadFile(c.file(GrantFile))
+		if err != nil {
+			c.st.PolicyETag = "" // local copy lost: fetch it again next time
+			return err
+		}
+		var g grantFile
+		if err := json.Unmarshal(b, &g); err != nil {
+			c.st.PolicyETag = ""
+			return err
+		}
+		raw = g.Policy
+	} else {
+		if p, err = identity.Parse([]byte(f.Text)); err != nil {
+			return err // keep the last good policy (and its confirmation time)
+		}
+		raw = []byte(f.Text)
 	}
-	p, err := identity.Parse([]byte(f.Text))
-	if err != nil {
-		return err // keep the last good policy
-	}
-	old, _ := c.read(PolicyFile)
-	if err := c.write(PolicyFile, f.Text); err != nil {
+	now := c.now().UTC()
+	g := grantFile{Prototype: true, Note: "PROTOTYPE: copy of a static policy file, not a live Identity grant",
+		Source: c.cfg.Identity, FetchedAt: now, Policy: json.RawMessage(raw)}
+	b, _ := json.MarshalIndent(g, "", " ")
+	if err := c.write(GrantFile, string(b)); err != nil {
 		return err
 	}
-	if norm(old) != norm(f.Text) {
-		c.event("sync", "Identity policy loaded for "+p.Identity+" from "+c.cfg.Identity+".")
-	}
 	c.mu.Lock()
-	c.policy = p
+	changed := c.policy == nil || !got.NotModified && hash(string(raw)) != c.st.PolicyHash
+	c.policy, c.confirmed = p, now
 	c.mu.Unlock()
-	c.st.PolicyETag = got.ETag
+	if changed {
+		c.event("sync", "Identity policy loaded for "+p.Identity+" from "+c.cfg.Identity+" (prototype policy file).")
+	}
+	c.st.PolicyETag, c.st.PolicyHash = got.ETag, hash(string(raw))
 	return nil
 }
 
@@ -437,6 +498,12 @@ func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) er
 	if c.st.ConflictKey == key {
 		return nil
 	}
+	// Keep both sides locally, whatever happens with the pull request.
+	stamp := c.now().UTC().Format("20060102T150405Z")
+	_ = os.MkdirAll(c.file("conflicts"), 0o700)
+	remoteCopy, _ := c.read("tass.base.md")
+	_ = os.WriteFile(filepath.Join(c.file("conflicts"), stamp+"-local.md"), []byte(mine), 0o600)
+	_ = os.WriteFile(filepath.Join(c.file("conflicts"), stamp+"-github.md"), []byte(remoteCopy), 0o600)
 	if !c.pol().Allowed(identity.AskOnConflict) {
 		c.st.ConflictKey = key
 		c.event("problem", "Both sides changed "+strings.Join(conflicts, ", ")+"; TASS uses the GitHub version "+
@@ -473,7 +540,7 @@ func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) er
 
 func (c *Core) readMessages() error {
 	p := c.pol()
-	if !p.Allowed(identity.ReadMessages) {
+	if !c.cfg.Messages || !p.Allowed(identity.ReadMessages) {
 		return nil
 	}
 	repo, _, _, err := p.Target()
@@ -581,16 +648,47 @@ func (c *Core) Say(text string) error {
 var (
 	rememberRe = regexp.MustCompile(`(?im)^[ \t*_>-]*REMEMBER[*_ ]*:[*_ ]*(.+?)[*_ ]*$`)
 	nowRe      = regexp.MustCompile(`(?im)^[ \t*_>-]*NOW[*_ ]*:[*_ ]*(.+?)[*_ ]*$`)
-	blankRe    = regexp.MustCompile(`\n{3,}`)
 )
 
-const howToAct = `HOW TO ACT
-Reply to Dustin as TASS: short, honest, friendly. Think step by step before you answer.
-You may add these lines anywhere in your reply; they are taken out of what Dustin sees:
-  REMEMBER: <one short line>   saved under "## Memory" in your tass.md (what's worth keeping)
-  NOW: <one short line>        replaces "## Now" in your tass.md (what you're doing or thinking about)
-Your tass.md lives on this computer, so you keep thinking and remembering without internet. It syncs
-with its GitHub copy whenever GitHub can be reached.`
+// Actions TASS may propose in a cycle. They only read his own local tass.md; Identity decides
+// (action.read_tass) at the moment they would run.
+var Actions = []engine.Action{
+	{Name: "tass_sections", Description: `number of "## " sections in your tass.md`},
+	{Name: "tass_memory_lines", Description: `number of lines starting with "- " in the "## Memory" section of your tass.md`},
+	{Name: "tass_words", Description: "number of words in your tass.md"},
+}
+
+func measure(action, doc string) (float64, error) {
+	switch action {
+	case "tass_sections":
+		n := 0
+		for _, sec := range tassmd.Parse(doc) {
+			if sec.Name != "" {
+				n++
+			}
+		}
+		return float64(n), nil
+	case "tass_memory_lines":
+		n := 0
+		for _, sec := range tassmd.Parse(doc) {
+			if sec.Name == tassmd.MemorySection {
+				for _, l := range strings.Split(sec.Body, "\n") {
+					if strings.HasPrefix(strings.TrimSpace(l), "- ") {
+						n++
+					}
+				}
+			}
+		}
+		return float64(n), nil
+	case "tass_words":
+		return float64(len(strings.Fields(doc))), nil
+	}
+	return 0, fmt.Errorf("unknown action %q", action)
+}
+
+const howToTalk = `You are TASS, talking with Dustin. Be short, honest and friendly. You run locally on his computer
+through your Thought Engine (Nemotron). You can't run code, change files or act on GitHub yourself: you may
+propose one read-only action, and Dustin's Identity decides whether it runs.`
 
 func (c *Core) think(stop <-chan struct{}) {
 	for {
@@ -603,83 +701,119 @@ func (c *Core) think(stop <-chan struct{}) {
 	}
 }
 
-// Answer: Identity check → Thought Engine (Nemotron) → tass.md updates → reply.
-func (c *Core) Answer(m Incoming) {
-	c.event("you", m.Text)
-	p := c.pol()
-	if !p.Allowed(identity.ModelRequest) {
-		c.event("problem", "Identity hasn't authorized TASS to think (model.request) yet, so this wasn't sent to the model.")
-		return
-	}
+func (c *Core) context(online bool) string {
 	c.fileMu.Lock()
 	doc, _ := c.read("tass.md")
 	c.fileMu.Unlock()
 	if norm(doc) == "" {
 		doc = "# TASS\n\n(tass.md hasn't come from GitHub yet.)\n"
 	}
-	where := "on this computer (the local page)"
-	if m.From == "github" {
-		where = fmt.Sprintf("on GitHub, issue #%d", m.Issue)
+	var b strings.Builder
+	b.WriteString(doc)
+	b.WriteString("\n\n---\n" + howToTalk + "\n")
+	if mem := c.recentMemories(20); len(mem) > 0 {
+		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
+		for _, m := range mem {
+			fmt.Fprintf(&b, "- %s: %s\n", m.At.Format("2006-01-02"), m.Text)
+		}
 	}
+	if now, ok := c.read("now.txt"); ok && strings.TrimSpace(now) != "" {
+		b.WriteString("\nWHAT YOU WERE DOING: " + strings.TrimSpace(now) + "\n")
+	}
+	status := "reachable"
+	if !online {
+		status = "not reachable right now (you're running locally)"
+	}
+	b.WriteString("\nRIGHT NOW: GitHub is " + status + ". Time: " + c.now().Format("Mon 2006-01-02 15:04") + ".")
+	return b.String()
+}
+
+// Answer is one thought cycle: Identity check → Thought Engine (Spark/Trace/Thought + plan with a
+// locked prediction, on Nemotron) → the proposed action only if Identity allows it now →
+// outcome back to the engine, which evaluates the prediction → reply.
+func (c *Core) Answer(m Incoming) {
+	c.event("you", m.Text)
+	for _, a := range []string{identity.ModelRequest, identity.ThoughtProcess} {
+		if ok, why := c.allowedNow(a); !ok {
+			c.event("problem", "Not sent to the Thought Engine: "+why+".")
+			return
+		}
+	}
+	p := c.pol()
 	c.mu.Lock()
 	online := c.online
 	hist := append([]engine.Message(nil), c.history...)
 	c.busy = true
 	c.mu.Unlock()
-	status := "reachable"
-	if !online {
-		status = "not reachable right now (you're running locally)"
-	}
-	sys := doc + "\n\n---\n" + howToAct + "\n\nRIGHT NOW: GitHub is " + status + ". This message came " + where +
-		". Time: " + c.now().Format("Mon 2006-01-02 15:04") + "."
-	msgs := append([]engine.Message{{Role: "system", Content: sys}}, hist...)
-	msgs = append(msgs, engine.Message{Role: "user", Content: m.Text})
+	defer func() {
+		c.mu.Lock()
+		c.busy = false
+		c.mu.Unlock()
+	}()
 
 	id := engine.NewRequestID()
-	r, err := c.engine.Think(id, p.Identity, "reply", msgs)
-	c.mu.Lock()
-	c.busy = false
-	c.lastResult = r
-	c.mu.Unlock()
-	rec := map[string]any{"at": c.now().UTC(), "request_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
-	if r != nil {
-		rec["elapsed_ms"], rec["authorized"] = r.ElapsedMS, r.Authorized
-	}
+	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: p.Identity, Source: "thought-processor:" + m.From,
+		Request: m.Text, Context: c.context(online), History: hist, Actions: Actions})
+	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
 	if err != nil {
 		rec["error"] = err.Error()
 		c.appendLog("conversation.jsonl", rec)
-		c.event("problem", "Thinking failed ("+id+"): "+err.Error())
+		c.keepCycle(cy)
+		c.event("problem", "Thinking failed (cycle "+id+"): "+err.Error())
 		return
 	}
-	if r.Thought != "" {
-		c.event("thought", r.Thought)
+	prop := cy.Proposal
+	if prop.Reasoning != "" {
+		c.event("thought", prop.Reasoning)
 	}
-	text := r.Text
-	c.fileMu.Lock()
-	cur, _ := c.read("tass.md")
-	changed := cur
-	for _, mm := range rememberRe.FindAllStringSubmatch(text, 5) {
-		changed = tassmd.AddMemory(changed, mm[1], c.now())
-	}
-	if mm := nowRe.FindStringSubmatch(text); mm != nil {
-		changed = tassmd.SetNow(changed, mm[1], c.now())
-	}
-	if norm(cur) != "" && changed != cur {
-		if err := c.write("tass.md", changed); err != nil {
-			c.event("problem", "Couldn't save tass.md: "+err.Error())
+
+	// The proposed action runs only if Identity allows it at this moment.
+	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
+	if prop.Action != "NONE" {
+		if ok, why := c.allowedNow(identity.ReadTass); !ok {
+			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: why, Executor: "thought-processor", Authorized: why}
+		} else {
+			c.fileMu.Lock()
+			doc, _ := c.read("tass.md")
+			c.fileMu.Unlock()
+			v, err := measure(prop.Action, doc)
+			out = engine.Outcome{Status: "EXECUTED", Value: &v, Executor: "thought-processor (read-only, local tass.md)",
+				ExecutedAt: c.now().UTC(), Authorized: why, Detail: prop.Action + " on tass.md (" + hash(doc) + ")"}
+			if err != nil {
+				out = engine.Outcome{Status: "FAILED", Detail: err.Error(), Executor: "thought-processor", Authorized: why}
+			}
 		}
 	}
-	c.fileMu.Unlock()
-	for _, mm := range rememberRe.FindAllStringSubmatch(text, 5) {
-		c.event("sync", "TASS remembered: "+mm[1])
+	if done, err := c.engine.FinishCycle(id, out); err != nil {
+		c.event("problem", "Couldn't record the outcome of cycle "+id+": "+err.Error())
+	} else {
+		cy = done
+	}
+	c.keepCycle(cy)
+
+	text := strings.TrimSpace(prop.Reply)
+	if mm := nowRe.FindStringSubmatch(text); mm != nil {
+		_ = c.write("now.txt", mm[1]+"\n")
 	}
 	text = strings.TrimSpace(nowRe.ReplaceAllString(rememberRe.ReplaceAllString(text, ""), ""))
-	text = blankRe.ReplaceAllString(text, "\n\n")
+	remember := strings.TrimSpace(prop.Remember)
+	if remember == "" {
+		if mm := rememberRe.FindStringSubmatch(prop.Reply); mm != nil {
+			remember = mm[1]
+		}
+	}
+	if remember != "" {
+		c.addMemory(remember, id, m.From)
+		c.event("sync", "TASS noted in his memory journal: "+remember)
+	}
 	if text == "" {
-		text = "(TASS only updated his tass.md.)"
+		text = "(TASS gave no reply text.)"
 	}
 	c.event("tass", text)
-	rec["thought"], rec["reply"] = r.Thought, text
+	rec["reply"], rec["action"], rec["prediction"] = text, prop.Action, prop.Prediction.Text
+	if cy.Evaluation != nil {
+		rec["forecast"], rec["goal"] = cy.Evaluation.Forecast, cy.Evaluation.Goal
+	}
 	c.appendLog("conversation.jsonl", rec)
 	c.mu.Lock()
 	c.history = append(c.history, engine.Message{Role: "user", Content: m.Text}, engine.Message{Role: "assistant", Content: text})
@@ -688,11 +822,82 @@ func (c *Core) Answer(m Incoming) {
 	}
 	c.mu.Unlock()
 	if m.From == "github" {
-		c.replies <- outgoing{m.Issue, text + "\n\n" + Marker}
+		c.replies <- outgoing{m.Issue, text + "\n\n<sub>cycle " + id + "</sub>\n" + Marker}
 		c.mu.Lock()
 		c.pending++
 		c.mu.Unlock()
 	}
+}
+
+func (c *Core) keepCycle(cy *engine.Cycle) {
+	if cy == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastCycle = cy
+	c.cycles = append(c.cycles, *cy)
+	if len(c.cycles) > 20 {
+		c.cycles = c.cycles[len(c.cycles)-20:]
+	}
+}
+
+// ------------------------------------------------------------- memory ----
+
+// Memory is one line in TASS's local memory journal, with where it came from.
+type Memory struct {
+	At      time.Time `json:"at"`
+	Text    string    `json:"text"`
+	CycleID string    `json:"cycle_id"`
+	From    string    `json:"from"`   // local | github
+	Source  string    `json:"source"` // TASS (REMEMBER)
+}
+
+func (c *Core) addMemory(text, cycleID, from string) {
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > 300 {
+		text = text[:300]
+	}
+	c.fileMu.Lock()
+	defer c.fileMu.Unlock()
+	mem := c.readMemories()
+	for _, m := range mem {
+		if strings.EqualFold(m.Text, text) {
+			return
+		}
+	}
+	mem = append(mem, Memory{At: c.now().UTC(), Text: text, CycleID: cycleID, From: from, Source: "TASS (REMEMBER)"})
+	if len(mem) > MemoryKeep {
+		mem = mem[len(mem)-MemoryKeep:]
+	}
+	var b strings.Builder
+	for _, m := range mem {
+		line, _ := json.Marshal(m)
+		b.Write(append(line, '\n'))
+	}
+	_ = c.write("memory.jsonl", b.String())
+}
+
+func (c *Core) readMemories() []Memory {
+	raw, _ := c.read("memory.jsonl")
+	var out []Memory
+	for _, l := range strings.Split(raw, "\n") {
+		var m Memory
+		if json.Unmarshal([]byte(l), &m) == nil && m.Text != "" {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func (c *Core) recentMemories(n int) []Memory {
+	c.fileMu.Lock()
+	defer c.fileMu.Unlock()
+	mem := c.readMemories()
+	if len(mem) > n {
+		mem = mem[len(mem)-n:]
+	}
+	return mem
 }
 
 // ---------------------------------------------------------------- status ---
@@ -702,10 +907,13 @@ type Status struct {
 	LastSync     time.Time      `json:"last_sync"`
 	NextSync     time.Time      `json:"next_sync"`
 	SyncProblem  string         `json:"sync_problem"`
+	Messages     bool           `json:"github_messages"`
 	Policy       string         `json:"policy"`
+	PolicyValid  bool           `json:"policy_valid_now"`
 	Busy         bool           `json:"busy"`
 	Engine       engine.Status  `json:"engine"`
-	LastRequest  *engine.Result `json:"last_request,omitempty"`
+	Cycles       []engine.Cycle `json:"cycles"`
+	Memories     []Memory       `json:"memories"`
 	Pending      int            `json:"replies_waiting"`
 	TassMD       string         `json:"tass_md"`
 	Events       []Event        `json:"events"`
@@ -716,6 +924,8 @@ func (c *Core) Status() Status {
 	c.fileMu.Lock()
 	doc, _ := c.read("tass.md")
 	c.fileMu.Unlock()
+	mem := c.recentMemories(10)
+	valid, why := c.allowedNow(identity.ModelRequest)
 	pol := "none yet: Identity hasn't authorized TASS (" + c.cfg.Identity + ")"
 	if p := c.pol(); p != nil {
 		allowed := []string{}
@@ -724,7 +934,11 @@ func (c *Core) Status() Status {
 				allowed = append(allowed, k)
 			}
 		}
-		pol = fmt.Sprintf("%s · obeys %s · allows %s", p.Identity, strings.Join(p.Obey, ", "), strings.Join(allowed, ", "))
+		sort.Strings(allowed)
+		pol = fmt.Sprintf("PROTOTYPE policy for %s · obeys %s · allows %s", p.Identity, strings.Join(p.Obey, ", "), strings.Join(allowed, ", "))
+		if !valid {
+			pol += " · NOT VALID NOW: " + why
+		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -732,13 +946,11 @@ func (c *Core) Status() Status {
 	if len(ev) > 150 {
 		ev = ev[len(ev)-150:]
 	}
-	var lr *engine.Result
-	if c.lastResult != nil {
-		x := *c.lastResult
-		x.Thought, x.Text = "", ""
-		lr = &x
+	cys := make([]engine.Cycle, len(c.cycles))
+	for i := range c.cycles {
+		cys[len(c.cycles)-1-i] = c.cycles[i]
 	}
 	return Status{GitHubOnline: c.online, LastSync: c.lastSync, NextSync: c.nextSync, SyncProblem: c.syncErr,
-		Policy: pol, Busy: c.busy, Engine: es, LastRequest: lr, Pending: c.pending, TassMD: doc,
-		Events: append([]Event(nil), ev...)}
+		Messages: c.cfg.Messages, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
+		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...)}
 }

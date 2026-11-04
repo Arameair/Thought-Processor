@@ -1,3 +1,6 @@
+// PROTOTYPE: this is a static policy file, not a live Identity grant (Identity's authorize API is not
+// connected yet). It is enforced, but it is only as strong as the review of changes to that file.
+//
 // Package identity is the core's gate to Identity: every GitHub action TASS takes, and every
 // person he obeys, is checked against a policy that lives in the Identity repo
 // (Arameair/identity: policies/tass.json). Changing what TASS may do is a reviewed change there.
@@ -10,15 +13,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Actions the core may ask about.
 const (
-	ModelRequest  = "model.request"        // think with the local model, through the Thought Engine
-	ReadMessages  = "github.read_messages" // read issues/comments addressed to TASS
-	Reply         = "github.reply"         // post TASS's answers as comments
-	SyncTassMD    = "tass_md.sync"         // keep tass.md in step with its GitHub copy
-	AskOnConflict = "tass_md.conflict_pr"  // open a pull request when both sides changed the same part
+	ModelRequest   = "model.request"        // think with the local model, through the Thought Engine
+	ThoughtProcess = "thought.process"      // send observations through the engine's Spark/Trace/Thought pipeline
+	ReadTass       = "action.read_tass"     // the one local action: read (count things in) TASS's own tass.md
+	ReadMessages   = "github.read_messages" // read issues/comments addressed to TASS
+	Reply          = "github.reply"         // post TASS's answers as comments
+	SyncTassMD     = "tass_md.sync"         // keep tass.md in step with its GitHub copy
+	AskOnConflict  = "tass_md.conflict_pr"  // open a pull request when both sides changed the same part
 )
 
 // Policy is policies/tass.json in the Identity repo.
@@ -28,6 +34,17 @@ type Policy struct {
 	Obey     []string        `json:"obey"`     // logins whose messages TASS answers
 	TassMD   string          `json:"tass_md"`  // owner/repo@branch:path of the GitHub copy
 	Allow    map[string]bool `json:"allow"`    // action -> allowed
+	// How long a cached copy may still authorize local work while GitHub can't be reached (default 24).
+	OfflineGrantHours float64 `json:"offline_grant_hours,omitempty"`
+	Note              string  `json:"note,omitempty"`
+}
+
+// OfflineLimit is how long a cached policy stays valid without being confirmed.
+func (p *Policy) OfflineLimit() time.Duration {
+	if p == nil || p.OfflineGrantHours <= 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(p.OfflineGrantHours * float64(time.Hour))
 }
 
 // Parse validates a policy file.

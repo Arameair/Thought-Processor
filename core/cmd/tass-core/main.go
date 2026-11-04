@@ -11,12 +11,17 @@
 //	TASS_ENGINE_URL   the Thought Engine                                    (default http://127.0.0.1:7798)
 //	TASS_LABEL        issues with this label are messages to TASS           (default tass)
 //	TASS_SYNC         GitHub sync interval                                  (default 20s)
+//	TASS_ENGINE_KEY   the Thought Engine's api-key file                     (default ~/.thought-engine/tass/api-key)
+//	TASS_GITHUB_MESSAGES  "off" to not read GitHub messages (while another program answers them)
 //	TASS_TOKEN_FILE   GitHub token file (or GITHUB_TOKEN)                   (default secrets/github_token)
 //	TASS_LISTEN       local page address                                    (default 127.0.0.1:8795)
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -70,12 +75,19 @@ func main() {
 		Identity:  env("TASS_IDENTITY", "Arameair/identity@main:policies/tass.json"),
 		Label:     env("TASS_LABEL", "tass"),
 		SyncEvery: every,
+		Messages:  !strings.EqualFold(env("TASS_GITHUB_MESSAGES", "on"), "off"),
 	}
 	gh := github.New(token)
 	if b := os.Getenv("TASS_GITHUB_API"); b != "" { // tests and dry runs only
 		gh.Base = b
 	}
 	eng := engine.New(env("TASS_ENGINE_URL", "http://127.0.0.1:7798"))
+	keyFile := env("TASS_ENGINE_KEY", filepath.Join(home, ".thought-engine", "tass", "api-key"))
+	if b, err := os.ReadFile(keyFile); err == nil {
+		eng.Key = strings.TrimSpace(string(b))
+	} else {
+		log.Printf("No Thought Engine key at %s: start the engine first (it creates the key). TASS can't think until then.", keyFile)
+	}
 	core, err := tass.New(cfg, gh, eng)
 	if err != nil {
 		log.Fatal(err)
@@ -96,7 +108,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("can't listen on %s: %v", listen, err)
 	}
-	srv := &http.Server{Handler: handler(core), ReadHeaderTimeout: 10 * time.Second}
+	// Local API keys: a fresh one for the page each start, and a file for other local programs.
+	pageToken := randomKey()
+	apiKey, err := loadOrCreateKey(filepath.Join(cfg.DataDir, "api-key"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	srv := &http.Server{Handler: handler(core, pageToken, apiKey), ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln)
 	log.Printf("TASS core: data in %s · Identity policy from %s · engine %s · GitHub sync every %s",
 		cfg.DataDir, cfg.Identity, eng.URL, every)
@@ -111,19 +129,65 @@ func main() {
 	log.Printf("stopped; tass.md and state are on disk in %s", cfg.DataDir)
 }
 
-func handler(core *tass.Core) http.Handler {
+func randomKey() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatal(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+func loadOrCreateKey(path string) (string, error) {
+	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) >= 32 {
+		return strings.TrimSpace(string(b)), nil
+	}
+	k := randomKey()
+	return k, os.WriteFile(path, []byte(k+"\n"), 0o600)
+}
+
+func localHost(r *http.Request) bool {
+	h, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		h = r.Host
+	}
+	return h == "127.0.0.1" || h == "localhost" || h == "::1"
+}
+
+func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r) {
+			http.Error(w, "host not allowed", http.StatusForbidden)
+			return
+		}
 		b, _ := page.ReadFile("page.html")
+		b = []byte(strings.Replace(string(b), "__PAGE_TOKEN__", pageToken, 1))
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
 		w.Write(b)
 	})
+	authed := func(r *http.Request) bool {
+		got := r.Header.Get("X-TASS-Token")
+		if got == "" {
+			got = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		}
+		return localHost(r) && got != "" && (subtle.ConstantTimeCompare([]byte(got), []byte(pageToken)) == 1 ||
+			subtle.ConstantTimeCompare([]byte(got), []byte(apiKey)) == 1)
+	}
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(r) { // it holds conversation and tass.md: same key as writing
+			http.Error(w, "missing or wrong key", http.StatusUnauthorized)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(core.Status())
 	})
 	mux.HandleFunc("POST /api/say", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(r) {
+			http.Error(w, "missing or wrong key (the page's token, or ~/.tass/api-key)", http.StatusUnauthorized)
+			return
+		}
 		// Only this page may post: JSON, and a local Origin (blocks other websites in your browser).
 		if o := r.Header.Get("Origin"); o != "" {
 			u, err := url.Parse(o)

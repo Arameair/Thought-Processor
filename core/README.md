@@ -1,102 +1,89 @@
-# TASS's Go core: first vertical slice
-
-One working path, built so it keeps running without the internet:
+# TASS's Go core: one thought cycle (Thought-Processor #42)
 
 ```
-you ──► tass-core (Thought-Processor) ──► Thought Engine ──► Nemotron (llama.cpp, local)
-            │   ▲                              │
-            │   └──── reply, request ID, ◄─────┘   records every request and a 20-second local pulse
-            │         elapsed time, error
-            ├── tass.md (local copy he runs on)
-            └── GitHub sync, its own loop: Identity's policy · tass.md · messages · replies
+you ─► tass-core (Thought-Processor) ─► Thought Engine ─► Nemotron (llama.cpp, local)
+          │  checks Identity first           │  observation → Spark → Trace → Thought   (its existing pipeline)
+          │                                  │  plan: reply + proposed action + PREDICTION, locked before anything runs
+          │◄──────── cycle (IDs, timing) ────┘
+          │  runs the read-only action only if Identity allows it at that moment → receipt
+          └─► engine evaluates: PREDICTION_CORRECT / INCORRECT / UNSCORABLE / NO_ACTION, and GOAL_MET / UNMET / UNKNOWN
 ```
 
-| Repo | Its part here |
+| Repo | Its part |
 | --- | --- |
-| **TASS** | `tass.md` on branch `live`: who TASS is, his memory, what he's doing now. The versioned record. |
-| **Thought-Processor** | `core/` (this folder), the `tass-core` program: the local page, conversation, the local `tass.md`, GitHub sync, and asking Identity before acting. |
-| **Thought-engine** | Branch `experiment/nemotron-link-20261104`: `POST /api/model/requests` to Nemotron, plus the 20-second local pulse, and records of both. |
-| **identity** | `policies/tass.json`: what TASS may do and whom he obeys. Checked before every action. |
-| Nemotron 3 Nano 4B | Weights on local storage, served by llama.cpp in Docker. Never in Git. |
+| **TASS** | `tass.md` on branch `live`: the reviewed record of who TASS is. PR #22 brings it in line with this core. |
+| **Thought-Processor** | `core/` (`tass-core`): the owner page, conversation, the local `tass.md`, the memory journal, GitHub sync, the read-only executor, and asking Identity first. |
+| **Thought-engine** | Branch `experiment/nemotron-link-20261104`, pinned in `start.sh`. It holds: `-worker nemotron`, so the existing Spark/Trace/Thought pipeline runs on the local model; the cycle API; the model link; and the 20-second pulse. |
+| **identity** | `policies/tass.json` (PR #31, **owner review**). A **PROTOTYPE** static policy, not a live Identity grant. |
+| Nemotron 3 Nano 4B | Weights on local storage, served by llama.cpp. Never in Git. |
 
-The Python workspace and the Atrium are untouched. They are still on `alpha` and the experiment branches.
+The Python workspace and the Atrium are untouched.
 
-## Start it (WSL)
+## Run it (WSL)
 
 ```bash
 cd ~/tass-workspace && git fetch && git checkout experiment/go-core-20261104 && cd core
-./start.sh
+./start.sh check     # read-only: tools, ports, model, policy, conflicts. Changes nothing.
+./start.sh           # starts the Thought Engine and tass-core. Stops nothing that's already running.
 ```
 
-Then open **http://127.0.0.1:8795**.
-- `./start.sh status` shows what's running, the engine's last pulse and the last GitHub sync.
-- `./start.sh logs` follows the logs. `./start.sh stop` stops the core.
+Then open **http://127.0.0.1:8795**. Other commands:
+- `./start.sh status` and `./start.sh logs`;
+- `./start.sh stop` stops only what this script started.
 
-You need Go 1.22+ and `gh` signed in. The script:
-1. starts the model container (the same one the workspace uses);
-2. fetches the Thought Engine branch with your `gh` login and builds it;
-3. builds `tass-core`, then starts both.
+**Rollback:** `./start.sh stop`, then delete `~/.tass` and `~/.thought-engine/tass`.
 
-It also stops the Python workspace's liaison, so TASS doesn't answer GitHub twice.
+- **The model must already be running.** Start it the usual way: `cd ../workspace && ./run.sh`, or only its container. The script never starts or stops the model.
+- **If the Python liaison is running,** the script asks whether to stop it. The default is **no**: the Go core then starts with **GitHub messages paused**, so TASS never answers twice.
+- **Nothing happens until Identity's policy is on `Arameair/identity` `main`.** That is PR #31: review it, then merge.
 
-**First time:** TASS does nothing until Identity's policy exists on `Arameair/identity` `main`. Merging the policy pull request is that approval.
+The owner test is in [ACCEPTANCE.md](ACCEPTANCE.md).
 
-## Which `tass.md` is authoritative
+## Rules this slice follows
 
-- **TASS runs on the local copy** (`~/.tass/tass.md`). He reads it for every reply and writes his `REMEMBER:` and `NOW:` lines into it, with or without the internet.
-- **The GitHub copy (`Arameair/TASS@live:tass.md`) is the versioned record.** Every sync merges the two, section by section (`## Who I am`, `## Memory`, …):
-  - **Changed on one side only:** that side wins. When you edit on GitHub, TASS thinks with the change on the next sync.
-  - **`## Memory` changed on both sides:** the lines are combined. A line one side removed stays removed.
-  - **Any other section changed on both sides:** TASS runs on the GitHub version of that section, and opens a pull request into `live` holding his version. **Merge** it to take his; **close** it to keep yours. Nothing is lost.
-- The core only writes to `live`. Identity's policy refuses `main`, `alpha` and `stable`.
+- **Conversation is not authority.** A reply is just text. The one action TASS may propose is read-only: count the sections, memory lines or words of his own `tass.md`.
+  - The action runs only if Identity allows `action.read_tass` **at that moment**.
+  - Its prediction is locked (time and SHA-256) **before** it runs.
+  - There is no Full Auto in this core; nothing runs on its own.
+- **Identity first, everywhere.** `tass-core` checks before each step. The engine checks again on arrival, and **again after waiting for the model slot**, so a queued request whose permission was withdrawn is refused.
+  - A cached policy authorizes local work for at most `offline_grant_hours` (24 h) without GitHub confirming it. After that, everything fails closed.
+  - GitHub actions always use a policy fetched in the same sync.
+  - Deleting the policy on GitHub stops everything on the next sync.
+- **Every state-changing local API needs a key.**
+  - tass-core uses a fresh page token each start, plus `~/.tass/api-key` for local programs. Its status endpoint holds conversation, so it needs the key too.
+  - The engine's model and cycle endpoints need `~/.thought-engine/tass/api-key`, which only tass-core is given.
+  - **Open risk:** the engine's older routes (identities, grants, events, settings) are still unauthenticated, as before this slice.
+- **Evidence is append-only.**
+  - Engine: `cycles.jsonl`, `model-requests.jsonl`, `pulse.jsonl`, `calls.jsonl`.
+  - Core: `conversation.jsonl`, `sync.jsonl`, `memory.jsonl`.
+  - Unknown steps show **UNKNOWN**.
+  - Evaluation is a deterministic rule. **No evaluator model is configured**, and every record says so.
+- **`tass.md` is the reviewed identity.**
+  - The core never writes it.
+  - TASS's `REMEMBER` lines go to `~/.tass/memory.jsonl` with provenance (cycle ID, time, source), keeping the last 200. `NOW` is local state.
+  - Edits made on either side merge section by section.
+  - If the same section changed on both sides, TASS runs on the GitHub version. Both versions are kept in `~/.tass/conflicts/`, and a PR into `live` offers the local one.
+- **The pulse is not thinking.** The engine records a 20-second local model check (`pulse.jsonl`) with or without the internet. A thought cycle runs only when something happens.
+- **GitHub sync is separate.** It runs every 20 s, backing off to 40, 80 and 160 s, then 5 min, while unreachable. ETags mean an unchanged poll costs no rate limit, and nothing is written unless something changed.
 
-## The two loops
+## Evidence (2026-11-04, this sandbox)
 
-| Loop | Where | How often | Needs internet |
-| --- | --- | --- | --- |
-| **Pulse** | Thought Engine | every 20 s: checks Nemotron, appends to `~/.thought-engine/tass/pulse.jsonl` | no |
-| **GitHub sync** | tass-core | every 20 s while it works. After a failure it waits 20, 40, 80, 160 s, then 5 min, and is back to 20 s as soon as a sync succeeds. Reads use ETags, so "no change" costs no rate limit. Every attempt goes to `~/.tass/sync.jsonl`. | yes, but nothing waits on it |
+| Check | How | Result |
+| --- | --- | --- |
+| One full cycle: event → Spark (6/10, Trace kept) → plan → locked prediction (8) → authorized read-only action (measured 7) → `PREDICTION_INCORRECT` + `GOAL_MET` | Real `thought-engine` (pinned commit) and real `tass-core` binaries; real GitHub reads (policy branch, `TASS@live`); the model was a **TEST FIXTURE** | PASS (fixture model) |
+| Third related request formed a **Thought** through the engine's existing rule (3 related Traces) | same run | PASS (fixture model) |
+| `REMEMBER` → memory journal with cycle ID; `tass.md` untouched | same run | PASS |
+| Keys: say/status without a token → 401; engine cycle without its key → 401; key files 0600 | same run | PASS |
+| GitHub cut: cycles still ran; the engine pulse kept recording; the sync backed off | real processes, proxy stopped | PASS (fixture model) |
+| Both programs restarted **offline**: cycles rebuilt from `cycles.jsonl`; memory and policy kept; a new cycle ran | real processes | PASS |
+| Revoked or stale grant, queued request re-checked, wrong identity, no policy | engine and core unit tests | PASS (fixtures) |
+| Conflict: same section on both sides → PR into `live` + both sides in `conflicts/` | core unit test (fake GitHub) | PASS (fixture) |
+| **Real Nemotron**, real GPU, real model identity | — | **NOT RUN** (no GPU or weights here). Owner test in ACCEPTANCE.md. |
+| **GitHub writes** (pushing `tass.md`, conflict PR) on real GitHub | — | **NOT RUN** here (this sandbox's proxy refuses API writes). Owner test step 6. |
 
-Replies to GitHub messages wait in `~/.tass/state.json` until GitHub is back.
-
-## Identity before action
-
-`policies/tass.json` (in `Arameair/identity`) lists whom TASS obeys and allows each action separately:
-- `model.request`
-- `github.read_messages`
-- `github.reply`
-- `tass_md.sync`
-- `tass_md.conflict_pr`
-
-How it is enforced:
-- The core checks the policy **before** each action.
-- The **Thought Engine checks it again before running the model**. It reads the same local copy, `~/.tass/identity-policy.json`. With no policy, it refuses the request and records the refusal.
-- The last good policy is kept locally, so permissions hold offline.
-- If the policy is deleted on GitHub, the local copy is deleted on the next sync, and the engine refuses from then on.
-
-This is a policy file, not yet Identity's live `authorize` API. That API answers DENIED for everything on alpha; its grants work on the P1 experiment. Moving the check onto it is a later step.
-
-## Evidence against the four acceptance criteria
-
-| # | Criterion | Shown by | Result |
-| --- | --- | --- | --- |
-| 1 | **Local-first:** TASS keeps answering with the internet disconnected | Real processes in the sandbox: GitHub cut off; TASS answered and remembered, also after a restart while still offline. Test `TestOutageBackoffAndRecoveryKeepLocalState`. | PASS with a **TEST FIXTURE model**. Real Nemotron: **NOT RUN** (no GPU or weights here). |
-| 2 | **Persistent identity:** a local `tass.md` and a versioned GitHub copy, with an authority and conflict rule | Real GitHub: the first sync took `tass.md` from `TASS@live`. Tests: merge rules, conflict pull request, no duplicate pull requests. | PASS for reads and the rules. Writing to real GitHub: **NOT RUN** here, because the sandbox's network proxy refuses API writes (HTTP 403). The same code path passes against the fake GitHub. |
-| 3 | **20-second pulse:** recorded locally; GitHub sync separate, with retries and backoff | Real engine: `pulse.jsonl` every 20 s while GitHub was down. The core's backoff was seen live and checked in a test (20 s → 5 min). | PASS |
-| 4 | **Evidence:** start, stop, reconnect and outage recovery, without losing local state or bypassing Identity | Real processes: stop and start offline kept memory and permissions; reconnecting resumed syncing. The engine refused with no policy, and for another identity. Tests: Dustin's offline edit and TASS's offline memory both survive; withdrawn permission stops thinking. | PASS (fixtures as noted) |
-
-Fixtures used: a fake llama.cpp and a fake GitHub API, both labelled **TEST FIXTURE** in the code. The real-process run used:
-- the real `thought-engine` and `tass-core` binaries;
-- real GitHub reads, through a small forwarding proxy that was stopped to cut the connection.
-
-**Not built yet:**
-- TASS doesn't see the Thought Engine's Spark/Trace/Thought pipeline; this slice uses only its model link;
-- streaming the model's thinking live;
-- Discord, lessons and Developmnt (left out, as decided).
-
-## Tests
+Screenshot of that run (fixture model): `docs/evidence/cycle-20261104-fixture.png`.
 
 ```bash
-cd core && go test -race ./...                       # tass.md merge, sync, outage/backoff, conflicts, Identity
-cd vendor/thought-engine && go test ./...            # engine incl. TestModelRequest*, TestLocalPulse*
+cd core && go test -race ./...                         # core: cycle flow, keys, grant expiry, sync, outage, conflicts
+cd vendor/thought-engine && go test -race ./...        # engine: cycle end-to-end on its pipeline, grants, re-check, pulse
 ```

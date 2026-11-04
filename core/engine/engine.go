@@ -32,6 +32,7 @@ type Result struct {
 
 type Client struct {
 	URL  string // http://127.0.0.1:7798
+	Key  string // the engine's api-key (only Thought-Processor is given it)
 	HTTP *http.Client
 }
 
@@ -50,6 +51,7 @@ func (c *Client) Think(requestID, identity, purpose string, msgs []Message) (*Re
 	body, _ := json.Marshal(map[string]any{"request_id": requestID, "identity": identity, "purpose": purpose, "messages": msgs})
 	req, _ := http.NewRequest("POST", c.URL+"/api/model/requests", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Key)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Thought Engine not reachable at %s (%v)", c.URL, err)
@@ -100,4 +102,158 @@ func (c *Client) Status() Status {
 	}
 	s.Reachable = true
 	return s
+}
+
+// ---- thought cycles ----------------------------------------------------------------
+
+type Action struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type CycleRequest struct {
+	CycleID  string    `json:"cycle_id"`
+	Identity string    `json:"identity"`
+	Source   string    `json:"source"`
+	Request  string    `json:"request"`
+	Context  string    `json:"context"`
+	History  []Message `json:"history,omitempty"`
+	Actions  []Action  `json:"actions"`
+}
+
+type Spark struct {
+	Status     string   `json:"status"`
+	EventID    string   `json:"event_id"`
+	SparkID    string   `json:"spark_id"`
+	Rating     int      `json:"rating"`
+	Topic      string   `json:"topic"`
+	Outcome    string   `json:"outcome"`
+	TraceID    string   `json:"trace_id"`
+	ThoughtID  string   `json:"thought_id"`
+	Reason     string   `json:"reason"`
+	RequestIDs []string `json:"model_request_ids"`
+	ElapsedMS  int64    `json:"elapsed_ms"`
+}
+
+type Prediction struct {
+	Text     string    `json:"text"`
+	Value    *float64  `json:"value"`
+	State    string    `json:"state"`
+	LockedAt time.Time `json:"locked_at"`
+	SHA256   string    `json:"sha256"`
+}
+
+type Proposal struct {
+	ModelRequestID string     `json:"model_request_id"`
+	Format         string     `json:"format"`
+	Reply          string     `json:"reply"`
+	Action         string     `json:"action"`
+	ActionNote     string     `json:"action_note"`
+	Why            string     `json:"why"`
+	Remember       string     `json:"remember"`
+	Prediction     Prediction `json:"prediction"`
+	Reasoning      string     `json:"model_reasoning"`
+	ElapsedMS      int64      `json:"elapsed_ms"`
+}
+
+type Outcome struct {
+	Status     string    `json:"status"` // EXECUTED | NOT_AUTHORIZED | NO_ACTION | FAILED
+	Value      *float64  `json:"value"`
+	Detail     string    `json:"detail"`
+	Executor   string    `json:"executor"`
+	ExecutedAt time.Time `json:"executed_at"`
+	Authorized string    `json:"authorized"`
+	ReceivedAt time.Time `json:"received_at,omitempty"`
+}
+
+type Evaluation struct {
+	Forecast    string    `json:"forecast"`
+	Goal        string    `json:"goal"`
+	Explanation string    `json:"explanation"`
+	Evaluator   string    `json:"evaluator"`
+	At          time.Time `json:"at"`
+}
+
+type Cycle struct {
+	CycleID       string            `json:"cycle_id"`
+	Identity      string            `json:"identity"`
+	Request       string            `json:"request"`
+	ReceivedAt    time.Time         `json:"received_at"`
+	Authorization map[string]string `json:"authorization"`
+	State         string            `json:"state"`
+	Problem       string            `json:"problem"`
+	Spark         Spark             `json:"spark"`
+	Proposal      *Proposal         `json:"proposal"`
+	Outcome       *Outcome          `json:"outcome"`
+	Evaluation    *Evaluation       `json:"evaluation"`
+}
+
+func (c *Client) post(path string, in any, out any) (int, error) {
+	body, _ := json.Marshal(in)
+	req, _ := http.NewRequest("POST", c.URL+path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Key)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("Thought Engine not reachable at %s (%v)", c.URL, err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err := json.Unmarshal(raw, out); err != nil {
+		return resp.StatusCode, fmt.Errorf("Thought Engine answered %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return resp.StatusCode, nil
+}
+
+func errorOf(raw any) string {
+	b, _ := json.Marshal(raw)
+	var e struct {
+		Error string `json:"error"`
+	}
+	json.Unmarshal(b, &e)
+	return e.Error
+}
+
+// StartCycle runs the engine's cycle up to the locked prediction.
+func (c *Client) StartCycle(in CycleRequest) (*Cycle, error) {
+	var cy Cycle
+	var raw map[string]any
+	code, err := c.post("/api/cycles", in, &raw)
+	if err != nil {
+		return nil, err
+	}
+	b, _ := json.Marshal(raw)
+	json.Unmarshal(b, &cy)
+	if cy.CycleID == "" {
+		return nil, fmt.Errorf("Thought Engine refused the cycle (%d): %s", code, errorOf(raw))
+	}
+	if code != 200 {
+		return &cy, fmt.Errorf("%s", firstNonEmpty(cy.Problem, fmt.Sprintf("Thought Engine answered %d", code)))
+	}
+	return &cy, nil
+}
+
+// FinishCycle reports the executor's outcome; the engine evaluates the locked prediction.
+func (c *Client) FinishCycle(id string, out Outcome) (*Cycle, error) {
+	var raw map[string]any
+	code, err := c.post("/api/cycles/"+id+"/outcome", out, &raw)
+	if err != nil {
+		return nil, err
+	}
+	var cy Cycle
+	b, _ := json.Marshal(raw)
+	json.Unmarshal(b, &cy)
+	if code != 200 {
+		return nil, fmt.Errorf("Thought Engine refused the outcome (%d): %s", code, errorOf(raw))
+	}
+	return &cy, nil
+}
+
+func firstNonEmpty(s ...string) string {
+	for _, x := range s {
+		if x != "" {
+			return x
+		}
+	}
+	return ""
 }

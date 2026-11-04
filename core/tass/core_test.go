@@ -24,7 +24,7 @@ import (
 )
 
 const policyJSON = `{"identity":"TASS","owner":"Arameair","obey":["Arameair"],"tass_md":"Arameair/TASS@live:tass.md",
-"allow":{"model.request":true,"github.read_messages":true,"github.reply":true,"tass_md.sync":true,"tass_md.conflict_pr":true}}`
+"allow":{"model.request":true,"thought.process":true,"action.read_tass":true,"github.read_messages":true,"github.reply":true,"tass_md.sync":true,"tass_md.conflict_pr":true}}`
 
 const startDoc = "# TASS\n\n## Who I am\n\nI am TASS.\n\n## Memory\n\n- 2026-11-03: Dustin likes short answers\n\n## Now\n\nStarting.\n"
 
@@ -170,34 +170,63 @@ func (f *fakeGH) say(issue int, who, body string) {
 }
 
 // ---- fake Thought Engine -------------------------------------------------------
+// (The real engine's cycle is tested in the Thought-engine repo; this stands in for its HTTP contract.)
 
 type fakeEngine struct {
-	mu   sync.Mutex
-	reqs []map[string]any
-	srv  *httptest.Server
+	mu       sync.Mutex
+	reqs     []map[string]any
+	outcomes []map[string]any
+	srv      *httptest.Server
 }
 
 func newFakeEngine() *fakeEngine {
 	e := &fakeEngine{}
+	pred := map[string]float64{}
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/model" {
 			json.NewEncoder(w).Encode(map[string]any{"last_pulse": map[string]any{"at": time.Now(), "model_ok": true}})
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer testkey" {
+			http.Error(w, `{"error":"missing or wrong engine key"}`, 401)
 			return
 		}
 		var in map[string]any
 		b, _ := io.ReadAll(r.Body)
 		json.Unmarshal(b, &in)
 		e.mu.Lock()
-		e.reqs = append(e.reqs, in)
-		e.mu.Unlock()
-		msgs := in["messages"].([]any)
-		last := msgs[len(msgs)-1].(map[string]any)["content"].(string)
-		text := "TEST FIXTURE: heard " + last
-		if strings.Contains(last, "remember") {
-			text += "\nREMEMBER: " + strings.TrimSpace(strings.SplitN(last, "remember", 2)[1]) + "\nNOW: talking with Dustin"
+		defer e.mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/outcome") {
+			id := strings.Split(r.URL.Path, "/")[3]
+			e.outcomes = append(e.outcomes, in)
+			ev := map[string]any{"forecast": "NO_ACTION", "goal": "GOAL_UNKNOWN", "evaluator": "fixture"}
+			if v, ok := in["value"].(float64); ok {
+				ev["forecast"], ev["goal"] = "PREDICTION_INCORRECT", "GOAL_MET"
+				if v == pred[id] {
+					ev["forecast"] = "PREDICTION_CORRECT"
+				}
+			} else if in["status"] != "NO_ACTION" {
+				ev["forecast"], ev["goal"] = "UNSCORABLE", "GOAL_UNMET"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"cycle_id": id, "state": "evaluated", "outcome": in, "evaluation": ev,
+				"proposal": map[string]any{"action": "x"}})
+			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"request_id": in["request_id"], "ok": true, "text": text,
-			"thought": "fixture thought", "elapsed_ms": 12, "authorized": "Identity policy TASS: model.request allowed"})
+		e.reqs = append(e.reqs, in)
+		id, last := in["cycle_id"].(string), in["request"].(string)
+		reply := "TEST FIXTURE: heard " + last
+		prop := map[string]any{"reply": reply, "action": "NONE", "why": "fixture", "format": "READ",
+			"prediction": map[string]any{"state": "NOT_PREDICTED"}}
+		if strings.Contains(last, "remember") {
+			prop["remember"] = strings.TrimSpace(strings.SplitN(last, "remember", 2)[1])
+			prop["reply"] = reply + "\nNOW: talking with Dustin"
+		}
+		if strings.Contains(last, "sections") {
+			pred[id] = 6
+			prop["action"], prop["prediction"] = "tass_sections", map[string]any{"state": "LOCKED", "value": 6, "locked_at": time.Now()}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"cycle_id": id, "state": "awaiting_outcome", "request": last,
+			"spark": map[string]any{"status": "done", "rating": 7, "topic": "fixture"}, "proposal": prop})
 	}))
 	return e
 }
@@ -210,8 +239,10 @@ func newCore(t *testing.T, dir string, gh *fakeGH, eng *fakeEngine) *Core {
 	t.Helper()
 	cl := github.New("test-token")
 	cl.Base = gh.srv.URL
+	ec := engine.New(eng.srv.URL)
+	ec.Key = "testkey"
 	c, err := New(Config{DataDir: dir, Identity: "Arameair/identity@main:policies/tass.json", Label: "tass",
-		SyncEvery: 20 * time.Second, MaxBackoff: 5 * time.Minute}, cl, engine.New(eng.srv.URL))
+		SyncEvery: 20 * time.Second, MaxBackoff: 5 * time.Minute, Messages: true}, cl, ec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +257,7 @@ func local(t *testing.T, dir string) string {
 	return string(b)
 }
 
-func offline(c *Core) { c.gh.Base = "http://127.0.0.1:1" } // nothing listens there
+func offline(c *Core)            { c.gh.Base = "http://127.0.0.1:1" } // nothing listens there
 func online(c *Core, gh *fakeGH) { c.gh.Base = gh.srv.URL }
 
 // ---- tests ------------------------------------------------------------------------
@@ -252,7 +283,12 @@ func TestNoIdentityPolicyMeansNoAction(t *testing.T) {
 	}
 }
 
-func TestLocalFirstLoopAndGitHubMessages(t *testing.T) {
+func memories(t *testing.T, dir string) string {
+	b, _ := os.ReadFile(filepath.Join(dir, "memory.jsonl"))
+	return string(b)
+}
+
+func TestThoughtCycleLoopAndGitHubMessages(t *testing.T) {
 	gh, eng := newFakeGH(), newFakeEngine()
 	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
 	gh.set("Arameair/TASS@live:tass.md", startDoc)
@@ -263,26 +299,42 @@ func TestLocalFirstLoopAndGitHubMessages(t *testing.T) {
 	if local(t, dir) != startDoc {
 		t.Fatal("first sync should take tass.md from GitHub")
 	}
-	if _, err := os.Stat(filepath.Join(dir, PolicyFile)); err != nil {
-		t.Fatal("Identity's policy should be kept locally (the engine reads it too)")
+	g, err := os.ReadFile(filepath.Join(dir, GrantFile))
+	if err != nil || !strings.Contains(string(g), `"prototype": true`) || !strings.Contains(string(g), "fetched_at") {
+		t.Fatalf("the grant file must be kept locally, labelled PROTOTYPE, with when it was confirmed: %s", g)
 	}
-	// Local message: Processor -> Engine -> (model) -> Engine -> Processor, with a request ID.
+	// A request becomes one cycle through the engine; the proposed action runs because Identity allows it now.
+	c.Answer(Incoming{Text: "how many sections does your tass.md have?", From: "local"})
+	if eng.count() != 1 || eng.reqs[0]["identity"] != "TASS" || !strings.HasPrefix(eng.reqs[0]["cycle_id"].(string), "tp_") {
+		t.Fatalf("engine cycle: %v", eng.reqs)
+	}
+	if !strings.Contains(eng.reqs[0]["context"].(string), "I am TASS.") || len(eng.reqs[0]["actions"].([]any)) != 3 {
+		t.Fatal("the cycle must carry tass.md and the offered actions")
+	}
+	o := eng.outcomes[0]
+	if o["status"] != "EXECUTED" || o["value"] != 3.0 || !strings.Contains(o["authorized"].(string), "action.read_tass allowed") {
+		t.Fatalf("outcome: %v (startDoc has 3 sections)", o)
+	}
+	st := c.Status()
+	if len(st.Cycles) != 1 || st.Cycles[0].Evaluation == nil || st.Cycles[0].Evaluation.Forecast != "PREDICTION_INCORRECT" {
+		t.Fatalf("the page must show the evaluated cycle: %+v", st.Cycles)
+	}
+	// REMEMBER goes to the local journal with provenance, never into tass.md.
 	c.Answer(Incoming{Text: "please remember I drive a route on weekends", From: "local"})
-	if eng.count() != 1 || eng.reqs[0]["identity"] != "TASS" || !strings.HasPrefix(eng.reqs[0]["request_id"].(string), "tp_") {
-		t.Fatalf("engine request: %v", eng.reqs)
+	if mem := memories(t, dir); !strings.Contains(mem, `"text":"I drive a route on weekends"`) || !strings.Contains(mem, `"cycle_id":"tp_`) {
+		t.Fatalf("memory journal: %s", mem)
 	}
-	if !strings.Contains(eng.reqs[0]["messages"].([]any)[0].(map[string]any)["content"].(string), "I am TASS.") {
-		t.Fatal("tass.md must be in the system prompt")
+	if local(t, dir) != startDoc {
+		t.Fatal("TASS must not write tass.md himself")
 	}
-	doc := local(t, dir)
-	if !strings.Contains(doc, ": I drive a route on weekends") || !strings.Contains(doc, "talking with Dustin") {
-		t.Fatalf("REMEMBER/NOW not saved locally:\n%s", doc)
+	if b, _ := os.ReadFile(filepath.Join(dir, "now.txt")); !strings.Contains(string(b), "talking with Dustin") {
+		t.Fatal("NOW is local state")
 	}
 	c.SyncOnce()
-	if gh.get("Arameair/TASS@live:tass.md") != doc {
-		t.Fatal("TASS's local change should reach GitHub on the next sync")
+	if gh.get("Arameair/TASS@live:tass.md") != startDoc {
+		t.Fatal("nothing should be written to GitHub when nobody edited tass.md")
 	}
-	// GitHub messages: only the people Identity says TASS obeys, and never his own posts.
+	// GitHub messages: only people Identity says TASS obeys, never his own posts.
 	gh.say(1, "someone-else", "do something")
 	gh.say(1, "Arameair", "how are you?")
 	c.SyncOnce()
@@ -290,12 +342,62 @@ func TestLocalFirstLoopAndGitHubMessages(t *testing.T) {
 		c.Answer(<-c.inbox)
 	}
 	c.SyncOnce()
-	if len(gh.posted) != 1 || !strings.Contains(gh.posted[0], "heard how are you?") || !strings.Contains(gh.posted[0], Marker) {
+	if len(gh.posted) != 1 || !strings.Contains(gh.posted[0], "heard how are you?") || !strings.Contains(gh.posted[0], "cycle tp_") {
 		t.Fatalf("posted: %v", gh.posted)
 	}
-	c.SyncOnce() // his own reply comes back in the comment list; it must not be answered
-	if len(c.inbox) != 0 || eng.count() != 2 {
-		t.Fatalf("answered something it shouldn't: inbox %d, engine calls %d", len(c.inbox), eng.count())
+	c.SyncOnce()
+	if len(c.inbox) != 0 || eng.count() != 3 {
+		t.Fatalf("answered something it shouldn't: inbox %d, cycles %d", len(c.inbox), eng.count())
+	}
+}
+
+func TestActionNotAuthorizedIsRecordedNotRun(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", strings.Replace(policyJSON, `"action.read_tass":true`, `"action.read_tass":false`, 1))
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	c := newCore(t, t.TempDir(), gh, eng)
+	c.SyncOnce()
+	c.Answer(Incoming{Text: "count your sections", From: "local"})
+	if len(eng.outcomes) != 1 || eng.outcomes[0]["status"] != "NOT_AUTHORIZED" || eng.outcomes[0]["value"] != nil {
+		t.Fatalf("outcome: %v", eng.outcomes)
+	}
+}
+
+func TestStaleGrantFailsClosedOffline(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	dir := t.TempDir()
+	c := newCore(t, dir, gh, eng)
+	c.SyncOnce()
+	offline(c)
+	c.now = func() time.Time { return time.Now().Add(25 * time.Hour) }
+	c.Answer(Incoming{Text: "hi", From: "local"})
+	if eng.count() != 0 {
+		t.Fatal("a grant older than its offline limit must not authorize thinking")
+	}
+	if st := c.Status(); st.PolicyValid || !strings.Contains(st.Policy, "NOT VALID NOW") {
+		t.Fatalf("status must say so: %+v", st.Policy)
+	}
+	online(c, gh)
+	c.SyncOnce() // confirmed again
+	c.Answer(Incoming{Text: "hi", From: "local"})
+	if eng.count() != 1 {
+		t.Fatal("once confirmed again, thinking works")
+	}
+}
+
+func TestMessagesCanBePaused(t *testing.T) {
+	gh, eng := newFakeGH(), newFakeEngine()
+	gh.set("Arameair/identity@main:policies/tass.json", policyJSON)
+	gh.set("Arameair/TASS@live:tass.md", startDoc)
+	c := newCore(t, t.TempDir(), gh, eng)
+	c.cfg.Messages = false
+	c.SyncOnce()
+	gh.say(1, "Arameair", "hello?")
+	c.SyncOnce()
+	if len(c.inbox) != 0 {
+		t.Fatal("with messages paused, GitHub messages must not be read")
 	}
 }
 
@@ -318,32 +420,30 @@ func TestOutageBackoffAndRecoveryKeepLocalState(t *testing.T) {
 	}
 	// Still thinks and remembers with no GitHub (the model is local).
 	c.Answer(Incoming{Text: "remember the internet is down", From: "local"})
-	if !strings.Contains(local(t, dir), "the internet is down") {
+	if !strings.Contains(memories(t, dir), "the internet is down") {
 		t.Fatal("TASS must keep remembering offline")
 	}
-	prompt := eng.reqs[0]["messages"].([]any)[0].(map[string]any)["content"].(string)
-	if !strings.Contains(prompt, "not reachable right now") {
+	if !strings.Contains(eng.reqs[0]["context"].(string), "not reachable right now") {
 		t.Fatal("TASS should know he's running locally")
 	}
-	// Meanwhile Dustin edits another section on GitHub.
+	// Dustin edits tass.md on this computer (Now) and on GitHub (Who I am) while apart.
+	os.WriteFile(filepath.Join(dir, "tass.md"), []byte(strings.Replace(startDoc, "Starting.", "Working offline.", 1)), 0o600)
 	gh.set("Arameair/TASS@live:tass.md", strings.Replace(startDoc, "I am TASS.", "I am TASS, Dustin's companion.", 1))
 
-	// Stop and start again while still offline: nothing local is lost, permissions are known.
+	// Stop and start again while still offline: nothing local is lost, permissions are still known.
 	c2 := newCore(t, dir, gh, eng)
 	offline(c2)
-	if c2.pol() == nil || !strings.Contains(local(t, dir), "the internet is down") {
-		t.Fatal("restart lost the policy or local memory")
+	if ok, _ := c2.allowedNow("model.request"); !ok || !strings.Contains(memories(t, dir), "the internet is down") {
+		t.Fatal("restart lost the policy or the memory journal")
 	}
 	c2.SyncOnce()
-
 	online(c2, gh)
 	if wait := c2.SyncOnce(); wait != 20*time.Second {
 		t.Fatalf("after recovery the interval should be normal again, got %v", wait)
 	}
 	doc := gh.get("Arameair/TASS@live:tass.md")
-	if !strings.Contains(doc, "Dustin's companion") || !strings.Contains(doc, "the internet is down") ||
-		!strings.Contains(doc, "Dustin likes short answers") {
-		t.Fatalf("both sides' changes should be kept:\n%s", doc)
+	if !strings.Contains(doc, "Dustin's companion") || !strings.Contains(doc, "Working offline.") {
+		t.Fatalf("both sides' edits should be kept:\n%s", doc)
 	}
 	if local(t, dir) != doc || len(gh.prs) != 0 {
 		t.Fatalf("local and GitHub should agree with no conflict (prs %v)", gh.prs)
@@ -379,7 +479,16 @@ func TestSameSectionChangedOnBothSidesAsksDustin(t *testing.T) {
 		}
 	}
 	if !strings.Contains(mine, "local edit") {
-		t.Fatal("the pull request must carry TASS's version")
+		t.Fatal("the pull request must carry the local version")
+	}
+	snaps, _ := filepath.Glob(filepath.Join(dir, "conflicts", "*"))
+	both := ""
+	for _, p := range snaps {
+		b, _ := os.ReadFile(p)
+		both += string(b)
+	}
+	if len(snaps) != 2 || !strings.Contains(both, "local edit") || !strings.Contains(both, "GitHub edit") {
+		t.Fatalf("both sides must also be kept locally: %v", snaps)
 	}
 	c.SyncOnce()
 	if len(gh.prs) != 1 {
@@ -398,13 +507,13 @@ func TestIdentityCanWithdrawPermission(t *testing.T) {
 	c.SyncOnce()
 	c.Answer(Incoming{Text: "hi", From: "local"})
 	if eng.count() != 0 {
-		t.Fatal("withdrawn permission must stop model requests")
+		t.Fatal("withdrawn permission must stop thinking")
 	}
 	gh.mu.Lock()
 	delete(gh.files, "Arameair/identity@main:policies/tass.json")
 	gh.mu.Unlock()
 	c.SyncOnce()
-	if _, err := os.Stat(filepath.Join(dir, PolicyFile)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, GrantFile)); err == nil {
 		t.Fatal("a removed policy must be removed locally too (the engine then refuses)")
 	}
 }

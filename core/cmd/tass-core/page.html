@@ -9,71 +9,114 @@
           --think:#b892ff; --sync:#f2b866; --bad:#ff8a80; --mono: ui-monospace, Consolas, monospace; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
-  header { display:flex; gap:12px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-  h1 { font:500 22px Georgia, serif; margin:0; } h1 small { color:var(--dim); font:12px system-ui; margin-left:8px; }
+  header { display:flex; gap:10px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { font:500 22px Georgia, serif; margin:0 8px 0 0; } h1 small { color:var(--dim); font:12px system-ui; margin-left:8px; }
+  h2 { font:500 17px Georgia, serif; margin:0 0 8px; } h2 small { color:var(--dim); font:12px system-ui; margin-left:6px; }
   .chip { font-size:12px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim); }
-  .chip.ok::before, .chip.off::before { content:"● "; } .chip.ok::before { color:var(--tass); } .chip.off::before { color:var(--bad); }
-  main { display:grid; grid-template-columns: 1fr 420px; gap:16px; padding:16px 20px; }
-  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .chip.ok::before, .chip.off::before, .chip.unk::before { content:"● "; } .chip.ok::before { color:var(--tass); }
+  .chip.off::before { color:var(--bad); } .chip.unk::before { color:var(--dim); }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:16px 20px; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
-  #log { height:58vh; overflow-y:auto; }
+  #log { height:44vh; overflow-y:auto; }
   .ev { margin:0 0 10px; white-space:pre-wrap; }
   .ev .w { font-size:12px; color:var(--dim); }
   .ev.you .w { color:var(--you); } .ev.tass .w { color:var(--tass); }
-  .ev.thought { color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:160px; overflow:auto; }
+  .ev.thought { color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:140px; overflow:auto; }
   .ev.sync, .ev.github { color:var(--sync); font-size:13px; } .ev.problem { color:var(--bad); font-size:13px; }
-  #live { display:none; color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:140px; overflow:auto; margin-bottom:8px; white-space:pre-wrap; }
   form { display:flex; gap:8px; margin-top:10px; }
-  textarea { flex:1; height:60px; resize:none; font:inherit; color:var(--text); background:#0f1418; border:1px solid var(--line); border-radius:9px; padding:8px 10px; }
+  textarea { flex:1; height:56px; resize:none; font:inherit; color:var(--text); background:#0f1418; border:1px solid var(--line); border-radius:9px; padding:8px 10px; }
   button { font:inherit; color:var(--text); background:#1d252d; border:1px solid var(--line); border-radius:9px; padding:0 16px; cursor:pointer; }
-  pre { white-space:pre-wrap; font:12.5px/1.5 var(--mono); margin:0; max-height:70vh; overflow:auto; }
+  pre { white-space:pre-wrap; font:12.5px/1.5 var(--mono); margin:0; max-height:34vh; overflow:auto; }
   .dim { color:var(--dim); font-size:12.5px; }
+  .cycle { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:0 0 10px; background:#12181d; }
+  .cycle .head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; font-size:13px; color:var(--dim); }
+  .cycle .head b { color:var(--text); font-weight:500; }
+  .steps { display:grid; grid-template-columns: 150px 1fr; gap:3px 10px; margin-top:8px; font-size:13px; }
+  .steps .k { color:var(--dim); }
+  .tag { font:11.5px var(--mono); padding:1px 7px; border-radius:6px; border:1px solid var(--line); }
+  .tag.good { color:var(--tass); border-color:#2e5a49; } .tag.bad { color:var(--bad); border-color:#5a2e2e; } .tag.unk { color:var(--dim); }
 </style>
 </head>
 <body>
 <header>
-  <h1>TASS <small>core · thinks on this computer, syncs with GitHub</small></h1>
-  <span id="engine" class="chip">Thought Engine</span><span id="model" class="chip">model</span><span id="pulse" class="chip">pulse</span>
-  <span id="gh" class="chip">GitHub</span><span id="busy" class="chip">listening</span>
+  <h1>TASS <small>core · thinks on this computer</small></h1>
+  <span id="engine" class="chip unk">Thought Engine</span><span id="model" class="chip unk">Nemotron</span>
+  <span id="pulse" class="chip unk">pulse</span><span id="gh" class="chip unk">GitHub</span><span id="busy" class="chip">listening</span>
 </header>
 <main>
   <section class="card">
+    <h2>Talk <small>works without internet</small></h2>
     <div id="log"></div>
-    <div id="live"></div>
-    <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Works without internet."></textarea><button>Send</button></form>
+    <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Try: how many sections does your tass.md have?"></textarea><button>Send</button></form>
   </section>
   <section class="card">
-    <div class="dim" id="policy">Identity policy</div>
-    <div class="dim" id="lastreq" style="margin:4px 0 10px"></div>
-    <div class="dim" id="where">tass.md</div>
+    <h2>Thought cycles <small>event → Spark → Trace/Thought → proposal → locked prediction → authorization → result → evaluation</small></h2>
+    <div id="cycles"><div class="dim">No cycles yet. Say something to TASS.</div></div>
+  </section>
+  <section class="card">
+    <h2>Identity <small>decides before anything runs</small></h2>
+    <div id="policy" class="dim"></div>
+    <h2 style="margin-top:14px">Memory journal <small>local, with where each line came from</small></h2>
+    <div id="mem" class="dim">(none yet)</div>
+  </section>
+  <section class="card">
+    <h2>tass.md <small id="where">local copy TASS runs on · GitHub keeps the reviewed record</small></h2>
     <pre id="md"></pre>
   </section>
 </main>
 <script>
+const TOKEN = "__PAGE_TOKEN__";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const who = {you: "You", tass: "TASS", thought: "", sync: "", github: "", problem: ""};
-let shown = 0;
-function ago(t) { const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 60 ? s + " s ago" : Math.round(s / 60) + " min ago"; }
+const who = {you: "You", tass: "TASS"};
+let shown = -1, shownCycles = "";
+function ago(t) { if (!t || t.startsWith("0001")) return "never"; const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 60 ? s + " s ago" : Math.round(s / 60) + " min ago"; }
+const U = v => (v === undefined || v === null || v === "") ? '<span class="tag unk">UNKNOWN</span>' : esc(v);
+function tag(v) {
+  if (!v) return '<span class="tag unk">UNKNOWN</span>';
+  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
+  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed/.test(v);
+  return `<span class="tag ${good ? "good" : bad ? "bad" : "unk"}">${esc(v)}</span>`;
+}
+function cycleHTML(c) {
+  const p = c.proposal, o = c.outcome, e = c.evaluation, s = c.spark || {};
+  const auth = Object.entries(c.authorization || {}).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join("<br>");
+  const spark = s.status ? `${tag(s.status)} importance ${s.rating}/10 · topic ${U(s.topic)} · ${esc(s.outcome || "")}${s.trace_id ? " · Trace " + esc(s.trace_id.slice(0, 8)) : ""}${s.thought_id ? " · Thought " + esc(s.thought_id.slice(0, 8)) : ""}${s.reason ? `<div class="dim">${esc(s.reason)}</div>` : ""}` : U();
+  return `<div class="cycle"><div class="head"><b>${esc(c.cycle_id)}</b> · ${new Date(c.received_at).toLocaleTimeString()} · ${tag(c.state)}${c.problem ? ` <span style="color:var(--bad)">${esc(c.problem)}</span>` : ""}</div>
+  <div class="steps">
+    <span class="k">Event</span><span>${esc(c.request)}</span>
+    <span class="k">Authorization</span><span class="dim">${auth || '<span class="tag unk">UNKNOWN</span>'}</span>
+    <span class="k">Spark → Trace/Thought</span><span>${spark}</span>
+    <span class="k">Reply</span><span>${p ? esc(p.reply) : U()}${p && p.format === "UNREADABLE" ? ' <span class="tag bad">format UNREADABLE</span>' : ""}</span>
+    <span class="k">Proposed action</span><span>${p ? esc(p.action) + (p.action_note ? ` <span class="dim">(${esc(p.action_note)})</span>` : "") : U()}${p && p.why ? `<div class="dim">why: ${esc(p.why)}</div>` : ""}</span>
+    <span class="k">Prediction</span><span>${p ? `${tag(p.prediction.state)} ${esc(p.prediction.value ?? p.prediction.text ?? "")} <span class="dim">locked ${p.prediction.locked_at && !p.prediction.locked_at.startsWith("0001") ? new Date(p.prediction.locked_at).toLocaleTimeString() + "." + String(new Date(p.prediction.locked_at).getMilliseconds()).padStart(3, "0") : "—"} · sha ${esc((p.prediction.sha256 || "").slice(0, 12))}</span>` : U()}</span>
+    <span class="k">Action result</span><span>${o ? `${tag(o.status)} ${o.value ?? ""} <span class="dim">${esc(o.detail || "")}${o.executed_at && !o.executed_at.startsWith("0001") ? " · ran " + new Date(o.executed_at).toLocaleTimeString() + "." + String(new Date(o.executed_at).getMilliseconds()).padStart(3, "0") : ""}</span>` : U()}</span>
+    <span class="k">Evaluation</span><span>${e ? `${tag(e.forecast)} ${tag(e.goal)}<div>${esc(e.explanation)}</div><div class="dim">${esc(e.evaluator)}</div>` : U()}</span>
+    <span class="k">Timing</span><span class="dim">Spark ${s.elapsed_ms ?? "?"} ms · plan ${p ? p.elapsed_ms : "?"} ms · model requests ${esc([...(s.model_request_ids || []), p ? p.model_request_id : ""].filter(Boolean).join(", ")) || "—"}</span>
+  </div></div>`;
+}
 async function refresh() {
   let st;
-  try { st = await (await fetch("/api/status")).json(); } catch { $("gh").className = "chip off"; $("gh").textContent = "core not reachable"; return; }
+  try {
+    const r = await fetch("/api/status", {headers: {"X-TASS-Token": TOKEN}});
+    if (r.status === 401) { $("busy").textContent = "this page is from before a restart: reload it"; return; }
+    st = await r.json();
+  } catch { $("engine").className = "chip off"; $("engine").textContent = "tass-core not reachable"; return; }
   const e = st.engine || {}, p = e.last_pulse;
   $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
-  $("model").className = "chip " + (p && p.model_ok ? "ok" : "off");
-  $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron —"; $("model").title = (p && p.error) || "";
-  $("pulse").textContent = p ? "engine pulse " + ago(p.at) : "pulse —";
-  const synced = st.last_sync && !st.last_sync.startsWith("0001");
+  $("model").className = "chip " + (p ? (p.model_ok ? "ok" : "off") : "unk");
+  $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron UNKNOWN"; $("model").title = (p && p.error) || "";
+  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "engine pulse " + ago(p.at) : "pulse UNKNOWN";
   $("gh").className = "chip " + (st.github_online ? "ok" : "off");
-  $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) : (synced ? "GitHub: not syncing, TASS runs locally" : "GitHub —");
+  $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) + (st.github_messages ? "" : " · messages paused") : "GitHub not syncing: TASS runs locally";
   $("gh").title = st.sync_problem || "";
   $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
-  $("policy").textContent = "Identity: " + st.policy;
-  const r = st.last_request;
-  $("lastreq").textContent = r ? `Last request ${r.request_id}: ${r.ok ? "ok" : "failed"} in ${(r.elapsed_ms / 1000).toFixed(1)} s · ${r.authorized}${r.error ? " · " + r.error : ""}` : "";
-  $("where").textContent = "tass.md · TASS runs on this local copy; GitHub keeps the versioned record";
-  $("md").textContent = st.tass_md || "(not created yet)";
-  const live = $("live"); live.style.display = st.busy && st.thinking ? "block" : "none"; live.textContent = st.thinking.slice(-1500); live.scrollTop = 1e9;
+  $("policy").innerHTML = `${st.policy_valid_now ? '<span class="tag good">valid now</span>' : '<span class="tag bad">not valid now</span>'} ${esc(st.policy)}`;
+  $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
+  $("md").textContent = st.tass_md || "(not here yet: it comes from GitHub on the first sync)";
+  const cj = JSON.stringify(st.cycles || []);
+  if (cj !== shownCycles) { shownCycles = cj; if ((st.cycles || []).length) $("cycles").innerHTML = st.cycles.map(cycleHTML).join(""); }
   const evs = st.events || [];
   if (evs.length !== shown) {
     const keep = $("log").scrollTop + $("log").clientHeight >= $("log").scrollHeight - 30;
@@ -82,9 +125,9 @@ async function refresh() {
     if (keep) $("log").scrollTop = 1e9;
   }
 }
-$("f").onsubmit = async e => {
-  e.preventDefault(); const text = $("t").value.trim(); if (!text) return; $("t").value = "";
-  await fetch("/api/say", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+$("f").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("t").value.trim(); if (!text) return; $("t").value = "";
+  await fetch("/api/say", {method: "POST", headers: {"Content-Type": "application/json", "X-TASS-Token": TOKEN}, body: JSON.stringify({text})});
   refresh();
 };
 $("t").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("f").requestSubmit(); } };
