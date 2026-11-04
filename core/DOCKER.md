@@ -33,6 +33,7 @@ Nothing depends on the Python workspace, the liaison or the `tass-workspace` net
 cd core
 ./tass.sh check        # writes ~/.tass-app/app.env the first time; otherwise read-only
 nano ~/.tass-app/app.env   # MODEL_DIR + MODEL_FILE (your .gguf), or MODEL_MODE=external
+                           # GITHUB_REPO=owner/repo to connect GitHub (token from gh auth token)
 ./tass.sh check        # must end with "Ready"
 ./tass.sh start        # builds the pinned version, starts the 4 services, validates them
 ```
@@ -74,6 +75,21 @@ A failed update puts back the previous version **and** the data from the backup 
 - **External** (`MODEL_MODE=external`, `MODEL_NETWORK`, `MODEL_URL`): the engine joins that model's Docker network and nothing new starts.
   - On a PC where the workspace's Nemotron already runs: `MODEL_NETWORK=tass-workspace_default` and `MODEL_URL=http://model:8081`. That container isn't stopped or changed.
 
+## GitHub and the lessons loop
+
+Set `GITHUB_REPO` (and `GITHUB_BRANCH`, default `live`) in `~/.tass-app/app.env`. At start, `tass.sh` saves a token from `gh auth token` (or `GITHUB_TOKEN`) as `~/.tass-app/secrets/github_token` (0600). It's mounted read-only and is never in an image. Without `GITHUB_REPO`, everything stays on this computer.
+
+- **Document:** the entity's `tass.md` comes from the repo. The app syncs it every 20 s with ETags and a section-by-section merge. If both sides changed the same section, it opens a pull request instead of choosing. A repo without the file gets the entity's own starter, but a local starter is never merged over a real document.
+- **Lessons:** turn on **Work pulse every 20 seconds** and **Learn new lessons from GitHub** on the page (8795). Then each pulse:
+  1. Looks at `lessons/` in the repo. One request, usually a free 304 when nothing changed.
+  2. Downloads new or changed lessons and keeps them locally.
+  3. Hands **one** lesson at a time to the engine's pulse. The entity studies it **without** the expected answers.
+  4. The **app grades** the answers against each step's `Answer:`. A wrong answer means another try on a later pulse, up to 3; then the lesson is STUCK until you press **Try again**.
+  5. A lesson that passes waits for **Approve**. Approved, it's LEARNED: one line in `## Learned` of `tass.md`, synced to GitHub. The entity is given its learned lessons in conversation.
+- **The setting sticks.** The pulse comes back on by itself after every restart, as soon as you unlock Identity.
+- **Identity decides each step.** LOCKED means no GitHub sync, no lessons and no pulse.
+- **Lesson format:** `lessons/README.md` in the TASS repo (Teach / Check / Answer). The app never runs code from a lesson. Older code-cell lessons show up as "needs the workspace".
+
 ## The work pulse
 
 Every 20 s (`PULSE_EVERY`) the engine runs one tick: it observes pending work, decides, starts or continues one authorized job, observes results and reports. Each tick is a line in `~/.tass-app/data/engine/ticks.jsonl` and appears on the page.
@@ -106,7 +122,7 @@ See `docs/evidence/one-app-clean-host-20261104.txt` for the full run. "Fixture" 
 
 | Acceptance item | Fixture (sandbox) | CI | Owner's PC (real Nemotron) |
 | --- | --- | --- | --- |
-| Clean install: 4 services healthy, one start command | PASS | NOT RUN (CI builds only the core image) | NOT RUN |
+| Clean install: 4 services healthy, one start command | PASS (re-run on 8208895: 37/37) | NOT RUN (CI builds only the core image) | NOT RUN |
 | Exactly one model; preflight refuses a second; external mode starts none | PASS | NOT RUN | NOT RUN |
 | No Python workspace, liaison or tass-workspace dependency | PASS | — | NOT RUN |
 | No keys inside any image (every layer searched) | PASS | — | NOT RUN |
@@ -122,6 +138,19 @@ See `docs/evidence/one-app-clean-host-20261104.txt` for the full run. "Fixture" 
 
 Found and fixed by this run: a failed update overwrote the rollback target (`tass.sh` now keeps it).
 
+Lessons loop (`docs/evidence/lessons-loop-clean-host-20261104.txt`, TEST FIXTURE GitHub and model): **23 PASS, 0 FAIL**:
+- token handling;
+- document from the repo;
+- chat;
+- setting off → nothing looked at;
+- setting on → the pulse runs, 3 lessons found, studied one at a time, graded by the app, one retry after a wrong answer;
+- approval → Learned on GitHub;
+- restart → the pulse comes back on by itself and nothing is studied again;
+- a lesson added later is picked up;
+- 304s when nothing changed.
+
+Against your real GitHub and Nemotron: NOT RUN.
+
 ## Owner acceptance (on your PC, about 15 minutes)
 
 Your existing containers aren't touched. Because your workspace's Nemotron is already running, use external mode so the PC still runs ONE model.
@@ -136,11 +165,14 @@ sudo -v; ./tass.sh start               # don't run the script itself with sudo: 
                                        # ends with "PASS … Identity NO_ENTITY"
 ```
 
+In `app.env`, also set `GITHUB_REPO=Arameair/TASS` (branch `live`). Merge TASS PR #23 (the starter lessons) first, or the pulse won't find any lessons.
+
 1. Open http://127.0.0.1:8795: the red bar says NO_ENTITY and BLOCKED.
-2. Open http://127.0.0.1:8796 and create an entity with a **new** name and passphrase. Not your TASS: this proves a downloader gets their own.
+2. Open http://127.0.0.1:8796 and create your entity: a name and a passphrase only you know. With `GITHUB_REPO=Arameair/TASS`, its document is TASS's `tass.md` from `live`, so name it TASS. The download never does this for anyone: it's your choice on your PC.
 3. Back on 8795, say "hi". Expected: a real Nemotron reply and a full thought cycle.
 4. In Work pulse, queue "count your sections", press **Start**, and watch at least 10 ticks. Expected: START once, then CONTINUE while it runs, then OBSERVED. Then **Pause**.
-5. Run `./tass.sh stop && ./tass.sh start`. Expected: same entity, LOCKED and BLOCKED until you unlock; earlier ticks and jobs still listed.
-6. Run `./tass.sh status` and paste the output into #44 with PASS or FAIL for each step.
+5. In **Learning**, tick both switches. Within a minute or two, the three lessons appear and get studied one by one. Read the answers, then press **Approve** on each lesson that passed. Check that `tass.md` on `live` now has a `## Learned` section.
+6. Run `./tass.sh stop && ./tass.sh start`. Expected: same entity, LOCKED and BLOCKED until you unlock. After unlock, the pulse comes back on by itself, and learned lessons stay learned.
+7. Run `./tass.sh status` and paste the output into #44 with PASS or FAIL for each step.
 
 To remove the test app afterwards, run `./tass.sh stop`. Your data stays in `~/.tass-app` until you delete it yourself.
