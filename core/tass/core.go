@@ -934,6 +934,9 @@ func (c *Core) Answer(m Incoming) {
 			return
 		}
 	}
+	if c.handleLessonChat(m) {
+		return
+	}
 
 	// @identity-test is a reference lookup, NEVER an execution request.
 	// No GitHub sync, write, notebook kernel, or action capability is enabled.
