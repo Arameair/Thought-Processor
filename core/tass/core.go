@@ -880,8 +880,13 @@ func (c *Core) Answer(m Incoming) {
 	}()
 
 	id := engine.NewRequestID()
+	actions := Actions
+	if lessonContext != "" {
+		// Lesson retrieval cannot select any executable tool, even a read-entity tool.
+		actions = nil
+	}
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
-		Request: m.Text, Context: c.context(online) + lessonContext, History: hist, Actions: Actions})
+		Request: m.Text, Context: c.context(online) + lessonContext, History: hist, Actions: actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
 	if err != nil {
 		rec["error"] = err.Error()
@@ -912,6 +917,10 @@ func (c *Core) Answer(m Incoming) {
 	// The proposed action runs only if Identity allows it at this moment.
 	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
 	if prop.Action != "NONE" {
+		if lessonContext != "" {
+			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: "reference-only GitHub lesson: no execution",
+				Executor: "thought-processor"}
+		} else {
 		// A model proposal is never an authorization. Independently require the
 		// matching, persisted, locked numeric prediction before the Identity check.
 		digest, hashErr := hex.DecodeString(prop.Prediction.SHA256)
@@ -932,6 +941,7 @@ func (c *Core) Answer(m Incoming) {
 				out = engine.Outcome{Status: "FAILED", Detail: err.Error(), Executor: "thought-processor", Authorized: why}
 			}
 		}
+		} // only a normal separately authorized action may reach the executor
 	}
 	if done, err := c.engine.FinishCycle(id, out); err != nil {
 		c.event("problem", "Couldn't record the outcome of cycle "+id+": "+err.Error())
