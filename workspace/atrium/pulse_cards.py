@@ -476,6 +476,8 @@ class PulseCoordinator:
             try:
                 worker.start()
             except RuntimeError as exc:
+                self._workers.pop(chosen[1], None)
+                self._cancels.pop(chosen[1], None)
                 self._failure(chosen[0], chosen[1], "Worker could not launch: " + str(exc))
 
     def _failure(self, card_id, job_id, message):
