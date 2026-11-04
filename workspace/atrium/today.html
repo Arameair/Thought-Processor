@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="playground-csrf" content="__PLAYGROUND_CSRF__">
+  <title>Atrium / Daily Mission — Nov 4</title>
+  <link rel="stylesheet" href="/assets/today.css">
+  <script defer src="/assets/today.js"></script>
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="topbar">
+    <a class="wordmark" href="/today" aria-label="Atrium Daily Mission"><span class="asterisk">✳</span><span><strong>ATRIUM</strong><small>THE DAILY WORKSTATION</small></span></a>
+    <nav aria-label="Workspace navigation">
+      <a href="/today" class="active">Today's desk</a>
+      <a href="/build">Build Room</a>
+      <a href="/explore">Service map</a>
+      <a href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer">Workshop ↗</a>
+    </nav>
+    <span class="edition">NOV 04 · EXPERIMENT</span>
+  </header>
+  <main>
+    <section class="headline">
+      <div class="headline-text">
+        <span class="kicker"><span class="dot"></span> DAY 01 / FOUNDATION CLEANUP</span>
+        <h1>Make what works <em>repeatable.</em></h1>
+        <p>Today's mission is to preserve the current TASS runtime, prove one real cognition cycle, and record what is known before reorganizing repositories. No new memory system. No decorative green lights.</p>
+        <div class="hero-actions">
+          <button id="refreshLive" class="primary" type="button">↻ Check live connections</button>
+          <button id="copyHandoff" class="secondary" type="button">Copy clean handoff</button>
+          <a class="subtle-link" href="https://github.com/Arameair/TASS/issues/21" target="_blank" rel="noopener noreferrer">Team runbook ↗</a>
+        </div>
+      </div>
+      <aside class="principle">
+        <span class="caps">OPERATING RULE</span>
+        <strong>GitHub defines the approved plan. Local tests reveal what actually happened.</strong>
+        <span id="boardSaveState" role="status">Reading local task notes…</span>
+      </aside>
+    </section>
+
+    <section class="reality" aria-labelledby="realityTitle">
+      <div class="section-label"><h2 id="realityTitle">01 / LIVE REALITY</h2><span id="lastChecked">Not checked yet</span></div>
+      <div class="reality-grid">
+        <article class="signal" id="workshopSignal"><span>WORKSHOP</span><strong id="workshopValue">UNKNOWN</strong><small id="workshopDetail">Waiting for direct response</small></article>
+        <article class="signal" id="modelSignal"><span>LOCAL MODEL</span><strong id="modelValue">UNKNOWN</strong><small id="modelDetail">Not yet confirmed</small></article>
+        <article class="signal" id="identitySignal"><span>TASS MIND SOURCE</span><strong id="identityValue">UNKNOWN</strong><small id="identityDetail">A mirror is not a verified grant</small></article>
+        <article class="signal"><span>THOUGHT ENGINE</span><strong>NOT VERIFIED</strong><small>This bridge does not prove Engine integration</small></article>
+        <article class="signal"><span>DOCKER &amp; GRANTS</span><strong>NOT OBSERVED</strong><small>Use the read-only home inventory first</small></article>
+      </div>
+      <p class="reality-foot" id="runtimeFoot">Checking the Workshop does not inspect Docker, prove permission grants, or establish a genuine cognition cycle.</p>
+    </section>
+
+    <div class="columns">
+      <section class="tasks panel" aria-labelledby="tasksTitle">
+        <div class="panel-head"><div><span class="caps">02 / FOCUS</span><h2 id="tasksTitle">Today's work</h2></div><span class="count" id="taskCount">6</span></div>
+        <p class="hint">Select one task. A recorded PASS is an owner report, not independent verification.</p>
+        <div id="taskList" class="task-list" role="list"><p class="muted">Loading the task ledger…</p></div>
+        <form id="addTaskForm" class="add-task">
+          <label for="newTitle">Add an idea or next task</label>
+          <input id="newTitle" name="newTitle" type="text" maxlength="120" placeholder="Describe one small test or idea" required>
+          <button class="secondary" type="submit">+ Add to our work</button>
+        </form>
+        <p class="muted small">Tasks save in Atrium's dedicated local Docker volume, not GitHub or TASS memory.</p>
+      </section>
+
+      <section class="focus panel" aria-labelledby="focusTitle">
+        <div class="panel-head"><div><span class="caps">03 / WORK TOGETHER</span><h2 id="focusTitle">One task at a time</h2></div><span class="count">OWNER CONTROLLED</span></div>
+        <form id="taskForm">
+          <label for="taskTitle">Task name</label>
+          <input id="taskTitle" maxlength="120" required>
+          <label for="taskWhy">Why this matters</label>
+          <textarea id="taskWhy" rows="2" maxlength="500"></textarea>
+          <label for="taskNext">Next safe step</label>
+          <textarea id="taskNext" rows="3" maxlength="750"></textarea>
+          <label for="taskExpected">Expected result / acceptance</label>
+          <textarea id="taskExpected" rows="2" maxlength="750"></textarea>
+          <div class="split-fields">
+            <div><label for="taskStatus">Work status</label>
+              <select id="taskStatus"><option value="planned">Not started</option><option value="working">In progress</option><option value="blocked">Blocked</option><option value="review">Ready for review</option></select>
+            </div>
+            <div><label for="taskResult">Observed test result</label>
+              <select id="taskResult"><option value="unverified">Not verified</option><option value="reported_pass">Owner-reported PASS</option><option value="failed">Observed failure</option><option value="blocked">Could not test</option></select>
+            </div>
+          </div>
+          <label for="taskNotes">Working notes / what we learned</label>
+          <textarea id="taskNotes" rows="3" maxlength="1500" placeholder="Record what changed, and what needs a decision. No passwords, keys, or private content."></textarea>
+          <label for="taskEvidence">Evidence and source revision</label>
+          <textarea id="taskEvidence" rows="3" maxlength="1200" placeholder="Version / SHA, expected vs actual, test log or GitHub link. Required for reported PASS."></textarea>
+          <div class="form-actions">
+            <button type="submit" class="primary" id="saveTask">Save task notes</button>
+            <button class="secondary" type="button" id="resetTask">Discard unsaved edits</button>
+          </div>
+        </form>
+        <div class="next-test">
+          <div><span class="caps">NEXT TEST WITH TASS</span><p>Send a task-specific request to the real Workshop. TASS may propose code, but Atrium cannot approve or execute it.</p></div>
+          <label for="askText">Edit the exact message before sending</label>
+          <textarea id="askText" rows="4" maxlength="3000"></textarea>
+          <div class="form-actions">
+            <button type="button" id="prepareAsk" class="secondary">↻ Prepare from task</button>
+            <button type="button" id="askTass" class="primary">Ask the real TASS</button>
+          </div>
+          <span class="muted small" id="askState">No message sent.</span>
+        </div>
+      </section>
+
+      <section class="activity panel" aria-labelledby="activityTitle">
+        <div class="panel-head"><div><span class="caps">04 / OBSERVE</span><h2 id="activityTitle">Conversation & evidence</h2></div><span class="count" id="eventCount">0 EVENTS</span></div>
+        <p class="hint">Live Workshop events only. An absence of events is not evidence of IDLE.</p>
+        <div id="eventStream" class="event-stream" aria-live="polite"><div class="empty">No Workshop events observed yet.</div></div>
+        <div id="pendingActions" class="pending-actions" hidden>
+          <strong>Approval required in Workshop</strong>
+          <p>A proposal exists. Inspect exact code before you decide. This page cannot execute it.</p>
+          <a class="secondary link-button" href="http://127.0.0.1:8790/" target="_blank" rel="noopener noreferrer">Review proposal ↗</a>
+        </div>
+        <div class="divider"></div>
+        <span class="caps">05 / BRING CHATGPT INTO THE LOOP</span>
+        <p class="hint">ChatGPT cannot watch your local Atrium. Explicitly share a short, reviewed brief through the optional GitHub feed, or copy your clean handoff into chat.</p>
+        <label for="briefPreview">Text to share (editable)</label>
+        <textarea id="briefPreview" maxlength="1200" rows="4"></textarea>
+        <button class="secondary" type="button" id="prepareBrief">Prepare task brief</button>
+        <label class="consent"><input type="checkbox" id="shareConsent"> I reviewed the exact text and approve queuing it to private TASS #19.</label>
+        <button class="secondary" type="button" id="shareBrief" disabled>Queue approved brief</button>
+        <p class="muted small" id="shareState">Sharing is optional and disabled unless configured. Queued does not mean posted.</p>
+        <a class="subtle-link" href="https://github.com/Arameair/TASS/issues/20" target="_blank" rel="noopener noreferrer">Talk to TASS through GitHub #20 ↗</a>
+      </section>
+    </div>
+    <footer><span>ATRIUM / DAILY MISSION · 2026-11-04</span><span>Experimental · no memory repo · no automatic changes · Claude's workspace untouched</span></footer>
+  </main>
+  <div id="toast" class="toast" hidden role="status"></div>
+</body>
+</html>
