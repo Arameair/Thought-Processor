@@ -135,6 +135,37 @@ class RestartTests(unittest.TestCase):
                 os.environ.update(old)
 
 
+    def test_atrium_chat_only_offline_model_reports_correlated_error(self):
+        # Deterministic model failure: no reply, proposal, or fabricated success.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            make_mirror(root / "mirror")
+            (root / "shared").mkdir()
+            previous = dict(os.environ)
+            os.environ.update(TASS_MIRROR=str(root / "mirror"),
+                              TASS_SHARED=str(root / "shared"),
+                              TASS_DATA=str(root / "data"),
+                              TASS_JUPYTER="0")
+            try:
+                from tass_workspace.server import Workspace
+                ws = Workspace()
+                ws.model.measure = lambda messages: (16, 16384)
+
+                def offline(*args, **kwargs):
+                    raise ConnectionError("fixture model is offline")
+                ws.model.stream = offline
+                rid = "0123456789abcdef"
+                ws.turn("user", "Hello", chat_only=True, request_id=rid)
+                self.assertTrue(any(e["type"] == "error" and e.get("request_id") == rid
+                                    and "offline" in e["text"] for e in ws.timeline))
+                self.assertFalse(any(e["type"] == "reply" and e.get("request_id") == rid
+                                     for e in ws.timeline))
+                self.assertFalse(ws.proposals)
+            finally:
+                os.environ.clear()
+                os.environ.update(previous)
+
+
 class EndToEndTests(unittest.TestCase):
     """Real server + real (private) Jupyter kernel + scripted fake model."""
 
