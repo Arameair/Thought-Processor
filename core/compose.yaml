@@ -114,11 +114,17 @@ services:
       TASS_ENGINE_KEY: /run/tass-secrets/engine-api-key
       TASS_IDENTITY_URL: http://identity:8796
       TASS_IDENTITY_KEY_FILE: /run/tass-secrets/core.key
-      TASS_GITHUB: "off"                                        # local-first: no repository is built in
+      TASS_REPO: ${GITHUB_REPO:-}                               # empty = local only; nothing is built in
+      TASS_BRANCH: ${GITHUB_BRANCH:-live}
+      TASS_DOC: ${GITHUB_DOC:-tass.md}
+      TASS_LESSONS: ${GITHUB_LESSONS:-lessons}
+      TASS_TOKEN_FILE: /run/tass-secrets/github_token
+      TASS_GITHUB_API: ${TASS_GITHUB_API:-}                     # tests only; empty = https://api.github.com
     volumes:
       - ${APP_DATA:?}/core:/data/core                          # this entity's document, conversation, memory journal
       - ${APP_DATA:?}/engine/api-key:/run/tass-secrets/engine-api-key:ro
       - ${APP_SECRETS:?}/core.key:/run/tass-secrets/core.key:ro
+      - ${APP_SECRETS:?}/github_token:/run/tass-secrets/github_token:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

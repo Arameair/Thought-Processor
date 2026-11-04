@@ -25,8 +25,8 @@ here="$(pwd)"
 
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
-ENGINE_COMMIT_PIN="a847385"
-IDENTITY_COMMIT_PIN="8b175c8"
+ENGINE_COMMIT_PIN="6741fd4"
+IDENTITY_COMMIT_PIN="14587c0"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"
@@ -80,6 +80,17 @@ IDENTITY_UNLOCK_HOURS=12
 EOF
     chmod 600 "$APP_HOME/app.env"
   fi
+  if ! grep -q '^GITHUB_REPO=' "$APP_HOME/app.env"; then
+    cat >>"$APP_HOME/app.env" <<'EOF'
+
+# GitHub: your entity's document and its lessons. Empty = everything stays on this computer.
+# The token comes from "gh auth token" (or GITHUB_TOKEN) at start, kept in secrets/, never in an image.
+GITHUB_REPO=            # e.g. Arameair/TASS
+GITHUB_BRANCH=live      # the document syncs here (never main/alpha/stable); lessons are read from here
+GITHUB_DOC=tass.md
+GITHUB_LESSONS=lessons
+EOF
+  fi
   # shellcheck disable=SC1091
   set -a; source "$APP_HOME/app.env"; set +a
   CORE_PORT="${CORE_PORT:-8795}"; IDENTITY_PORT="${IDENTITY_PORT:-8796}"
@@ -119,6 +130,8 @@ compose() { # compose for the version in $1 (an env file)
   IDENTITY_IMAGE="$IDENTITY_IMAGE" ENGINE_IMAGE="$ENGINE_IMAGE" CORE_IMAGE="$CORE_IMAGE" \
   MODEL_IMAGE="${MODEL_IMAGE:-}" MODEL_ARGS="$MODEL_ARGS" MODEL_DIR="${MODEL_DIR:-}" MODEL_URL="$RUN_MODEL_URL" \
   MODEL_HEALTH_CMD="${MODEL_HEALTH_CMD:-}" MODEL_NETWORK="${MODEL_NETWORK:-}" FIXTURE_DELAY="${FIXTURE_DELAY:-}" \
+  GITHUB_REPO="${GITHUB_REPO:-}" GITHUB_BRANCH="${GITHUB_BRANCH:-live}" GITHUB_DOC="${GITHUB_DOC:-tass.md}" \
+  GITHUB_LESSONS="${GITHUB_LESSONS:-lessons}" TASS_GITHUB_API="${TASS_GITHUB_API:-}" \
   CORE_PORT="$CORE_PORT" IDENTITY_PORT="$IDENTITY_PORT" PULSE_EVERY="${PULSE_EVERY:-20s}" \
   IDENTITY_UNLOCK_HOURS="${IDENTITY_UNLOCK_HOURS:-12}" \
     "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
@@ -176,6 +189,12 @@ check() {
     if port_busy "$p" && [[ -z "$( [[ $docker_ok == 1 ]] && ours)" ]]; then bad "Port $p is used by another program (set CORE_PORT / IDENTITY_PORT in app.env)"; blockers=1
     else ok "Port 127.0.0.1:$p available (or already this application's)"; fi
   done
+  if [[ -n "${GITHUB_REPO:-}" ]]; then
+    case "${GITHUB_BRANCH:-live}" in main|alpha|stable) bad "GITHUB_BRANCH=${GITHUB_BRANCH}: the document may not sync straight onto it; use its own branch (live)"; blockers=1 ;; esac
+    if [[ -s "$APP_SECRETS/github_token" || -n "${GITHUB_TOKEN:-}" ]] || { command -v gh >/dev/null && gh auth status >/dev/null 2>&1; }; then
+      ok "GitHub: $GITHUB_REPO@${GITHUB_BRANCH:-live} (${GITHUB_DOC:-tass.md}, lessons in ${GITHUB_LESSONS:-lessons}/); token from $( [[ -s "$APP_SECRETS/github_token" ]] && echo 'secrets/github_token' || echo 'gh / GITHUB_TOKEN at start')"
+    else bad "GITHUB_REPO is set but there's no token: gh auth login (or set GITHUB_TOKEN)"; blockers=1; fi
+  else note "No GITHUB_REPO in app.env: the entity runs locally only (no lessons from GitHub)."; fi
   [[ "$ENGINE_COMMIT_PIN" =~ ^[0-9a-f]{7,40}$ && "$IDENTITY_COMMIT_PIN" =~ ^[0-9a-f]{7,40}$ ]] && ok "Pins: engine $ENGINE_COMMIT_PIN · identity $IDENTITY_COMMIT_PIN" || { bad "bad commit pins"; blockers=1; }
   if [[ -f "$DEPLOY/current.env" ]]; then
     ( load_env "$DEPLOY/current.env"; ok "Deployed: core $(short "$CORE_SHA") · engine $(short "$ENGINE_SHA") · identity $(short "$IDENTITY_SHA") · since $DEPLOYED_AT" )
@@ -246,6 +265,14 @@ prepare() { # folders and THIS installation's own keys (generated here, never sh
    [[ -s "$APP_DATA/engine/api-key" ]] || newkey >"$APP_DATA/engine/api-key"
    printf 'engine %s\ncore %s\n' "$(cat "$APP_SECRETS/engine.key")" "$(cat "$APP_SECRETS/core.key")" >"$APP_SECRETS/service-keys.new")
   mv "$APP_SECRETS/service-keys.new" "$APP_SECRETS/service-keys"
+  # GitHub token for the core (only when a repository is set). Mounted read-only, never in an image.
+  if [[ -n "${GITHUB_REPO:-}" && ! -s "$APP_SECRETS/github_token" ]]; then
+    (umask 177
+     if [[ -n "${GITHUB_TOKEN:-}" ]]; then printf '%s' "$GITHUB_TOKEN" >"$APP_SECRETS/github_token"
+     else gh auth token >"$APP_SECRETS/github_token" 2>/dev/null || true; fi)
+  fi
+  [[ -f "$APP_SECRETS/github_token" ]] || (umask 177; : >"$APP_SECRETS/github_token")   # exists, so Docker mounts a file
+  chmod 600 "$APP_SECRETS/github_token"
 }
 
 backup() { # → prints the backup file (data and keys; 0600 in a 0700 folder)
