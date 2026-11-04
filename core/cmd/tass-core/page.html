@@ -63,7 +63,8 @@
 <div id="idbar"></div>
 <main>
   <section class="card">
-    <h2>Talk <small>works without internet</small></h2>
+    <h2>Talk <small>works without internet; lesson requests need authorized GitHub access</small></h2>
+    <div class="ctl"><button id="talkFind">Find lessons</button><button id="talkTest">Run one lesson test</button><span id="talkLessonNotice" class="dim" aria-live="polite">Lesson tests use the existing Engine; Autonomous stays OFF</span></div>
     <div id="log"></div>
     <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Try: how many sections does your tass.md have?"></textarea><button>Send</button></form>
   </section>
@@ -215,6 +216,43 @@ $("f").onsubmit = async ev => {
   ev.preventDefault(); const text = $("t").value.trim(); if (!text) return;
   const r = await post("/api/say", {text});
   if (r.ok) $("t").value = ""; else alertLine(r.body.error || "not accepted (" + r.status + ")");
+  refresh();
+};
+// The buttons invoke the same real, Identity-checked operations as the
+// Learning card. Never show a fabricated model test or claim a pass until
+// the Engine outcome is actually collected by the lesson controller.
+$("talkFind").onclick = async () => {
+  const r = await post("/api/lessons/discover", {});
+  $("talkLessonNotice").textContent = r.ok ? "GitHub lesson search completed. Review Learning below." : (r.body.error || "GitHub lesson search failed");
+  refresh();
+};
+$("talkTest").onclick = async () => {
+  if (CUR.autonomous) {
+    $("talkLessonNotice").textContent = "Switch Autonomous OFF first so the test waits for your approval.";
+    return;
+  }
+  const found = await post("/api/lessons/discover", {});
+  if (!found.ok) {
+    $("talkLessonNotice").textContent = found.body.error || "Identity refused lesson discovery";
+    return;
+  }
+  const response = await fetch("/api/status", {headers: {"X-TASS-Token": TOKEN}});
+  if (!response.ok) {
+    $("talkLessonNotice").textContent = "Cannot read lesson status; reload the page.";
+    return;
+  }
+  const st = await response.json();
+  const eligible = ((st.learning && st.learning.lessons) || []).filter(l => l.status === "NEW" || l.status === "RETRY");
+  if (!eligible.length) {
+    $("talkLessonNotice").textContent = "No NEW or RETRY Markdown lessons. Review Learning below for existing results.";
+    refresh();
+    return;
+  }
+  const selected = eligible[0];
+  const result = await post("/api/lessons/study", {path: selected.path});
+  $("talkLessonNotice").textContent = result.ok
+    ? "Submitted " + selected.title + " · job " + (result.body.receipt || "unknown") + ". Check Learning below for graded answers. NOT approved."
+    : (result.body.error || "Lesson study failed");
   refresh();
 };
 $("tf").onsubmit = async ev => {
