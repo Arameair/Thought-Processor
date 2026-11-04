@@ -209,7 +209,7 @@ async function decide(id, decision, el) {
 function render(ev, replay) {
   const keepChat = near(chat), keepStream = near(stream);
   switch (ev.type) {
-    case "user": add(chat, `<div class="who">You${ev.via ? ` · <a href="${esc(ev.via)}" target="_blank" rel="noopener" style="color:inherit">via GitHub ${esc(ev.issue)}</a>` : ""}</div>${md(ev.text)}`, "msg you"); break;
+    case "user": add(chat, `<div class="who">You${ev.request_id ? ` · req ${esc(ev.request_id)}` : ""}${ev.via ? ` · <a href="${esc(ev.via)}" target="_blank" rel="noopener" style="color:inherit">via GitHub ${esc(ev.issue)}</a>` : ""}</div>${md(ev.text)}`, "msg you"); break;
     case "spark":
       add(stream, "", "turn-sep");
       step("spark", "Spark · " + esc(ev.kind), esc(ev.text)); break;
@@ -232,7 +232,7 @@ function render(ev, replay) {
       break;
     case "reply":
       if (liveReply) { liveReply.remove(); liveReply = null; }
-      add(chat, `<div class="who">TASS ${ev.action ? `<span class="tag">→ ${esc(ev.action)}</span>` : ""}</div>${md(ev.text)}`, "msg tass");
+      add(chat, `<div class="who">TASS ${ev.request_id ? `<span class="muted">· req ${esc(ev.request_id)}</span>` : ""} ${ev.action ? `<span class="tag">→ ${esc(ev.action)}</span>` : ""}</div>${md(ev.text)}`, "msg tass");
       step("reply", "Reply", ev.action ? "decided: " + esc(ev.action) : "answered"); break;
     case "book": step("book", ev.kind === "project" ? "Opened project" : "Opened book",
       `${esc(ev.title)} <span class="muted">(${esc(ev.path)}, ${ev.cells} ${ev.kind === "project" ? "files" : "cells"})</span>`); break;
@@ -256,7 +256,7 @@ function render(ev, replay) {
           <div class="muted" style="margin-top:6px">TASS thinks with the new text about 30 s after you merge.</div>`
         : `<h4>✗ Pull request failed for <code>${esc(ev.path)}</code></h4><div style="color:var(--bad)">${esc(ev.error)}</div>`, "card result");
       break; }
-    case "error": add(chat, `<div class="who">Problem</div>${esc(ev.text)}`, "msg err"); step("err", "Error", esc(ev.text)); break;
+    case "error": add(chat, `<div class="who">Problem${ev.request_id ? ` · req ${esc(ev.request_id)}` : ""}</div>${esc(ev.text)}`, "msg err"); step("err", "Error", esc(ev.text)); break;
     case "busy": setBusy(ev.busy); break;
   }
   if (keepChat) chat.scrollTop = chat.scrollHeight;
