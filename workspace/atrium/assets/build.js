@@ -11,11 +11,11 @@ function notify(message) {
   clearTimeout(notify.timeout); notify.timeout=setTimeout(()=>node.hidden=true,4800);
 }
 function renderStatus() {
-  $('modelStatus').textContent=session.ready ? (session.fullAuto?'⚠ FULL AUTO IS ON':session.busy?'◌ TASS is working':'● TASS connected') : '○ TASS unavailable';
+  $('modelStatus').textContent=session.ready ? (session.busy?'◌ TASS is working':session.fullAuto?'● FULL AUTO ON · CHAT ONLY':'● TASS connected') : '○ TASS unavailable';
   $('modelStatus').classList.toggle('live',session.ready);
   $('modelStatus').classList.toggle('offline',!session.ready);
-  $('askTass').disabled=!session.ready || session.busy || session.fullAuto;
-  $('streamStatus').textContent=session.fullAuto?'Disable Full Auto in Workshop before building':session.ready ? (session.busy?'TASS is thinking':'Listening for real results') : 'No live model — work is not simulated';
+  $('askTass').disabled=!session.ready || session.busy;
+  $('streamStatus').textContent=session.ready ? (session.busy?'TASS is thinking; busy requests are rejected':'Atrium chat-only: no proposal or execution authorized') : 'No live model — work is not simulated';
 }
 function updateProgress() {
   const flags={asked:session.asked,answered:session.answered,proposed:session.proposed,executed:session.executed};
@@ -28,7 +28,7 @@ function updateProgress() {
   $('progressNote').textContent=!session.request?'Start by describing one small thing you want TASS to build.' :
     !session.asked?'Waiting for Workshop to record your request.':
     !session.answered?'TASS has your request. Waiting for his actual reply.':
-    !session.proposed?'You have a real TASS reply. Ask him to propose one concrete step if none was offered.':
+    !session.proposed?'Real chat reply received. Action proposals must be initiated and reviewed in Workshop separately.':
     !session.executed?'An action was proposed. Examine the code and approve or reject it in Workshop.':
     'Workshop reported an execution result. Check its real output before calling the task complete.';
 }
@@ -153,11 +153,10 @@ async function askTass(ev) {
   if(!task)return notify('Describe one thing you would like to build.');
   if(!session.ready)return notify('TASS is offline; open the Workshop before sending.');
   if(session.busy)return notify('TASS is already working on another request.');
-  if(session.fullAuto)return notify('Full Auto is enabled. Turn it off in Workshop so you can approve code first.');
   $('askTass').disabled=true;
   const taskStartId=session.lastId;
   const message='TASS, I want to build this with you: '+task+
-    '\nPlease tell me what existing library or project ability could help, and propose ONE concrete, safe step that I can review. Do not execute code without my approval. Do not claim work was done until there is a real Workshop result.';
+    '\nPlease explain ONE concrete safe step in plain text. Atrium chat cannot propose or execute actions; use Workshop separately to review execution. Do not claim work was done without a real result.';
   try {
     const res=await fetch('/bridge/message',{method:'POST',
       headers:{'Content-Type':'application/json','X-Playground-CSRF':csrf},
