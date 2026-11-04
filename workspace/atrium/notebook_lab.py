@@ -82,6 +82,29 @@ def validate_model_selection(raw, *, actor="MODEL_FIXTURE"):
     }
 
 
+def record_model_selection(coordinator, raw: str, *, actor="MODEL_FIXTURE"):
+    """Durably record an untrusted cell proposal, never an execution grant.
+
+    A trusted future model adapter may invoke this only after an attributable
+    model turn. No untrusted HTTP, GitHub or Discord write route calls it today.
+    """
+    choice = validate_model_selection(raw, actor=actor)
+    from pulse_cards import utc
+    def save(doc):
+        card = doc["cards"][LESSON_ID]
+        if card["status"] != "PROPOSED":
+            raise CardError("Cannot replace a model proposal after approval", 409)
+        prior = card.get("model_proposal")
+        if prior is not None:
+            if {k: v for k, v in prior.items() if k != "recorded_at"} != choice:
+                raise CardError("Cannot replace an existing model proposal", 409)
+            return prior
+        choice["recorded_at"] = utc()
+        card["model_proposal"] = choice
+        return choice
+    return coordinator.store.mutate(save)
+
+
 def propose_skill_candidate(receipt: dict, *, selection: dict, reflection: str, repeats=None):
     """Construct a PROPOSED skill only after an evidence-backed PASS; never approve it."""
     spec = CATALOG[LESSON_ID]
