@@ -318,3 +318,49 @@ SUMMARY
   PASS  entity intact after rollback
 
 37 PASS · 0 FAIL
+
+================================================================================
+INTEGRATION RUN (experiment/integration-20261104 f0243b1: GPT-6 safety line + lessons loop + Autonomous switch)
+engine d820840 · identity d37757b · candidates 623099f / c47b639
+SUMMARY
+  PASS  4 services healthy (identity, model, engine, core)
+  PASS  exactly one model container on this host
+  PASS  the app uses only its own networks (no Python workspace, liaison or tass-workspace)
+  PASS  fresh install has NO entity and nothing personal
+  PASS  core is BLOCKED until an entity exists
+  PASS  no task can be queued without an entity
+  PASS  model is on the internal network only, no published port
+  PASS  no generated key is inside any image
+  PASS  Identity refuses a caller without a service key
+  PASS  Identity refuses entity creation without the page token
+  PASS  a service inside the app can't create or take over an entity (owner routes are localhost-only)
+  PASS  owner creates THIS installation's own entity
+  PASS  wrong passphrase is refused
+  PASS  unlocked: core READY
+  PASS  conversation: message accepted with a receipt
+  PASS  conversation: answered through a full thought cycle as Mira
+  PASS  the entity has its own starter document (no one else's)
+  PASS  Autonomous off (default): chat only, no task can be queued
+  PASS  owner turns Autonomous on
+  PASS  task queued for the pulse (not run right away)
+  PASS  pulse is PAUSED until Start; the job waits
+  PASS  Start
+  PASS  owner conversation stays available while the long job runs (accepted with receipt)
+  PASS  10 verifiable ticks ~20 s apart
+  PASS  job longer than 20 s survives several pulses
+  PASS  started exactly once (no duplicate execution)
+  PASS  result observed and reported on a later tick
+  PASS  Pause/Resume/Step controls answer
+  PASS  after restart: same entity, LOCKED, core BLOCKED
+  PASS  records persisted across restart
+  PASS  jobs and ticks persisted; pulse comes back PAUSED
+  PASS  unlock again → READY
+  PASS  good update applied and validated
+  PASS  after update: same entity
+  PASS  broken update is detected and rolled back automatically (version and data)
+  PASS  running the previous good version again
+  PASS  entity intact after the failed update
+  PASS  manual rollback returns to the version before the update
+  PASS  entity intact after rollback
+
+39 PASS · 0 FAIL

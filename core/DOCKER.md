@@ -75,6 +75,16 @@ A failed update puts back the previous version **and** the data from the backup 
 - **External** (`MODEL_MODE=external`, `MODEL_NETWORK`, `MODEL_URL`): the engine joins that model's Docker network and nothing new starts.
   - On a PC where the workspace's Nemotron already runs: `MODEL_NETWORK=tass-workspace_default` and `MODEL_URL=http://model:8081`. That container isn't stopped or changed.
 
+## Autonomous (the master switch)
+
+The top bar of the page (8795) has two buttons and a live chip:
+- **Autonomous: off (chat only).** This is the default on a new install. You can talk; the model can't run any action, no task can be queued, and the work pulse stays paused. Health reports `action_mode: CHAT_ONLY`.
+- **Autonomous: ON.** The 20-second work pulse runs and lessons come in from GitHub on each pulse. Read-only actions may run, but only behind the Issue #50 checks: same cycle ID, a locked prediction with its digest, and Identity at the point of use. A lesson that passes every check is approved automatically and marked "auto-approved". Health reports `action_mode: AUTONOMOUS_GUARDED`.
+- **Pulse: ON / off** turns only the work pulse on or off. Turning it on also turns Autonomous on.
+- **The chip** shows `working · STATE · tick N s ago` while the pulse runs, and "work pulse paused" otherwise.
+
+Every setting survives restarts. After a restart, Identity is LOCKED until you unlock it; then everything resumes by itself. `TASS_CHAT_ONLY=on` forces chat-only whatever the switch says.
+
 ## GitHub and the lessons loop
 
 Set `GITHUB_REPO` (and `GITHUB_BRANCH`, default `live`) in `~/.tass-app/app.env`. At start, `tass.sh` saves a token from `gh auth token` (or `GITHUB_TOKEN`) as `~/.tass-app/secrets/github_token` (0600). It's mounted read-only and is never in an image. Without `GITHUB_REPO`, everything stays on this computer.
@@ -150,6 +160,22 @@ Lessons loop (`docs/evidence/lessons-loop-clean-host-20261104.txt`, TEST FIXTURE
 - 304s when nothing changed.
 
 Against your real GitHub and Nemotron: NOT RUN.
+
+## Moving your PC to this version (from any earlier one-app build)
+
+Your entity, its data and its keys stay in `~/.tass-app`. The update backs them up first and restores them automatically if anything fails.
+
+```bash
+cd ~/tass-one-app                   # the folder you run tass.sh from
+git fetch origin
+git checkout --detach origin/experiment/integration-20261104
+cd core
+./tass.sh check                     # adds the GitHub lines to ~/.tass-app/app.env if they're missing
+nano ~/.tass-app/app.env            # GITHUB_REPO=Arameair/TASS
+sudo -v; ./tass.sh update --yes     # build, back up, switch, validate (rolls back by itself on failure)
+```
+
+Then unlock at http://127.0.0.1:8796, open http://127.0.0.1:8795, and press **Autonomous** in the top bar.
 
 ## Owner acceptance (on your PC, about 15 minutes)
 

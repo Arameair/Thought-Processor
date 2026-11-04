@@ -33,7 +33,8 @@ APP_DATA="$APP_HOME/data"
 APP_SECRETS="$APP_HOME/secrets"
 DEPLOY="$APP_HOME/deploy"
 APP_PROJECT="${APP_PROJECT:-tass-app}"
-TRACK="${TASS_TRACK:-experiment/one-app-20261104}"
+TRACK="${TASS_TRACK:-experiment/integration-20261104}"
+ISSUE50_FIX="90c8892"   # core commit that rejects unlocked / mismatched proposals before any action
 REPO="$(git -C "$here" rev-parse --show-toplevel)"
 
 say()  { printf '%s\n' "$*"; }
@@ -378,8 +379,10 @@ cmd_start() {
   checkout_sha="$(git -C "$REPO" rev-parse --verify HEAD)" || die "cannot inspect checkout revision"
   if [[ -f "$DEPLOY/current.env" ]]; then
     recorded_sha="$(load_env "$DEPLOY/current.env"; printf '%s' "${CORE_SHA:-}")" || die "cannot read deployed revision"
-    [[ "$recorded_sha" == "$checkout_sha" ]] ||
-      die "saved Core $(short "$recorded_sha") is not this CHAT_ONLY safety build $(short "$checkout_sha"); current.env unchanged. Review and explicitly update to the safety build before starting."
+    # Refuse only builds WITHOUT the Issue #50 fix (90c8892); an already-updated safety build starts normally.
+    if [[ "$recorded_sha" != "$checkout_sha" ]] && ! git -C "$REPO" merge-base --is-ancestor "$ISSUE50_FIX" "$recorded_sha" 2>/dev/null; then
+      die "saved Core $(short "$recorded_sha") predates the Issue #50 safety fix; current.env unchanged. Update explicitly: ./tass.sh update"
+    fi
   fi
   say
   prepare
