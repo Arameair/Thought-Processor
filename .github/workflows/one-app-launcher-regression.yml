@@ -1,0 +1,29 @@
+name: one-app-launcher-regression
+on:
+  push:
+    paths:
+      - "core/tass.sh"
+      - "core/test/test_launcher_regression.py"
+      - ".github/workflows/one-app-launcher-regression.yml"
+  pull_request:
+    paths:
+      - "core/tass.sh"
+      - "core/test/test_launcher_regression.py"
+      - ".github/workflows/one-app-launcher-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Shell syntax
+        run: bash -n core/tass.sh
+      - name: Offline sudo and build-failure simulation (no Docker invoked)
+        run: python3 core/test/test_launcher_regression.py

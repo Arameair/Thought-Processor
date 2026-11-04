@@ -1,30 +1,93 @@
-# TASS's Go core in Docker: the Thought Engine and tass-core, using the Nemotron model that is
-# ALREADY running in the workspace stack (project tass-workspace, service "model"). No second model.
+# TASS as ONE Docker application: Identity, Thought Engine (with the 20-second work pulse),
+# Thought-Processor core, and one local model (llama.cpp). One project, one start, one update.
 #
-# Don't run this file by hand: ./tass.sh start sets the pinned images, folders and keys.
+# Don't run this file by hand: ./tass.sh start sets the pinned images, folders, keys and model.
 #
-#   engine  Thought Engine (Go): Spark/Trace/Thought on Nemotron, thought cycles, 20-s local pulse.
-#           Listens ONLY on 127.0.0.1 inside its own network namespace: none of its routes (including
-#           its older unauthenticated ones) can be reached from your computer or other containers.
-#   core    tass-core (Go): the page you talk to TASS on, GitHub sync, Identity checks.
-#           Shares the engine's network namespace (so it reaches the engine on 127.0.0.1);
-#           its page is published on 127.0.0.1:8795 only.
-name: tass-core
+#   identity  tass-identity (Go): creates THIS installation's own entity, owner unlock, and
+#             authorizes every action. Its page is on 127.0.0.1:8796 only. Nothing is built in:
+#             a fresh install has NO entity until its owner creates one, and stays LOCKED after
+#             every restart until its owner unlocks it.
+#   model     llama.cpp server with weights from your MODEL_DIR (never in an image or in Git).
+#             Only on the internal network: nothing outside the application can reach it, and it
+#             has no internet. Profile "bundled-model"; with MODEL_MODE=external the app uses a
+#             model that is already running instead, so a computer never runs two.
+#   engine    Thought Engine (Go): Spark/Trace/Thought, thought cycles, the 20-s coordination pulse.
+#             Listens ONLY on 127.0.0.1 inside its own network namespace.
+#   core      tass-core (Go): the page you talk on, tasks, pulse controls. Shares the engine's
+#             network namespace; its page is published on 127.0.0.1:8795 only.
+#
+# Secrets (service keys, the engine key) are generated at install into $APP_HOME/secrets and
+# mounted read-only. Images contain no keys, credentials, memories or personal files.
+name: ${APP_PROJECT:-tass-app}
 services:
+  identity:
+    image: ${IDENTITY_IMAGE:?use ./tass.sh start}
+    user: "${APP_UID:?}:${APP_GID:?}"
+    environment:
+      HOME: /tmp
+      IDENTITY_DATA: /data/identity
+      IDENTITY_LISTEN: 0.0.0.0:8796
+      IDENTITY_SERVICE_KEYS: /run/tass-secrets/service-keys
+      IDENTITY_UNLOCK_HOURS: ${IDENTITY_UNLOCK_HOURS:-12}
+      IDENTITY_CORE_URL: http://127.0.0.1:${CORE_PORT:-8795}/ # owner-facing; validated by Identity
+    volumes:
+      - ${APP_DATA:?}/identity:/data/identity                  # entity.json, credential, decisions.jsonl
+      - ${APP_SECRETS:?}/service-keys:/run/tass-secrets/service-keys:ro
+    networks: [front, app]
+    ports:
+      - "127.0.0.1:${IDENTITY_PORT:-8796}:8796"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tass-identity", "-healthcheck"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+
+  model:
+    profiles: [bundled-model]
+    image: ${MODEL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    command: ${MODEL_ARGS:?use ./tass.sh start}
+    environment:
+      FIXTURE_DELAY: ${FIXTURE_DELAY:-}                         # test fixture only; ignored by llama.cpp
+    volumes:
+      - ${MODEL_DIR:-/nonexistent}:/models:ro                   # your weights, read-only
+    networks: [app]                                             # internal only: no ports, no internet
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "${MODEL_HEALTH_CMD:-curl -sf http://127.0.0.1:8081/health}"]
+      interval: 10s
+      timeout: 6s
+      retries: 60                                               # loading a large model takes a while
+      start_period: 30s
+    restart: unless-stopped
+
   engine:
     image: ${ENGINE_IMAGE:?use ./tass.sh start}
-    user: "${TASS_UID:?}:${TASS_GID:?}"
+    user: "${APP_UID:?}:${APP_GID:?}"
     command: ["-data", "/data/engine", "-model", "${MODEL_URL:-http://model:8081}", "-worker", "nemotron",
-              "-identity-policy", "/data/grant/identity-grant.json"]
+              "-identity-url", "http://identity:8796", "-identity-key-file", "/run/tass-secrets/engine.key",
+              "-pulse", "${PULSE_EVERY:-20s}"]
     environment:
       PORT: "7798"
       HOME: /tmp
     volumes:
-      - ${ENGINE_DATA:?}:/data/engine                 # cycles.jsonl, pulse.jsonl, model-requests.jsonl, api-key
-      - ${TASS_DATA:?}/grant:/data/grant:ro           # Identity's (prototype) policy, written by the core
-    networks: [default, model]
+      - ${APP_DATA:?}/engine:/data/engine                      # cycles, jobs, pulse ticks, model requests, api-key
+      - ${APP_SECRETS:?}/engine.key:/run/tass-secrets/engine.key:ro
+    networks: [front, app]
     ports:
-      - "127.0.0.1:${CORE_PORT:-8795}:8795"           # the core's page (the core shares this namespace)
+      - "127.0.0.1:${CORE_PORT:-8795}:8795"                     # the core's page (the core shares this namespace)
+    depends_on:
+      identity:
+        condition: service_healthy
+      model:
+        condition: service_healthy
+        required: false                                         # absent with MODEL_MODE=external
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -39,26 +102,30 @@ services:
 
   core:
     image: ${CORE_IMAGE:?use ./tass.sh start}
-    user: "${TASS_UID:?}:${TASS_GID:?}"
+    user: "${APP_UID:?}:${APP_GID:?}"
     network_mode: "service:engine"
     depends_on:
       engine:
         condition: service_healthy
     environment:
       HOME: /tmp
-      TASS_DATA: /data/tass
+      TASS_DATA: /data/core
       TASS_LISTEN: 0.0.0.0:8795
       TASS_ENGINE_URL: http://127.0.0.1:7798
-      TASS_ENGINE_KEY: /run/secrets/engine_key
-      TASS_TOKEN_FILE: /run/secrets/github_token
-      TASS_IDENTITY: ${TASS_IDENTITY:-Arameair/identity@main:policies/tass.json}
-      TASS_GITHUB_MESSAGES: ${TASS_GITHUB_MESSAGES:-off}
-      TASS_SYNC: ${TASS_SYNC:-20s}
-      TASS_GITHUB_API: ${TASS_GITHUB_API:-}           # tests only; empty = https://api.github.com
+      TASS_ENGINE_KEY: /run/tass-secrets/engine-api-key
+      TASS_IDENTITY_URL: http://identity:8796
+      TASS_IDENTITY_KEY_FILE: /run/tass-secrets/core.key
+      TASS_REPO: ${GITHUB_REPO:-}                               # empty = local only; nothing is built in
+      TASS_BRANCH: ${GITHUB_BRANCH:-live}
+      TASS_DOC: ${GITHUB_DOC:-tass.md}
+      TASS_LESSONS: ${GITHUB_LESSONS:-lessons}
+      TASS_TOKEN_FILE: /run/tass-secrets/github_token
+      TASS_GITHUB_API: ${TASS_GITHUB_API:-}                     # tests only; empty = https://api.github.com
     volumes:
-      - ${TASS_DATA:?}:/data/tass                     # tass.md, memory.jsonl, conversation.jsonl, sync.jsonl, conflicts/, grant/
-      - ${ENGINE_DATA:?}/api-key:/run/secrets/engine_key:ro
-      - ${TOKEN_FILE:?}:/run/secrets/github_token:ro
+      - ${APP_DATA:?}/core:/data/core                          # this entity's document, conversation, memory journal
+      - ${APP_DATA:?}/engine/api-key:/run/tass-secrets/engine-api-key:ro
+      - ${APP_SECRETS:?}/core.key:/run/tass-secrets/core.key:ro
+      - ${APP_SECRETS:?}/github_token:/run/tass-secrets/github_token:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -72,6 +139,6 @@ services:
     restart: unless-stopped
 
 networks:
-  model:
-    external: true
-    name: ${MODEL_NETWORK:-tass-workspace_default}    # where the existing "model" service lives
+  front: {}                 # only for the two 127.0.0.1 pages
+  app:
+    internal: true          # identity ⇄ engine/core ⇄ model; no internet, nothing published

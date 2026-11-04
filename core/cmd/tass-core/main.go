@@ -23,6 +23,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -38,6 +39,7 @@ import (
 
 	"github.com/Arameair/Thought-Processor/core/engine"
 	"github.com/Arameair/Thought-Processor/core/github"
+	"github.com/Arameair/Thought-Processor/core/identitysvc"
 	"github.com/Arameair/Thought-Processor/core/tass"
 )
 
@@ -92,6 +94,30 @@ func main() {
 		SyncEvery: every,
 		Messages:  !strings.EqualFold(env("TASS_GITHUB_MESSAGES", "on"), "off"),
 	}
+	if u := os.Getenv("TASS_IDENTITY_URL"); u != "" {
+		// One-app mode: the installation's own Identity service decides everything. No
+		// built-in owner, no GitHub repository unless the owner turns sync on.
+		ids, err := identitysvc.New(u, env("TASS_IDENTITY_KEY_FILE", "/run/tass-secrets/core.key"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.IdentitySvc = ids
+		// Chat-only unless the owner turns Autonomous on (page switch, kept in settings.json).
+		// Issue #50's checks (same cycle ID, locked prediction with digest) now guard every action
+		// either way. TASS_CHAT_ONLY=on forces chat-only whatever the switch says.
+		cfg.ChatOnly = strings.EqualFold(os.Getenv("TASS_CHAT_ONLY"), "on")
+		if cfg.ChatOnly {
+			log.Printf("CHAT_ONLY forced (TASS_CHAT_ONLY=on): no model actions, tasks or work pulse")
+		}
+		cfg.Identity = "tass-identity at " + u
+		// GitHub only when the owner set a repository for THIS installation (nothing is built in).
+		cfg.Repo = strings.TrimSpace(os.Getenv("TASS_REPO"))
+		cfg.Branch = env("TASS_BRANCH", "live")
+		cfg.DocPath = env("TASS_DOC", "tass.md")
+		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+		cfg.GitHub = cfg.Repo != ""
+		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
+	}
 	gh := github.New(token)
 	if b := os.Getenv("TASS_GITHUB_API"); b != "" { // tests and dry runs only
 		gh.Base = b
@@ -131,8 +157,14 @@ func main() {
 	}
 	srv := &http.Server{Handler: handler(core, pageToken, apiKey), ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln)
-	log.Printf("TASS core %s: data in %s · Identity policy from %s · engine %s · GitHub sync every %s",
-		version, cfg.DataDir, cfg.Identity, eng.URL, every)
+	gh_ := "GitHub sync every " + every.String()
+	if cfg.IdentitySvc != nil {
+		gh_ = "no GitHub repository set (local only)"
+		if cfg.Repo != "" {
+			gh_ = fmt.Sprintf("GitHub %s@%s (%s, lessons in %s/) every %s", cfg.Repo, cfg.Branch, cfg.DocPath, cfg.LessonsDir, every)
+		}
+	}
+	log.Printf("core %s: data in %s · authority %s · engine %s · %s", version, cfg.DataDir, cfg.Identity, eng.URL, gh_)
 	log.Printf("Talk to TASS: http://%s", strings.Replace(listen, "0.0.0.0", "127.0.0.1", 1))
 
 	stop := make(chan struct{})
@@ -207,35 +239,113 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(core.Status())
 	})
-	mux.HandleFunc("POST /api/say", func(w http.ResponseWriter, r *http.Request) {
+	// pagePost: the key, a local Origin (blocks other websites in your browser) and JSON.
+	pagePost := func(w http.ResponseWriter, r *http.Request, into any) bool {
 		if !authed(r) {
-			http.Error(w, "missing or wrong key (the page's token, or ~/.tass/api-key)", http.StatusUnauthorized)
-			return
+			http.Error(w, "missing or wrong key (the page's token, or the api-key file)", http.StatusUnauthorized)
+			return false
 		}
-		// Only this page may post: JSON, and a local Origin (blocks other websites in your browser).
 		if o := r.Header.Get("Origin"); o != "" {
 			u, err := url.Parse(o)
 			if err != nil || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
 				http.Error(w, "forbidden origin", http.StatusForbidden)
-				return
+				return false
 			}
 		}
 		if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 			http.Error(w, "JSON only", http.StatusUnsupportedMediaType)
-			return
+			return false
 		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(into); err != nil {
+			http.Error(w, "bad JSON", http.StatusBadRequest)
+			return false
+		}
+		return true
+	}
+	reply := func(w http.ResponseWriter, code int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		json.NewEncoder(w).Encode(v)
+	}
+	mux.HandleFunc("POST /api/say", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Text string `json:"text"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
-			http.Error(w, "bad JSON", http.StatusBadRequest)
+		if !pagePost(w, r, &body) {
 			return
 		}
-		if err := core.Say(body.Text); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		id, err := core.Say(body.Text)
+		if errors.Is(err, tass.ErrBusy) { // #46: refused, not silently dropped
+			reply(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusAccepted)
+		if err != nil {
+			reply(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusAccepted, map[string]string{"receipt": id})
+	})
+	mux.HandleFunc("POST /api/tasks", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Text string `json:"text"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		id, err := core.SubmitTask(body.Text)
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusAccepted, map[string]string{"job_id": id})
+	})
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var body tass.Settings
+		if !pagePost(w, r, &body) {
+			return
+		}
+		if err := core.SetSettings(body); err != nil {
+			reply(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.GetSettings())
+	})
+	mux.HandleFunc("POST /api/lessons/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "approve": // the owner's approval: only from this page, with its token
+			err = core.ApproveLesson(body.Path)
+		case "retry":
+			err = core.RetryLesson(body.Path)
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "approve or retry"})
+			return
+		}
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.Learning())
+	})
+	mux.HandleFunc("POST /api/pulse", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Action string `json:"action"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		out, err := core.PulseControl(body.Action)
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, out)
 	})
 	return mux
 }

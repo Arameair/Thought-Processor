@@ -36,14 +36,31 @@
   .steps .k { color:var(--dim); }
   .tag { font:11.5px var(--mono); padding:1px 7px; border-radius:6px; border:1px solid var(--line); }
   .tag.good { color:var(--tass); border-color:#2e5a49; } .tag.bad { color:var(--bad); border-color:#5a2e2e; } .tag.unk { color:var(--dim); }
+  #idbar { display:none; margin:12px 20px 0; padding:10px 14px; border-radius:10px; border:1px solid #5a2e2e; background:#1d1414; }
+  #idbar a { color:var(--you); }
+  .ctl { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 10px; } .ctl button { padding:4px 12px; }
+  table.ticks { width:100%; border-collapse:collapse; font:12px/1.45 var(--mono); } .ticks td { border-top:1px solid var(--line); padding:3px 6px 3px 0; vertical-align:top; }
+  .switch { display:flex; gap:10px; align-items:center; margin:4px 0; cursor:pointer; }
+  .switch input { width:18px; height:18px; }
+  .lesson { border-top:1px solid var(--line); padding:8px 0; font-size:13.5px; }
+  .lesson .t { font-weight:500; } .lesson .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .lesson button { padding:2px 10px; font-size:12.5px; }
+  .topbtn { padding:6px 14px; border-radius:999px; font-weight:500; }
+  .topbtn.on { background:#1f3b30; border-color:#2e5a49; color:var(--tass); }
+  .topbtn.off { background:#2a1b1b; border-color:#5a2e2e; color:#f2b3ad; }
 </style>
 </head>
 <body>
 <header>
-  <h1>TASS <small>core · thinks on this computer</small></h1>
+  <h1><span id="name">TASS</span> <small>core · thinks on this computer</small></h1>
   <span id="engine" class="chip unk">Thought Engine</span><span id="model" class="chip unk">Nemotron</span>
   <span id="pulse" class="chip unk">pulse</span><span id="gh" class="chip unk">GitHub</span><span id="busy" class="chip">listening</span>
+  <span style="flex:1"></span>
+  <span id="workchip" class="chip unk" title="the 20-second work pulse">work pulse UNKNOWN</span>
+  <button id="btnPulse" class="topbtn">Pulse: …</button>
+  <button id="btnAuto" class="topbtn">Autonomous: …</button>
 </header>
+<div id="idbar"></div>
 <main>
   <section class="card">
     <h2>Talk <small>works without internet</small></h2>
@@ -53,6 +70,23 @@
   <section class="card">
     <h2>Thought cycles <small>event → Spark → Trace/Thought → proposal → locked prediction → authorization → result → evaluation</small></h2>
     <div id="cycles"><div class="dim">No cycles yet. Say something to TASS.</div></div>
+  </section>
+  <section class="card">
+    <h2>Learning <small>every pulse looks for new lessons on GitHub; you approve what counts</small></h2>
+    <label class="switch"><input type="checkbox" id="setAuto"> <b>Autonomous</b> <span class="dim">(off = chat only. On: the pulse runs, it learns from GitHub, and lessons that pass every check are approved for you)</span></label>
+    <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
+    <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
+    <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
+    <div id="lessons" class="dim">(no lessons yet)</div>
+  </section>
+  <section class="card">
+    <h2>Work pulse <small>every 20 s: observe → decide → start/continue → observe result → report</small></h2>
+    <div class="ctl"><span id="pstate" class="tag unk">UNKNOWN</span>
+      <button data-a="start">Start</button><button data-a="pause">Pause</button><button data-a="resume">Resume</button><button data-a="step">Step once</button></div>
+    <form id="tf" style="margin:0 0 10px"><textarea id="tt" style="height:40px" placeholder="Give a task for the pulse (it starts on the next tick). Try: count your sections"></textarea><button>Queue</button></form>
+    <div id="pmsg" class="dim"></div>
+    <div id="jobs" class="dim"></div>
+    <table class="ticks"><tbody id="ticks"></tbody></table>
   </section>
   <section class="card">
     <h2>Identity <small>decides before anything runs</small></h2>
@@ -66,6 +100,7 @@
   </section>
 </main>
 <script>
+let CUR = {};
 const TOKEN = "__PAGE_TOKEN__";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -75,8 +110,8 @@ function ago(t) { if (!t || t.startsWith("0001")) return "never"; const s = Math
 const U = v => (v === undefined || v === null || v === "") ? '<span class="tag unk">UNKNOWN</span>' : esc(v);
 function tag(v) {
   if (!v) return '<span class="tag unk">UNKNOWN</span>';
-  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
-  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed/.test(v);
+  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$|^LEARNED$|^PASSED$|^UNLOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
+  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed|STUCK/.test(v);
   return `<span class="tag ${good ? "good" : bad ? "bad" : "unk"}">${esc(v)}</span>`;
 }
 function cycleHTML(c) {
@@ -107,12 +142,54 @@ async function refresh() {
   $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
   $("model").className = "chip " + (p ? (p.model_ok ? "ok" : "off") : "unk");
   $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron UNKNOWN"; $("model").title = (p && p.error) || "";
-  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "engine pulse " + ago(p.at) : "pulse UNKNOWN";
+  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "model checked " + ago(p.at) : "pulse UNKNOWN";
   $("gh").className = "chip " + (st.github_online ? "ok" : "off");
   $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) + (st.github_messages ? "" : " · messages paused") : "GitHub not syncing: TASS runs locally";
   $("gh").title = st.sync_problem || "";
   $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
   $("policy").innerHTML = `${st.policy_valid_now ? '<span class="tag good">valid now</span>' : '<span class="tag bad">not valid now</span>'} ${esc(st.policy)}`;
+  const id = st.identity;
+  if (id) {
+    if (id.entity && id.entity.name) { $("name").textContent = id.entity.name; document.title = id.entity.name + " · core"; }
+    const bad = id.state !== "UNLOCKED";
+    $("idbar").style.display = bad ? "block" : "none";
+    $("idbar").innerHTML = bad ? `<b>${esc(id.state)}</b>: ${esc(id.reason)} · nothing runs until Identity allows it. Open <a href="http://127.0.0.1:8796/" target="_blank">Identity (127.0.0.1:8796)</a> to ${id.state === "NO_ENTITY" ? "create your own entity" : "unlock"}.` : "";
+    who.tass = (id.entity && id.entity.name) || "TASS";
+  }
+  const pu = st.pulse;
+  if (pu) {
+    const lt = (pu.ticks || [])[0];
+    $("workchip").className = "chip " + (pu.control === "RUNNING" ? "ok" : "off");
+    $("workchip").textContent = pu.control === "RUNNING" ? `working · ${pu.state} · tick ${lt ? ago(lt.at) : "soon"}` : "work pulse paused";
+    $("pstate").className = "tag " + (pu.state === "BLOCKED" ? "bad" : pu.state === "READY" || pu.state === "WORKING" ? "good" : "unk");
+    $("pstate").textContent = (pu.control || "?") + " · " + (pu.state || "UNKNOWN");
+    $("jobs").innerHTML = (pu.jobs || []).slice(0, 6).map(j => `<div>${tag(j.state)} <b>${esc(j.job_id)}</b> ${esc(j.request)} ${j.result ? "→ " + esc(j.result) : ""} <span class="dim">${j.cycle_id ? esc(j.cycle_id) : ""}</span></div>`).join("") || "(no tasks yet)";
+    $("ticks").innerHTML = (pu.ticks || []).slice(0, 10).map(t => `<tr><td>${esc(t.pulse_id)}</td><td>${tag(t.state)}</td><td>${esc(t.decision)}${t.job_id ? " " + esc(t.job_id) : ""}</td><td class="dim">${esc(t.observed)}${t.outcome ? " · " + esc(t.outcome) : ""}${t.authorization ? " · " + esc(t.authorization) : ""}</td></tr>`).join("");
+  } else { $("pstate").textContent = "pulse UNKNOWN (engine not answering)"; }
+  const L = st.learning;
+  if (L) {
+    CUR = L.settings;
+    if (document.activeElement !== $("setAuto")) $("setAuto").checked = !!L.settings.autonomous;
+    if (document.activeElement !== $("setPulse")) $("setPulse").checked = !!L.settings.pulse;
+    $("btnAuto").textContent = "Autonomous: " + (L.settings.autonomous ? "ON" : "off (chat only)");
+    $("btnAuto").className = "topbtn " + (L.settings.autonomous ? "on" : "off");
+    const pon = L.settings.pulse && L.settings.autonomous;
+    $("btnPulse").textContent = "Pulse: " + (pon ? "ON" : "off");
+    $("btnPulse").className = "topbtn " + (pon ? "on" : "off");
+    if (document.activeElement !== $("setLearn")) $("setLearn").checked = !!L.settings.learn;
+    $("ghinfo").innerHTML = L.repo
+      ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
+      : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
+    const ls = L.lessons || [];
+    $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
+      <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
+      ${l.checks ? `<span class="dim">${l.status === "NEW" || l.status === "QUEUED" ? "" : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
+      ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
+      ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" ? `<button data-retry="${esc(l.path)}">Try again</button>` : ""}</div>
+      ${l.goal ? `<div class="dim">${esc(l.goal)}</div>` : ""}
+      ${(l.results || []).map(r => `<div class="dim">${r.right ? "✓" : "✗"} ${esc(r.check)} → <i>${esc(r.given || "(no answer)")}</i></div>`).join("")}
+      ${l.remember ? `<div>Remembers: ${esc(l.remember)}</div>` : ""}${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
+  }
   $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
   $("md").textContent = st.tass_md || "(not here yet: it comes from GitHub on the first sync)";
   const cj = JSON.stringify(st.cycles || []);
@@ -125,11 +202,42 @@ async function refresh() {
     if (keep) $("log").scrollTop = 1e9;
   }
 }
+const post = (path, body) => fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-TASS-Token": TOKEN}, body: JSON.stringify(body)})
+  .then(async r => ({ok: r.ok, status: r.status, body: await r.json().catch(() => ({}))}));
+function alertLine(t) { $("pmsg").textContent = t; }
 $("f").onsubmit = async ev => {
-  ev.preventDefault(); const text = $("t").value.trim(); if (!text) return; $("t").value = "";
-  await fetch("/api/say", {method: "POST", headers: {"Content-Type": "application/json", "X-TASS-Token": TOKEN}, body: JSON.stringify({text})});
+  ev.preventDefault(); const text = $("t").value.trim(); if (!text) return;
+  const r = await post("/api/say", {text});
+  if (r.ok) $("t").value = ""; else alertLine(r.body.error || "not accepted (" + r.status + ")");
   refresh();
 };
+$("tf").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("tt").value.trim(); if (!text) return;
+  const r = await post("/api/tasks", {text});
+  alertLine(r.ok ? "Queued " + r.body.job_id + ": it starts on a pulse tick." : (r.body.error || "not queued"));
+  if (r.ok) $("tt").value = "";
+  refresh();
+};
+async function saveSettings() {
+  const r = await post("/api/settings", {autonomous: $("setAuto").checked, pulse: $("setPulse").checked, learn: $("setLearn").checked});
+  alertLine(r.ok ? "Settings saved." : (r.body.error || "not saved")); refresh();
+}
+$("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnPulse").onclick = () => { const on = !CUR.pulse; $("setPulse").checked = on; if (on) $("setAuto").checked = true; saveSettings(); };
+$("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
+$("lessons").onclick = async ev => {
+  const a = ev.target.dataset.approve, t = ev.target.dataset.retry;
+  if (!a && !t) return;
+  const r = await post(a ? "/api/lessons/approve" : "/api/lessons/retry", {path: a || t});
+  alertLine(r.ok ? (a ? "Approved: it's in the Learned section now, and syncs to GitHub." : "It will study it again on a pulse.") : (r.body.error || "refused"));
+  refresh();
+};
+document.querySelectorAll(".ctl button").forEach(b => b.onclick = async () => {
+  const r = await post("/api/pulse", {action: b.dataset.a});
+  alertLine(r.ok ? b.textContent + ": ok" : (r.body.error || "refused"));
+  refresh();
+});
 $("t").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("f").requestSubmit(); } };
 refresh(); setInterval(refresh, 1000);
 </script>

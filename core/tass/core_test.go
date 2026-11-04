@@ -36,15 +36,16 @@ type ghFile struct {
 }
 
 type fakeGH struct {
-	mu       sync.Mutex
-	files    map[string]*ghFile // "repo@branch:path"
-	branches map[string]bool    // "repo@branch"
-	issues   []github.Issue
-	comments []github.Comment
-	posted   []string // "issue#n: body"
-	prs      []string
-	nextID   int64
-	srv      *httptest.Server
+	mu        sync.Mutex
+	files     map[string]*ghFile // "repo@branch:path"
+	branches  map[string]bool    // "repo@branch"
+	issues    []github.Issue
+	comments  []github.Comment
+	posted    []string // "issue#n: body"
+	prs       []string
+	treeCalls int
+	nextID    int64
+	srv       *httptest.Server
 }
 
 func newFakeGH() *fakeGH {
@@ -101,6 +102,25 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", etag)
 		json.NewEncoder(w).Encode(map[string]string{"content": base64.StdEncoding.EncodeToString([]byte(x.text)),
 			"encoding": "base64", "sha": fmt.Sprintf("sha%d", x.ver)})
+	case r.Method == "GET" && strings.Contains(p, "/git/trees/"):
+		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/git/trees/", 2)
+		prefix := parts[0] + "@" + parts[1] + ":"
+		tree := []map[string]string{}
+		sig := ""
+		for k, v := range f.files {
+			if strings.HasPrefix(k, prefix) {
+				tree = append(tree, map[string]string{"path": strings.TrimPrefix(k, prefix), "type": "blob", "sha": fmt.Sprintf("sha%d", v.ver)})
+				sig += k + fmt.Sprint(v.ver)
+			}
+		}
+		etag := fmt.Sprintf(`"t%x"`, hash(sig)[:8])
+		f.treeCalls++
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(304)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		json.NewEncoder(w).Encode(map[string]any{"tree": tree})
 	case r.Method == "PUT" && strings.Contains(p, "/contents/"):
 		var b struct{ Message, Content, SHA, Branch string }
 		json.NewDecoder(r.Body).Decode(&b)
@@ -173,10 +193,17 @@ func (f *fakeGH) say(issue int, who, body string) {
 // (The real engine's cycle is tested in the Thought-engine repo; this stands in for its HTTP contract.)
 
 type fakeEngine struct {
-	mu       sync.Mutex
-	reqs     []map[string]any
-	outcomes []map[string]any
-	srv      *httptest.Server
+	control            string
+	jobState           map[string]map[string]any
+	mu                 sync.Mutex
+	reqs               []map[string]any
+	outcomes           []map[string]any
+	pulse              []string
+	jobs               []map[string]any
+	srv                *httptest.Server
+	mismatchCycleID    string
+	unlockedPrediction bool
+	unreadableProposal bool
 }
 
 func newFakeEngine() *fakeEngine {
@@ -189,6 +216,44 @@ func newFakeEngine() *fakeEngine {
 		}
 		if r.Header.Get("Authorization") != "Bearer testkey" {
 			http.Error(w, `{"error":"missing or wrong engine key"}`, 401)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/pulse") {
+			e.mu.Lock()
+			e.pulse = append(e.pulse, r.URL.Path)
+			e.mu.Unlock()
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			if e.control == "" {
+				e.control = "PAUSED"
+			}
+			if r.Method == "GET" {
+				jobs := []map[string]any{}
+				for _, j := range e.jobs {
+					if st, ok := e.jobState[j["job_id"].(string)]; ok {
+						jobs = append(jobs, st)
+					} else {
+						jobs = append(jobs, map[string]any{"job_id": j["job_id"], "state": "QUEUED"})
+					}
+				}
+				json.NewEncoder(w).Encode(map[string]any{"control": e.control, "state": "READY", "jobs": jobs})
+				return
+			}
+			var in map[string]any
+			json.NewDecoder(r.Body).Decode(&in)
+			switch r.URL.Path {
+			case "/api/pulse/jobs":
+				e.jobs = append(e.jobs, in)
+				w.WriteHeader(202)
+			case "/api/pulse/control":
+				switch in["action"] {
+				case "start", "resume":
+					e.control = "RUNNING"
+				case "pause":
+					e.control = "PAUSED"
+				}
+			}
+			json.NewEncoder(w).Encode(in)
 			return
 		}
 		var in map[string]any
@@ -223,9 +288,20 @@ func newFakeEngine() *fakeEngine {
 		}
 		if strings.Contains(last, "sections") {
 			pred[id] = 6
-			prop["action"], prop["prediction"] = "tass_sections", map[string]any{"state": "LOCKED", "value": 6, "locked_at": time.Now()}
+			prop["action"], prop["prediction"] = "tass_sections", map[string]any{
+				"state": "LOCKED", "value": 6, "locked_at": time.Now(), "sha256": strings.Repeat("a", 64)}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"cycle_id": id, "state": "awaiting_outcome", "request": last,
+		if e.unlockedPrediction {
+			prop["prediction"] = map[string]any{"state": "NOT_PREDICTED"}
+		}
+		if e.unreadableProposal {
+			prop["format"] = "UNREADABLE"
+		}
+		responseID := id
+		if e.mismatchCycleID != "" {
+			responseID = e.mismatchCycleID
+		}
+		json.NewEncoder(w).Encode(map[string]any{"cycle_id": responseID, "state": "awaiting_outcome", "request": last,
 			"spark": map[string]any{"status": "done", "rating": 7, "topic": "fixture"}, "proposal": prop})
 	}))
 	return e
@@ -516,4 +592,14 @@ func TestIdentityCanWithdrawPermission(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, GrantFile)); err == nil {
 		t.Fatal("a removed policy must be removed locally too (the engine then refuses)")
 	}
+}
+
+// finish marks a pulse job done with the entity's reply.
+func (e *fakeEngine) finish(jobID, state, result, remember string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.jobState == nil {
+		e.jobState = map[string]map[string]any{}
+	}
+	e.jobState[jobID] = map[string]any{"job_id": jobID, "state": state, "result": result, "remember": remember, "cycle_id": jobID + ":cycle"}
 }

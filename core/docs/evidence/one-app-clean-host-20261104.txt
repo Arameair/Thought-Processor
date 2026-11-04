@@ -1,0 +1,366 @@
+TASS one-application clean-host acceptance — 2026-11-04 (sandbox; TEST FIXTURE model; NOT the owner's PC)
+Host: isolated Docker 29.9.2 / compose 5.6.1, 2 CPUs, 8 GB, no GPU. Docker Hub unreachable, so stand-in base images
+(GO_IMAGE=go-standin:local, RUN_IMAGE=liaison-testbase:local); the real build uses golang:1.24-alpine / alpine:3.20.
+Model: tass-fixture-model:local (core/test/fixture-model), FIXTURE_DELAY=45 s for requests containing 'slow'.
+Versions: core 30fa680 (deployed first), engine a847385, identity 8b175c8; candidates test/candidate-good cc97b06, test/candidate-bad 5da6f4e (local only).
+Command: APP_HOME=/tmp/ch/app FIXTURE_MODEL_IMAGE=tass-fixture-model:local FIXTURE_DELAY=45 python3 core/test/acceptance.py test/candidate-good test/candidate-bad
+
+09:21:05 $ ./tass.sh check
+    |   [ok]   Pins: engine a847385 · identity 8b175c8
+    |   [note] Nothing deployed yet: start builds core 30fa680b862f with the pins above.
+    |   [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+    |   Data in /tmp/ch/app/data (line counts; records are only appended):
+    |          identity/entity.json missing
+    |          identity/decisions.jsonl missing
+    |          core/tass.md missing
+    |          core/memory.jsonl missing
+    |          core/conversation.jsonl missing
+    |          engine/cycles.jsonl missing
+    |          engine/jobs.jsonl missing
+    |          engine/ticks.jsonl missing
+    |          engine/model-requests.jsonl missing
+    | Ready: ./tass.sh start
+09:21:05 $ ./tass.sh start
+    |  Container tass-app-model-1 Starting
+    |  Container tass-app-identity-1 Starting
+    |  Container tass-app-model-1 Started
+    |  Container tass-app-identity-1 Started
+    |  Container tass-app-identity-1 Waiting
+    |  Container tass-app-model-1 Waiting
+    |  Container tass-app-model-1 Healthy
+    |  Container tass-app-identity-1 Healthy
+    |  Container tass-app-engine-1 Starting
+    |  Container tass-app-engine-1 Started
+    |  Container tass-app-engine-1 Waiting
+    |  Container tass-app-engine-1 Healthy
+    |  Container tass-app-core-1 Starting
+    |  Container tass-app-core-1 Started
+09:22:18 containers:
+    tass-app-core-1 Up 6 seconds (healthy)
+    tass-app-engine-1 Up 12 seconds (healthy)
+    tass-app-identity-1 Up 17 seconds (healthy)
+    tass-app-model-1 Up 18 seconds (healthy)
+09:22:18 PASS 4 services healthy (identity, model, engine, core) · tass-app-core-1 Up 6 seconds (healthy); tass-app-engine-1 Up 12 seconds (healthy); tass-app-identity-1 Up 17 seconds (healthy); tass-app-model-1 Up 18 seconds (healthy)
+09:22:18 PASS exactly one model container on this host · 1 model container(s)
+09:22:18 PASS the app uses only its own networks (no Python workspace, liaison or tass-workspace) · attached: tass-app_app, tass-app_front (engine-namespace core has none of its own)
+09:22:18 PASS fresh install has NO entity and nothing personal · {"state": "NO_ENTITY", "reason": "no entity on this installation yet"}
+09:22:18 PASS core is BLOCKED until an entity exists · Identity NO_ENTITY: no entity on this installation yet
+09:22:18 PASS no task can be queued without an entity · 409 {'error': 'not queued: Identity dec_0e39ed63c7066e73: NO_ENTITY: no entity on this installation yet'}
+09:22:18 PASS model is on the internal network only, no published port · {"tass-app_app":{"IPAMConfig":null,"Links":null,"Aliases":["tass-app-model-1","model"],"DriverOpts":null,"GwPriority":0,"NetworkID":"c5ac1e841c1c0a7f028839a7693
+09:22:22 PASS no generated key is inside any image · searched every layer of: tass-core:30fa680b862f tass-engine:a84738503025 tass-identity:8b175c8cd779 tass-fixture-model:local
+09:22:22 PASS Identity refuses a caller without a service key · 401
+09:22:22 PASS Identity refuses entity creation without the page token · 403
+09:22:22 PASS a service inside the app can't create or take over an entity (owner routes are localhost-only) · 403
+09:22:22 create entity: 201 {'state': 'UNLOCKED', 'entity': {'entity_id': 'ent_751d8e112bd6f3087870635c', 'name': 'Mira', 'created_at': '2026-11-04T15:22:22.709788391Z', 'grants': ['conversation', 'model.request', 'thought.process', 'pulse.run', 'action.read_entity']}, 'unlocked_until': '2026-11-05T03:22:22.711667123Z'}
+09:22:22 PASS owner creates THIS installation's own entity · {"state": "UNLOCKED", "entity": {"entity_id": "ent_751d8e112bd6f3087870635c", "name": "Mira", "created_at": "2026-11-04T15:22:22.709788391Z", "grants": ["conversation", "model.request", "thought.proce
+09:22:22 PASS wrong passphrase is refused · 403
+09:22:22 PASS unlocked: core READY · {"state": "READY", "version": "30fa680b862faa52d9a9ec2996fc038eacd5f919", "engine_reachable": true, "model_ok": true, "policy_valid_now": true, "github_online": false, "github_messages": false, "last_
+09:22:22 PASS conversation: message accepted with a receipt · 202 {'receipt': 'msg_20261104T152222_c39a60'}
+09:22:24 PASS conversation: answered through a full thought cycle as Mira · tp_20261104T152222_8beaf6884fc8
+09:22:24 PASS the entity has its own starter document (no one else's) · # Mira
+09:22:25 PASS task queued for the pulse (not run right away) · 202 {'job_id': 'job_20261104T152225_cb8f15'}
+09:22:28 PASS pulse is PAUSED until Start; the job waits · PAUSED
+09:22:28 PASS Start · 200
+09:22:53 PASS owner conversation stays available while the long job runs (accepted with receipt) · 202 {'receipt': 'msg_20261104T152253_319195'}
+    pulse_000010_152525  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000009_152505  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000008_152445  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000007_152425  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000006_152405  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000005_152345  READY    nothing pending                                                        | 0 queued · no job running · model slot free
+    pulse_000004_152325  READY    OBSERVED: job_20261104T152225_cb8f15 finished; nothing else pending    | 0 queued · no job running · model slot free | job_20261104T152225_cb8f15 DONE (PREDICTION_INCORRECT, GOAL_MET): (TEST FIXTURE) I think my document has 4 sections.
+    pulse_000003_152305  WORKING  CONTINUE: job_20261104T152225_cb8f15 is still running (38s); not start | 0 queued · job job_20261104T152225_cb8f15 running · model slot busy
+    pulse_000002_152245  WORKING  CONTINUE: job_20261104T152225_cb8f15 is still running (18s); not start | 0 queued · job job_20261104T152225_cb8f15 running · model slot busy
+    pulse_000001_152228  WORKING  START: job_20261104T152225_cb8f15                                      | 1 queued · no job running · model slot free
+09:25:28 PASS 10 verifiable ticks ~20 s apart · 10 ticks in 180 s
+09:25:28 PASS job longer than 20 s survives several pulses · job ran 45 s; CONTINUE ticks 2
+09:25:28 PASS started exactly once (no duplicate execution) · START ticks: 1
+09:25:28 PASS result observed and reported on a later tick · DONE · (TEST FIXTURE) I think my document has 4 sections.
+09:25:28 model requests during the pulse run (job + the 'are you there?' chat): 5
+09:25:28 PASS Pause/Resume/Step controls answer · pause, step, resume, pause
+09:25:28 $ ./tass.sh stop
+    | Stopped this application's containers (nothing else).
+    |  Container tass-app-core-1 Stopping
+    |  Container tass-app-core-1 Stopped
+    |  Container tass-app-engine-1 Stopping
+    |  Container tass-app-engine-1 Stopped
+    |  Container tass-app-model-1 Stopping
+    |  Container tass-app-identity-1 Stopping
+    |  Container tass-app-identity-1 Stopped
+    |  Container tass-app-model-1 Stopped
+09:25:39 $ ./tass.sh start
+    |  Container tass-app-identity-1 Starting
+    |  Container tass-app-model-1 Starting
+    |  Container tass-app-identity-1 Started
+    |  Container tass-app-model-1 Started
+    |  Container tass-app-model-1 Waiting
+    |  Container tass-app-identity-1 Waiting
+    |  Container tass-app-identity-1 Healthy
+    |  Container tass-app-model-1 Healthy
+    |  Container tass-app-engine-1 Starting
+    |  Container tass-app-engine-1 Started
+    |  Container tass-app-engine-1 Waiting
+    |  Container tass-app-engine-1 Healthy
+    |  Container tass-app-core-1 Starting
+    |  Container tass-app-core-1 Started
+09:25:57 PASS after restart: same entity, LOCKED, core BLOCKED · LOCKED BLOCKED ent_751d8e112bd6f3087870635c
+09:25:57 PASS records persisted across restart · {"engine/cycles.jsonl": 18, "engine/jobs.jsonl": 3, "engine/ticks.jsonl": 12, "core/conversation.jsonl": 2, "identity/decisions.jsonl": 96}
+09:25:57 PASS jobs and ticks persisted; pulse comes back PAUSED · PAUSED · 1 jobs
+09:25:57 PASS unlock again → READY · READY
+09:25:57 $ ./tass.sh update test/candidate-good --yes
+    | Current:   core 30fa680b862faa52d9a9ec2996fc038eacd5f919 · engine a84738503025 · identity 8b175c8cd779
+    | Candidate: core cc97b061c00f4987071f3670c6520ee780215663 · engine a847385 · identity 8b175c8 (test/candidate-good)
+    |
+    | Changes in core/ (newest first):
+    |   cc97b06 TEST candidate: good update (comment only)
+    |    1 file changed, 1 insertion(+)
+    |
+    | Apply with: ./tass.sh update cc97b061c00f4987071f3670c6520ee780215663
+    | Building core cc97b061c00f · engine a84738503025 · identity 8b175c8cd779…
+    | Backup: /tmp/ch/app/deploy/backups/20261104T152626Z-before-cc97b061c00f.tgz
+    | Validating core cc97b061c00f · engine a84738503025 · identity 8b175c8cd779…
+    |   PASS: all healthy · version cc97b061c00f · Identity LOCKED (ent_751d8e112bd6f3087870635c) · state BLOCKED · no records lost
+    |   Identity is LOCKED: unlock at http://127.0.0.1:8796 to let it work.
+    | UPDATED to core cc97b061c00f. Previous version kept for ./tass.sh rollback.
+09:26:45 PASS good update applied and validated · UPDATED to core cc97b061c00f. Previous version kept for ./tass.sh rollback.
+09:26:45 PASS after update: same entity · ent_751d8e112bd6f3087870635c
+09:26:53 $ ./tass.sh update test/candidate-bad --yes
+    |     core-1      | 15:27:36 TEST candidate: broken on purpose
+    |     core-1      | 15:27:37 TEST candidate: broken on purpose
+    |     core-1      | 15:27:39 TEST candidate: broken on purpose
+    |     core-1      | 15:27:42 TEST candidate: broken on purpose
+    |     core-1      | 15:27:48 TEST candidate: broken on purpose
+    |     core-1      | 15:28:01 TEST candidate: broken on purpose
+    |     core-1      | 15:28:27 TEST candidate: broken on purpose
+    |     core-1      | 15:29:18 TEST candidate: broken on purpose
+    |     core-1      | 15:30:19 TEST candidate: broken on purpose
+    | Restored data and keys from /tmp/ch/app/deploy/backups/20261104T152723Z-before-5a0dbf2254ed.tgz (what was there is kept in /tmp/ch/app/deploy/failed/20261104T153055Z).
+    | Validating core cc97b061c00f · engine a84738503025 · identity 8b175c8cd779…
+    |   PASS: all healthy · version cc97b061c00f · Identity LOCKED (ent_751d8e112bd6f3087870635c) · state BLOCKED · no records lost
+    |   Identity is LOCKED: unlock at http://127.0.0.1:8796 to let it work.
+    | ROLLED BACK: running the previous version again, with your data as it was before the update.
+09:31:13 PASS broken update is detected and rolled back automatically (version and data) · ROLLED BACK: running the previous version again, with your data as it was before the update.
+09:31:13 PASS running the previous good version again · cc97b061c00f
+09:31:13 PASS entity intact after the failed update · ent_751d8e112bd6f3087870635c
+09:31:13 $ ./tass.sh rollback
+    | Validating core 30fa680b862f · engine a84738503025 · identity 8b175c8cd779…
+    |   PASS: all healthy · version 30fa680b862f · Identity LOCKED (ent_751d8e112bd6f3087870635c) · state BLOCKED · no records lost
+    |   Identity is LOCKED: unlock at http://127.0.0.1:8796 to let it work.
+    | Rolled back. (./tass.sh rollback again returns to the version you just left.)
+09:31:42 PASS manual rollback returns to the version before the update · 30fa680b862f
+09:31:42 PASS entity intact after rollback · ent_751d8e112bd6f3087870635c
+09:31:42 $ ./tass.sh status
+    | Deployed: core 30fa680b862f · engine a84738503025 · identity 8b175c8cd779 · since 2026-11-04T15:21:59Z
+    | tass-app-core-1: Up 6 seconds (healthy)
+    | tass-app-engine-1: Up 12 seconds (healthy)
+    | tass-app-identity-1: Up 17 seconds (healthy)
+    | tass-app-model-1: Up 17 seconds (healthy)
+    | Identity: LOCKED Mira locked: the owner unlocks it with the passphrase
+    | State: BLOCKED  Identity LOCKED: locked: the owner unlocks it with the passphrase
+    |   engine reachable True · model ok True
+    |   last pulse tick: {"pulse_id":"pulse_000012_152528","at":"2026-11-04T15:25:28.4504406Z","trigger":"timer","state":"READY","observed":"0 queued · no job running · model slot free","decision":"nothing pending","ms":0}
+
+SUMMARY
+  PASS  4 services healthy (identity, model, engine, core)
+  PASS  exactly one model container on this host
+  PASS  the app uses only its own networks (no Python workspace, liaison or tass-workspace)
+  PASS  fresh install has NO entity and nothing personal
+  PASS  core is BLOCKED until an entity exists
+  PASS  no task can be queued without an entity
+  PASS  model is on the internal network only, no published port
+  PASS  no generated key is inside any image
+  PASS  Identity refuses a caller without a service key
+  PASS  Identity refuses entity creation without the page token
+  PASS  a service inside the app can't create or take over an entity (owner routes are localhost-only)
+  PASS  owner creates THIS installation's own entity
+  PASS  wrong passphrase is refused
+  PASS  unlocked: core READY
+  PASS  conversation: message accepted with a receipt
+  PASS  conversation: answered through a full thought cycle as Mira
+  PASS  the entity has its own starter document (no one else's)
+  PASS  task queued for the pulse (not run right away)
+  PASS  pulse is PAUSED until Start; the job waits
+  PASS  Start
+  PASS  owner conversation stays available while the long job runs (accepted with receipt)
+  PASS  10 verifiable ticks ~20 s apart
+  PASS  job longer than 20 s survives several pulses
+  PASS  started exactly once (no duplicate execution)
+  PASS  result observed and reported on a later tick
+  PASS  Pause/Resume/Step controls answer
+  PASS  after restart: same entity, LOCKED, core BLOCKED
+  PASS  records persisted across restart
+  PASS  jobs and ticks persisted; pulse comes back PAUSED
+  PASS  unlock again → READY
+  PASS  good update applied and validated
+  PASS  after update: same entity
+  PASS  broken update is detected and rolled back automatically (version and data)
+  PASS  running the previous good version again
+  PASS  entity intact after the failed update
+  PASS  manual rollback returns to the version before the update
+  PASS  entity intact after rollback
+
+37 PASS · 0 FAIL
+
+--------------------------------------------------------------------------------
+Thought cycles in that run (engine/cycles.jsonl): 'are you there?' arrived 15:22:53 while the 45-s job held
+the one model slot, and was answered at 15:23:13 when the slot freed.
+
+### External-model mode (the owner's case: a model is ALREADY running)
+$ docker ps (a stand-in for the workspace's Nemotron, in another project)
+fake-workspace-model-1 tass-fixture-model:local fake-workspace
+
+$ ./tass.sh check   (MODEL_MODE=bundled)
+Preflight (read-only: nothing is built, started, stopped or written except a first app.env)
+  [ok]   Docker 29.9.2 · compose 5.6.1
+  [ok]   Computer: 2 CPUs · 8 GB memory · 25G free
+  [note] TEST FIXTURE model image tass-fixture-model:local (tests only: not a real model)
+  [stop] Another model is already running: fake-workspace-model-1 (tass-fixture-model:local). One computer runs ONE model: set MODEL_MODE=external, MODEL_NETWORK and MODEL_URL in /tmp/ch/app2/app.env to use it (nothing of it is stopped).
+  [ok]   Port 127.0.0.1:8795 available (or already this application's)
+  [ok]   Port 127.0.0.1:8796 available (or already this application's)
+  [ok]   Pins: engine a847385 · identity 8b175c8
+  [note] Nothing deployed yet: start builds core 30fa680b862f with the pins above.
+  [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+  Data in /tmp/ch/app2/data (line counts; records are only appended):
+         identity/entity.json missing
+         identity/decisions.jsonl missing
+         core/tass.md missing
+         core/memory.jsonl missing
+         core/conversation.jsonl missing
+         engine/cycles.jsonl missing
+         engine/jobs.jsonl missing
+         engine/ticks.jsonl missing
+         engine/model-requests.jsonl missing
+Fix the [stop] items, then ./tass.sh check again.
+exit 0
+
+$ ./tass.sh start   (MODEL_MODE=external MODEL_NETWORK=fake-workspace_default MODEL_URL=http://model:8081)
+Preflight (read-only: nothing is built, started, stopped or written except a first app.env)
+  [ok]   Docker 29.9.2 · compose 5.6.1
+  [ok]   Computer: 2 CPUs · 8 GB memory · 25G free
+  [ok]   Using the model already running on Docker network fake-workspace_default (http://model:8081); no second model starts
+  [ok]   Port 127.0.0.1:8795 available (or already this application's)
+  [ok]   Port 127.0.0.1:8796 available (or already this application's)
+  [ok]   Pins: engine a847385 · identity 8b175c8
+  [note] Nothing deployed yet: start builds core 30fa680b862f with the pins above.
+  [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+  Data in /tmp/ch/app2/data (line counts; records are only appended):
+         identity/entity.json missing
+         identity/decisions.jsonl missing
+         core/tass.md missing
+         core/memory.jsonl missing
+         core/conversation.jsonl missing
+         engine/cycles.jsonl missing
+         engine/jobs.jsonl missing
+         engine/ticks.jsonl missing
+         engine/model-requests.jsonl missing
+
+Building core 30fa680b862f · engine a84738503025 · identity 8b175c8cd779…
+Validating core 30fa680b862f · engine a84738503025 · identity 8b175c8cd779…
+  PASS: all healthy · version 30fa680b862f · Identity NO_ENTITY · state BLOCKED · no records lost
+  No entity yet: create your own at http://127.0.0.1:8796
+Running. Identity: http://127.0.0.1:8796  ·  Talk and work pulse: http://127.0.0.1:8795
+
+$ docker ps
+tass-app-core-1 Up 6 seconds (healthy)
+tass-app-engine-1 Up 12 seconds (healthy)
+tass-app-identity-1 Up 17 seconds (healthy)
+fake-workspace-model-1 Up 57 seconds
+model containers: 1
+{"state":"BLOCKED","reasons":["Identity NO_ENTITY: no entity on this installation yet"],"version":"30fa680b862faa52d9a9ec2996fc038eacd5f919","engine_reachable":true,"model_ok":true,"policy_valid_now":false,"github_online":false,"github_messages":false,"last_sync":"0001-01-01T00:00:00Z","replies_waiting":0,"identity":"NO_ENTITY"}
+
+create entity: 201
+say: (202, {'receipt': 'msg_20261104T153551_bbb7ec'})
+answered through the EXISTING model: tp_20261104T153551_d4db48da4b1c evaluated (TEST FIXTURE) Hello.
+existing model served {"requests": 2}
+
+--------------------------------------------------------------------------------
+Unit tests (go test -race): identity 8b175c8 ok · engine a847385 ok (-count=2) · core 30fa680 ok
+
+================================================================================
+RE-RUN on core 8208895 (lessons loop added) · engine 6741fd4 · identity 14587c0 · candidates ac776f9 / 88da227
+SUMMARY
+  PASS  4 services healthy (identity, model, engine, core)
+  PASS  exactly one model container on this host
+  PASS  the app uses only its own networks (no Python workspace, liaison or tass-workspace)
+  PASS  fresh install has NO entity and nothing personal
+  PASS  core is BLOCKED until an entity exists
+  PASS  no task can be queued without an entity
+  PASS  model is on the internal network only, no published port
+  PASS  no generated key is inside any image
+  PASS  Identity refuses a caller without a service key
+  PASS  Identity refuses entity creation without the page token
+  PASS  a service inside the app can't create or take over an entity (owner routes are localhost-only)
+  PASS  owner creates THIS installation's own entity
+  PASS  wrong passphrase is refused
+  PASS  unlocked: core READY
+  PASS  conversation: message accepted with a receipt
+  PASS  conversation: answered through a full thought cycle as Mira
+  PASS  the entity has its own starter document (no one else's)
+  PASS  task queued for the pulse (not run right away)
+  PASS  pulse is PAUSED until Start; the job waits
+  PASS  Start
+  PASS  owner conversation stays available while the long job runs (accepted with receipt)
+  PASS  10 verifiable ticks ~20 s apart
+  PASS  job longer than 20 s survives several pulses
+  PASS  started exactly once (no duplicate execution)
+  PASS  result observed and reported on a later tick
+  PASS  Pause/Resume/Step controls answer
+  PASS  after restart: same entity, LOCKED, core BLOCKED
+  PASS  records persisted across restart
+  PASS  jobs and ticks persisted; pulse comes back PAUSED
+  PASS  unlock again → READY
+  PASS  good update applied and validated
+  PASS  after update: same entity
+  PASS  broken update is detected and rolled back automatically (version and data)
+  PASS  running the previous good version again
+  PASS  entity intact after the failed update
+  PASS  manual rollback returns to the version before the update
+  PASS  entity intact after rollback
+
+37 PASS · 0 FAIL
+
+================================================================================
+INTEGRATION RUN (experiment/integration-20261104 f0243b1: GPT-6 safety line + lessons loop + Autonomous switch)
+engine d820840 · identity d37757b · candidates 623099f / c47b639
+SUMMARY
+  PASS  4 services healthy (identity, model, engine, core)
+  PASS  exactly one model container on this host
+  PASS  the app uses only its own networks (no Python workspace, liaison or tass-workspace)
+  PASS  fresh install has NO entity and nothing personal
+  PASS  core is BLOCKED until an entity exists
+  PASS  no task can be queued without an entity
+  PASS  model is on the internal network only, no published port
+  PASS  no generated key is inside any image
+  PASS  Identity refuses a caller without a service key
+  PASS  Identity refuses entity creation without the page token
+  PASS  a service inside the app can't create or take over an entity (owner routes are localhost-only)
+  PASS  owner creates THIS installation's own entity
+  PASS  wrong passphrase is refused
+  PASS  unlocked: core READY
+  PASS  conversation: message accepted with a receipt
+  PASS  conversation: answered through a full thought cycle as Mira
+  PASS  the entity has its own starter document (no one else's)
+  PASS  Autonomous off (default): chat only, no task can be queued
+  PASS  owner turns Autonomous on
+  PASS  task queued for the pulse (not run right away)
+  PASS  pulse is PAUSED until Start; the job waits
+  PASS  Start
+  PASS  owner conversation stays available while the long job runs (accepted with receipt)
+  PASS  10 verifiable ticks ~20 s apart
+  PASS  job longer than 20 s survives several pulses
+  PASS  started exactly once (no duplicate execution)
+  PASS  result observed and reported on a later tick
+  PASS  Pause/Resume/Step controls answer
+  PASS  after restart: same entity, LOCKED, core BLOCKED
+  PASS  records persisted across restart
+  PASS  jobs and ticks persisted; pulse comes back PAUSED
+  PASS  unlock again → READY
+  PASS  good update applied and validated
+  PASS  after update: same entity
+  PASS  broken update is detected and rolled back automatically (version and data)
+  PASS  running the previous good version again
+  PASS  entity intact after the failed update
+  PASS  manual rollback returns to the version before the update
+  PASS  entity intact after rollback
+
+39 PASS · 0 FAIL

@@ -1,0 +1,231 @@
+TASS one app — lessons loop clean-host run — 2026-11-04 (sandbox; TEST FIXTURES; NOT the owner's PC or GitHub)
+GitHub: core/test/fake_github.py (stands in for api.github.com: contents + git/trees with ETags), repo Mira/home@live,
+  seeded with a Mira tass.md and the 3 lessons from Arameair/TASS PR #23 (lessons/README.md, lessons/claude/01..03).
+Model: tass-fixture-model:local; lesson checks answered from a lookup table (first try at 'attempts' wrong on purpose).
+Versions: core 8208895 · engine 6741fd4 · identity 14587c0. Stand-in base images (Docker Hub unreachable).
+Command: APP_HOME=/tmp/ch/app3 FIXTURE_MODEL_IMAGE=tass-fixture-model:local GITHUB_TOKEN=fixture-token TASS_GITHUB_API=http://172.17.0.1:28999 python3 core/test/learning_acceptance.py
+
+12:32:22 $ ./tass.sh check
+    |   [ok]   Pins: engine 6741fd4 · identity 14587c0
+    |   [note] Nothing deployed yet: start builds core 82088957390b with the pins above.
+    |   [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+    |   Data in /tmp/ch/app3/data (line counts; records are only appended):
+    |          identity/entity.json missing
+    |          identity/decisions.jsonl missing
+    |          core/tass.md missing
+    |          core/memory.jsonl missing
+    |          core/conversation.jsonl missing
+    |          engine/cycles.jsonl missing
+    |          engine/jobs.jsonl missing
+    |          engine/ticks.jsonl missing
+    |          engine/model-requests.jsonl missing
+    | Ready: ./tass.sh start
+12:32:22 $ ./tass.sh check
+    |   [ok]   Pins: engine 6741fd4 · identity 14587c0
+    |   [note] Nothing deployed yet: start builds core 82088957390b with the pins above.
+    |   [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+    |   Data in /tmp/ch/app3/data (line counts; records are only appended):
+    |          identity/entity.json missing
+    |          identity/decisions.jsonl missing
+    |          core/tass.md missing
+    |          core/memory.jsonl missing
+    |          core/conversation.jsonl missing
+    |          engine/cycles.jsonl missing
+    |          engine/jobs.jsonl missing
+    |          engine/ticks.jsonl missing
+    |          engine/model-requests.jsonl missing
+    | Ready: ./tass.sh start
+12:32:22 $ ./tass.sh start
+12:33:41 PASS GitHub token made at start, 0600, mounted read-only ·
+12:33:44 PASS the token is not in the core image · 0
+12:33:44 PASS before an entity exists, nothing syncs with GitHub · 4 requests
+12:33:44 PASS owner creates the entity (UNLOCKED) · 201
+12:33:56 PASS connected to GitHub: the entity's document came from the repo · # Mira
+12:33:58 PASS chat with the entity (receipt + answered) · msg_20261104T183356_855da8
+12:34:23 PASS pulse setting off: no lessons looked at, pulse PAUSED · PAUSED
+12:34:23 PASS turn the pulse setting ON · {"pulse": true, "learn": true}
+12:34:23 PASS the engine pulse is RUNNING (a tick every 20 s) · RUNNING
+12:34:35 PASS a pulse found the 3 lessons on GitHub · lessons/claude/01-my-work-pulse.md, lessons/claude/02-how-i-learn.md, lessons/claude/03-building-together.md
+12:36:55    PASSED  lessons/claude/01-my-work-pulse.md  3/3 attempts 1  remembers: (TEST FIXTURE) I can explain My work pulse
+12:36:55             ✓ How many seconds are there between two pulses? → 20 seconds
+12:36:55             ✓ What do I say on a tick when my job is still running? → I say CONTINUE
+12:36:55             ✓ What is my state while Identity is locked? → I am BLOCKED
+12:36:55    PASSED  lessons/claude/02-how-i-learn.md  3/3 attempts 2  remembers: (TEST FIXTURE) I can explain How I learn
+12:36:55             ✓ In which folder of my repository do lessons live? → the lessons folder
+12:36:55             ✓ How many attempts do I get before a lesson is stuck? → 3 attempts
+12:36:55             ✓ Who must approve a lesson before it counts as learned? → my owner
+12:36:55    PASSED  lessons/claude/03-building-together.md  3/3 attempts 1  remembers: (TEST FIXTURE) I can explain Building together
+12:36:55             ✓ Who makes the final decisions on the project? → my owner
+12:36:55             ✓ When may I say that something happened? → only after I see the result
+12:36:55             ✓ How does a new lesson reach me? → by a pull request
+12:36:55 PASS each lesson was studied on the pulse and graded by the app: all 3 PASSED · in 140 s
+12:36:55 PASS a wrong answer made the entity try again (attempt 2 passed) · attempts 2
+12:36:55 PASS one lesson at a time, each job started once · 4 jobs
+12:36:55 PASS nothing counts as learned before approval ·
+12:36:55 PASS owner approves 01-my-work-pulse.md · 200
+12:36:55 PASS owner approves 02-how-i-learn.md · 200
+12:36:55 PASS owner approves 03-building-together.md · 200
+12:37:15 tass.md on GitHub now ends:
+    ## Learned
+
+    - My work pulse: (TEST FIXTURE) I can explain My work pulse (lesson `lessons/claude/01-my-work-pulse.md`, 3/3, approved 2026-11-04)
+    - How I learn: (TEST FIXTURE) I can explain How I learn (lesson `lessons/claude/02-how-i-learn.md`, 3/3, approved 2026-11-04)
+    - Building together: (TEST FIXTURE) I can explain Building together (lesson `lessons/claude/03-building-together.md`, 3/3, approved 2026-11-04)
+12:37:15 PASS the 3 learned lessons are in the Learned section on GitHub ·
+12:37:15 $ ./tass.sh stop
+    | Stopped this application's containers (nothing else).
+12:37:26 $ ./tass.sh start
+12:37:44 PASS after restart: LOCKED, nothing runs · BLOCKED
+12:37:58 PASS after unlock the pulse comes back ON by itself (setting kept) · RUNNING
+12:37:58 PASS learned lessons are remembered, not studied again ·
+12:38:38 PASS a lesson added to GitHub later is found on a pulse and studied · PASSED
+12:38:38 PASS GitHub is checked cheaply (304 Not Modified when nothing changed) · 12 tree requests
+12:38:38 $ ./tass.sh status
+    | Deployed: core 82088957390b · engine 6741fd47cab4 · identity 14587c0bca08 · since 2026-11-04T18:33:22Z
+    | tass-app-core-1: Up About a minute (healthy)
+    | tass-app-engine-1: Up About a minute (healthy)
+    | tass-app-identity-1: Up About a minute (healthy)
+    | tass-app-model-1: Up About a minute (healthy)
+    | Identity: UNLOCKED Mira
+    | State: READY
+    |   engine reachable True · model ok True
+    |   last pulse tick: {"pulse_id":"pulse_000013_183832","at":"2026-11-04T18:38:32.293822249Z","trigger":"timer","state":"WORKING","observed":"1 queued · no job running · model slot free","decision":"START: lesson_6edc967
+
+SUMMARY
+  PASS  GitHub token made at start, 0600, mounted read-only
+  PASS  the token is not in the core image
+  PASS  before an entity exists, nothing syncs with GitHub
+  PASS  owner creates the entity (UNLOCKED)
+  PASS  connected to GitHub: the entity's document came from the repo
+  PASS  chat with the entity (receipt + answered)
+  PASS  pulse setting off: no lessons looked at, pulse PAUSED
+  PASS  turn the pulse setting ON
+  PASS  the engine pulse is RUNNING (a tick every 20 s)
+  PASS  a pulse found the 3 lessons on GitHub
+  PASS  each lesson was studied on the pulse and graded by the app: all 3 PASSED
+  PASS  a wrong answer made the entity try again (attempt 2 passed)
+  PASS  one lesson at a time, each job started once
+  PASS  nothing counts as learned before approval
+  PASS  owner approves 01-my-work-pulse.md
+  PASS  owner approves 02-how-i-learn.md
+  PASS  owner approves 03-building-together.md
+  PASS  the 3 learned lessons are in the Learned section on GitHub
+  PASS  after restart: LOCKED, nothing runs
+  PASS  after unlock the pulse comes back ON by itself (setting kept)
+  PASS  learned lessons are remembered, not studied again
+  PASS  a lesson added to GitHub later is found on a pulse and studied
+  PASS  GitHub is checked cheaply (304 Not Modified when nothing changed)
+
+23 PASS · 0 FAIL
+
+================================================================================
+INTEGRATION RUN (f0243b1, engine d820840, identity d37757b): Autonomous switch instead of manual approval
+13:27:34 $ ./tass.sh check
+    |   [ok]   Pins: engine d820840 · identity d37757b
+    |   [note] Nothing deployed yet: start builds core f0243b113c5a with the pins above.
+    |   [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+    |   Data in /tmp/ch/app3/data (line counts; records are only appended):
+    |          identity/entity.json missing
+    |          identity/decisions.jsonl missing
+    |          core/tass.md missing
+    |          core/memory.jsonl missing
+    |          core/conversation.jsonl missing
+    |          engine/cycles.jsonl missing
+    |          engine/jobs.jsonl missing
+    |          engine/ticks.jsonl missing
+    |          engine/model-requests.jsonl missing
+    | Ready: ./tass.sh start
+13:27:35 $ ./tass.sh check
+    |   [ok]   Pins: engine d820840 · identity d37757b
+    |   [note] Nothing deployed yet: start builds core f0243b113c5a with the pins above.
+    |   [note] No entity yet: after start, open http://127.0.0.1:8796 and create your own.
+    |   Data in /tmp/ch/app3/data (line counts; records are only appended):
+    |          identity/entity.json missing
+    |          identity/decisions.jsonl missing
+    |          core/tass.md missing
+    |          core/memory.jsonl missing
+    |          core/conversation.jsonl missing
+    |          engine/cycles.jsonl missing
+    |          engine/jobs.jsonl missing
+    |          engine/ticks.jsonl missing
+    |          engine/model-requests.jsonl missing
+    | Ready: ./tass.sh start
+13:27:35 $ ./tass.sh start
+13:28:42 PASS GitHub token made at start, 0600, mounted read-only ·
+13:28:43 PASS the token is not in the core image · 0
+13:28:43 PASS before an entity exists, nothing syncs with GitHub · 2 requests
+13:28:43 PASS owner creates the entity (UNLOCKED) · 201
+13:28:57 PASS connected to GitHub: the entity's document came from the repo · # Mira
+13:28:59 PASS chat with the entity (receipt + answered) · msg_20261104T192857_8c6ba8
+13:29:24 PASS pulse setting off: no lessons looked at, pulse PAUSED · PAUSED
+13:29:24 PASS turn Autonomous ON (pulse + learning) · {"autonomous": true, "pulse": true, "learn": true}
+13:29:24 PASS the engine pulse is RUNNING (a tick every 20 s) · RUNNING
+13:29:36 PASS a pulse found the 3 lessons on GitHub · lessons/claude/01-my-work-pulse.md, lessons/claude/02-how-i-learn.md, lessons/claude/03-building-together.md
+13:29:36 PASS the notebook lesson is listed, marked to run in JupyterLab · notebook lesson (13 cells, each with its thought): run it cell by cell in JupyterLab; this app doesn't run code
+13:31:56    LEARNED lessons/claude/01-my-work-pulse.md  3/3 attempts 1  remembers: (TEST FIXTURE) I can explain My work pulse
+13:31:56             ✓ How many seconds are there between two pulses? → 20 seconds
+13:31:56             ✓ What do I say on a tick when my job is still running? → I say CONTINUE
+13:31:56             ✓ What is my state while Identity is locked? → I am BLOCKED
+13:31:56    LEARNED lessons/claude/02-how-i-learn.md  3/3 attempts 2  remembers: (TEST FIXTURE) I can explain How I learn
+13:31:56             ✓ In which folder of my repository do lessons live? → the lessons folder
+13:31:56             ✓ How many attempts do I get before a lesson is stuck? → 3 attempts
+13:31:56             ✓ Who must approve a lesson before it counts as learned? → my owner
+13:31:56    LEARNED lessons/claude/03-building-together.md  3/3 attempts 1  remembers: (TEST FIXTURE) I can explain Building together
+13:31:56             ✓ Who makes the final decisions on the project? → my owner
+13:31:56             ✓ When may I say that something happened? → only after I see the result
+13:31:56             ✓ How does a new lesson reach me? → by a pull request
+13:31:56 PASS each lesson was studied on the pulse, graded by the app, and auto-approved (Autonomous): all 3 LEARNED · in 140 s
+13:31:56 PASS a wrong answer made the entity try again (attempt 2 passed) · attempts 2
+13:31:56 PASS one lesson at a time, each job started once · 4 jobs
+13:32:16 tass.md on GitHub now ends:
+    ## Learned
+
+    - My work pulse: (TEST FIXTURE) I can explain My work pulse (lesson `lessons/claude/01-my-work-pulse.md`, 3/3, approved 2026-11-04)
+    - How I learn: (TEST FIXTURE) I can explain How I learn (lesson `lessons/claude/02-how-i-learn.md`, 3/3, approved 2026-11-04)
+    - Building together: (TEST FIXTURE) I can explain Building together (lesson `lessons/claude/03-building-together.md`, 3/3, approved 2026-11-04)
+13:32:16 PASS the 3 learned lessons are in the Learned section on GitHub ·
+13:32:16 $ ./tass.sh stop
+    | Stopped this application's containers (nothing else).
+13:32:27 $ ./tass.sh start
+13:32:46 PASS after restart: LOCKED, nothing runs · BLOCKED
+13:33:00 PASS after unlock the pulse comes back ON by itself (setting kept) · RUNNING
+13:33:00 PASS learned lessons are remembered, not studied again ·
+13:33:00 PASS Autonomous is still ON after restart ·
+13:33:40 PASS a lesson added to GitHub later is found on a pulse and studied · LEARNED
+13:33:40 PASS GitHub is checked cheaply (304 Not Modified when nothing changed) · 12 tree requests
+13:33:40 $ ./tass.sh status
+    | Deployed: core f0243b113c5a · engine d8208409457f · identity d37757b7a06c · since 2026-11-04T19:28:24Z
+    | tass-app-core-1: Up About a minute (healthy)
+    | tass-app-engine-1: Up About a minute (healthy)
+    | tass-app-identity-1: Up About a minute (healthy)
+    | tass-app-model-1: Up About a minute (healthy)
+    | Identity: UNLOCKED Mira
+    | State: READY
+    |   engine reachable True · model ok True
+    |   action gate: AUTONOMOUS_GUARDED (CHAT_ONLY = Autonomous off · AUTONOMOUS_GUARDED = on, Issue #50 checks enforced)
+    |   last pulse tick: {"pulse_id":"pulse_000013_193334","at":"2026-11-04T19:33:34.038899904Z","trigger":"timer","state":"WORKING","observed":"1 queued · no job running · model slot free","decision":"START: lesson_6edc967
+
+SUMMARY
+  PASS  GitHub token made at start, 0600, mounted read-only
+  PASS  the token is not in the core image
+  PASS  before an entity exists, nothing syncs with GitHub
+  PASS  owner creates the entity (UNLOCKED)
+  PASS  connected to GitHub: the entity's document came from the repo
+  PASS  chat with the entity (receipt + answered)
+  PASS  pulse setting off: no lessons looked at, pulse PAUSED
+  PASS  turn Autonomous ON (pulse + learning)
+  PASS  the engine pulse is RUNNING (a tick every 20 s)
+  PASS  a pulse found the 3 lessons on GitHub
+  PASS  the notebook lesson is listed, marked to run in JupyterLab
+  PASS  each lesson was studied on the pulse, graded by the app, and auto-approved (Autonomous): all 3 LEARNED
+  PASS  a wrong answer made the entity try again (attempt 2 passed)
+  PASS  one lesson at a time, each job started once
+  PASS  the 3 learned lessons are in the Learned section on GitHub
+  PASS  after restart: LOCKED, nothing runs
+  PASS  after unlock the pulse comes back ON by itself (setting kept)
+  PASS  learned lessons are remembered, not studied again
+  PASS  Autonomous is still ON after restart
+  PASS  a lesson added to GitHub later is found on a pulse and studied
+  PASS  GitHub is checked cheaply (304 Not Modified when nothing changed)
+
+21 PASS · 0 FAIL

@@ -1,0 +1,10 @@
+# Added by ./tass.sh when an NVIDIA GPU is usable from Docker (MODEL_GPU=auto|on): the bundled model gets the GPU.
+services:
+  model:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

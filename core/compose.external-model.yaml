@@ -1,0 +1,10 @@
+# Added by ./tass.sh when MODEL_MODE=external: use a model that is ALREADY running (for example the
+# workspace's Nemotron) instead of starting a second one. The engine joins that model's Docker network;
+# nothing on that network is started, stopped or changed.
+services:
+  engine:
+    networks: [front, app, external-model]
+networks:
+  external-model:
+    external: true
+    name: ${MODEL_NETWORK:?set MODEL_NETWORK in app.env}
