@@ -150,6 +150,51 @@ def cycle_checks(rows, cycle_id):
     return result
 
 
+
+def current_document_action_checks(rows, cycle_id, tass_path):
+    """Cross-check a non-mutating local action against the CURRENT file only.
+
+    The executor's 12-character document hash is not a signed receipt. It
+    guards accidental edits between action time and acceptance, not tampering.
+    """
+    relevant = [e for e in rows if e.get("cycle_id") == cycle_id]
+    proposals = [e.get("data") or {} for e in relevant if e.get("step") == "proposal"]
+    outcomes = [e.get("data") or {} for e in relevant if e.get("step") == "outcome"]
+    if not proposals or not outcomes:
+        return [check("local action independently measurable", False, "no proposal/outcome")]
+    p, out = proposals[-1], outcomes[-1]
+    action = p.get("action")
+    if action not in ("tass_sections", "tass_words", "tass_memory_lines"):
+        return [check("local action independently measurable", False, f"unexpected action {action!r}")]
+    doc = pathlib.Path(tass_path).expanduser().read_text(encoding="utf-8")
+    canonical = doc.replace("\r\n", "\n").strip()
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+    detail = out.get("detail", "")
+    if f"({digest})" not in detail:
+        return [check("action snapshot matches current tass.md", False,
+                      "local doc differs from action-time hash: no independent measurement possible")]
+    if action == "tass_words":
+        count_value = len(doc.split())
+    else:
+        sections = []
+        section = ("", [])
+        for line in doc.replace("\r\n", "\n").splitlines(keepends=True):
+            if line.startswith("## "):
+                sections.append(section)
+                section = (line[3:].strip(), [])
+            else:
+                section[1].append(line)
+        sections.append(section)
+        if action == "tass_sections":
+            count_value = sum(bool(name) for name, _ in sections)
+        else:
+            count_value = sum(
+                1 for name, lines in sections if name == "Memory"
+                for line in "".join(lines).split("\n") if line.strip().startswith("- "))
+    return [check("independent tass.md count matches action receipt",
+                  out.get("value") == count_value,
+                  f"action={action}, current count={count_value}, action receipt={out.get('value')}")]
+
 def health_checks(rows, count=10, interval=20.0, tolerance=6.0):
     # This is a HEALTH ping. It cannot be promoted to a thought pulse result.
     last = rows[-count:]
@@ -297,6 +342,14 @@ def verify_cycle(args):
     result = render(cycle_checks(rows, args.cycle_id))
     if result:
         return result
+    try:
+        doc_checks = current_document_action_checks(rows, args.cycle_id, args.tass_md)
+    except (OSError, UnicodeError) as exc:
+        print(f"NOT RUN | independent local tass.md measurement: {type(exc).__name__}")
+        return NOT_RUN
+    if render(doc_checks):
+        print("NOT RUN/FAIL | independent action measurement is absent or differs; inspect snapshot provenance")
+        return NOT_RUN
     key = key_from(args.engine_key)
     if not key:
         print("NOT RUN | live Engine correlation (no API key); journal-only checks above PASSED")
@@ -378,6 +431,7 @@ def main():
     p.add_argument("--core-key", default="~/.tass/api-key")
     p.add_argument("--engine-key", default="~/.thought-engine/tass/api-key")
     p.add_argument("--cycle-log", default="~/.thought-engine/tass/cycles.jsonl")
+    p.add_argument("--tass-md", default="~/.tass/tass.md")
     p.add_argument("--health-log", default="~/.thought-engine/tass/pulse.jsonl")
     s = p.add_subparsers(dest="command", required=True)
     s.add_parser("baseline", help="read-only service, policy and model catalogue check")
