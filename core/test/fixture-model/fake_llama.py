@@ -9,6 +9,28 @@ DELAY = float(os.environ.get("FIXTURE_DELAY", "45"))
 lock = threading.Lock()
 count = 0
 
+# TEST FIXTURE answers for lesson checks, from a lookup table (a real model reads the lesson).
+# The first attempt at "attempts" is wrong on purpose, so the retry path is exercised.
+TABLE = [("seconds", "20 seconds"), ("still running", "I say CONTINUE"), ("locked", "I am BLOCKED"),
+         ("which folder", "the lessons folder"), ("approve a lesson", "my owner"), ("final decisions", "my owner"),
+         ("may i say", "only after I see the result"), ("new lesson reach", "by a pull request"), ("color", "blue")]
+tries = {}
+
+def study(allm):
+    import re
+    title = (re.search(r'Study this lesson: "([^"]+)"', allm) or [None, "a lesson"])[1]
+    lines = []
+    for n, q in re.findall(r"^Check (\d+): (.*)$", allm, re.M):
+        ql = q.lower()
+        if "attempts" in ql:
+            tries[title] = tries.get(title, 0) + 1
+            a = "5" if tries[title] == 1 else "3 attempts"
+        else:
+            a = next((v for k, v in TABLE if k in ql), "I don't know")
+        lines.append(f"ANSWER {n}: {a}")
+    return ("REPLY: (TEST FIXTURE) I studied it.\n" + "\n".join(lines) +
+            f"\nACTION: NONE\nPREDICTION: NONE\nWHY: studying\nREMEMBER: (TEST FIXTURE) I can explain {title}")
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -35,6 +57,8 @@ class H(BaseHTTPRequestHandler):
             count += 1
         if "IMPORTANCE: <a whole number" in allm:
             text = "IMPORTANCE: 6\nTOPIC: local work"
+        elif "HOW TO ANSWER" in allm and "Study this lesson" in last:
+            text = study(allm)
         elif "HOW TO ANSWER" in allm:
             if "slow" in last:
                 time.sleep(DELAY)

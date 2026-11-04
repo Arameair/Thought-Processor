@@ -164,3 +164,25 @@ func lessonAt(c *Core, p string) LessonState {
 	}
 	return LessonState{}
 }
+
+func TestRepoDocumentIsNeverOverwrittenByAStarter(t *testing.T) {
+	ids, eng, gh := newFakeIdentitySvc(), newFakeEngine(), newFakeGH()
+	ids.set("UNLOCKED")
+	gh.set("Mira/home@live:tass.md", entityDoc+"\n## Precious\n\nkeep me\n")
+	dir := t.TempDir()
+	c := newLearningCore(t, dir, ids, gh, eng)
+	c.Answer(Incoming{Text: "hi", From: "local"}) // chat BEFORE the first sync
+	c.SyncOnce()
+	c.SyncOnce()
+	if !strings.Contains(gh.get("Mira/home@live:tass.md"), "keep me") || !strings.Contains(local(t, dir), "keep me") {
+		t.Fatalf("the repo's document must win:\n%s", gh.get("Mira/home@live:tass.md"))
+	}
+	// A repo without the document: the entity's own starter is created there.
+	gh2 := newFakeGH()
+	dir2 := t.TempDir()
+	c2 := newLearningCore(t, dir2, ids, gh2, eng)
+	c2.SyncOnce()
+	if !strings.HasPrefix(gh2.get("Mira/home@live:tass.md"), "# Mira") || !strings.HasPrefix(local(t, dir2), "# Mira") {
+		t.Fatalf("starter created in the repo: %q", gh2.get("Mira/home@live:tass.md"))
+	}
+}

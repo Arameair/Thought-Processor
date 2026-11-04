@@ -204,16 +204,12 @@ func (c *Core) ensureDocument(name string) {
 	if name == "" || fileExists(c.file("tass.md")) {
 		return
 	}
-	if c.cfg.Repo != "" { // the document comes from the owner's repository on the first sync
-		c.mu.Lock()
-		synced := !c.lastSync.IsZero()
-		c.mu.Unlock()
-		if !synced {
-			return
-		}
+	if c.cfg.Repo != "" {
+		// With a repository, the document only ever comes from it (or is created there by syncTass
+		// when missing): a local starter could otherwise be merged over the owner's real document.
+		return
 	}
-	doc := "# " + name + "\n\n<!-- This entity's own document. It lives only on this computer. -->\n\n## Who I am\n\nI am " + name +
-		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Now\n\nJust created.\n"
+	doc := starterDoc(name)
 	c.fileMu.Lock()
 	defer c.fileMu.Unlock()
 	if !fileExists(c.file("tass.md")) {
@@ -545,6 +541,26 @@ func (c *Core) syncTass() error {
 		etag = c.st.FileETag
 	}
 	f, got, err := c.gh.GetFile(repo, branch, path, etag)
+	if errors.Is(err, github.ErrNotFound) && c.cfg.IdentitySvc != nil && !haveLocal {
+		// App mode, a new entity: give it its own starter document, in its repository too.
+		name := c.entityName()
+		if name == "" {
+			return nil
+		}
+		doc := starterDoc(name)
+		sha, perr := c.gh.PutFile(repo, branch, path, doc, "", name+": my own document")
+		if perr != nil {
+			return fmt.Errorf("%s isn't on %s@%s and couldn't be created: %w", path, repo, branch, perr)
+		}
+		c.fileMu.Lock()
+		defer c.fileMu.Unlock()
+		c.st.RemoteSHA, c.st.FileETag = sha, ""
+		c.event("sync", "Created "+name+"'s own document at "+repo+"@"+branch+":"+path+".")
+		if err := c.write("tass.md", doc); err != nil {
+			return err
+		}
+		return c.write("tass.base.md", doc)
+	}
 	if errors.Is(err, github.ErrNotFound) {
 		return fmt.Errorf("%s isn't on %s@%s yet: create it there first", path, repo, branch)
 	}
@@ -1236,4 +1252,9 @@ func (c *Core) Status() Status {
 		out.SyncHold = c.syncHold // c.mu is held
 	}
 	return out
+}
+
+func starterDoc(name string) string {
+	return "# " + name + "\n\n<!-- This entity's own document. -->\n\n## Who I am\n\nI am " + name +
+		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Learned\n\n## Now\n\nJust created.\n"
 }
