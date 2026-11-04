@@ -115,13 +115,23 @@ compose() { # compose for the version in $1 (an env file)
   local envf="$1"; shift
   load_env "$envf" || die "no deployed version recorded ($envf)"
   model_files "$(dirname "$COMPOSE_FILE")"
-  APP_PROJECT="$APP_PROJECT" APP_UID="$(id -u)" APP_GID="$(id -g)" APP_DATA="$APP_DATA" APP_SECRETS="$APP_SECRETS" \
-  IDENTITY_IMAGE="$IDENTITY_IMAGE" ENGINE_IMAGE="$ENGINE_IMAGE" CORE_IMAGE="$CORE_IMAGE" \
-  MODEL_IMAGE="${MODEL_IMAGE:-}" MODEL_ARGS="$MODEL_ARGS" MODEL_DIR="${MODEL_DIR:-}" MODEL_URL="$RUN_MODEL_URL" \
-  MODEL_HEALTH_CMD="${MODEL_HEALTH_CMD:-}" MODEL_NETWORK="${MODEL_NETWORK:-}" FIXTURE_DELAY="${FIXTURE_DELAY:-}" \
-  CORE_PORT="$CORE_PORT" IDENTITY_PORT="$IDENTITY_PORT" PULSE_EVERY="${PULSE_EVERY:-20s}" \
-  IDENTITY_UNLOCK_HOURS="${IDENTITY_UNLOCK_HOURS:-12}" \
-    "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  # Docker under sudo loses assignments placed BEFORE sudo (env_reset).
+  # Pass only Compose interpolation values AFTER sudo, never arbitrary caller env.
+  local vars=(
+    "APP_PROJECT=$APP_PROJECT" "APP_UID=$(id -u)" "APP_GID=$(id -g)"
+    "APP_DATA=$APP_DATA" "APP_SECRETS=$APP_SECRETS"
+    "IDENTITY_IMAGE=$IDENTITY_IMAGE" "ENGINE_IMAGE=$ENGINE_IMAGE" "CORE_IMAGE=$CORE_IMAGE"
+    "MODEL_IMAGE=${MODEL_IMAGE:-}" "MODEL_ARGS=$MODEL_ARGS"
+    "MODEL_DIR=${MODEL_DIR:-}" "MODEL_URL=$RUN_MODEL_URL"
+    "MODEL_HEALTH_CMD=${MODEL_HEALTH_CMD:-}" "MODEL_NETWORK=${MODEL_NETWORK:-}"
+    "FIXTURE_DELAY=${FIXTURE_DELAY:-}" "CORE_PORT=$CORE_PORT" "IDENTITY_PORT=$IDENTITY_PORT"
+    "PULSE_EVERY=${PULSE_EVERY:-20s}" "IDENTITY_UNLOCK_HOURS=${IDENTITY_UNLOCK_HOURS:-12}"
+  )
+  if [[ "${DOCKER[0]}" == sudo ]]; then
+    sudo -n env "${vars[@]}" docker compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  else
+    env "${vars[@]}" "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  fi
 }
 
 ours() { "${DOCKER[@]}" ps -q --filter "label=com.docker.compose.project=$APP_PROJECT" 2>/dev/null; }
@@ -196,15 +206,19 @@ worktree_for() { # $1 = core commit → a build checkout outside your working tr
   printf '%s' "$dir"
 }
 
-src_for() { # $1 = name, $2 = commit, $3 = local source or "", $4 = clone command → checkout at the commit
-  local name="$1" sha="$2" local_src="$3" dir="$DEPLOY/src/$1-${2:0:12}"
+src_for() { # $1 = name, $2 = pin, $3 = local source or "", $4 = HTTPS clone URL
+  local name="$1" sha="$2" local_src="$3" url="$4" dir="$DEPLOY/src/$1-${2:0:12}"
   if [[ ! -d "$dir/.git" ]]; then
-    rm -rf "$dir.new"   # only our own half-finished clone
-    if [[ -n "$local_src" ]]; then git clone -q --no-checkout "$local_src" "$dir.new"; else eval "$4 \"$dir.new\""; fi
+    [[ ! -e "$dir" ]] || die "$name checkout path exists but is not a Git clone: $dir"
+    rm -rf -- "$dir.new"   # own previous incomplete clone under APP_HOME only
+    git clone -q --no-checkout "${local_src:-$url}" "$dir.new" || die "$name clone failed; deployment unchanged"
     git -C "$dir.new" checkout -q "$sha" || die "$name commit $sha not found"
-    mv "$dir.new" "$dir"
+    mv -- "$dir.new" "$dir" || die "$name checkout move failed"
   fi
-  [[ "$(git -C "$dir" rev-parse HEAD)" == "$(git -C "$dir" rev-parse "$sha^{commit}")" ]] || die "$name checkout is not at $sha"
+  local found expected
+  found="$(git -C "$dir" rev-parse --verify HEAD)" || die "$name HEAD not available"
+  expected="$(git -C "$dir" rev-parse --verify "$sha^{commit}")" || die "$name pin not available"
+  [[ "$found" == "$expected" ]] || die "$name checkout is not at $sha"
   printf '%s' "$dir"
 }
 
@@ -214,16 +228,17 @@ build_version() { # $1 = core commit; writes $2 (env file) describing the built 
   local csha="$1" out="$2" esha isha src esrc isrc
   esha="$(pin_of "$csha" ENGINE_COMMIT_PIN)"; isha="$(pin_of "$csha" IDENTITY_COMMIT_PIN)"
   [[ -n "$esha" && -n "$isha" ]] || die "core $csha has no engine/identity pins in core/tass.sh"
-  src="$(worktree_for "$csha")"
-  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "gh repo clone Arameair/Thought-engine -- -q --no-checkout")"
-  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "git clone -q --no-checkout https://github.com/Arameair/identity.git")"
-  esha="$(git -C "$esrc" rev-parse HEAD)"; isha="$(git -C "$isrc" rev-parse HEAD)"
+  src="$(worktree_for "$csha")" || die "cannot prepare pinned Core source"
+  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "https://github.com/Arameair/Thought-engine.git")" || die "cannot prepare pinned Engine source"
+  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "https://github.com/Arameair/identity.git")" || die "cannot prepare pinned Identity source"
+  esha="$(git -C "$esrc" rev-parse --verify HEAD)" || die "cannot determine Engine revision"
+  isha="$(git -C "$isrc" rev-parse --verify HEAD)" || die "cannot determine Identity revision"
   local bargs=(); [[ -n "${GO_IMAGE:-}" ]] && bargs+=(--build-arg "GO_IMAGE=$GO_IMAGE"); [[ -n "${RUN_IMAGE:-}" ]] && bargs+=(--build-arg "RUN_IMAGE=$RUN_IMAGE")
   say "Building core $(short "$csha") · engine $(short "$esha") · identity $(short "$isha")…"
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null
-  cat >"$out" <<EOF
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null || die "core image build failed; deployment unchanged"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null || die "engine image build failed; deployment unchanged"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null || die "identity image build failed; deployment unchanged"
+  cat >"$out" <<EOF || die "could not write candidate deployment record"
 CORE_SHA=$csha
 ENGINE_SHA=$esha
 IDENTITY_SHA=$isha
@@ -321,7 +336,9 @@ cmd_start() {
   prepare
   if [[ ! -f "$DEPLOY/current.env" ]] || ! (load_env "$DEPLOY/current.env"; "${DOCKER[@]}" image inspect "$CORE_IMAGE" "$ENGINE_IMAGE" "$IDENTITY_IMAGE" >/dev/null 2>&1); then
     local sha; sha="$( [[ -f "$DEPLOY/current.env" ]] && (load_env "$DEPLOY/current.env"; echo "$CORE_SHA") || git -C "$REPO" rev-parse HEAD)"
-    build_version "$sha" "$DEPLOY/current.env.new" && mv "$DEPLOY/current.env.new" "$DEPLOY/current.env"
+    build_version "$sha" "$DEPLOY/current.env.new" || die "build aborted; current.env preserved"
+    [[ -s "$DEPLOY/current.env.new" ]] || die "build produced no candidate deployment record"
+    mv -- "$DEPLOY/current.env.new" "$DEPLOY/current.env" || die "could not activate built deployment record"
     echo "$(date -u +%FT%TZ) start: deployed core $sha" >>"$DEPLOY/history.log"
   fi
   local before ent; before="$(inventory)"; ent="$( [[ -s "$APP_DATA/identity/entity.json" ]] && json_field entity_id <"$APP_DATA/identity/entity.json" || true)"
