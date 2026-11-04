@@ -8,7 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from notebook_cell_worker import cell_from_fixed_notebook
 from notebook_lab import (SKILL, LESSON_ID, lesson_prompt, resolve_skill,
-                          validate_model_selection, propose_skill_candidate, NotebookTestAdapter)
+                          validate_model_selection, record_model_selection,
+                          propose_skill_candidate, NotebookTestAdapter)
 from pulse_cards import CATALOG, CardError, CardStore, initial, PulseCoordinator
 
 
@@ -117,6 +118,13 @@ class NotebookLabTests(unittest.TestCase):
         adapter = NotebookTestAdapter(enabled=False, sandbox_confirmed=False)
         p = PulseCoordinator(Path(self.temp.name) / "cards.json", adapter=adapter)
         try:
+            with self.assertRaises(CardError):
+                p.action("approve", LESSON_ID, "APPROVE " + LESSON_ID)
+            selected = record_model_selection(p, self.model_fixture(), actor="MODEL_FIXTURE")
+            self.assertFalse(selected["execution_authorized"])
+            with self.assertRaises(CardError):
+                record_model_selection(p, json.dumps({"skill":"@identity-test",
+                    "cell_id":"identity-go-packages", "expectation":"A different model request is now proposed."}))
             p.action("approve", LESSON_ID, "APPROVE " + LESSON_ID)
             with self.assertRaises(CardError):
                 p.action("queue", LESSON_ID)
