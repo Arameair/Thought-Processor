@@ -334,6 +334,16 @@ current_entity() { local s; s="$(id_state || true)"; [[ -n "$s" ]] && json_field
 # ------------------------------------------------------------------------------- commands
 cmd_start() {
   check || { say; say "Not starting: fix the [stop] items (nothing was changed)."; exit 1; }
+  # This experimental safety build must never start a previously built,
+  # unguarded Core image. Replacing it requires an explicit reviewed update,
+  # not an implicit upgrade or overwrite of the owner's current.env.
+  local checkout_sha recorded_sha
+  checkout_sha="$(git -C "$REPO" rev-parse --verify HEAD)" || die "cannot inspect checkout revision"
+  if [[ -f "$DEPLOY/current.env" ]]; then
+    recorded_sha="$(load_env "$DEPLOY/current.env"; printf '%s' "${CORE_SHA:-}")" || die "cannot read deployed revision"
+    [[ "$recorded_sha" == "$checkout_sha" ]] ||
+      die "saved Core $(short "$recorded_sha") is not this CHAT_ONLY safety build $(short "$checkout_sha"); current.env unchanged. Review and explicitly update to the safety build before starting."
+  fi
   say
   prepare
   if [[ ! -f "$DEPLOY/current.env" ]] || ! (load_env "$DEPLOY/current.env"; "${DOCKER[@]}" image inspect "$CORE_IMAGE" "$ENGINE_IMAGE" "$IDENTITY_IMAGE" >/dev/null 2>&1); then
