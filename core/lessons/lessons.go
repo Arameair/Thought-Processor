@@ -18,6 +18,7 @@
 package lessons
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -224,3 +225,42 @@ func matches(expected, given string) bool {
 
 var numberWords = map[string]string{"0": "zero", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
 	"6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten", "20": "twenty"}
+
+// Notebook reads a notebook lesson's title, goal and code cells (with their THOUGHT) for listing.
+// The app never runs them.
+func Notebook(text string) Lesson {
+	var nb struct {
+		Cells []struct {
+			Type     string          `json:"cell_type"`
+			Source   json.RawMessage `json:"source"`
+			Metadata struct {
+				Tass struct{ Title, Thought, Expect string } `json:"tass"`
+			} `json:"metadata"`
+		} `json:"cells"`
+	}
+	l := Lesson{HasCode: true}
+	if json.Unmarshal([]byte(text), &nb) != nil {
+		return l
+	}
+	for _, c := range nb.Cells {
+		src := sourceText(c.Source)
+		if c.Type == "markdown" && l.Title == "" {
+			md := Parse(src)
+			l.Title, l.By, l.Goal = md.Title, md.By, md.Goal
+		}
+		if c.Type == "code" {
+			l.Steps = append(l.Steps, Step{N: len(l.Steps) + 1, Name: c.Metadata.Tass.Title, Teach: c.Metadata.Tass.Thought})
+		}
+	}
+	return l
+}
+
+func sourceText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var parts []string
+	_ = json.Unmarshal(raw, &parts)
+	return strings.Join(parts, "")
+}

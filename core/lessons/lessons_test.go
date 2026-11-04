@@ -1,6 +1,7 @@
 package lessons
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -71,5 +72,16 @@ func TestWorkspaceLessonIsNotCheckable(t *testing.T) {
 func TestAlternatives(t *testing.T) {
 	if !matches("locked | LOCKED state", "it stays locked") || matches("3", "33 things") || !matches("3", "three") {
 		t.Fatal("alternatives / numbers")
+	}
+}
+
+func TestNotebookLessonIsListed(t *testing.T) {
+	b, err := os.ReadFile("/home/claude/tass/lessons/claude/00-find-and-run-a-lesson.ipynb")
+	if err != nil {
+		t.Skip("TASS checkout not here")
+	}
+	l := Notebook(string(b))
+	if l.Title != "Find and run a lesson" || l.By != "Claude" || len(l.Steps) != 13 || l.Steps[0].Teach == "" {
+		t.Fatalf("%+v", l)
 	}
 }

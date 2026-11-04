@@ -175,7 +175,9 @@ func (c *Core) syncLessons() error {
 	found := 0
 	seen := map[string]bool{}
 	for _, e := range tree {
-		if e.Type != "blob" || !strings.HasPrefix(e.Path, dir) || !strings.HasSuffix(strings.ToLower(e.Path), ".md") ||
+		low := strings.ToLower(e.Path)
+		if e.Type != "blob" || !strings.HasPrefix(e.Path, dir) || !(strings.HasSuffix(low, ".md") || strings.HasSuffix(low, ".ipynb")) ||
+			strings.Contains(e.Path, ".ipynb_checkpoints") ||
 			strings.EqualFold(path.Base(e.Path), "README.md") || strings.Contains(e.Path, "..") {
 			continue
 		}
@@ -196,9 +198,14 @@ func (c *Core) syncLessons() error {
 			return err
 		}
 		l := lessons.Parse(f.Text)
+		if strings.HasSuffix(low, ".ipynb") {
+			l = lessons.Notebook(f.Text)
+		}
 		ls := &LessonState{Path: e.Path, SHA: e.SHA, Title: firstNonEmpty(l.Title, path.Base(e.Path)), By: l.By, Goal: l.Goal,
 			Status: "NEW", Checks: len(l.Checks()), FoundAt: c.now().UTC()}
 		switch {
+		case strings.HasSuffix(low, ".ipynb"):
+			ls.Status, ls.Note = "NEEDS_WORKSPACE", fmt.Sprintf("notebook lesson (%d cells, each with its thought): run it cell by cell in JupyterLab; this app doesn't run code", len(l.Steps))
 		case !l.Checkable && l.HasCode:
 			ls.Status, ls.Note = "NEEDS_WORKSPACE", "made of code cells for the workspace: this app doesn't run code, so it can't teach it"
 		case !l.Checkable:
