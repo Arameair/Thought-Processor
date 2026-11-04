@@ -86,12 +86,13 @@ Nothing secret is in an image, a build argument, the repository or a log. Contai
 | # | Check | Where | Result |
 | --- | --- | --- | --- |
 | 1 | `check` writes nothing (file listing before and after) and reports the model, liaison, ports, policy and data | sandbox, Docker 29.9.2 / compose 5.6.1 | PASS |
-| 2 | Go images build (core + engine at the pin) | sandbox (**stand-in base images**; Docker Hub isn't reachable there) and GitHub CI (real `golang:1.24-alpine` / `alpine:3.20`) | PASS |
+| 2 | Go images build (core + engine at the pin) | Sandbox: both, with **stand-in base images** (Docker Hub isn't reachable there). GitHub CI run 41847703616: the core image with the real `golang:1.24-alpine` / `alpine:3.20` bases (label = commit, `user=65532:65532`), plus compose validated. The engine image isn't built in CI because Thought-engine is private. | PASS |
 | 3 | `start` with a running "liaison" and "model": nothing of theirs stopped; messages paused; exactly one model container | sandbox, **simulated** workspace containers | PASS |
 | 4 | The engine reaches the existing model container by network (`model:8081`) | sandbox, **fixture model** | PASS |
 | 5 | Stop, then start: every record kept (cycles 6 → 12, conversation 1 → 2), the policy still valid, READY | sandbox | PASS |
 | 6 | GitHub cut: still READY, a cycle ran, failed syncs recorded; reconnects by itself | sandbox, GitHub reads through a local proxy | PASS |
-| 7 | Update to a good candidate, a deliberately broken candidate (automatic restore of version + data), and rollback | sandbox | see `docs/evidence/docker-update-20261104.txt` |
+| 7 | Update to a good candidate (PASS). Update to a **deliberately broken** candidate: FAIL detected, previous version **and data** restored (counts and `tass.md` checksum identical), failed data moved aside. Update with an engine pin change (PASS). Rollback twice (PASS). | sandbox, `docs/evidence/docker-update-20261104.txt` | PASS |
+| 7b | The engine refuses on its own when the Identity grant file is missing (cycle `denied`, **no model request made**) | sandbox | PASS |
 | 8 | Keys: status without key → 401; the engine isn't reachable from the host or from another container | sandbox | PASS |
 | 9 | **Real Nemotron thought cycle, on your PC** | — | **NOT RUN**: owner test below |
 
