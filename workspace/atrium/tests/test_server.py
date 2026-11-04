@@ -101,7 +101,9 @@ class ServerTest(unittest.TestCase):
     def test_homepage_served_without_docker(self):
         status,headers,data=self.req('/')
         self.assertEqual(status,200)
-        self.assertIn(b'TASS / The Atrium',data)
+        self.assertIn(b'ATRIUM',data)
+        self.assertIn(b'DAILY WORKSTATION',data)
+        self.assertIn(b'TASS / The Atrium',self.req('/explore')[2])
         self.assertIn(b'test-csrf',data)
         self.assertIn("default-src 'none'",headers['Content-Security-Policy'])
         self.assertEqual(headers['Cache-Control'],'no-store')
