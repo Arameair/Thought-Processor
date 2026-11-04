@@ -26,7 +26,7 @@ here="$(pwd)"
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
 ENGINE_COMMIT_PIN="d820840"
-IDENTITY_COMMIT_PIN="22b6ceb963027f219d11facfea29490b4de61beb"
+IDENTITY_COMMIT_PIN="91e1521659a31db79044a44bd33bce48178554d9"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"

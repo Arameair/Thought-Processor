@@ -77,7 +77,8 @@
     <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
     <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
     <div class="ctl"><button id="findLessons">Find lessons (manual)</button><span class="dim">Autonomous OFF: choose Study on a lesson, review the answers, then Approve</span></div>
-    <div id="lessonMessage" class="dim" aria-live="polite"></div>
+    <div id="lessonMessage" aria-live="polite"></div>
+    <div id="lessonHint" class="dim"></div>
     <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
     <div id="lessons" class="dim">(no lessons yet)</div>
   </section>
@@ -182,19 +183,23 @@ async function refresh() {
     $("ghinfo").innerHTML = L.repo
       ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
       : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
-    if ((st.sync_hold || L.last_note || "").includes("no grant")) {
-      $("lessonMessage").innerHTML = '<a style="color:var(--you)" href="http://127.0.0.1:8796/" target="_blank" rel="noopener">Identity must authorize learning. Open Identity to enable permissions.</a>';
-    }
+    $("lessonHint").innerHTML = (st.sync_hold || L.last_note || "").includes("no grant")
+      ? '<a style="color:var(--you)" href="http://127.0.0.1:8796/" target="_blank" rel="noopener">Identity hasn\'t granted learning yet (github.sync, lesson.learn). Open Identity and use "Enable learning".</a>'
+      : "";
     const ls = L.lessons || [];
     $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
       <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
       ${l.checks ? `<span class="dim">${l.status === "NEW" || l.status === "QUEUED" ? "" : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
       ${!L.settings.autonomous && (l.status === "NEW" || l.status === "RETRY" || l.status === "QUEUED") ? `<button data-study="${esc(l.path)}">${l.status === "QUEUED" ? "Step again" : "Study (manual)"}</button>` : ""}
       ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
-      ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" ? `<button data-retry="${esc(l.path)}">Try again</button>` : ""}</div>
+      ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" ? `<button data-retry="${esc(l.path)}">Retry</button>` : ""}</div>
       ${l.goal ? `<div class="dim">${esc(l.goal)}</div>` : ""}
       ${(l.results || []).map(r => `<div class="dim">${r.right ? "✓" : "✗"} ${esc(r.check)} → <i>${esc(r.given || "(no answer)")}</i></div>`).join("")}
-      ${l.remember ? `<div>Remembers: ${esc(l.remember)}</div>` : ""}${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
+      ${l.status === "QUEUED" ? `<div class="dim">Studying now (job ${esc(l.job_id)}). Results appear here when the model has answered.</div>` : ""}
+      ${l.status === "PASSED" && !L.settings.autonomous ? `<div><b>Every check was right. Waiting for you:</b> Approve to record it as learned, or Retry.</div>` : ""}
+      ${l.remember ? `<div>Claims he learned: ${esc(l.remember)}</div>` : ""}
+      ${l.reply ? `<details><summary class="dim">His full answer${l.job_id ? " · job " + esc(l.job_id) : ""}${l.cycle_id ? " · " + esc(l.cycle_id) : ""}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(l.reply)}</pre></details>` : ""}
+      ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
   }
   $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
   $("md").textContent = st.tass_md || "(not here yet: it comes from GitHub on the first sync)";
@@ -232,22 +237,28 @@ $("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checke
 $("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
 $("btnPulse").onclick = () => { $("setPulse").checked = !CUR.pulse; saveSettings(); };
 $("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
+function lessonResult(ok, text) { $("lessonMessage").style.color = ok ? "" : "var(--bad)"; $("lessonMessage").textContent = text; }
 $("findLessons").onclick = async () => {
+  const b = $("findLessons"); b.disabled = true; lessonResult(true, "Looking for lessons on GitHub…");
   const r = await post("/api/lessons/discover", {});
-  $("lessonMessage").textContent = r.ok ? "Lesson search complete. Choose Study on a NEW lesson." : (r.body.error || "Discovery refused");
+  b.disabled = false;
+  const n = r.ok ? (r.body.learning.lessons || []).length : 0;
+  lessonResult(r.ok, r.ok ? `Found ${n} lesson(s). Choose Study on a NEW lesson.` : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason given"));
   refresh();
 };
 $("lessons").onclick = async ev => {
   const a = ev.target.dataset.approve, t = ev.target.dataset.retry, study = ev.target.dataset.study;
   if (!a && !t && !study) return;
   const mode = study ? "study" : a ? "approve" : "retry";
+  ev.target.disabled = true;
   const r = await post("/api/lessons/" + mode, {path: study || a || t});
-  $("lessonMessage").textContent = r.ok ? (mode === "study"
-    ? "Study queued: " + (r.body.receipt || "") + ". Check results and approve only after PASSED."
-    : mode === "approve" ? "Owner approved: now LEARNED." : "Ready for another attempt.") : (r.body.error || "refused");
+  lessonResult(r.ok, r.ok ? (mode === "study"
+    ? "Study started: job " + (r.body.receipt || "") + ". His answers and results appear on the lesson when he's done."
+    : mode === "approve" ? "You approved it: LEARNED, and added to the Learned section of his document." : "Ready to study again: press Study.")
+    : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason given"));
   refresh();
 };
-document.querySelectorAll(".ctl button").forEach(b => b.onclick = async () => {
+document.querySelectorAll(".ctl button[data-a]").forEach(b => b.onclick = async () => {
   const r = await post("/api/pulse", {action: b.dataset.a});
   alertLine(r.ok ? b.textContent + ": ok" : (r.body.error || "refused"));
   refresh();

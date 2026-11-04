@@ -24,7 +24,7 @@ func (c *Core) DiscoverLessons() error {
 	}
 	for _, action := range []string{"github.sync", "lesson.learn"} {
 		if ok, why := c.allowedNow(action); !ok {
-			return fmt.Errorf("Identity denied %s: %s; enable learning on Identity's owner page", action, why)
+			return fmt.Errorf("Identity denied %s: %s; %s", action, why, identityFix(why))
 		}
 	}
 	c.manualMu.Lock()
@@ -107,7 +107,7 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	if strings.TrimSpace(doc) == "" {
 		return "", errors.New("TASS document is not synced yet; wait for the next GitHub sync before studying")
 	}
-	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path+snapshot.SHA)[:10], snapshot.Attempts+1)
+	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path + snapshot.SHA)[:10], snapshot.Attempts+1)
 	request := "Study this lesson: \"" + l.Title + "\". Read every step, then answer each check in your REPLY, " +
 		"one line per check, exactly like:\nANSWER 1: <your short answer>\nANSWER 2: <your short answer>\n" +
 		"Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE."
@@ -136,3 +136,14 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	return id, nil
 }
 
+// identityFix tells the owner the one thing to do about an Identity denial.
+func identityFix(why string) string {
+	switch {
+	case strings.Contains(why, "LOCKED"):
+		return "unlock TASS on Identity's page (127.0.0.1:8796) with your passphrase"
+	case strings.Contains(why, "no grant"):
+		return `on Identity's page use "Enable learning" (adds github.sync and lesson.learn)`
+	default:
+		return "check Identity's page (127.0.0.1:8796)"
+	}
+}
