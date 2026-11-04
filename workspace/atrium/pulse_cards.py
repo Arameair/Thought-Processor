@@ -537,8 +537,9 @@ class PulseCoordinator:
             # Only allowlisted receipt fields can be persisted/displayed.
             keys = ("receipt_id", "job_id", "card_id", "operation", "repository", "sha",
                     "argv", "started_at", "finished_at", "exit_code", "outcome", "executed",
-                    "environment", "output_sha256", "output_excerpt", "reason")
-            receipt = {key: receipt.get(key) for key in keys}
+                    "environment", "output_sha256", "output_excerpt", "reason",
+                    "cell_id", "cell_sha256", "notebook_blob_sha")
+            receipt = {key: receipt.get(key) for key in keys if key in receipt}
             if self.store._lockfile is None:
                 return  # Never write from an old worker after process shutdown/restart.
             receipt["output_excerpt"] = redact(receipt.get("output_excerpt") or "")
