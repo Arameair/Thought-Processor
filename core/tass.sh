@@ -115,13 +115,23 @@ compose() { # compose for the version in $1 (an env file)
   local envf="$1"; shift
   load_env "$envf" || die "no deployed version recorded ($envf)"
   model_files "$(dirname "$COMPOSE_FILE")"
-  APP_PROJECT="$APP_PROJECT" APP_UID="$(id -u)" APP_GID="$(id -g)" APP_DATA="$APP_DATA" APP_SECRETS="$APP_SECRETS" \
-  IDENTITY_IMAGE="$IDENTITY_IMAGE" ENGINE_IMAGE="$ENGINE_IMAGE" CORE_IMAGE="$CORE_IMAGE" \
-  MODEL_IMAGE="${MODEL_IMAGE:-}" MODEL_ARGS="$MODEL_ARGS" MODEL_DIR="${MODEL_DIR:-}" MODEL_URL="$RUN_MODEL_URL" \
-  MODEL_HEALTH_CMD="${MODEL_HEALTH_CMD:-}" MODEL_NETWORK="${MODEL_NETWORK:-}" FIXTURE_DELAY="${FIXTURE_DELAY:-}" \
-  CORE_PORT="$CORE_PORT" IDENTITY_PORT="$IDENTITY_PORT" PULSE_EVERY="${PULSE_EVERY:-20s}" \
-  IDENTITY_UNLOCK_HOURS="${IDENTITY_UNLOCK_HOURS:-12}" \
-    "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  # Docker under sudo loses assignments placed BEFORE sudo (env_reset).
+  # Pass only Compose interpolation values AFTER sudo, never arbitrary caller env.
+  local vars=(
+    "APP_PROJECT=$APP_PROJECT" "APP_UID=$(id -u)" "APP_GID=$(id -g)"
+    "APP_DATA=$APP_DATA" "APP_SECRETS=$APP_SECRETS"
+    "IDENTITY_IMAGE=$IDENTITY_IMAGE" "ENGINE_IMAGE=$ENGINE_IMAGE" "CORE_IMAGE=$CORE_IMAGE"
+    "MODEL_IMAGE=${MODEL_IMAGE:-}" "MODEL_ARGS=$MODEL_ARGS"
+    "MODEL_DIR=${MODEL_DIR:-}" "MODEL_URL=$RUN_MODEL_URL"
+    "MODEL_HEALTH_CMD=${MODEL_HEALTH_CMD:-}" "MODEL_NETWORK=${MODEL_NETWORK:-}"
+    "FIXTURE_DELAY=${FIXTURE_DELAY:-}" "CORE_PORT=$CORE_PORT" "IDENTITY_PORT=$IDENTITY_PORT"
+    "PULSE_EVERY=${PULSE_EVERY:-20s}" "IDENTITY_UNLOCK_HOURS=${IDENTITY_UNLOCK_HOURS:-12}"
+  )
+  if [[ "${DOCKER[0]}" == sudo ]]; then
+    sudo -n env "${vars[@]}" docker compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  else
+    env "${vars[@]}" "${DOCKER[@]}" compose -p "$APP_PROJECT" "${COMPOSE_FILES[@]}" "${PROFILES[@]}" "$@"
+  fi
 }
 
 ours() { "${DOCKER[@]}" ps -q --filter "label=com.docker.compose.project=$APP_PROJECT" 2>/dev/null; }
@@ -196,15 +206,19 @@ worktree_for() { # $1 = core commit → a build checkout outside your working tr
   printf '%s' "$dir"
 }
 
-src_for() { # $1 = name, $2 = commit, $3 = local source or "", $4 = clone command → checkout at the commit
-  local name="$1" sha="$2" local_src="$3" dir="$DEPLOY/src/$1-${2:0:12}"
+src_for() { # $1 = name, $2 = pin, $3 = local source or "", $4 = HTTPS clone URL
+  local name="$1" sha="$2" local_src="$3" url="$4" dir="$DEPLOY/src/$1-${2:0:12}"
   if [[ ! -d "$dir/.git" ]]; then
-    rm -rf "$dir.new"   # only our own half-finished clone
-    if [[ -n "$local_src" ]]; then git clone -q --no-checkout "$local_src" "$dir.new"; else eval "$4 \"$dir.new\""; fi
+    [[ ! -e "$dir" ]] || die "$name checkout path exists but is not a Git clone: $dir"
+    rm -rf -- "$dir.new"   # own previous incomplete clone under APP_HOME only
+    git clone -q --no-checkout "${local_src:-$url}" "$dir.new" || die "$name clone failed; deployment unchanged"
     git -C "$dir.new" checkout -q "$sha" || die "$name commit $sha not found"
-    mv "$dir.new" "$dir"
+    mv -- "$dir.new" "$dir" || die "$name checkout move failed"
   fi
-  [[ "$(git -C "$dir" rev-parse HEAD)" == "$(git -C "$dir" rev-parse "$sha^{commit}")" ]] || die "$name checkout is not at $sha"
+  local found expected
+  found="$(git -C "$dir" rev-parse --verify HEAD)" || die "$name HEAD not available"
+  expected="$(git -C "$dir" rev-parse --verify "$sha^{commit}")" || die "$name pin not available"
+  [[ "$found" == "$expected" ]] || die "$name checkout is not at $sha"
   printf '%s' "$dir"
 }
 
@@ -214,16 +228,17 @@ build_version() { # $1 = core commit; writes $2 (env file) describing the built 
   local csha="$1" out="$2" esha isha src esrc isrc
   esha="$(pin_of "$csha" ENGINE_COMMIT_PIN)"; isha="$(pin_of "$csha" IDENTITY_COMMIT_PIN)"
   [[ -n "$esha" && -n "$isha" ]] || die "core $csha has no engine/identity pins in core/tass.sh"
-  src="$(worktree_for "$csha")"
-  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "gh repo clone Arameair/Thought-engine -- -q --no-checkout")"
-  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "git clone -q --no-checkout https://github.com/Arameair/identity.git")"
-  esha="$(git -C "$esrc" rev-parse HEAD)"; isha="$(git -C "$isrc" rev-parse HEAD)"
+  src="$(worktree_for "$csha")" || die "cannot prepare pinned Core source"
+  esrc="$(src_for engine "$esha" "${ENGINE_SOURCE:-}" "https://github.com/Arameair/Thought-engine.git")" || die "cannot prepare pinned Engine source"
+  isrc="$(src_for identity "$isha" "${IDENTITY_SOURCE:-}" "https://github.com/Arameair/identity.git")" || die "cannot prepare pinned Identity source"
+  esha="$(git -C "$esrc" rev-parse --verify HEAD)" || die "cannot determine Engine revision"
+  isha="$(git -C "$isrc" rev-parse --verify HEAD)" || die "cannot determine Identity revision"
   local bargs=(); [[ -n "${GO_IMAGE:-}" ]] && bargs+=(--build-arg "GO_IMAGE=$GO_IMAGE"); [[ -n "${RUN_IMAGE:-}" ]] && bargs+=(--build-arg "RUN_IMAGE=$RUN_IMAGE")
   say "Building core $(short "$csha") · engine $(short "$esha") · identity $(short "$isha")…"
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null
-  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null
-  cat >"$out" <<EOF
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$csha" -f "$src/core/docker/core.Dockerfile" -t "tass-core:$(short "$csha")" "$src/core" >/dev/null || die "core image build failed; deployment unchanged"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$esha" -f "$src/core/docker/engine.Dockerfile" -t "tass-engine:$(short "$esha")" "$esrc" >/dev/null || die "engine image build failed; deployment unchanged"
+  "${DOCKER[@]}" build -q "${bargs[@]}" --build-arg "VERSION=$isha" -f "$src/core/docker/identity.Dockerfile" -t "tass-identity:$(short "$isha")" "$isrc" >/dev/null || die "identity image build failed; deployment unchanged"
+  cat >"$out" <<EOF || die "could not write candidate deployment record"
 CORE_SHA=$csha
 ENGINE_SHA=$esha
 IDENTITY_SHA=$isha
@@ -290,6 +305,8 @@ validate() { # $1 = env file that should now run; $2 = inventory before; $3 = st
   fi
   h="$(health)" || { say "  FAIL: the core's /api/health doesn't answer"; return 1; }
   state="$(json_field state <<<"$h")"; ver="$(json_field version <<<"$h")"
+  # A healthy but unguarded old Core is NOT acceptance for this one-app trial.
+  [[ "$(json_field action_mode <<<"$h")" == CHAT_ONLY ]] || { say "  FAIL: Core is not in CHAT_ONLY safety mode (Issue #50)"; return 1; }
   [[ "$ver" == "$CORE_SHA" ]] || { say "  FAIL: running core reports version $ver, expected $CORE_SHA"; return 1; }
   local ids now_ent ids_state; ids="$(id_state)" || { say "  FAIL: Identity doesn't answer"; return 1; }
   now_ent="$(json_field entity.entity_id <<<"$ids")"; ids_state="$(json_field state <<<"$ids")"
@@ -317,11 +334,23 @@ current_entity() { local s; s="$(id_state || true)"; [[ -n "$s" ]] && json_field
 # ------------------------------------------------------------------------------- commands
 cmd_start() {
   check || { say; say "Not starting: fix the [stop] items (nothing was changed)."; exit 1; }
+  # This experimental safety build must never start a previously built,
+  # unguarded Core image. Replacing it requires an explicit reviewed update,
+  # not an implicit upgrade or overwrite of the owner's current.env.
+  local checkout_sha recorded_sha
+  checkout_sha="$(git -C "$REPO" rev-parse --verify HEAD)" || die "cannot inspect checkout revision"
+  if [[ -f "$DEPLOY/current.env" ]]; then
+    recorded_sha="$(load_env "$DEPLOY/current.env"; printf '%s' "${CORE_SHA:-}")" || die "cannot read deployed revision"
+    [[ "$recorded_sha" == "$checkout_sha" ]] ||
+      die "saved Core $(short "$recorded_sha") is not this CHAT_ONLY safety build $(short "$checkout_sha"); current.env unchanged. Review and explicitly update to the safety build before starting."
+  fi
   say
   prepare
   if [[ ! -f "$DEPLOY/current.env" ]] || ! (load_env "$DEPLOY/current.env"; "${DOCKER[@]}" image inspect "$CORE_IMAGE" "$ENGINE_IMAGE" "$IDENTITY_IMAGE" >/dev/null 2>&1); then
     local sha; sha="$( [[ -f "$DEPLOY/current.env" ]] && (load_env "$DEPLOY/current.env"; echo "$CORE_SHA") || git -C "$REPO" rev-parse HEAD)"
-    build_version "$sha" "$DEPLOY/current.env.new" && mv "$DEPLOY/current.env.new" "$DEPLOY/current.env"
+    build_version "$sha" "$DEPLOY/current.env.new" || die "build aborted; current.env preserved"
+    [[ -s "$DEPLOY/current.env.new" ]] || die "build produced no candidate deployment record"
+    mv -- "$DEPLOY/current.env.new" "$DEPLOY/current.env" || die "could not activate built deployment record"
     echo "$(date -u +%FT%TZ) start: deployed core $sha" >>"$DEPLOY/history.log"
   fi
   local before ent; before="$(inventory)"; ent="$( [[ -s "$APP_DATA/identity/entity.json" ]] && json_field entity_id <"$APP_DATA/identity/entity.json" || true)"
@@ -340,6 +369,7 @@ cmd_status() {
   else
     say "State: $(json_field state <<<"$h")  $(json_field reasons <<<"$h")"
     say "  engine reachable $(json_field engine_reachable <<<"$h") · model ok $(json_field model_ok <<<"$h")"
+    say "  action gate: $(json_field action_mode <<<"$h") (CHAT_ONLY required until Issue #50 fixed)"
   fi
   say "  last pulse tick: $(tail -n 1 "$APP_DATA/engine/ticks.jsonl" 2>/dev/null | cut -c1-200 || echo none)"
 }
@@ -370,7 +400,9 @@ cmd_update() {
   if [[ $yes == 0 ]]; then read -r -p "Apply this update? Data and keys are backed up first. [y/N] " yn; [[ "$yn" == [yY]* ]] || { say "Nothing changed."; return 0; }; fi
   prepare
   build_version "$cand" "$DEPLOY/candidate.env"
-  local was before ent bk; was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
+  local was before ent bk had_running
+  had_running="$(ours)"  # preserve whether this project was actually running before update
+  was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
   compose "$DEPLOY/current.env" stop >/dev/null 2>&1 || true
   bk="$(backup "before-${cand:0:12}")"; say "Backup: $bk"
   [[ -f "$DEPLOY/previous.env" ]] && cp "$DEPLOY/previous.env" "$DEPLOY/previous.env.keep" || rm -f "$DEPLOY/previous.env.keep"
@@ -389,6 +421,13 @@ cmd_update() {
   # the rollback target stays what it was before this failed attempt
   if [[ -f "$DEPLOY/previous.env.keep" ]]; then cp "$DEPLOY/previous.env.keep" "$DEPLOY/previous.env"; else rm -f "$DEPLOY/previous.env"; fi
   restore_data "$bk"
+  if [[ -z "$had_running" ]]; then
+    # Fresh first-start recovery: old images were not running before the failed
+    # candidate. Preserve the old env/data, but do NOT boot an unguarded Core.
+    echo "$(date -u +%FT%TZ) update: → $cand FAILED; previous record/data preserved; application remains stopped" >>"$DEPLOY/history.log"
+    say "ROLLED BACK deployment record and data; the new application remains stopped (nothing was running before this attempt)."
+    return 1
+  fi
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
   if validate "$DEPLOY/current.env" "$before" "$was" "$ent"; then
     echo "$(date -u +%FT%TZ) update: → $cand FAILED, restored $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA") and data ($bk)" >>"$DEPLOY/history.log"

@@ -48,6 +48,7 @@ const GrantFile = "grant/identity-grant.json"
 const MemoryKeep = 200
 
 type Config struct {
+	ChatOnly  bool          // one-app: deny tool/action execution and work pulse until Issue #50 is fixed
 	DataDir    string        // local home: tass.md, tass.base.md, identity-policy.json, state.json, logs
 	Identity   string        // owner/repo@branch:path of Identity's policy
 	Label      string        // issues with this label are messages to TASS
@@ -715,6 +716,9 @@ func (c *Core) Say(text string) (string, error) {
 
 // SubmitTask queues work for the coordination pulse (it runs on a pulse, not right away).
 func (c *Core) SubmitTask(text string) (string, error) {
+	if c.cfg.ChatOnly {
+		return "", errors.New("CHAT_ONLY: pulse tasks disabled pending independent integrity tests (Issue #50)")
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", errors.New("empty task")
@@ -737,6 +741,9 @@ func (c *Core) SubmitTask(text string) (string, error) {
 
 // PulseControl: start | pause | resume | step, passed to the Thought Engine.
 func (c *Core) PulseControl(action string) (map[string]any, error) {
+	if c.cfg.ChatOnly && action != "pause" {
+		return nil, errors.New("CHAT_ONLY: autonomous pulse controls disabled pending Issue #50")
+	}
 	return c.engine.PulseControl(action)
 }
 
@@ -863,8 +870,12 @@ func (c *Core) Answer(m Incoming) {
 	}()
 
 	id := engine.NewRequestID()
+	actions := Actions
+	if c.cfg.ChatOnly {
+		actions = nil // no executable capabilities offered to Nemotron in safe chat-only mode
+	}
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
-		Request: m.Text, Context: c.context(online), History: hist, Actions: Actions})
+		Request: m.Text, Context: c.context(online), History: hist, Actions: actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
 	if err != nil {
 		rec["error"] = err.Error()
@@ -881,7 +892,11 @@ func (c *Core) Answer(m Incoming) {
 	// The proposed action runs only if Identity allows it at this moment.
 	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
 	if prop.Action != "NONE" {
-		if ok, why := c.allowedNow(identity.ReadTass); !ok {
+		if c.cfg.ChatOnly {
+			out = engine.Outcome{Status: "NOT_AUTHORIZED",
+				Detail: "CHAT_ONLY: model-proposed actions blocked until prediction-lock and cycle-ID checks pass (Issue #50)",
+				Executor: "thought-processor"}
+		} else if ok, why := c.allowedNow(identity.ReadTass); !ok {
 			out = engine.Outcome{Status: "NOT_AUTHORIZED", Detail: why, Executor: "thought-processor", Authorized: why}
 		} else {
 			c.fileMu.Lock()
@@ -903,8 +918,10 @@ func (c *Core) Answer(m Incoming) {
 	c.keepCycle(cy)
 
 	text := strings.TrimSpace(prop.Reply)
-	if mm := nowRe.FindStringSubmatch(text); mm != nil {
-		_ = c.write("now.txt", mm[1]+"\n")
+	if !c.cfg.ChatOnly {
+		if mm := nowRe.FindStringSubmatch(text); mm != nil {
+			_ = c.write("now.txt", mm[1]+"\n")
+		}
 	}
 	text = strings.TrimSpace(nowRe.ReplaceAllString(rememberRe.ReplaceAllString(text, ""), ""))
 	remember := strings.TrimSpace(prop.Remember)
@@ -913,7 +930,7 @@ func (c *Core) Answer(m Incoming) {
 			remember = mm[1]
 		}
 	}
-	if remember != "" {
+	if remember != "" && !c.cfg.ChatOnly {
 		c.addMemory(remember, id, m.From)
 		c.event("sync", "TASS noted in his memory journal: "+remember)
 	}
@@ -1022,6 +1039,7 @@ func (c *Core) recentMemories(n int) []Memory {
 //	UNKNOWN  (shown by callers that can't reach the core at all)
 type Health struct {
 	State        string    `json:"state"`
+	ActionMode   string    `json:"action_mode"` // CHAT_ONLY until Issue #50 integrity gates verified
 	Reasons      []string  `json:"reasons,omitempty"`
 	Version      string    `json:"version"`
 	EngineUp     bool      `json:"engine_reachable"`
@@ -1039,7 +1057,10 @@ func (c *Core) Health(version string) Health {
 	valid, why := c.allowedNow(identity.ModelRequest)
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending}
+		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending, ActionMode: "LEGACY_UNVERIFIED"}
+	if c.cfg.ChatOnly {
+		h.ActionMode = "CHAT_ONLY"
+	}
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {
