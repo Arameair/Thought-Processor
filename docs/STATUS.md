@@ -1,5 +1,20 @@
 # Thought Processor — current status and branch ledger
 
+> **Update 2026-11-05 (verified by evidence, newest first).** The older sections below date from October 23 and are kept as history; where they say "documentation only, no runnable implementation" they are **out of date**.
+>
+> | What | State | Evidence |
+> |---|---|---|
+> | One-app TASS (Go Core + Thought Engine + Identity + local Nemotron, Docker) | **OWNER VERIFIED** running on the owner's WSL machine | owner tests Nov 4–5 |
+> | Supervised Markdown learning: Find → Study → grade → owner Approve → `tass.md ## Learned` → GitHub | **OWNER VERIFIED** for lessons 02 and 03 (3/3, approved Nov 5) on alpha `3ff2a52` | `Arameair/TASS@live:tass.md` |
+> | Lesson retry after a failed attempt (#71: HTTP 409 duplicate job) | **FIXED, LIVE INTEGRATION TESTED in sandbox** (real Engine + Identity binaries, fixture model); owner test pending | Core PR #73, `core/test/lesson_retry_native.py` 24/24 |
+> | First @ skill `@lesson-workspace.list-lessons` with Identity grant, owner approval and durable receipts (#72) | **IMPLEMENTED, LIVE INTEGRATION TESTED in sandbox**; owner test pending | branch `experiment/p0-first-skill-20261105`, `core/test/skill_native.py` 22/22, browser 6/6 |
+> | Workspace slice (#31): identity, repo/branch/revision, skills, receipts, read-only project file, ask TASS about a file | **IMPLEMENTED, browser-tested in sandbox**; owner test pending | same branch |
+> | Lesson 01 *My work pulse* learned on real Nemotron | **NOT RUN** (blocked by #71 until the fix is installed) | — |
+> | TASS applying approved lessons in a fresh conversation (real Nemotron) | **NOT RUN** | owner test D |
+> | Notebook cell execution, five-card thought batches (#70), GitHub issue relay (#69), autonomous skill use | **NOT IMPLEMENTED** | — |
+>
+> Owner test runbook: `core/docs/OWNER_TEST_20261105_LEARNING_AND_FIRST_SKILL.md`.
+
 **Last reviewed:** 2026-10-23  
 **Overall:** **DOCUMENTATION ONLY — NO RUNNABLE IMPLEMENTATION**  
 **Source of truth:** This file *plus* the referenced branch heads, GitHub issues, and recorded test results. A status label must be backed by evidence; branch names alone do not prove anything.
