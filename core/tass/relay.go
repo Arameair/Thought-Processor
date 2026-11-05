@@ -93,12 +93,28 @@ func (c *Core) relayOnce() error {
     }
     c.setRelayHold("")
     if c.st.RelaySince.IsZero() {
-        // Explicitly prime before sending a pilot message. Historic messages
-        // are never processed retroactively.
-        c.st.RelaySince = c.now().UTC()
-        c.saveState()
-        c.event("github", "Mailbox #24 primed: waiting for new ChatGPT: comments")
-        return nil
+        // Capture EXISTING IDs before enabling intake. A timestamp alone is
+        // insufficient: GitHub created_at is second-resolution. A comment
+        // just before activation must never be replayed as a new command.
+        for page := 1; page <= 10; page++ {
+            comments, err := c.gh.MailboxComments(c.cfg.Repo, pilotMailboxIssue, time.Time{}, page)
+            if err != nil { return fmt.Errorf("priming mailbox: %w", err) }
+            for _, cm := range comments {
+                if cm.ID <= 0 || cm.IssueNumber() != pilotMailboxIssue { continue }
+                if len(c.st.RelaySeen) >= maxRelaySeen { return fmt.Errorf("mailbox baseline exceeds ledger limit") }
+                if _, known := c.st.RelaySeen[cm.ID]; !known {
+                    c.st.RelaySeen[cm.ID] = RelayReceipt{Issue:pilotMailboxIssue,SourceCommentID:cm.ID,
+                        Author:cm.User.Login,Stage:"BASELINE"}
+                }
+            }
+            if len(comments) < 100 {
+                c.st.RelaySince = c.now().UTC().Add(-2*time.Second)
+                c.saveState()
+                c.event("github", "Mailbox #24 primed from existing comment IDs; waiting for new ChatGPT: comments")
+                return nil
+            }
+        }
+        return fmt.Errorf("mailbox baseline exceeds 1000 comments; review required")
     }
     if err := c.postRelayOutbox(); err != nil { c.setRelayHold(err.Error()); return err }
     if err := c.readRelayMailbox(); err != nil { c.setRelayHold(err.Error()); return err }
