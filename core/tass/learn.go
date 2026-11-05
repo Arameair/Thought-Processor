@@ -292,9 +292,7 @@ func (c *Core) advanceLessons() {
 	doc, _ := c.read("tass.md")
 	c.fileMu.Unlock()
 	jobID := fmt.Sprintf("lesson_%s_%d", hash(next.Path + next.SHA)[:10], next.Attempts+1)
-	req := "Study this lesson: \"" + l.Title + "\". Read every step, then answer each check in your REPLY, " +
-		"one line per check, exactly like:\nANSWER 1: <your short answer>\nANSWER 2: <your short answer>\n" +
-		"Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE."
+	req := studyRequest(l)
 	ctx := "LESSON (from " + c.cfg.Repo + "/" + next.Path + "):\n" + l.ForStudy() + "\n\nYOUR DOCUMENT:\n" + doc
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
