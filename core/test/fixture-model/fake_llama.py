@@ -50,7 +50,7 @@ def lesson_answers(allm):
     out = []
     for num, q in re.findall(r"^Check (\d+): (.*)$", allm, re.M):
         ql = q.lower()
-        out.append(f"ANSWER {num}: " + next((v for k, v in TABLE if k in ql), "I don't know"))
+        out.append(f"ANSWER {num}: " + next((v for k, v in [("attempts", "3 attempts")] + TABLE if k in ql), "I don't know"))
     return "\n".join(out)
 
 class H(BaseHTTPRequestHandler):
