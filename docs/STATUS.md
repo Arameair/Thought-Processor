@@ -9,6 +9,7 @@
 > | Lesson retry after a failed attempt (#71: HTTP 409 duplicate job) | **FIXED, LIVE INTEGRATION TESTED in sandbox** (real Engine + Identity binaries, fixture model); owner test pending | Core PR #73, `core/test/lesson_retry_native.py` 24/24 |
 > | First @ skill `@lesson-workspace.list-lessons` with Identity grant, owner approval and durable receipts (#72) | **IMPLEMENTED, LIVE INTEGRATION TESTED in sandbox**; owner test pending | branch `experiment/p0-first-skill-20261105`, `core/test/skill_native.py` 22/22, browser 6/6 |
 > | Workspace slice (#31): identity, repo/branch/revision, skills, receipts, read-only project file, ask TASS about a file | **IMPLEMENTED, browser-tested in sandbox**; owner test pending | same branch |
+> | Development page `/dev` (Arameair/Development Brain Builder M1–M3 on real Core data: lessons, notebook cells, skills, notes; versioned graph with history/restore and STALE detection; Ask TASS with a saved revision) | **IMPLEMENTED, browser-tested in sandbox** (11/11); owner test pending | branch `experiment/dev-platform-brain-20261105`, `core/test/browser/dev_brain.py` |
 > | Lesson 01 *My work pulse* learned on real Nemotron | **NOT RUN** (blocked by #71 until the fix is installed) | — |
 > | TASS applying approved lessons in a fresh conversation (real Nemotron) | **NOT RUN** | owner test D |
 > | Notebook cell execution, five-card thought batches (#70), GitHub issue relay (#69), autonomous skill use | **NOT IMPLEMENTED** | — |

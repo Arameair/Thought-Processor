@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TASS · Development</title>
+<style>
+:root{color-scheme:dark;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#0b1119;--panel:#121b27;--line:#283648;--text:#e8eef6;--muted:#8fa0b6;--teal:#5cc2b2;--blue:#7ea6ec;--amber:#e7b26f;--red:#ec8a83;--violet:#b49af0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}
+button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointer;border:1px solid #34445a;background:#1a283a;border-radius:7px;padding:6px 10px}button:hover{background:#243649}button.primary{background:#5f9fbe;color:#08131d;font-weight:700;border-color:#7cc0e2}button:disabled{opacity:.45;cursor:default}
+input,select,textarea{background:#0e1622;border:1px solid var(--line);border-radius:7px;padding:6px 8px}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:#0e1520;flex-wrap:wrap}
+header h1{font-size:17px;margin:0 8px 0 0}header h1 small{color:var(--muted);font-weight:400}
+.sp{flex:1}.chip{font-size:12px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted)}.chip.dirty{color:var(--amber);border-color:#6b5432}
+.shell{display:grid;grid-template-columns:270px 1fr 320px;height:calc(100vh - 56px - 210px);min-height:420px}
+aside{background:var(--panel);overflow:auto;padding:12px}aside.lib{border-right:1px solid var(--line)}aside.insp{border-left:1px solid var(--line)}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 8px}
+.item{border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin:6px 0;background:#0f1824}.item .t{font-weight:600}.item .p{color:var(--muted);font-size:12px;margin:2px 0 4px}
+.tag{display:inline-block;font:11px ui-monospace,monospace;border:1px solid #3a4a60;border-radius:5px;padding:0 5px;margin-right:4px;color:#b8c6d8}
+.tag.good{border-color:#2f6b58;color:#8fe0c4}.tag.bad{border-color:#7a3a36;color:#f2aaa3}.tag.warn{border-color:#6b5432;color:#f0c78f}
+.k-lesson{border-left:4px solid var(--teal)}.k-code-cell,.k-text-cell{border-left:4px solid var(--blue)}.k-skill{border-left:4px solid var(--violet)}.k-note{border-left:4px solid var(--amber)}
+.wrap{position:relative;overflow:auto;background:radial-gradient(#1a2433 1px,transparent 1px) 0 0/22px 22px}
+#canvas{position:relative;width:4000px;height:4000px}svg#links{position:absolute;inset:0;width:4000px;height:4000px}
+.node{position:absolute;width:220px;background:#142031;border:1px solid #33465e;border-radius:10px;padding:8px 9px;cursor:grab;user-select:none;box-shadow:0 4px 14px #0006}
+.node.sel{outline:2px solid #9fd2ff}.node.src{outline:2px dashed var(--amber)}.node .t{font-weight:650;font-size:13px}.node .p{font-size:11.5px;color:var(--muted);margin-top:3px}.node .f{margin-top:5px}
+.node.dim{opacity:.18}
+path.edge{fill:none;stroke-width:2.4;cursor:pointer}path.edge.sel{stroke-width:4.5}path.hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+text.el{fill:#c9d6e6;font-size:11px;paint-order:stroke;stroke:#0b1119;stroke-width:3px}
+.kv{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px}.vv{white-space:pre-wrap;word-break:break-word}
+pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12px;max-height:220px;overflow:auto}
+.bottom{height:210px;border-top:1px solid var(--line);display:grid;grid-template-columns:1.1fr 1fr 1.3fr;background:var(--panel)}
+.bottom>div{padding:10px 12px;overflow:auto;border-right:1px solid var(--line)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}.muted{color:var(--muted)}.err{color:var(--red)}.ok{color:#8fe0c4}
+.hint{color:var(--muted);font-size:12px}.ev{margin:4px 0;font-size:12.5px}.ev b{color:#9fd2ff}
+</style>
+</head>
+<body>
+<header>
+  <h1>TASS <small>· Development</small></h1>
+  <a href="/" style="color:#9fd2ff">← Talk / Core</a>
+  <span id="rev" class="chip">revision —</span><span id="dirty" class="chip">saved</span>
+  <span class="sp"></span>
+  <label class="hint"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
+  <button id="undo" disabled>Undo</button>
+  <button id="check">Check</button>
+  <input id="change" placeholder="what changed (optional)" style="width:180px">
+  <button id="save" class="primary">Save revision</button>
+</header>
+<div class="shell">
+  <aside class="lib">
+    <h2>Find / add</h2>
+    <input id="q" placeholder="search lessons, cells, skills, notes" style="width:100%">
+    <div class="row"><select id="kind"><option value="">all kinds</option><option>lesson</option><option>code-cell</option><option>text-cell</option><option>skill</option><option>note</option></select>
+    <button id="newNote">+ Note</button></div>
+    <div id="noteForm" hidden class="item k-note"><input id="noteTitle" placeholder="note title" style="width:100%"><textarea id="noteText" placeholder="an idea, a thought, a question for TASS…" style="width:100%;height:60px;margin-top:4px"></textarea><div class="row"><button id="noteAdd">Add note</button><button id="noteCancel">Cancel</button></div></div>
+    <div id="lib"></div>
+    <p class="hint">Blocks come from TASS's real lessons, notebook cells and skills. Adding one places a reference; it changes nothing in the source and runs nothing.</p>
+  </aside>
+  <div class="wrap" id="wrap"><div id="canvas"><svg id="links"></svg></div></div>
+  <aside class="insp">
+    <h2>Inspector</h2>
+    <div id="insp" class="hint">Select a block or a connection.</div>
+  </aside>
+</div>
+<div class="bottom">
+  <div><h2>Check</h2><div id="report" class="hint">Not checked yet. Checks never run anything.</div></div>
+  <div><h2>History</h2><div id="hist" class="hint">No saved revisions yet.</div></div>
+  <div><h2>Ask TASS using this brain</h2>
+    <div class="row"><input id="ask" placeholder="e.g. Which block should you use first to find a lesson, and why?" style="flex:1"><button id="askBtn">Ask</button></div>
+    <div class="hint">TASS gets the last <b>saved</b> revision, read-only, for this one message. His reply also appears in Talk. He may disagree with the map.</div>
+    <div id="replies"></div></div>
+</div>
+<script>
+"use strict";
+const TOKEN = "__PAGE_TOKEN__";
+const $ = id => document.getElementById(id);
+let blocks = [], graph = {revision: 0, nodes: [], edges: [], notes: []}, saved = "", sel = null, connectFrom = null, undo = [], relations = {}, askedAt = 0;
+const W = 220, H = 92;
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function tag(text) { const good = /^(LEARNED|PASSED|GRANTED|PASS|DONE|NOTE)$/.test(text), bad = /(FAIL|DENIED|MISSING|NOT GRANTED|STUCK|MODEL_FAILED)/.test(text), warn = /(STALE|RETRY|QUEUED|DISCOVERED|NEW|WARN)/.test(text); return el("span", "tag" + (good ? " good" : bad ? " bad" : warn ? " warn" : ""), text); }
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers: Object.assign({"X-TASS-Token": TOKEN}, body ? {"Content-Type": "application/json"} : {}), body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  return {ok: r.ok, status: r.status, body: data};
+}
+const blockById = id => blocks.find(b => b.id === id);
+const nodeById = id => graph.nodes.find(n => n.id === id);
+const rid = p => p + Math.random().toString(16).slice(2, 12);
+function snapshot() { undo.push(JSON.stringify(graph)); if (undo.length > 60) undo.shift(); $("undo").disabled = false; }
+function changed() { const d = JSON.stringify(graph) !== saved; $("dirty").textContent = d ? "unsaved changes" : "saved"; $("dirty").className = "chip" + (d ? " dirty" : ""); }
+function isStale(n) { const b = blockById(n.block_id); return b && n.pinned !== b.revision; }
+
+async function load() {
+  const r = await api("GET", "/api/brain");
+  if (!r.ok) { $("report").textContent = "Couldn't load (HTTP " + r.status + "). Reload this page from TASS's Core page."; return; }
+  blocks = r.body.blocks || []; relations = r.body.relations || {};
+  graph = r.body.graph || graph; graph.nodes ||= []; graph.edges ||= []; graph.notes ||= [];
+  saved = JSON.stringify(graph); undo = []; $("undo").disabled = true;
+  $("rev").textContent = "revision " + graph.revision + (graph.revision ? " · " + (graph.actor || "") + " · " + new Date(graph.saved_at).toLocaleString() : " · not saved yet");
+  showReport(r.body.report); showHistory(r.body.history || []); drawLib(); render(); changed();
+}
+function drawLib() {
+  const q = $("q").value.toLowerCase(), k = $("kind").value, lib = $("lib"); lib.replaceChildren();
+  const list = blocks.filter(b => (!k || b.kind === k) && (b.title + " " + b.purpose + " " + b.source).toLowerCase().includes(q));
+  for (const b of list) {
+    const c = el("div", "item k-" + b.kind); c.append(el("div", "t", b.title));
+    const m = el("div"); m.append(tag(b.kind.toUpperCase()), tag(b.status)); c.append(m);
+    c.append(el("div", "p", (b.purpose || "").slice(0, 140)));
+    const onCanvas = graph.nodes.filter(n => n.block_id === b.id).length;
+    const add = el("button", "", onCanvas ? "+ Add again (" + onCanvas + " on canvas)" : "+ Add to brain"); add.onclick = () => addNode(b); c.append(add);
+    lib.append(c);
+  }
+  if (!list.length) lib.append(el("p", "hint", blocks.length ? "Nothing matches." : "No blocks yet: press Find lessons on the Core page first."));
+}
+function addNode(b) {
+  if (graph.nodes.length >= 150) return msg("At most 150 blocks.", true);
+  snapshot();
+  const wrap = $("wrap"), n = {id: rid("n"), block_id: b.id, pinned: b.revision, x: Math.round(wrap.scrollLeft + 40 + (graph.nodes.length % 3) * 250), y: Math.round(wrap.scrollTop + 30 + (Math.floor(graph.nodes.length / 3) % 4) * 125)};
+  graph.nodes.push(n); sel = {node: n.id}; render(); drawLib(); changed();
+}
+function center(n) { return [n.x + W / 2, n.y + H / 2]; }
+function neighbors(id) { const s = new Set([id]); for (const e of graph.edges) { if (e.from === id) s.add(e.to); if (e.to === id) s.add(e.from); } return s; }
+function focusSet() { return $("focusMode").checked && sel && sel.node ? neighbors(sel.node) : null; }
+function render() { drawEdges(); drawNodes(); inspect(); }
+function drawEdges() {
+  const svg = $("links"); svg.replaceChildren();
+  const focus = focusSet();
+  const color = {next: "#5cc2b2", supports: "#7ea6ec", alternative: "#e7b26f", requires: "#ec8a83", uses: "#b49af0"};
+  for (const e of graph.edges) {
+    const a = nodeById(e.from), b = nodeById(e.to); if (!a || !b) continue;
+    if (focus && !(focus.has(a.id) && focus.has(b.id))) continue;
+    const [ax, ay] = center(a), [bx, by] = center(b), mx = (ax + bx) / 2;
+    const d = `M ${ax} ${ay} C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`;
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "path"); hit.setAttribute("d", d); hit.setAttribute("class", "hit");
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d);
+    p.setAttribute("class", "edge" + (sel && sel.edge === e.id ? " sel" : "")); p.setAttribute("stroke", color[e.relation] || "#999");
+    if (e.relation !== "next" && e.relation !== "requires") p.setAttribute("stroke-dasharray", "7 6");
+    if (e.creator === "TASS") p.setAttribute("stroke-dasharray", "2 5");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text"); t.setAttribute("x", mx); t.setAttribute("y", (ay + by) / 2 - 4); t.setAttribute("class", "el"); t.setAttribute("text-anchor", "middle");
+    t.textContent = e.relation + (e.creator === "TASS" ? " · TASS" : "");
+    const pick = ev => { ev.stopPropagation(); sel = {edge: e.id}; connectFrom = null; render(); };
+    hit.onclick = pick; p.onclick = pick; t.onclick = pick;
+    svg.append(p, hit, t);
+  }
+}
+function drawNodes() {
+  const canvas = $("canvas"); canvas.querySelectorAll(".node").forEach(x => x.remove());
+  const focus = focusSet();
+  for (const n of graph.nodes) {
+    const b = blockById(n.block_id), c = el("div", "node k-" + (b ? b.kind : "missing"));
+    if (focus && !focus.has(n.id)) c.classList.add("dim");
+    if (sel && sel.node === n.id) c.classList.add("sel"); if (connectFrom === n.id) c.classList.add("src");
+    c.style.left = n.x + "px"; c.style.top = n.y + "px"; c.tabIndex = 0;
+    c.append(el("div", "t", b ? b.title : "MISSING source"), el("div", "p", b ? (b.purpose || "").slice(0, 90) : n.block_id));
+    const f = el("div", "f"); f.append(tag(b ? b.kind.toUpperCase() : "MISSING")); if (b) f.append(tag(b.status)); if (isStale(n)) f.append(tag("STALE")); c.append(f);
+    c.addEventListener("pointerdown", ev => drag(ev, n, c));
+    c.addEventListener("keydown", ev => { const step = ev.shiftKey ? 40 : 10, mv = {ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step]}[ev.key]; if (mv) { ev.preventDefault(); snapshot(); n.x = Math.max(0, n.x + mv[0]); n.y = Math.max(0, n.y + mv[1]); render(); changed(); c.focus(); } });
+    $("canvas").append(c);
+  }
+}
+function drag(ev, n, c) {
+  if (ev.button !== 0) return;
+  const ox = ev.clientX, oy = ev.clientY, sx = n.x, sy = n.y; let moved = false, snapped = false;
+  c.setPointerCapture(ev.pointerId);
+  const move = e => { const dx = e.clientX - ox, dy = e.clientY - oy; if (Math.abs(dx) + Math.abs(dy) > 4) { if (!snapped) { snapshot(); snapped = true; } moved = true; n.x = Math.max(0, Math.min(3770, Math.round(sx + dx))); n.y = Math.max(0, Math.min(3900, Math.round(sy + dy))); c.style.left = n.x + "px"; c.style.top = n.y + "px"; redrawEdges(); } };
+  const up = e => { c.removeEventListener("pointermove", move); c.removeEventListener("pointerup", up); if (moved) { changed(); } else clickNode(n.id); };
+  c.addEventListener("pointermove", move); c.addEventListener("pointerup", up);
+}
+let redrawPending = false;
+function redrawEdges() { if (redrawPending) return; redrawPending = true; requestAnimationFrame(() => { redrawPending = false; drawEdges(); }); }
+function clickNode(id) {
+  if (connectFrom && connectFrom !== id) { addEdge(connectFrom, id, $("cRel") ? $("cRel").value : "supports", $("cWhy") ? $("cWhy").value : ""); connectFrom = null; return; }
+  sel = {node: id}; render();
+}
+function addEdge(from, to, relation, reason) {
+  if (from === to) return msg("A block can't connect to itself.", true);
+  if (graph.edges.some(e => e.from === from && e.to === to && e.relation === relation)) return msg("That connection already exists.", true);
+  snapshot();
+  const e = {id: rid("e"), from, to, relation, reason: (reason || "").trim(), creator: "owner"};
+  graph.edges.push(e); sel = {edge: e.id}; render(); changed();
+  msg("Connection added (" + relation + "). Save to keep it. Nothing ran.");
+}
+function kv(box, k, v, pre) { box.append(el("div", "kv", k)); box.append(el(pre ? "pre" : "div", pre ? "" : "vv", v || "—")); }
+function relSelect(id, value) { const s = el("select"); s.id = id; for (const r of Object.keys(relations)) { const o = el("option", "", r); o.value = r; o.title = relations[r]; if (r === value) o.selected = true; s.append(o); } return s; }
+function inspect() {
+  const box = $("insp"); box.replaceChildren(); box.className = "";
+  if (sel && sel.edge) {
+    const e = graph.edges.find(x => x.id === sel.edge); if (!e) { sel = null; return inspect(); }
+    const a = blockById((nodeById(e.from) || {}).block_id) || {}, b = blockById((nodeById(e.to) || {}).block_id) || {};
+    box.append(el("div", "t", "Connection"));
+    kv(box, "From → to", (a.title || "?") + "  →  " + (b.title || "?"));
+    kv(box, "Made by", e.creator);
+    box.append(el("div", "kv", "Relation")); const rs = relSelect("eRel", e.relation); box.append(rs);
+    const meaning = el("div", "hint", relations[e.relation] || ""); box.append(meaning);
+    rs.onchange = () => { snapshot(); e.relation = rs.value; meaning.textContent = relations[e.relation]; render(); changed(); };
+    box.append(el("div", "kv", "Why does this connection help?")); const why = el("textarea"); why.style.width = "100%"; why.style.height = "70px"; why.value = e.reason || "";
+    why.onchange = () => { snapshot(); e.reason = why.value.trim(); changed(); }; box.append(why);
+    const un = el("button", "", "Unlink"); un.onclick = () => { snapshot(); graph.edges = graph.edges.filter(x => x.id !== e.id); sel = null; render(); changed(); msg("Unlinked. Saved revisions keep their history."); };
+    box.append(el("div", "row")); box.lastChild.append(un);
+    box.append(el("p", "hint", "A connection is advice for TASS. It grants no permission and runs nothing."));
+    return;
+  }
+  if (!sel || !sel.node) { box.className = "hint"; box.textContent = "Select a block or a connection. Arrow keys move a selected block (Shift = faster)."; return; }
+  const n = nodeById(sel.node); if (!n) { sel = null; return inspect(); }
+  const b = blockById(n.block_id);
+  if (!b) { kv(box, "Missing", "This block's source no longer exists: " + n.block_id); }
+  else {
+    box.append(el("div", "t", b.title)); const st = el("div"); st.append(tag(b.kind.toUpperCase()), tag(b.status)); if (isStale(n)) st.append(tag("STALE")); box.append(st);
+    kv(box, "Why use it", b.purpose); kv(box, "Expected", b.expect);
+    kv(box, "Source", b.source + (b.cell_id ? " · cell " + b.cell_id : ""));
+    kv(box, "Pinned revision", n.pinned + (isStale(n) ? "  (now " + b.revision + ")" : "  (current)"));
+    if (isStale(n)) { const rp = el("button", "", "Re-pin to current source"); rp.onclick = () => { snapshot(); n.pinned = b.revision; render(); changed(); }; box.append(rp); box.append(el("div", "hint", "The source changed after this block was placed. Check it before re-pinning.")); }
+    kv(box, "What can run it", b.runnable); if (b.last) kv(box, "Last real record", b.last);
+    if (b.kind === "skill") { const r = el("button", "", "Request a run (you approve on the Core page)"); r.onclick = async () => { const x = await api("POST", "/api/skills/request", {skill: b.id.slice(6), text: "requested from the Development brain"}); msg(x.ok ? "Receipt " + x.body.receipt.receipt_id + ": " + x.body.receipt.state + ". Approve it in Workspace on the Core page." : "Refused: " + (x.body.error || x.status), !x.ok); }; box.append(el("div", "row")); box.lastChild.append(r); }
+    if (b.kind === "note") { const note = graph.notes.find(x => "note:" + x.id === b.id); if (note) { box.append(el("div", "kv", "Edit note")); const t = el("textarea"); t.style.width = "100%"; t.style.height = "70px"; t.value = note.text; t.onchange = () => { snapshot(); note.text = t.value; changed(); }; box.append(t); } }
+    if (b.preview) kv(box, "Source preview (read-only)", b.preview, true);
+  }
+  box.append(el("div", "kv", "Connect this block to…"));
+  const row = el("div", "row"), target = el("select"); target.id = "cTo";
+  for (const m of graph.nodes) if (m.id !== n.id) { const o = el("option", "", (blockById(m.block_id) || {}).title || m.block_id); o.value = m.id; target.append(o); }
+  row.append(relSelect("cRel", "supports"), target); box.append(row);
+  const why = el("input"); why.id = "cWhy"; why.placeholder = "why does this help? (recommended)"; why.style.width = "100%"; box.append(why);
+  const r2 = el("div", "row"), go = el("button", "", "Connect"), pick = el("button", "", "…or click a block on the canvas"), rm = el("button", "", "Remove from canvas");
+  go.disabled = !target.options.length; go.onclick = () => addEdge(n.id, target.value, $("cRel").value, $("cWhy").value);
+  pick.onclick = () => { connectFrom = n.id; render(); msg("Now click the block to connect to."); };
+  rm.onclick = () => { snapshot(); graph.edges = graph.edges.filter(e => e.from !== n.id && e.to !== n.id); graph.nodes = graph.nodes.filter(x => x.id !== n.id); if (b && b.kind === "note" && !graph.nodes.some(x => x.block_id === b.id)) graph.notes = graph.notes.filter(x => "note:" + x.id !== b.id); sel = null; render(); drawLib(); changed(); msg("Removed from the canvas. The source is unchanged."); };
+  r2.append(go, pick, rm); box.append(r2);
+}
+function msg(t, bad) { const r = $("report"); r.replaceChildren(el("div", bad ? "err" : "ok", t)); }
+function showReport(rep) {
+  if (!rep) return; const r = $("report"); r.replaceChildren();
+  const h = el("div"); h.append(tag(rep.status), el("span", "", " " + rep.summary)); r.append(h); r.append(el("div", "hint", rep.execution));
+  for (const c of rep.checks || []) { const d = el("div", "ev"); d.append(tag(c.severity), el("span", "", " " + c.text)); r.append(d); }
+}
+function showHistory(h) {
+  const box = $("hist"); box.replaceChildren(); box.className = "";
+  if (!h.length) { box.className = "hint"; box.textContent = "No saved revisions yet."; return; }
+  for (const x of h) {
+    const d = el("div", "ev"); d.append(el("b", "", "rev " + x.revision), el("span", "", " · " + new Date(x.saved_at).toLocaleString() + " · " + x.actor + " · " + x.nodes + " blocks, " + x.edges + " connections" + (x.change ? " · " + x.change : "")));
+    if (x.revision !== graph.revision) { const b = el("button", "", "Restore"); b.style.marginLeft = "6px"; b.onclick = async () => { if (JSON.stringify(graph) !== saved && !confirmLose()) return; const r = await api("POST", "/api/brain/restore", {revision: x.revision, based_on: graph.revision}); if (!r.ok) return msg("Not restored: " + (r.body.error || r.status), true); await load(); msg("Restored revision " + x.revision + " as new revision " + r.body.graph.revision + ". History is unchanged."); }; d.append(b); }
+    box.append(d);
+  }
+}
+function confirmLose() { msg("You have unsaved changes. Save or Undo them first.", true); return false; }
+$("q").oninput = drawLib; $("kind").onchange = drawLib; $("focusMode").onchange = render;
+$("wrap").addEventListener("click", ev => { if (ev.target.id === "canvas" || ev.target.id === "links" || ev.target.id === "wrap") { sel = null; connectFrom = null; render(); } });
+$("undo").onclick = () => { if (!undo.length) return; graph = JSON.parse(undo.pop()); $("undo").disabled = !undo.length; sel = null; render(); drawLib(); changed(); };
+$("check").onclick = async () => { const r = await api("POST", "/api/brain/check", {graph}); if (r.ok) showReport(r.body); else msg("Check failed: HTTP " + r.status, true); };
+$("save").onclick = async () => {
+  const r = await api("POST", "/api/brain/save", {graph, change: $("change").value});
+  if (r.status === 409) return msg("Not saved: " + r.body.error, true);
+  if (!r.ok) { if (r.body.report) showReport(r.body.report); return msg("Not saved: " + (r.body.error || r.status), true); }
+  $("change").value = ""; await load(); showReport(r.body.report); msg("Saved as revision " + r.body.graph.revision + ".");
+};
+$("newNote").onclick = () => { $("noteForm").hidden = false; $("noteTitle").focus(); };
+$("noteCancel").onclick = () => { $("noteForm").hidden = true; };
+$("noteAdd").onclick = () => {
+  const title = $("noteTitle").value.trim(), text = $("noteText").value.trim(); if (!title) return msg("A note needs a title.", true);
+  snapshot(); const note = {id: rid(""), title, text}; graph.notes.push(note);
+  const b = {id: "note:" + note.id, kind: "note", title, source: "owner note", revision: "note", purpose: text, status: "NOTE", runnable: "a note: nothing to run"};
+  blocks.push(b); $("noteTitle").value = ""; $("noteText").value = ""; $("noteForm").hidden = true;
+  graph.nodes.push({id: rid("n"), block_id: b.id, pinned: "note", x: Math.round($("wrap").scrollLeft + 60), y: Math.round($("wrap").scrollTop + 60)});
+  render(); drawLib(); changed(); msg("Note added. Save to keep it.");
+};
+$("askBtn").onclick = async () => {
+  const text = $("ask").value.trim(); if (!text) return;
+  if (JSON.stringify(graph) !== saved) msg("Note: TASS sees the last SAVED revision (" + graph.revision + "), not your unsaved changes.");
+  const r = await api("POST", "/api/brain/ask", {text});
+  if (!r.ok) return msg("Not sent: " + (r.body.error || r.status), true);
+  $("ask").value = ""; askedAt = Date.now() - 2000;
+  const d = el("div", "ev"); d.append(el("b", "", "You (brain rev " + r.body.revision + "): "), el("span", "", text)); $("replies").prepend(d);
+};
+async function pollReplies() {
+  if (!askedAt) return;
+  const r = await fetch("/api/status", {headers: {"X-TASS-Token": TOKEN}}); if (!r.ok) return; const st = await r.json();
+  for (const e of (st.events || [])) {
+    const at = new Date(e.at).getTime(); if (at < askedAt || (e.kind !== "tass" && e.kind !== "problem")) continue;
+    const d = el("div", "ev"); d.append(el("b", "", e.kind === "tass" ? "TASS: " : "Problem: "), el("span", "", e.text)); $("replies").prepend(d); askedAt = at + 1;
+  }
+}
+setInterval(pollReplies, 1500);
+load();
+</script>
+</body>
+</html>
