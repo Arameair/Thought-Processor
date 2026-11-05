@@ -119,6 +119,7 @@ function showStep(){
   const t=S.timeline;
   if(!t){area.append(mk("div","", "Recorded timeline NOT RECORDED."));return;}
   field(area,"Source",t.source);field(area,"Engine commit",t.engine_commit);
+  field(area,"Original Identity decision evidence",t.identity_evidence);
   field(area,"Linked Thought",t.link_status==="VERIFIED-LINK"?t.thought_id:"UNLINKED / NOT RECORDED");
   field(area,"Missing journal stages",(t.missing||[]).join(", ")||"none reported");
   field(area,"Truncated / partial",String(t.truncated)+" / "+String(t.partial));
