@@ -160,3 +160,53 @@ func TestAskWithBrainSendsSavedRevisionReadOnly(t *testing.T) {
 		t.Fatalf("conversation log doesn't record which brain revision TASS saw:\n%s", b)
 	}
 }
+
+
+// Issue #78: Check and Save must reject invalid edges even if a client skips
+// the immediate editor guard and posts a malformed graph directly.
+func TestBrainCheckAndSaveRejectInvalidUsesAndNextCycle(t *testing.T) {
+    _, _, _, dir, c := brainCore(t)
+    lesson := blockOf(c, "lesson:"+pulsePath)
+    other := blockOf(c, "lesson:lessons/claude/01-pulse.md")
+    skill := blockOf(c, "skill:"+skillListLessons)
+    if lesson.ID == "" || other.ID == "" || skill.ID == "" { t.Fatal("fixture blocks missing") }
+    nodes := []BrainNode{
+        {ID:"a",BlockID:lesson.ID,Pinned:lesson.Revision,X:1,Y:1},
+        {ID:"b",BlockID:other.ID,Pinned:other.Revision,X:250,Y:1},
+        {ID:"c",BlockID:skill.ID,Pinned:skill.Revision,X:500,Y:1},
+    }
+    cases := []struct{name string; edges []BrainEdge; want string}{
+        {"uses to notebook-or-lesson",[]BrainEdge{{ID:"e1",From:"a",To:"b",Relation:"uses",Creator:"owner"}},"must point to a skill"},
+        {"directed next cycle",[]BrainEdge{
+            {ID:"e1",From:"a",To:"b",Relation:"next",Creator:"owner"},
+            {ID:"e2",From:"b",To:"a",Relation:"next",Creator:"owner"}},"circle"},
+        {"edit creates next cycle",[]BrainEdge{
+            {ID:"e1",From:"a",To:"b",Relation:"next",Creator:"owner"},
+            {ID:"e2",From:"b",To:"c",Relation:"next",Creator:"owner"},
+            {ID:"e3",From:"c",To:"a",Relation:"next",Creator:"owner"}},"circle"},
+    }
+    for _, tt := range cases {
+        t.Run(tt.name, func(t *testing.T) {
+            g := BrainGraph{Revision:0,Nodes:append([]BrainNode(nil),nodes...),Edges:tt.edges}
+            report := ValidateBrain(g,c.BrainBlocks(nil))
+            if report.Status != "FAIL" { t.Fatalf("Check accepted invalid graph: %+v",report) }
+            found := false
+            for _,check := range report.Checks { if strings.Contains(check.Text,tt.want) { found=true } }
+            if !found { t.Fatalf("missing specific validation reason %q: %+v",tt.want,report.Checks) }
+            saved, saveReport, err := c.SaveBrain(g,"owner","must refuse")
+            if err == nil || saveReport.Status != "FAIL" || saved.Revision != 0 {
+                t.Fatalf("Save accepted invalid relation: revision=%d err=%v report=%+v",saved.Revision,err,saveReport)
+            }
+            if current := c.Brain(); current.Revision != 0 || len(current.Edges)!=0 {
+                t.Fatalf("rejected graph was persisted: %+v",current)
+            }
+            if _,err := os.Stat(filepath.Join(dir,"brain","revisions","000001.json")); !os.IsNotExist(err) {
+                t.Fatalf("rejected graph created revision file: err=%v",err)
+            }
+        })
+    }
+    valid := BrainGraph{Nodes:nodes,Edges:[]BrainEdge{{ID:"e1",From:"a",To:"c",Relation:"uses",Creator:"owner"}}}
+    if got,rep,err:=c.SaveBrain(valid,"owner","valid skill edge");err!=nil || rep.Status!="PASS" || got.Revision!=1 {
+        t.Fatalf("valid uses→skill must remain allowed: %v %+v %+v",err,got,rep)
+    }
+}
