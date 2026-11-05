@@ -119,6 +119,7 @@ type CycleRequest struct {
 	Context  string    `json:"context"`
 	History  []Message `json:"history,omitempty"`
 	Actions  []Action  `json:"actions"`
+	LessonChecks []int `json:"lesson_checks,omitempty"`
 }
 
 type Spark struct {
@@ -265,6 +266,7 @@ type Job struct {
 	Request  string   `json:"request"`
 	Context  string   `json:"context,omitempty"`
 	Actions  []Action `json:"actions,omitempty"`
+	LessonChecks []int `json:"lesson_checks,omitempty"`
 }
 
 // SubmitJob queues a job; the pulse starts it on a later tick (never right away).
