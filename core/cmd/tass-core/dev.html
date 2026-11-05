@@ -186,9 +186,25 @@ function clickNode(id) {
   if (connectFrom && connectFrom !== id) { addEdge(connectFrom, id, $("cRel") ? $("cRel").value : "supports", $("cWhy") ? $("cWhy").value : ""); connectFrom = null; return; }
   sel = {node: id}; render();
 }
+// Issue #78: the same rules the server's ValidateBrain applies, checked BEFORE the graph changes, so an
+// invalid connection is refused with its reason instead of sitting unsaved on the canvas.
+function edgeProblem(from, to, relation, ignoreId) {
+  if (from === to) return "A block can't connect to itself.";
+  if (!(relation in relations)) return "Unknown relation: " + relation;
+  if (graph.edges.some(e => e.id !== ignoreId && e.from === from && e.to === to && e.relation === relation)) return "That connection already exists.";
+  if (relation === "uses" && !String((nodeById(to) || {}).block_id || "").startsWith("skill:"))
+    return "Refused: \"uses\" must point to a skill (" + ((blockById((nodeById(to) || {}).block_id) || {}).title || "this block") + " is not a skill).";
+  if (relation === "next") {
+    const nx = {};
+    for (const e of graph.edges) if (e.relation === "next" && e.id !== ignoreId) (nx[e.from] = nx[e.from] || []).push(e.to);
+    const seen = new Set(), stack = [to];              // adding from→to closes a circle if `from` is reachable from `to`
+    while (stack.length) { const x = stack.pop(); if (x === from) return "Refused: this NEXT step would make the NEXT steps go in a circle."; if (seen.has(x)) continue; seen.add(x); stack.push(...(nx[x] || [])); }
+  }
+  return "";
+}
 function addEdge(from, to, relation, reason) {
-  if (from === to) return msg("A block can't connect to itself.", true);
-  if (graph.edges.some(e => e.from === from && e.to === to && e.relation === relation)) return msg("That connection already exists.", true);
+  const bad = edgeProblem(from, to, relation, null);
+  if (bad) return msg(bad + " Nothing was added.", true);
   snapshot();
   const e = {id: rid("e"), from, to, relation, reason: (reason || "").trim(), creator: "owner"};
   graph.edges.push(e); sel = {edge: e.id}; render(); changed();
@@ -206,7 +222,11 @@ function inspect() {
     kv(box, "Made by", e.creator);
     box.append(el("div", "kv", "Relation")); const rs = relSelect("eRel", e.relation); box.append(rs);
     const meaning = el("div", "hint", relations[e.relation] || ""); box.append(meaning);
-    rs.onchange = () => { snapshot(); e.relation = rs.value; meaning.textContent = relations[e.relation]; render(); changed(); };
+    rs.onchange = () => {
+      const bad = edgeProblem(e.from, e.to, rs.value, e.id);
+      if (bad) { rs.value = e.relation; return msg(bad + " The connection was not changed.", true); }
+      snapshot(); e.relation = rs.value; meaning.textContent = relations[e.relation]; render(); changed();
+    };
     box.append(el("div", "kv", "Why does this connection help?")); const why = el("textarea"); why.style.width = "100%"; why.style.height = "70px"; why.value = e.reason || "";
     why.onchange = () => { snapshot(); e.reason = why.value.trim(); changed(); }; box.append(why);
     const un = el("button", "", "Unlink"); un.onclick = () => { snapshot(); graph.edges = graph.edges.filter(x => x.id !== e.id); sel = null; render(); changed(); msg("Unlinked. Saved revisions keep their history."); };

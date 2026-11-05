@@ -160,3 +160,36 @@ func TestAskWithBrainSendsSavedRevisionReadOnly(t *testing.T) {
 		t.Fatalf("conversation log doesn't record which brain revision TASS saw:\n%s", b)
 	}
 }
+
+// Issue #78: the two defects the owner reproduced in the editor must also be refused by Save
+// (not only by Check): nothing is written, the revision does not move, and history is unchanged.
+func TestBrainSaveRefusesUsesToNonSkillAndNextCycle(t *testing.T) {
+	_, _, _, dir, c := brainCore(t)
+	lesson := blockOf(c, "lesson:"+pulsePath)
+	other := blockOf(c, "lesson:lessons/claude/01-pulse.md")
+	skill := blockOf(c, "skill:"+skillListLessons)
+	good := BrainGraph{Nodes: []BrainNode{{ID: "a", BlockID: lesson.ID, Pinned: lesson.Revision},
+		{ID: "b", BlockID: other.ID, Pinned: other.Revision, X: 300}, {ID: "s", BlockID: skill.ID, Pinned: skill.Revision, X: 600}},
+		Edges: []BrainEdge{{"e1", "a", "b", "next", "", "owner"}, {"e2", "a", "s", "uses", "", "owner"}}}
+	saved, rep, err := c.SaveBrain(good, "owner", "valid map")
+	if err != nil || rep.Status != "PASS" || saved.Revision != 1 {
+		t.Fatalf("valid save: %v %+v", err, rep)
+	}
+	for name, edge := range map[string]BrainEdge{
+		"uses→lesson": {"e3", "b", "a", "uses", "owner tried uses on a lesson", "owner"},
+		"next cycle":  {"e3", "b", "a", "next", "owner closed the circle", "owner"},
+	} {
+		g := saved
+		g.Edges = append(append([]BrainEdge(nil), saved.Edges...), edge)
+		_, rep, err := c.SaveBrain(g, "owner", name)
+		if err == nil || rep.Status != "FAIL" {
+			t.Errorf("%s: Save must refuse, got err=%v report=%+v", name, err, rep)
+		}
+		if cur := c.Brain(); cur.Revision != 1 || len(cur.Edges) != 2 {
+			t.Errorf("%s: refused save changed the brain: rev %d edges %d", name, cur.Revision, len(cur.Edges))
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "brain", "revisions", "000002.json")); !os.IsNotExist(err) {
+		t.Fatal("a refused save must not write a revision")
+	}
+}

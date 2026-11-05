@@ -122,3 +122,75 @@ func TestPilotMailboxOffLockedAndNoOtherIssue(t *testing.T) {
 }
 
 // A simulated fixture is not evidence that owner's actual local Nemotron ran.
+
+// #76/#81 failure modes: GitHub unavailable, Identity revoked between answer and post, a POST whose
+// response is lost (uncertain delivery), and restart in each state. No blind resend, no replay.
+func TestPilotMailboxOutagesRevokeAndUncertainDelivery(t *testing.T) {
+    ids, eng, gh := mailboxFixture(t)
+    dir := t.TempDir()
+    c := pilotFixture(t, dir, ids, eng, gh)
+    if err := c.SetSettings(Settings{Learn:true,Relay:true}); err != nil { t.Fatal(err) }
+    c.SyncOnce() // prime
+
+    // 1. GitHub unavailable: nothing accepted, a hold is shown, nothing lost once it is back.
+    gh.say(24, "Arameair", "ChatGPT: MAILBOX-02 while GitHub is down")
+    srcA := gh.nextID
+    gh.mu.Lock(); gh.failRead = true; gh.mu.Unlock()
+    c.SyncOnce()
+    if len(c.inbox) != 0 || c.Status().RelayHold == "" { t.Fatalf("outage must hold visibly: inbox=%d hold=%q", len(c.inbox), c.Status().RelayHold) }
+    gh.mu.Lock(); gh.failRead = false; gh.mu.Unlock()
+    c.SyncOnce()
+    if len(c.inbox) != 1 { t.Fatalf("comment written during outage must be read once afterwards; inbox=%d", len(c.inbox)) }
+    in := <-c.inbox
+    if in.CommentID != srcA { t.Fatalf("wrong source %d != %d", in.CommentID, srcA) }
+    c.Answer(in)
+
+    // 2. Identity revoked (LOCKED) after the answer: the post waits, it is not dropped or sent.
+    ids.set("LOCKED")
+    c.SyncOnce()
+    gh.mu.Lock(); n := len(gh.posted); gh.mu.Unlock()
+    if n != 0 || c.st.RelaySeen[srcA].Stage != "ACCEPTED" || len(c.st.Outbox) != 1 {
+        t.Fatalf("revoked Identity must stop the post and keep it: posts=%d stage=%s outbox=%d", n, c.st.RelaySeen[srcA].Stage, len(c.st.Outbox))
+    }
+    // restart while waiting: still exactly one pending reply, no replayed input
+    c = pilotFixture(t, dir, ids, eng, gh)
+    ids.set("UNLOCKED")
+    c.SyncOnce()
+    gh.mu.Lock(); n = len(gh.posted); gh.mu.Unlock()
+    if n != 1 || c.st.RelaySeen[srcA].Stage != "POSTED" || len(c.inbox) != 0 || eng.count() != 1 {
+        t.Fatalf("after unlock+restart: posts=%d stage=%s inbox=%d engine=%d", n, c.st.RelaySeen[srcA].Stage, len(c.inbox), eng.count())
+    }
+
+    // 3. GitHub down at POST time (nothing created): uncertain from TASS's side → AMBIGUOUS, no retry.
+    gh.say(24, "Arameair", "ChatGPT: MAILBOX-03 reply will hit an outage")
+    srcB := gh.nextID
+    c.SyncOnce(); c.Answer(<-c.inbox)
+    gh.mu.Lock(); gh.failPost = "down"; gh.mu.Unlock()
+    c.SyncOnce()
+    if c.st.RelaySeen[srcB].Stage != "AMBIGUOUS" { t.Fatalf("failed POST must be AMBIGUOUS, got %s", c.st.RelaySeen[srcB].Stage) }
+
+    // 4. POST created the comment but the response was lost: also AMBIGUOUS; never posted twice.
+    gh.mu.Lock(); gh.failPost = ""; gh.mu.Unlock()
+    c2 := pilotFixture(t, t.TempDir(), ids, eng, gh)
+    if err := c2.SetSettings(Settings{Learn:true,Relay:true}); err != nil { t.Fatal(err) }
+    c2.SyncOnce()
+    gh.say(24, "Arameair", "ChatGPT: MAILBOX-04 response will be lost")
+    srcC := gh.nextID
+    c2.SyncOnce(); c2.Answer(<-c2.inbox)
+    gh.mu.Lock(); gh.failPost = "lost"; before := len(gh.posted); gh.mu.Unlock()
+    c2.SyncOnce()
+    gh.mu.Lock(); gh.failPost = ""; gh.mu.Unlock()
+    for i := 0; i < 3; i++ { c2.SyncOnce() }
+    c2 = pilotFixture(t, c2.cfg.DataDir, ids, eng, gh) // restart
+    for i := 0; i < 3; i++ { c2.SyncOnce() }
+    gh.mu.Lock(); after := len(gh.posted); gh.mu.Unlock()
+    if c2.st.RelaySeen[srcC].Stage != "AMBIGUOUS" || after-before != 1 {
+        t.Fatalf("lost response: stage=%s posts=%d (must be exactly 1, never resent)", c2.st.RelaySeen[srcC].Stage, after-before)
+    }
+    if !strings.Contains(c2.Status().RelayHold, "owner review") { t.Fatalf("ambiguous delivery must be shown for owner review: %q", c2.Status().RelayHold) }
+    // the original Core still has its own AMBIGUOUS item and has not resent either
+    for i := 0; i < 2; i++ { c.SyncOnce() }
+    gh.mu.Lock(); final := len(gh.posted); gh.mu.Unlock()
+    if final != after { t.Fatalf("AMBIGUOUS item was resent: %d -> %d", after, final) }
+    if h := c.Health("test"); h.ActionMode != "CHAT_ONLY" { t.Fatalf("mailbox changed the action gate: %+v", h) }
+}

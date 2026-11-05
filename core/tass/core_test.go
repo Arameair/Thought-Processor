@@ -46,6 +46,10 @@ type fakeGH struct {
 	treeCalls int
 	nextID    int64
 	srv       *httptest.Server
+	// failure injection for the mailbox (#76/#81): 503 on reads; post: "down" (503, nothing
+	// created) or "lost" (comment IS created but the response never arrives: uncertain delivery)
+	failRead bool
+	failPost string
 }
 
 func newFakeGH() *fakeGH {
@@ -85,6 +89,14 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p := r.URL.Path
+	if f.failRead && r.Method == "GET" && strings.Contains(p, "/issues") {
+		http.Error(w, `{"message":"Service Unavailable"}`, 503)
+		return
+	}
+	if r.Method == "POST" && strings.HasSuffix(p, "/comments") && f.failPost == "down" {
+		http.Error(w, `{"message":"Service Unavailable"}`, 503)
+		return
+	}
 	switch {
 	case r.Method == "GET" && strings.Contains(p, "/contents/"):
 		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/contents/", 2)
@@ -191,6 +203,10 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.nextID++
 		f.comments = append(f.comments, github.Comment{ID: f.nextID, Body: b.Body, User: github.User{Login: "Arameair"},
 			IssueURL: "https://api.github.test/repos/Arameair/TASS/issues/" + n, CreatedAt: time.Now().UTC()})
+		if f.failPost == "lost" {
+			http.Error(w, `{"message":"Bad Gateway"}`, 502)
+			return
+		}
 		f.json(w, 201, map[string]any{"id":f.nextID})
 	default:
 		http.Error(w, `{"message":"not in fake"}`, 404)
