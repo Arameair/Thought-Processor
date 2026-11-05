@@ -82,7 +82,7 @@ func TestLessonsLoopFromGitHubToLearned(t *testing.T) {
 	}
 	job := eng.jobs[0]
 	ctx := job["context"].(string)
-	if strings.Contains(ctx, "Answer:") || !strings.Contains(ctx, "Check 2: Which service") || !strings.Contains(ctx, "# Mira") || job["identity"] != "Mira" {
+	if strings.Contains(ctx, "Answer:") || !strings.Contains(ctx, "Check 2: Which service") || strings.Contains(ctx, "YOUR DOCUMENT") || job["identity"] != "Mira" {
 		t.Fatalf("the entity studies the lesson without its answers, as itself:\n%s", ctx)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "lessons", "lessons", "claude", "01-pulse.md")); string(b) != lessonPulse {
@@ -107,10 +107,13 @@ func TestLessonsLoopFromGitHubToLearned(t *testing.T) {
 	eng.finish(eng.jobs[1]["job_id"].(string), "DONE", "I studied it.\nANSWER 1: twenty\nANSWER 2: Identity", "my pulse ticks every 20 s and Identity decides")
 	c.SyncOnce()
 	got := lessonAt(c, "lessons/claude/01-pulse.md")
-	// Autonomous: a lesson that passes every check is approved automatically.
-	if got.Status != "LEARNED" || got.Right != 2 || !strings.Contains(got.Note, "auto-approved") {
-		t.Fatalf("auto-approved: %+v", got)
+	// No automatic approval, even if old Autonomous is ON. Grading is not authorization.
+	if got.Status != "PASSED" || got.Right != 2 || got.LearnedAt != nil {
+		t.Fatalf("graded lesson must await explicit owner approval: %+v", got)
 	}
+	if strings.Contains(gh.get("Mira/home@live:tass.md"),"## Learned") { t.Fatal("learned remotely before approval") }
+	if err:=c.ApproveLesson("lessons/claude/01-pulse.md");err!=nil { t.Fatal(err) }
+	if got=lessonAt(c,"lessons/claude/01-pulse.md");got.Status!="LEARNED" { t.Fatalf("approval failed: %+v",got) }
 	if err := c.ApproveLesson("lessons/claude/00-old.md"); err == nil {
 		t.Fatal("a lesson that didn't pass can't be approved")
 	}
