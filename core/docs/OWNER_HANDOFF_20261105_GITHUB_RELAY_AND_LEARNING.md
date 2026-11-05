@@ -181,3 +181,15 @@ All work stays in experimental branches or reviewed PRs. Do not merge into main 
 - [Fixture/browser lesson evidence](https://github.com/Arameair/Thought-Processor/blob/experiment/claude-supervised-lesson-fix-20261104/core/docs/SUPERVISED_LESSON_EVIDENCE_20261104.md).
 
 **Handoff summary:** The latest GitHub response is real as a **posted comment**. The live authoring runtime is **unverified**. The manual Markdown learning path exists in candidate code and passed **fixture tests** but has **not passed real Nemotron owner acceptance**. First verify which service replies; then prove one supervised lesson without autonomous side effects. The whole project remains ONE TASS application, not several competing prototypes.
+
+## 11. November 5 prototype implementation update (added after the initial route handoff)
+
+A runnable **draft integration candidate** now exists in [Thought-Processor PR #66](https://github.com/Arameair/Thought-Processor/pull/66), branch `experiment/owner-ready-chat-learning-20261105`, **based on** Claude's repaired #65 branch. The source combines #64's local-owner chat command dispatcher with #65's working Find/Study/Approve button wiring, adds a truthful `github_messages` relay status display, a regression test, and generates numbered answer instructions for every check instead of just two example answer lines. The candidate does not turn on Go-app issue messages or add a GitHub publisher.
+
+Owner instructions and precise acceptance gates: [OWNER_TEST_PROTOTYPE_20261105.md](https://github.com/Arameair/Thought-Processor/blob/experiment/owner-ready-chat-learning-20261105/core/docs/OWNER_TEST_PROTOTYPE_20261105.md).
+
+**Critical credential distinction confirmed from source:** the TASS repository is private. Existing `core/tass.sh` installs a separate Go Core GitHub token in a restricted secret file from `gh auth token` or explicit `GITHUB_TOKEN` when configured. Identity's optional memory-only GitHub device login grants a read-only pinned Issue #51 pilot and does **not** automatically provide the Core API client a token for private TASS lesson files. Before claiming Find PASS, inspect sanitized `gh auth status`, `GITHUB_REPO=Arameair/TASS`, `GITHUB_BRANCH=live`, and actual API discovery behavior. Never paste token values.
+
+A first PR #66 Go CI run (code revision `c9a7fd7`) passed vet, race tests, build, real-image build, Compose configuration and launcher syntax. Later source improvement and documentation commits have their own CI runs; confirm **the final exact PR head** before owner approval. Fixture CI does **not** prove the owner's Nemotron or the GitHub issue bridge.
+
+**Status: IMPLEMENTATION CANDIDATE / OWNER TEST NOT RUN.** No current owner deployment changed, no extra service created, no permissions altered and no guaranteed live ChatGPT↔new Go TASS relay. COMM-01 and LEARN-01 are still evidence gates, not success claims.
