@@ -30,6 +30,14 @@ func TestManualFindStudyReviewApproveWithoutAutonomous(t *testing.T) {
 	if eng.control == "RUNNING" {
 		t.Fatal("Study must not enable background pulse")
 	}
+    // Only actual check numbers cross into Engine; answer keys do not.
+    if checks,ok:=eng.jobs[0]["lesson_checks"].([]any);!ok || len(checks)!=2 || checks[0]!=float64(1) || checks[1]!=float64(2) {
+        t.Fatalf("wrong check number contract: %+v",eng.jobs[0]["lesson_checks"])
+    }
+    if ctx:=eng.jobs[0]["context"].(string);strings.Contains(ctx,"Answer:") || strings.Contains(ctx,"YOUR DOCUMENT") {
+        t.Fatal("model lesson context exposed answer keys or irrelevant document")
+    }
+
 	// Re-clicking Study steps the existing job, not a second submission.
 	again, err := c.StudyLesson("lessons/claude/01-pulse.md")
 	if err != nil || again != id || len(eng.jobs) != 1 {
@@ -108,8 +116,26 @@ Check: Last?
 Answer: gamma
 `)
 	s := studyRequest(l)
-	for _, want := range []string{"ANSWER 1: <your short answer>", "ANSWER 3: <your short answer>", "Use ACTION: NONE"} {
+	for _, want := range []string{"Check numbers: 1 3", "no executable actions"} {
 		if !strings.Contains(s, want) { t.Errorf("missing study instruction %q in %q", want, s) }
 	}
-	if strings.Contains(s, "ANSWER 2:") { t.Fatalf("prompt invented an unchecked answer: %q", s) }
+	if strings.Contains(s, "ANSWER 2:") || strings.Contains(s,"Check numbers: 1 2 3") || strings.Contains(s,"REPLY:") { t.Fatalf("prompt invented an unchecked answer or conflicting model contract: %q", s) }
+}
+
+func TestManualStudyRefusesRunningBackgroundPulse(t *testing.T) {
+    ids,eng,gh:=newFakeIdentitySvc(),newFakeEngine(),newFakeGH()
+    ids.set("UNLOCKED")
+    gh.set("Mira/home@live:tass.md",entityDoc)
+    gh.set("Mira/home@live:lessons/claude/01-pulse.md",lessonPulse)
+    c:=newLearningCore(t,t.TempDir(),ids,gh,eng)
+    c.SyncOnce()
+    if err:=c.DiscoverLessons();err!=nil { t.Fatal(err) }
+    eng.mu.Lock();eng.control="RUNNING";eng.mu.Unlock()
+    if _,err:=c.StudyLesson("lessons/claude/01-pulse.md");err==nil || len(eng.jobs)!=0 {
+        t.Fatal("manual Study began while autonomous work pulse was RUNNING")
+    }
+    eng.mu.Lock();eng.control="PAUSED";eng.mu.Unlock()
+    if _,err:=c.StudyLesson("lessons/claude/01-pulse.md");err!=nil || eng.control!="PAUSED" {
+        t.Fatalf("safe manual step should keep pulse paused: %v",err)
+    }
 }

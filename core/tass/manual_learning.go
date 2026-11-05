@@ -11,18 +11,22 @@ import (
 	"github.com/Arameair/Thought-Processor/core/lessons"
 )
 
-// studyRequest includes one numbered ANSWER line for EVERY actual checked step.
-// All current TASS@live Markdown lessons have three checks; providing only two
-// example lines could lead to an omitted real-Nemotron answer. Use source step
-// numbers rather than assuming the checks are contiguous.
+// studyRequest identifies real checks; Engine alone specifies the ANSWER n
+// output contract. Do not instruct the model to produce both REPLY and ANSWER.
 func studyRequest(l lessons.Lesson) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Study this lesson: %q. Read every step, then answer every check in your REPLY. Use exactly these numbered lines, with your own short answers:\n", l.Title)
-	for _, check := range l.Checks() {
-		fmt.Fprintf(&b, "ANSWER %d: <your short answer>\n", check.N)
-	}
-	b.WriteString("Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE. Do not claim you ran code or already received owner approval.")
-	return b.String()
+    var b strings.Builder
+    fmt.Fprintf(&b,"Read the Markdown lesson %q, then answer each Check in the lesson.\n",l.Title)
+    b.WriteString("Check numbers:")
+    for _,check:=range l.Checks() { fmt.Fprintf(&b," %d",check.N) }
+    b.WriteString(". You have no executable actions and are not yet approved as having learned this lesson.")
+    return b.String()
+}
+
+func studyCheckNumbers(l lessons.Lesson) []int {
+    checks:=l.Checks()
+    nums:=make([]int,0,len(checks))
+    for _,step:=range checks { nums=append(nums,step.N) }
+    return nums
 }
 
 // DiscoverLessons is one explicit owner request to read lessons. It requires
@@ -63,6 +67,10 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	if c.GetSettings().Autonomous {
 		return "", errors.New("turn Autonomous OFF for the supervised Study action")
 	}
+	pulse,err:=c.engine.PulseStatus()
+	if err!=nil || pulse.Control!="PAUSED" {
+		return "",errors.New("manual Study requires the repeating work pulse to be PAUSED")
+	}
 	for _, action := range []string{"lesson.learn", "pulse.run"} {
 		if ok, why := c.allowedNow(action); !ok {
 			return "", fmt.Errorf("Identity denied %s: %s", action, why)
@@ -98,10 +106,10 @@ func (c *Core) StudyLesson(p string) (string, error) {
 		c.learnMu.Unlock()
 		return "", errors.New("a different lesson is already queued; finish it before starting another")
 	}
-	if ls.Status != "NEW" && ls.Status != "RETRY" {
+	if ls.Status != "NEW" && ls.Status != "RETRY" && ls.Status != "MODEL_FAILED" {
 		status := ls.Status
 		c.learnMu.Unlock()
-		return "", fmt.Errorf("lesson is %s; only NEW or RETRY lessons may be studied", status)
+		return "", fmt.Errorf("lesson is %s; only NEW, RETRY or MODEL_FAILED lessons may be studied", status)
 	}
 	// Snapshot only immutable lesson provenance; do not keep an unlocked
 	// pointer across model, disk or network calls.
@@ -123,12 +131,13 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	}
 	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path + snapshot.SHA)[:10], snapshot.Attempts+1)
 	request := studyRequest(l)
-	ctx := "LESSON (from " + c.cfg.Repo + "/" + p + "):\n" + l.ForStudy() + "\n\nYOUR DOCUMENT:\n" + doc
+	// Keep model input small and unambiguous: the lesson, not the entire entity document.
+	ctx := "LESSON (from " + c.cfg.Repo + "/" + p + "):\n" + l.ForStudy()
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
 	}
 	if err := c.engine.SubmitJob(engine.Job{
-		JobID: id, Identity: c.entityName(), Request: request, Context: ctx, Actions: nil,
+		JobID: id, Identity: c.entityName(), Request: request, Context: ctx, Actions: nil, LessonChecks: studyCheckNumbers(l),
 	}); err != nil {
 		return "", err
 	}
@@ -144,7 +153,7 @@ func (c *Core) StudyLesson(p string) (string, error) {
 		c.event("problem", "Study job is QUEUED, but pulse step failed: "+err.Error())
 		return id, fmt.Errorf("lesson queued as %s but pulse step failed: %w", id, err)
 	}
-	c.event("sync", "Owner triggered one pulse step for the selected lesson. Check the Learning card for PASSED, RETRY or STUCK.")
+	c.event("sync", "Owner triggered one pulse step for the selected lesson. Check the Learning card for PASSED, RETRY or MODEL_FAILED.")
 	return id, nil
 }
 
