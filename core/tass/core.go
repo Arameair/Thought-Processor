@@ -1307,7 +1307,7 @@ func (c *Core) Health(version string) Health {
 	relayEnabledForStatus := c.relayOn()
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages || relayEnabledForStatus, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode
+		Messages: c.cfg.Messages || relayEnabledForStatus, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode}
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {
