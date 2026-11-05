@@ -3,6 +3,8 @@ package tass
 import (
 	"strings"
 	"testing"
+
+	"github.com/Arameair/Thought-Processor/core/lessons"
 )
 
 func TestManualFindStudyReviewApproveWithoutAutonomous(t *testing.T) {
@@ -85,4 +87,29 @@ func TestIdentityFixNamesTheOwnersNextStep(t *testing.T) {
 	if got := identityFix("Identity dec_2: the entity has no grant for lesson.learn"); !strings.Contains(got, "Enable learning") {
 		t.Fatalf("no grant: %q", got)
 	}
+}
+
+func TestStudyPromptListsEveryRealCheckNumber(t *testing.T) {
+	l := lessons.Parse(`# Small lesson
+by: owner
+
+## Step 1: First
+Teach: alpha.
+Check: First?
+Answer: alpha
+
+## Step 2: Explanation without an answer
+Teach: beta.
+Check: This is intentionally not checkable.
+
+## Step 3: Last
+Teach: gamma.
+Check: Last?
+Answer: gamma
+`)
+	s := studyRequest(l)
+	for _, want := range []string{"ANSWER 1: <your short answer>", "ANSWER 3: <your short answer>", "Use ACTION: NONE"} {
+		if !strings.Contains(s, want) { t.Errorf("missing study instruction %q in %q", want, s) }
+	}
+	if strings.Contains(s, "ANSWER 2:") { t.Fatalf("prompt invented an unchecked answer: %q", s) }
 }

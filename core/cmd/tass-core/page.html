@@ -63,7 +63,13 @@
 <div id="idbar"></div>
 <main>
   <section class="card">
-    <h2>Talk <small>works without internet</small></h2>
+    <h2>Talk <small>local conversation; lesson requests use authorized GitHub access</small></h2>
+    <div class="ctl">
+      <button id="talkFind">Find lessons</button>
+      <button id="talkTest">Run one lesson test</button>
+      <span id="talkLessonNotice" class="dim" aria-live="polite">Autonomous OFF: test one lesson, then review before approval.</span>
+    </div>
+    <div id="relayState" class="dim" role="status" aria-live="polite">GitHub issue relay: checking local configuration…</div>
     <div id="log"></div>
     <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Try: how many sections does your tass.md have?"></textarea><button>Send</button></form>
   </section>
@@ -149,6 +155,10 @@ async function refresh() {
   $("gh").className = "chip " + (st.github_online ? "ok" : "off");
   $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) + (st.github_messages ? "" : " · messages paused") : "GitHub not syncing: TASS runs locally";
   $("gh").title = st.sync_problem || "";
+  // This flag reports THIS Go Core's issue-message reader, not any older Identity Liaison.
+  $("relayState").textContent = st.github_messages
+    ? "GitHub issue relay configured in this Core; model delivery and publisher identity still require correlated receipts."
+    : "GitHub issue relay OFF in this Go Core. An older Liaison may post to GitHub; its reply does not prove this Core received the message.";
   $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
   $("policy").innerHTML = `${st.policy_valid_now ? '<span class="tag good">valid now</span>' : '<span class="tag bad">not valid now</span>'} ${esc(st.policy)}`;
   const id = st.identity;
@@ -221,6 +231,47 @@ $("f").onsubmit = async ev => {
   const r = await post("/api/say", {text});
   if (r.ok) $("t").value = ""; else alertLine(r.body.error || "not accepted (" + r.status + ")");
   refresh();
+};
+// Explicit controls reuse the exact supervised Learning APIs; never fabricate model results.
+$("talkFind").onclick = async () => {
+  const b = $("talkFind"); b.disabled = true;
+  $("talkLessonNotice").textContent = "Checking the configured GitHub lessons folder…";
+  try {
+    const r = await post("/api/lessons/discover", {});
+    $("talkLessonNotice").textContent = r.ok
+      ? "Found " + ((r.body.learning && r.body.learning.lessons) || []).length + " lesson(s). Review their real states in Learning."
+      : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason provided");
+    refresh();
+  } catch (err) { $("talkLessonNotice").textContent = "Lesson search did not reach Core: " + String(err); }
+  finally { b.disabled = false; }
+};
+$("talkTest").onclick = async () => {
+  const b = $("talkTest"); b.disabled = true;
+  try {
+    if (CUR.autonomous) {
+      $("talkLessonNotice").textContent = "Switch Autonomous OFF before supervised testing; approval must remain manual.";
+      return;
+    }
+    const found = await post("/api/lessons/discover", {});
+    if (!found.ok) {
+      $("talkLessonNotice").textContent = "Refused (HTTP " + found.status + "): " + (found.body.error || "Identity or GitHub refused discovery");
+      return;
+    }
+    const lessons = ((found.body.learning && found.body.learning.lessons) || [])
+      .filter(l => l.status === "NEW" || l.status === "RETRY");
+    if (!lessons.length) {
+      $("talkLessonNotice").textContent = "No eligible Markdown lesson. Review existing states under Learning.";
+      refresh();
+      return;
+    }
+    const chosen = lessons[0]; // Core returns lessons sorted by path; notebooks cannot be NEW.
+    const sent = await post("/api/lessons/study", {path: chosen.path});
+    $("talkLessonNotice").textContent = sent.ok
+      ? "Submitted " + chosen.title + " · real Engine job " + (sent.body.receipt || "UNKNOWN") + ". Review answers and grade under Learning. NOT approved."
+      : "Study refused (HTTP " + sent.status + "): " + (sent.body.error || "no reason provided");
+    refresh();
+  } catch (err) { $("talkLessonNotice").textContent = "Lesson test did not reach Core: " + String(err); }
+  finally { b.disabled = false; }
 };
 $("tf").onsubmit = async ev => {
   ev.preventDefault(); const text = $("tt").value.trim(); if (!text) return;

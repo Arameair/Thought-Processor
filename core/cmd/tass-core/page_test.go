@@ -47,3 +47,23 @@ func TestRefreshDoesNotOverwriteOwnerResultMessage(t *testing.T) {
 		t.Fatal("refresh() must not write lessonMessage (that line belongs to the owner's last action)")
 	}
 }
+
+// Show the distinction between this Go Core and the older GitHub Identity Liaison.
+// The two new Talk controls must use the real supervised endpoints, never the pulse
+// controls or an invented local model result.
+func TestTalkLessonControlsAndRelayStatusAreHonest(t *testing.T) {
+    b, err := os.ReadFile("page.html")
+    if err != nil { t.Fatal(err) }
+    s := string(b)
+    for _, want := range []string{
+        `id="talkFind"`, `id="talkTest"`, `id="relayState"`,
+        `st.github_messages`, `GitHub issue relay OFF in this Go Core`,
+        `$("talkFind").onclick`, `$("talkTest").onclick`,
+        `post("/api/lessons/discover", {})`, `post("/api/lessons/study", {path: chosen.path})`,
+    } {
+        if !strings.Contains(s, want) { t.Errorf("missing real Talk/relay behavior %q", want) }
+    }
+    if strings.Contains(s, `querySelectorAll(".ctl button")`) {
+        t.Fatal("pulse must not overwrite the Talk lesson buttons")
+    }
+}
