@@ -11,6 +11,20 @@ import (
 	"github.com/Arameair/Thought-Processor/core/lessons"
 )
 
+// studyRequest includes one numbered ANSWER line for EVERY actual checked step.
+// All current TASS@live Markdown lessons have three checks; providing only two
+// example lines caused a plausible real-Nemotron omission. Use source step
+// numbers rather than assuming the checks are contiguous.
+func studyRequest(l lessons.Lesson) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Study this lesson: %q. Read every step, then answer every check in your REPLY. Use exactly these numbered lines, with your own short answers:\n", l.Title)
+	for _, check := range l.Checks() {
+		fmt.Fprintf(&b, "ANSWER %d: <your short answer>\n", check.N)
+	}
+	b.WriteString("Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE. Do not claim you ran code or already received owner approval.")
+	return b.String()
+}
+
 // DiscoverLessons is one explicit owner request to read lessons. It requires
 // live Identity permissions, never starts the pulse, changes Autonomous, or
 // executes notebook cells. The scheduled sync loop stays disabled when
@@ -108,9 +122,7 @@ func (c *Core) StudyLesson(p string) (string, error) {
 		return "", errors.New("TASS document is not synced yet; wait for the next GitHub sync before studying")
 	}
 	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path + snapshot.SHA)[:10], snapshot.Attempts+1)
-	request := "Study this lesson: \"" + l.Title + "\". Read every step, then answer each check in your REPLY, " +
-		"one line per check, exactly like:\nANSWER 1: <your short answer>\nANSWER 2: <your short answer>\n" +
-		"Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE."
+	request := studyRequest(l)
 	ctx := "LESSON (from " + c.cfg.Repo + "/" + p + "):\n" + l.ForStudy() + "\n\nYOUR DOCUMENT:\n" + doc
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
