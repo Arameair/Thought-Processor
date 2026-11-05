@@ -61,3 +61,15 @@ func TestCognitionAPIRequiresOwnerTokenAndRejectsBadExports(t *testing.T) {
         }
     }
 }
+
+func TestCognitionHTTPDeniedWhileIdentityLocked(t *testing.T) {
+    // Server route auth is not enough: Identity must authorize each read too.
+    // nil Core cannot serve a valid token. This only checks the HTTP token gate;
+    // Core package tests exercise the actual LOCKED Identity decision.
+    req:=httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8795/api/cognition/library",nil)
+    req.Header.Set("X-TASS-Token","wrong")
+    rec:=httptest.NewRecorder()
+    handler(nil,"test-page-token","test-api-token").ServeHTTP(rec,req)
+    if rec.Code!=http.StatusUnauthorized {t.Fatalf("wrong key got HTTP %d",rec.Code)}
+    if rec.Header().Get("Cache-Control")!="no-store" {t.Fatal("Cognition read must be no-store")}
+}
