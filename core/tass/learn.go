@@ -36,6 +36,9 @@ type Settings struct {
 	Autonomous bool `json:"autonomous"`
 	Pulse      bool `json:"pulse"` // the 20-s work pulse runs (and comes back on after every restart)
 	Learn      bool `json:"learn"` // each pulse looks for new lessons on GitHub and studies them
+	// Relay: talk on GitHub. TASS reads new comments by the allowed authors on open issues
+	// labelled tass-core in the owner's repository and answers there. Off by default.
+	Relay bool `json:"relay"`
 }
 
 // chatOnly: no actions, tasks or pulse. Forced by TASS_CHAT_ONLY=on, or the owner's Autonomous switch is off.
@@ -66,7 +69,8 @@ type LessonState struct {
 	StudiedAt  *time.Time       `json:"studied_at,omitempty"`
 	LearnedAt  *time.Time       `json:"learned_at,omitempty"`
 	Note       string           `json:"note,omitempty"`
-	Superseded string           `json:"superseded,omitempty"` // sha of the version learned before it changed
+	Superseded string           `json:"superseded,omitempty"`     // sha of the version learned before it changed
+	AskedOn    int              `json:"asked_on_issue,omitempty"` // study requested on this GitHub issue: results are posted there
 }
 
 const maxAttempts = 3
@@ -115,7 +119,7 @@ func (c *Core) SetSettings(s Settings) error {
 	b, _ := json.Marshal(s)
 	err := os.WriteFile(c.file("settings.json"), b, 0o600)
 	c.learnMu.Unlock()
-	c.event("sync", fmt.Sprintf("Settings: autonomous %s · work pulse %s · learn from GitHub %s.", onOff(s.Autonomous), onOff(s.Pulse), onOff(s.Learn)))
+	c.event("sync", fmt.Sprintf("Settings: autonomous %s · work pulse %s · learn from GitHub %s · talk on GitHub %s.", onOff(s.Autonomous), onOff(s.Pulse), onOff(s.Learn), onOff(s.Relay)))
 	c.applySettings()
 	return err
 }
@@ -371,11 +375,14 @@ func (c *Core) collect(ls *LessonState) {
 			return
 		}
 		c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d checks right. Waiting for your approval.", ls.Title, ls.Right, ls.Checks))
+		c.postLessonResult(ls, job.State)
 	case ls.Attempts >= maxAttempts:
 		ls.Status = "STUCK"
+		c.postLessonResult(ls, job.State)
 		c.eventLocked("problem", fmt.Sprintf("Lesson %q: %d/%d right after %d attempts. Stuck until you press Try again.", ls.Title, ls.Right, ls.Checks, ls.Attempts))
 	default:
 		ls.Status = "RETRY"
+		c.postLessonResult(ls, job.State)
 		c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d right. It tries again on a later pulse.", ls.Title, ls.Right, ls.Checks))
 	}
 	c.saveLearningLocked()

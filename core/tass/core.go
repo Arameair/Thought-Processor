@@ -66,6 +66,10 @@ type Config struct {
 	Branch      string // e.g. live
 	DocPath     string // the entity's document in that repo (default tass.md)
 	LessonsDir  string // lessons folder in that repo (default lessons)
+	// GitHub conversation relay (app mode). The owner turns it on with the page switch
+	// (Settings.Relay). Only issues with RelayLabel, only comments by RelayAuthors.
+	RelayLabel   string   // default "tass-core" (the older Liaison uses "tass")
+	RelayAuthors []string // GitHub logins TASS answers; default: the repository owner
 }
 
 // grantFile is what GrantFile holds.
@@ -108,6 +112,7 @@ type Incoming struct {
 	Text    string
 	From    string // "local" or "github"
 	Issue   int
+	Author  string // GitHub login (From "github")
 	Receipt string
 }
 
@@ -140,7 +145,8 @@ type Core struct {
 	inbox   chan Incoming
 	replies chan outgoing
 
-	syncHold string // why GitHub sync is on hold (app mode), e.g. Identity LOCKED
+	syncHold  string // why GitHub sync is on hold (app mode), e.g. Identity LOCKED
+	relayHold string // why the GitHub conversation relay is not reading/posting now
 
 	manualMu sync.Mutex // serialize owner-requested lesson starts
 	learnMu  sync.Mutex // lessons loop and settings (learn.go)
@@ -387,6 +393,12 @@ func (c *Core) SyncOnce() time.Duration {
 			steps = append(steps, "lessons")
 		}
 		c.advanceLessons()
+		if err == nil {
+			err = c.relayOnce()
+			if err == nil && c.GetSettings().Relay {
+				steps = append(steps, "relay")
+			}
+		}
 	} else {
 		err = c.syncPolicy()
 		if err == nil {
@@ -694,8 +706,15 @@ func (c *Core) readMessages() error {
 	if err != nil {
 		return err
 	}
+	return c.readIssues(repo, c.cfg.Label, p.Obeys)
+}
+
+// readIssues takes new messages from open issues with label, written by people obeys
+// allows, after TASS first looked (older ones are never answered), never TASS's own
+// posts (Marker) or the older Liaison's.
+func (c *Core) readIssues(repo, label string, obeys func(string) bool) error {
 	first := c.st.Since.IsZero()
-	issues, got, err := c.gh.Issues(repo, c.cfg.Label, c.st.IssuesETag)
+	issues, got, err := c.gh.Issues(repo, label, c.st.IssuesETag)
 	if err != nil {
 		return err
 	}
@@ -709,10 +728,10 @@ func (c *Core) readMessages() error {
 				continue
 			}
 			c.st.SeenIssues[is.Number] = true
-			if first || !p.Obeys(is.User.Login) || strings.Contains(is.Body, "<!-- ") {
+			if first || !obeys(is.User.Login) || strings.Contains(is.Body, "<!-- ") {
 				continue // from before TASS started, or not someone Identity says TASS obeys
 			}
-			c.queue(Incoming{Text: strings.TrimSpace(is.Title + "\n\n" + is.Body), From: "github", Issue: is.Number})
+			c.queue(Incoming{Text: strings.TrimSpace(is.Title + "\n\n" + is.Body), From: "github", Issue: is.Number, Author: is.User.Login})
 		}
 	}
 	comments, got, err := c.gh.Comments(repo, c.st.Since.Add(-2*time.Second), c.st.CommentsETag)
@@ -731,11 +750,11 @@ func (c *Core) readMessages() error {
 		if cm.CreatedAt.After(c.st.Since) {
 			c.st.Since = cm.CreatedAt
 		}
-		if !c.st.SeenIssues[cm.IssueNumber()] || !p.Obeys(cm.User.Login) ||
+		if !c.st.SeenIssues[cm.IssueNumber()] || !obeys(cm.User.Login) ||
 			strings.Contains(cm.Body, Marker) || strings.Contains(cm.Body, "<!-- identity-liaison") {
 			continue
 		}
-		c.queue(Incoming{Text: strings.TrimSpace(cm.Body), From: "github", Issue: cm.IssueNumber()})
+		c.queue(Incoming{Text: strings.TrimSpace(cm.Body), From: "github", Issue: cm.IssueNumber(), Author: cm.User.Login})
 	}
 	if len(c.st.SeenComments) > 2000 {
 		c.st.SeenComments = map[int64]bool{}
@@ -750,7 +769,7 @@ func (c *Core) queue(m Incoming) error {
 	select {
 	case c.inbox <- m:
 		if m.From == "github" {
-			c.event("github", fmt.Sprintf("Message from GitHub, issue #%d", m.Issue))
+			c.event("github", fmt.Sprintf("Message from GitHub @%s on issue #%d", m.Author, m.Issue))
 		}
 		return nil
 	default:
@@ -773,6 +792,10 @@ func (c *Core) flushOutbox() error {
 	if err != nil {
 		return err
 	}
+	return c.postOutbox(repo)
+}
+
+func (c *Core) postOutbox(repo string) error {
 	for len(c.st.Outbox) > 0 {
 		o := c.st.Outbox[0]
 		if err := c.gh.Comment(repo, o.Issue, o.Body); err != nil && !errors.Is(err, github.ErrNotFound) {
@@ -1229,9 +1252,10 @@ func (c *Core) Health(version string) Health {
 	if c.chatOnly() { // before c.mu: chatOnly takes learnMu, and learnMu is never taken inside c.mu
 		mode = "CHAT_ONLY"
 	}
+	relayOn := c.relayOn()
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode}
+		Messages: c.cfg.Messages || relayOn, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode}
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {
@@ -1287,6 +1311,9 @@ type Status struct {
 	Pulse        map[string]any     `json:"pulse,omitempty"`
 	Learning     *LearningStatus    `json:"learning,omitempty"`
 	SyncHold     string             `json:"sync_hold,omitempty"`
+	RelayLabel   string             `json:"relay_label,omitempty"`
+	RelayAuthors []string           `json:"relay_authors,omitempty"`
+	RelayHold    string             `json:"relay_hold,omitempty"`
 	Pending      int                `json:"replies_waiting"`
 	TassMD       string             `json:"tass_md"`
 	Events       []Event            `json:"events"`
@@ -1327,6 +1354,7 @@ func (c *Core) Status() Status {
 		l := c.Learning() // takes learnMu: before c.mu, never inside it
 		learning = &l
 	}
+	relayOn := c.relayOn()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ev := c.events
@@ -1338,12 +1366,15 @@ func (c *Core) Status() Status {
 		cys[len(c.cycles)-1-i] = c.cycles[i]
 	}
 	out := Status{GitHubOnline: c.online, LastSync: c.lastSync, NextSync: c.nextSync, SyncProblem: c.syncErr,
-		Messages: c.cfg.Messages, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
+		Messages: c.cfg.Messages || relayOn, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
 		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...), Pulse: pulse}
 	if ids != nil {
 		out.Identity = ids
 		out.Learning = learning
 		out.SyncHold = c.syncHold // c.mu is held
+		if relayOn {
+			out.RelayLabel, out.RelayAuthors, out.RelayHold = c.relayLabel(), c.relayAuthors(), c.relayHold
+		}
 	}
 	return out
 }
