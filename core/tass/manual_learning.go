@@ -129,26 +129,40 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	if strings.TrimSpace(doc) == "" {
 		return "", errors.New("TASS document is not synced yet; wait for the next GitHub sync before studying")
 	}
-	id := fmt.Sprintf("lesson_%s_%d", hash(snapshot.Path + snapshot.SHA)[:10], snapshot.Attempts+1)
 	request := studyRequest(l)
 	// Keep model input small and unambiguous: the lesson, not the entire entity document.
 	ctx := "LESSON (from " + c.cfg.Repo + "/" + p + "):\n" + l.ForStudy()
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
 	}
-	if err := c.engine.SubmitJob(engine.Job{
-		JobID: id, Identity: c.entityName(), Request: request, Context: ctx, Actions: nil, LessonChecks: studyCheckNumbers(l),
-	}); err != nil {
-		return "", err
-	}
+	name := c.entityName()
+	id, seq, attached, found, err := c.submitLessonJob(snapshot.Path, snapshot.SHA, snapshot.JobSeq, func(id string) engine.Job {
+		return engine.Job{JobID: id, Identity: name, Request: request, Context: ctx, Actions: nil, LessonChecks: studyCheckNumbers(l)}
+	})
 	c.learnMu.Lock()
 	cur := c.learn.Lessons[p]
-	if cur != nil {
-		cur.Status, cur.JobID, cur.Attempts = "QUEUED", id, snapshot.Attempts+1
+	if cur != nil && cur.SHA == snapshot.SHA {
+		for _, r := range found {
+			cur.addHistory(r)
+		}
+		if seq > cur.JobSeq {
+			cur.JobSeq = seq
+		}
+		if err == nil {
+			cur.Status, cur.JobID, cur.Attempts = "QUEUED", id, snapshot.Attempts+1
+			cur.Results, cur.Right, cur.Reply, cur.Remember, cur.CycleID = nil, 0, "", "", ""
+		}
 		c.saveLearningLocked()
 	}
 	c.learnMu.Unlock()
-	c.event("sync", fmt.Sprintf("Owner queued supervised lesson %q: %s. Approval remains manual.", snapshot.Title, id))
+	if err != nil {
+		return "", err
+	}
+	verb := "queued"
+	if attached {
+		verb = "attached to the Engine's existing job"
+	}
+	c.event("sync", fmt.Sprintf("Supervised lesson %q %s: %s. Approval remains manual.", snapshot.Title, verb, id))
 	if _, err := c.engine.PulseControl("step"); err != nil {
 		c.event("problem", "Study job is QUEUED, but pulse step failed: "+err.Error())
 		return id, fmt.Errorf("lesson queued as %s but pulse step failed: %w", id, err)

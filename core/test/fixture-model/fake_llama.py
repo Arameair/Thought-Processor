@@ -31,6 +31,28 @@ def study(allm):
     return ("REPLY: (TEST FIXTURE) I studied it.\n" + "\n".join(lines) +
             f"\nACTION: NONE\nPREDICTION: NONE\nWHY: studying\nREMEMBER: (TEST FIXTURE) I can explain {title}")
 
+# Engine lesson mode (Thought-engine lesson_cycle.go: "OWNER-SUPERVISED LESSON ANSWERS"): numbered
+# ANSWER lines only. FIXTURE_LESSON_FAIL_FIRST="<title>" makes the first FIXTURE_LESSON_FAIL_COUNT
+# (default 2 = request + the Engine's one retry) replies for that lesson REMEMBER-only, the exact
+# shape the owner's real Nemotron produced on Nov 5 (Thought-Processor #71 / Thought-engine #12).
+FAIL_TITLE = os.environ.get("FIXTURE_LESSON_FAIL_FIRST", "")
+FAIL_COUNT = int(os.environ.get("FIXTURE_LESSON_FAIL_COUNT") or 2)
+lesson_calls = {}
+
+def lesson_answers(allm):
+    import re
+    title = (re.search(r"^# (.+)$", allm, re.M) or [None, "a lesson"])[1].strip()
+    with lock:
+        lesson_calls[title] = lesson_calls.get(title, 0) + 1
+        n = lesson_calls[title]
+    if FAIL_TITLE and title == FAIL_TITLE and n <= FAIL_COUNT:
+        return "REMEMBER: (TEST FIXTURE) I study my lessons and keep what I learn about my work pulse."
+    out = []
+    for num, q in re.findall(r"^Check (\d+): (.*)$", allm, re.M):
+        ql = q.lower()
+        out.append(f"ANSWER {num}: " + next((v for k, v in [("attempts", "3 attempts")] + TABLE if k in ql), "I don't know"))
+    return "\n".join(out)
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -55,7 +77,9 @@ class H(BaseHTTPRequestHandler):
         last = str(msgs[-1].get("content", "")) if msgs else ""
         with lock:
             count += 1
-        if "IMPORTANCE: <a whole number" in allm:
+        if "OWNER-SUPERVISED LESSON ANSWERS" in allm:
+            text = lesson_answers(allm)
+        elif "IMPORTANCE: <a whole number" in allm:
             text = "IMPORTANCE: 6\nTOPIC: local work"
         elif "HOW TO ANSWER" in allm and "Study this lesson" in last:
             text = study(allm)

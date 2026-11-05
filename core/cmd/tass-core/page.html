@@ -208,6 +208,7 @@ async function refresh() {
     // Refresh replaces the lesson markup every second. Preserve the expanded
     // model answer for each lesson so the owner can actually read/copy it.
     const openAnswers = new Set(Array.from($("lessons").querySelectorAll("details[data-lesson-path][open]"), d => d.dataset.lessonPath));
+    const openHistory = new Set(Array.from($("lessons").querySelectorAll("details[data-history-path][open]"), d => d.dataset.historyPath));
     $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
       <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
       ${l.checks ? `<span class="dim">${[ "NEW", "QUEUED", "MODEL_FAILED" ].includes(l.status) ? (l.status === "MODEL_FAILED" ? "NOT GRADED · " : "") : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
@@ -221,7 +222,8 @@ async function refresh() {
       ${l.status === "PASSED" ? `<div><b>Every check was right. Waiting for you:</b> Approve to record it as learned, or Retry.</div>` : ""}
       ${l.remember ? `<div>Proposed note (not proof of learning): ${esc(l.remember)}</div>` : ""}
       ${l.reply ? `<details data-lesson-path="${esc(l.path)}" ${openAnswers.has(l.path) ? "open" : ""}><summary class="dim">${l.status === "MODEL_FAILED" ? "Engine error details (not an answer)" : "His full answer"}${l.job_id ? " · job " + esc(l.job_id) : ""}${l.cycle_id ? " · " + esc(l.cycle_id) : ""}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(l.reply)}</pre><button data-copy-lesson="${esc(l.path)}">Copy full text</button></details>` : ""}
-      ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
+      ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}
+      ${(l.history || []).length ? `<details data-history-path="${esc(l.path)}" ${openHistory.has(l.path) ? "open" : ""}><summary class="dim">Attempt history (${l.history.length}, kept permanently${l.job_seq ? " · last job no. " + l.job_seq : ""})</summary>${l.history.slice().reverse().map(h => `<div class="dim" style="margin:3px 0">• ${new Date(h.at).toLocaleString()} · job ${esc(h.job_id)} · Engine ${esc(h.state)}${h.outcome ? " · " + esc(h.outcome === "MODEL_FAILED" || h.outcome === "NOT_COLLECTED" ? h.outcome + " (not graded)" : h.outcome + (h.checks ? " " + h.right + "/" + h.checks : "")) : ""} · ${esc(h.source)}${h.note ? " · " + esc(h.note) : ""}${h.reply ? `<pre style="white-space:pre-wrap;margin:2px 0 2px 12px">${esc(h.reply)}</pre>` : ""}</div>`).join("")}</details>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
     renderedLessons = lessonSignature;
     }
   }

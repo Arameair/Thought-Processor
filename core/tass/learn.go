@@ -55,7 +55,9 @@ type LessonState struct {
 	Goal       string           `json:"goal,omitempty"`
 	Status     string           `json:"status"` // NEW | QUEUED | MODEL_FAILED | PASSED | RETRY | STUCK | LEARNED | NEEDS_WORKSPACE | NO_CHECKS
 	Checks     int              `json:"checks"`
-	Attempts   int              `json:"attempts"`
+	Attempts   int              `json:"attempts"` // attempts since the owner last pressed Retry (limits STUCK)
+	JobSeq     int              `json:"job_seq"`  // highest Engine job number ever used for this revision; never decreases (#71)
+	History    []AttemptRecord  `json:"history,omitempty"`
 	JobID      string           `json:"job_id,omitempty"`
 	CycleID    string           `json:"cycle_id,omitempty"`
 	Right      int              `json:"right"`
@@ -87,6 +89,15 @@ func (c *Core) loadLearning() {
 		if c.learn.Lessons == nil {
 			c.learn.Lessons = map[string]*LessonState{}
 		}
+	}
+	migrated := false
+	for _, ls := range c.learn.Lessons {
+		if migrateLessonLocked(ls, c.now().UTC()) {
+			migrated = true
+		}
+	}
+	if migrated {
+		c.saveLearningLocked()
 	}
 	c.settings = Settings{Learn: true}
 	if b, err := os.ReadFile(c.file("settings.json")); err == nil {
@@ -227,6 +238,12 @@ func (c *Core) syncLessons(manual bool) error {
 		if old != nil && old.Status == "LEARNED" {
 			ls.Superseded, ls.Note = old.SHA, strings.TrimSpace("changed on GitHub after it was learned; studying the new version. "+ls.Note)
 		}
+		if old != nil { // a new revision starts its own attempts, but earlier evidence stays with the lesson
+			c.learnMu.Lock()
+			migrateLessonLocked(old, c.now().UTC())
+			ls.History = append([]AttemptRecord(nil), old.History...)
+			c.learnMu.Unlock()
+		}
 		c.learnMu.Lock()
 		c.learn.Lessons[e.Path] = ls
 		c.learnMu.Unlock()
@@ -288,17 +305,30 @@ func (c *Core) advanceLessons() {
 	}
 	l := lessons.Parse(string(text))
 	name := c.entityName()
-	jobID := fmt.Sprintf("lesson_%s_%d", hash(next.Path + next.SHA)[:10], next.Attempts+1)
 	req := studyRequest(l)
 	ctx := "LESSON (from " + c.cfg.Repo + "/" + next.Path + "):\n" + l.ForStudy()
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
 	}
-	if err := c.engine.SubmitJob(engine.Job{JobID: jobID, Identity: name, Request: req, Context: ctx, LessonChecks: studyCheckNumbers(l)}); err != nil {
+	c.learnMu.Lock()
+	path, sha, lastSeq := next.Path, next.SHA, next.JobSeq
+	c.learnMu.Unlock()
+	jobID, seq, _, found, err := c.submitLessonJob(path, sha, lastSeq, func(id string) engine.Job {
+		return engine.Job{JobID: id, Identity: name, Request: req, Context: ctx, LessonChecks: studyCheckNumbers(l)}
+	})
+	c.learnMu.Lock()
+	for _, r := range found {
+		next.addHistory(r)
+	}
+	if seq > next.JobSeq {
+		next.JobSeq = seq
+	}
+	if err != nil {
+		c.saveLearningLocked()
+		c.learnMu.Unlock()
 		c.noteLearning("Couldn't hand the lesson to the pulse: " + err.Error())
 		return
 	}
-	c.learnMu.Lock()
 	next.Status, next.JobID, next.Attempts = "QUEUED", jobID, next.Attempts+1
 	c.saveLearningLocked()
 	c.learnMu.Unlock()
@@ -347,10 +377,17 @@ func (c *Core) collect(ls *LessonState) {
 	if job.State != "DONE" {
 		ls.Results, ls.Right, ls.Status = nil, 0, "MODEL_FAILED"
 		ls.Note = "Model/Engine failure — NOT GRADED (" + job.State + "): " + oneLine(job.Result, 160)
+		ls.addHistory(AttemptRecord{JobID: ls.JobID, CycleID: job.CycleID, SHA: ls.SHA, State: job.State, Outcome: "MODEL_FAILED",
+			Checks: ls.Checks, Reply: job.Result, Note: ls.Note, Source: "study", At: now})
 		c.eventLocked("problem", fmt.Sprintf("Lesson %q: Engine job %s; not graded and not learned.",ls.Title,job.State))
 		c.saveLearningLocked()
 		return
 	}
+	defer func() {
+		ls.addHistory(AttemptRecord{JobID: ls.JobID, CycleID: job.CycleID, SHA: ls.SHA, State: job.State, Outcome: ls.Status,
+			Right: ls.Right, Checks: ls.Checks, Reply: job.Result, Source: "study", At: now})
+		c.saveLearningLocked()
+	}()
 	ls.Results, ls.Right, _ = lessons.Grade(l, job.Result)
 	ls.Note = ""
 	if ls.Checks>0 && ls.Right==ls.Checks {
@@ -436,7 +473,11 @@ func (c *Core) RetryLesson(p string) error {
 	if ls.Status == "QUEUED" || ls.Status == "LEARNED" || ls.Status == "NEEDS_WORKSPACE" || ls.Status == "NO_CHECKS" || ls.Status == "GONE" {
 		return fmt.Errorf("can't retry a lesson that is %s", ls.Status)
 	}
-	ls.Status, ls.Attempts, ls.Note = "NEW", 0, "you asked for another try"
+	// Attempts restarts (it limits STUCK); JobSeq and History are kept, so the next Study
+	// gets a job ID the Engine has never seen and earlier answers stay on record (#71).
+	migrateLessonLocked(ls, c.now().UTC())
+	ls.Status, ls.Attempts, ls.Note = "NEW", 0, "you asked for another try; earlier attempts are kept in its history"
+	ls.Results, ls.Right, ls.Reply, ls.Remember, ls.JobID, ls.CycleID = nil, 0, "", "", "", ""
 	c.saveLearningLocked()
 	return nil
 }
