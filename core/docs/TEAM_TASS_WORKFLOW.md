@@ -1,5 +1,8 @@
 # TASS team operating notes — single application, observable improvement
 
+> **November 5 owner-route handoff (latest testing/coordination plan):** [OWNER_HANDOFF_20261105_GITHUB_RELAY_AND_LEARNING.md](OWNER_HANDOFF_20261105_GITHUB_RELAY_AND_LEARNING.md). It separates the older Identity Liaison's confirmed GitHub reply from the new Go app's currently disabled issue messaging, and defines COMM-01 plus LEARN-01 acceptance. Read this with the November 4 workflow; it is documentation, not execution permission.
+
+
 **Status:** Owner-directed working agreement, 2026-11-04. This is coordination material, not a software/Identity grant, runnable instruction or proof of integration.
 
 ## Goal and development order
