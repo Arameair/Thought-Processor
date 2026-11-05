@@ -89,6 +89,10 @@ type CognitionTimeline struct {
     InvalidLines int `json:"invalid_lines"`
     Note string `json:"note"`
 }
+func cognitionFirst(values ...string) string {
+    for _,v:=range values {if v!="" {return v}}
+    return ""
+}
 func cognitionClip(s string,n int)string {
     s=strings.TrimSpace(s)
     if len(s)>n {return s[:n]+"…"}
@@ -174,7 +178,7 @@ func (c *Core) CognitionLibrary()(CognitionLibrary,error){
             }
         }
         out.Thoughts=append(out.Thoughts,CognitionCard{
-            ID:"thought:"+th.ThoughtID,Kind:"thought",Title:cognitionClip(firstNonEmpty(th.Topic,th.Question,th.ThoughtID),100),
+            ID:"thought:"+th.ThoughtID,Kind:"thought",Title:cognitionClip(cognitionFirst(th.Topic,th.Question,th.ThoughtID),100),
             Summary:cognitionClip(th.Question,cognitionTextMax),State:th.State,
             Source:"Thought Engine: persistent Thought",SourceID:th.ThoughtID,
             RecordedAt:th.UpdatedAt,Verified:"OBSERVED",ThoughtID:th.ThoughtID,
@@ -198,7 +202,7 @@ func (c *Core) CognitionLibrary()(CognitionLibrary,error){
         }
         out.Cycles=append(out.Cycles,CognitionCard{
             ID:"cycle:"+cy.CycleID,Kind:"cycle",Title:"Cycle "+cy.CycleID,
-            Summary:"Engine Spark "+firstNonEmpty(cy.Spark.Status,"NOT RECORDED")+" · "+linkStatus,
+            Summary:"Engine Spark "+cognitionFirst(cy.Spark.Status,"NOT RECORDED")+" · "+linkStatus,
             State:cy.State,Source:"Thought Engine: cycle aggregate",SourceID:cy.CycleID,
             RecordedAt:cy.ReceivedAt,Verified:linkStatus,ThoughtID:thoughtID,
             Fields:[]CognitionField{
@@ -212,7 +216,7 @@ func (c *Core) CognitionLibrary()(CognitionLibrary,error){
             status:=cy.Outcome.Status
             out.Outcomes=append(out.Outcomes,CognitionCard{
                 ID:"outcome:"+cy.CycleID,Kind:"outcome",
-                Title:"Outcome: "+firstNonEmpty(status,"NOT RECORDED"),
+                Title:"Outcome: "+cognitionFirst(status,"NOT RECORDED"),
                 Summary:"Executor-reported outcome; independently verified execution NOT RECORDED.",
                 State:status,Source:"Thought Engine: executor-report",SourceID:cy.CycleID,
                 RecordedAt:cy.ReceivedAt,Verified:"APP-REPORTED",ThoughtID:thoughtID,
@@ -347,16 +351,16 @@ func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error
     }
     var b bytes.Buffer
     fmt.Fprintf(&b,"# Cognition — sanitized recorded cycle\n\n- Core: %s\n- Engine: %s\n- Cycle: %s\n- Thought link: %s (%s)\n- Cycle state: %s\n- Source: %s\n- Verification: %s\n- Missing: %s\n- Truncated: %v / partial: %v\n\n",
-        coreVersion,v.EngineCommit,v.CycleID,firstNonEmpty(v.ThoughtID,"NOT RECORDED"),
-        v.LinkStatus,v.State,v.Source,report.Verification,firstNonEmpty(strings.Join(v.Missing,", "),"none reported"),
+        coreVersion,v.EngineCommit,v.CycleID,cognitionFirst(v.ThoughtID,"NOT RECORDED"),
+        v.LinkStatus,v.State,v.Source,report.Verification,cognitionFirst(strings.Join(v.Missing,", "),"none reported"),
         v.Truncated,v.Partial)
     for _,s:=range report.Steps {
         at:="NOT RECORDED"
         if !s.At.IsZero(){at=s.At.UTC().Format(time.RFC3339Nano)}
         fmt.Fprintf(&b,"- %s / %s / byte %d / %s / status %s / action %s / outcome %s / thought %s / trace %s\n",
-            at,s.Stage,s.Offset,s.Source,s.Status,firstNonEmpty(s.Action,"NOT RECORDED"),
-            firstNonEmpty(s.OutcomeStatus,"NOT RECORDED"),firstNonEmpty(s.ThoughtID,"NOT RECORDED"),
-            firstNonEmpty(s.TraceID,"NOT RECORDED"))
+            at,s.Stage,s.Offset,s.Source,s.Status,cognitionFirst(s.Action,"NOT RECORDED"),
+            cognitionFirst(s.OutcomeStatus,"NOT RECORDED"),cognitionFirst(s.ThoughtID,"NOT RECORDED"),
+            cognitionFirst(s.TraceID,"NOT RECORDED"))
     }
     if b.Len()>64<<10{return nil,"",fmt.Errorf("sanitized report too large")}
     return b.Bytes(),"text/markdown",nil
