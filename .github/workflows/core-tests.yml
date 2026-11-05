@@ -26,6 +26,16 @@ jobs:
           Path('/tmp/tass-learning-page.js').write_text(html.split('<script>', 1)[1].split('</script>', 1)[0])
           PY
           node --check /tmp/tass-learning-page.js
+      - name: Development editor edge validation (real JavaScript fixture)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('core/cmd/tass-core/dev.html').read_text()
+          assert html.count('<script>') == 1 and html.count('</script>') == 1
+          Path('/tmp/tass-dev.js').write_text(html.split('<script>', 1)[1].split('</script>', 1)[0])
+          PY
+          node --check /tmp/tass-dev.js
+          node core/test/dev_edge_validation.cjs
       - name: Build
         working-directory: core
         run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
