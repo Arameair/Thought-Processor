@@ -75,7 +75,7 @@ with sync_playwright() as p:
         assert pg.locator(".tile").count()==1
         pg.get_by_role("button",name="Inspect Real persistent Thought").click()
         pg.get_by_role("button",name="Inspect recorded details").click()
-        assert "Canonical question" in pg.locator("#thoughtDetail").inner_text()
+        pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes('Canonical question')")
         pg.get_by_role("button",name="Open cycle tp_1").click()
         pg.get_by_role("button",name="Step",exact=True).click()
         pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes('received')")
