@@ -79,6 +79,8 @@ func TestRefreshPreservesExpandedLessonAnswer(t *testing.T) {
         `d => d.dataset.lessonPath`,
         `data-lesson-path="${esc(l.path)}"`,
         `openAnswers.has(l.path) ? "open" : ""`,
+        `lessonSignature !== renderedLessons`,
+        `renderedLessons = lessonSignature;`,
     } {
         if !strings.Contains(page, part) { t.Errorf("Learning refresh no longer preserves opened answer state: %s", part) }
     }
