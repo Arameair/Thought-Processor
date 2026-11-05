@@ -81,7 +81,7 @@ For each test, send: **TEST ID**, owner WSL / real Nemotron (not fixture), exact
 ### Expected pass/fail summary
 | Check | Must be observed | Current status |
 |---|---|---|
-| CI Go/race/page regression | exact candidate SHA has verified green run | PENDING |
+| CI Go/race/page regression | exact candidate SHA has verified green run | Earlier code head PASS; verify latest PR #66 head before deployment |
 | Owner preflight/backup | current install/pins/model/data preserved | NOT RUN |
 | Identity grants | opt-in works on existing entity; no unwanted grants | NOT RUN |
 | Find lessons | real GitHub source and status list, not fake result | NOT RUN |
