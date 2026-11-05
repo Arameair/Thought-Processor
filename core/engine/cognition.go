@@ -28,7 +28,7 @@ func (c *Client) cognitionGet(path string, out any) error {
     defer resp.Body.Close()
     if resp.StatusCode!=200{return fmt.Errorf("Thought Engine read refused (HTTP %d)",resp.StatusCode)}
     // Reject oversize, even when JSON happens to parse before the limit.
-    raw,err:=io.ReadAll(io.LimitReader(resp.Body, 6<<20+1))
+    raw,err:=io.ReadAll(io.LimitReader(resp.Body, (6<<20)+1))
     if err!=nil||len(raw)>6<<20{return fmt.Errorf("Thought Engine read exceeded 6 MiB bound")}
     if err:=json.Unmarshal(raw,out);err!=nil{return fmt.Errorf("Thought Engine returned invalid JSON")}
     return nil
