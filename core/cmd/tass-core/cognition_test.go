@@ -17,7 +17,7 @@ func TestCognitionPageServedLocally(t *testing.T) {
         t.Fatalf("GET /cognition: got %d, want 200", rec.Code)
     }
     body := rec.Body.String()
-    for _, required := range []string{"Inside TASS's mind.", "LIVE READ ONLY", "test-page-token", "/api/status", "/api/brain", "PREVIEW ONLY"} {
+    for _, required := range []string{"Inside TASS's mind.", "LIVE / READ ONLY", "test-page-token", "/api/cognition/library", "/api/cognition/cycles/", "PREVIEW ONLY"} {
         if !strings.Contains(body, required) {
             t.Errorf("Cognition HTML missing %q", required)
         }
@@ -36,5 +36,28 @@ func TestCognitionRejectsNonLocalHost(t *testing.T) {
     handler(nil, "test-page-token", "test-api-token").ServeHTTP(rec, req)
     if rec.Code != http.StatusForbidden {
         t.Fatalf("nonlocal host: got %d, want 403", rec.Code)
+    }
+}
+
+func TestCognitionAPIRequiresOwnerTokenAndRejectsBadExports(t *testing.T) {
+    h:=handler(nil,"test-page-token","test-api-token")
+    paths:=[]string{
+        "/api/cognition/library","/api/cognition/thoughts/thought_1",
+        "/api/cognition/cycles/tp_1/timeline","/api/cognition/cycles/tp_1/export?format=json",
+    }
+    for _,path:=range paths{
+        req:=httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8795"+path,nil)
+        r:=httptest.NewRecorder();h.ServeHTTP(r,req)
+        if r.Code!=http.StatusUnauthorized {t.Fatalf("unauthenticated %s: got %d",path,r.Code)}
+        if r.Header().Get("Cache-Control")!="no-store" {t.Fatalf("%s was cacheable",path)}
+    }
+    for _,path:=range []string{"/api/cognition/cycles/tp_1/export?format=raw",
+        "/api/cognition/cycles/..%2Fsettings/export?format=json"} {
+        req:=httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8795"+path,nil)
+        req.Header.Set("X-TASS-Token","test-page-token")
+        rec:=httptest.NewRecorder();h.ServeHTTP(rec,req)
+        if rec.Code!=http.StatusBadRequest&&rec.Code!=http.StatusNotFound {
+            t.Fatalf("unsafe export %s: got %d",path,rec.Code)
+        }
     }
 }
