@@ -1,5 +1,7 @@
 # Cognition shelves — runnable read-only prototype (2026-11-05)
 
+**Go-first NEXT ITERATION:** [COGNITION_GO_FIRST_IMPLEMENTATION_20261105.md](COGNITION_GO_FIRST_IMPLEMENTATION_20261105.md) is the authoritative implementation contract. This file documents the existing UI-only draft. That draft currently constructs cards/associations in browser JavaScript, not Go; it treats each recent cycle as a thought card, rather than consuming canonical persistent Engine Thoughts. Future work must keep the Netflix-style visual design but move classification, evidence correlation, stage playback projection and sanitized exports into Go. **Do not send the older GPT-6 handoff below without this correction. Speaking is out of scope.**
+
 **Scope:** A Netflix-style browsing experience for TASS's recorded thought cycles, observed outcomes, learned lessons, notebook cells, skills/receipts, and owner notes. This is *not* a working autonomous cognition system, a notebook executor, or a replacement for Development.
 
 **Branch:** `experiment/cognition-shelf-prototype-20261105` (branched from `experiment/tass-unified-integration-20261105`).  
@@ -62,13 +64,13 @@ go test ./...
 go test -race ./...
 ```
 
-`core/cmd/tass-core/cognition_test.go` adds GET route/token substitution/local-host tests. CI still must verify the full build with new embed declaration; the authoring sandbox lacked network access to clone and build the complete repo.
+`core/cmd/tass-core/cognition_test.go` adds GET route/token substitution/local-host tests. GitHub Actions core-tests passed for prior prototype branch head `8a6a4eef7473171a9094091e95f0de023a9e3ec4` (run 42089696870), including Go route coverage available in that workflow. This does not establish owner-machine live integration or cover new Go-first implementation work. The authoring sandbox itself did not run the complete repo Go build.
 
 ## GPT-6 handoff / next iterations
 
 - Review branch against current unified integration HEAD before merging; handle concurrent PRs (#76 mailbox, #79 transactional updater, #78 graph validation, #80 export/UX).
 - Retain a small accessible homepage; this UI should feel like a **shelf of thoughts**, not an infrastructure dashboard.
-- Improve the mapping of Engine's real Thought/Spark/Trace objects to cards if the existing `/api/status` payload omits historical thought records; **do not invent thoughts**, add a read-only, Identity-gated, bounded endpoint only after inspecting actual Engine schemas.
+- The pinned Engine already defines canonical `Thought`, `Trace`, `ThoughtStep` and correlated `Cycle.Spark.ThoughtID` in `engine.go` and `cycles.go`; inspect those actual records and the owner-sensitive `/api/entities/{eid}` and `/api/entities/{eid}/thoughts/{tid}` routes. A cycle without a verified `thought_id` is an unlinked cycle, not a fabricated persistent Thought. Implement bounded Go-backed canonical thought projections. See the Go-first spec.
 - Tie lessons/skills to cycles only with verified correlations. Graph connections can be advisory, do not claim causation without evidence.
 - Add a browser test under existing isolated harness for the real `/cognition` route; test both authentication failures and empty data states, and test no unsafe POSTs.
 - Only then consider a cross-link from Cognition card to a Development experiment; Cognition itself remains for viewing/understanding.
