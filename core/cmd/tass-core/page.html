@@ -197,6 +197,9 @@ async function refresh() {
       ? '<a style="color:var(--you)" href="http://127.0.0.1:8796/" target="_blank" rel="noopener">Identity hasn\'t granted learning yet (github.sync, lesson.learn). Open Identity and use "Enable learning".</a>'
       : "";
     const ls = L.lessons || [];
+    // Refresh replaces the lesson markup every second. Preserve the expanded
+    // model answer for each lesson so the owner can actually read/copy it.
+    const openAnswers = new Set(Array.from($("lessons").querySelectorAll("details[data-lesson-path][open]"), d => d.dataset.lessonPath));
     $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
       <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
       ${l.checks ? `<span class="dim">${l.status === "NEW" || l.status === "QUEUED" ? "" : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
@@ -208,7 +211,7 @@ async function refresh() {
       ${l.status === "QUEUED" ? `<div class="dim">Studying now (job ${esc(l.job_id)}). Results appear here when the model has answered.</div>` : ""}
       ${l.status === "PASSED" && !L.settings.autonomous ? `<div><b>Every check was right. Waiting for you:</b> Approve to record it as learned, or Retry.</div>` : ""}
       ${l.remember ? `<div>Claims he learned: ${esc(l.remember)}</div>` : ""}
-      ${l.reply ? `<details><summary class="dim">His full answer${l.job_id ? " · job " + esc(l.job_id) : ""}${l.cycle_id ? " · " + esc(l.cycle_id) : ""}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(l.reply)}</pre></details>` : ""}
+      ${l.reply ? `<details data-lesson-path="${esc(l.path)}" ${openAnswers.has(l.path) ? "open" : ""}><summary class="dim">His full answer${l.job_id ? " · job " + esc(l.job_id) : ""}${l.cycle_id ? " · " + esc(l.cycle_id) : ""}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(l.reply)}</pre></details>` : ""}
       ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
   }
   $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
