@@ -210,7 +210,7 @@ async function refresh() {
     const openAnswers = new Set(Array.from($("lessons").querySelectorAll("details[data-lesson-path][open]"), d => d.dataset.lessonPath));
     $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
       <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
-      ${l.checks ? `<span class="dim">${[ "NEW", "QUEUED", "MODEL_FAILED" ].includes(l.status) ? (l.status === "MODEL_FAILED" ? "NOT GRADED · " : "") : l.right + "/" + l.checks + " right · }attempt ${l.attempts}</span>` : ""}
+      ${l.checks ? `<span class="dim">${[ "NEW", "QUEUED", "MODEL_FAILED" ].includes(l.status) ? (l.status === "MODEL_FAILED" ? "NOT GRADED · " : "") : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
       ${!L.settings.autonomous && (l.status === "NEW" || l.status === "RETRY" || l.status === "QUEUED" || l.status === "MODEL_FAILED") ? `<button data-study="${esc(l.path)}">${l.status === "QUEUED" ? "Step again" : l.status === "MODEL_FAILED" ? "Study again" : "Study (manual)"}</button>` : ""}
       ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
       ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" || l.status === "MODEL_FAILED" ? `<button data-retry="${esc(l.path)}">Retry</button>` : ""}</div>
