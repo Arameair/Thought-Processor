@@ -86,7 +86,7 @@ func TestCognitionUsesCanonicalIdentityAndActualIDs(t *testing.T) {
        len(lib.Thoughts[0].RelatedCycleIDs)!=1||lib.Thoughts[0].RelatedCycleIDs[0]!="tp_1" {
         t.Fatalf("IDs/records not correlated: %+v",lib)
     }
-    if lib.Cycles[0].Verification!="VERIFIED-LINK"||lib.Cycles[1].Verification!="UNLINKED" {
+    if lib.Cycles[0].Verified!="VERIFIED-LINK"||lib.Cycles[1].Verified!="UNLINKED" {
         t.Fatalf("cycle links were invented: %+v",lib.Cycles)
     }
     if lib.Outcomes[0].Verified=="EXECUTED"||lib.Outcomes[0].Verified!="APP-REPORTED" {
