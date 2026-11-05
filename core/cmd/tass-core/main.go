@@ -116,6 +116,12 @@ func main() {
 		cfg.Branch = env("TASS_BRANCH", "live")
 		cfg.DocPath = env("TASS_DOC", "tass.md")
 		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+        // Bounded Github mailbox pilot; independently opt-in via local settings.
+        cfg.RelayLabel = "tass-core"
+        for _, login := range strings.Split(os.Getenv("TASS_RELAY_AUTHORS"), ",") {
+            login = strings.TrimSpace(login)
+            if login != "" { cfg.RelayAuthors = append(cfg.RelayAuthors, login) }
+        }
 		cfg.GitHub = cfg.Repo != ""
 		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
 	}

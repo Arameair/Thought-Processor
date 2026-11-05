@@ -164,7 +164,23 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.prs = append(f.prs, b.Head+" -> "+b.Base+": "+b.Title)
 		f.json(w, 201, map[string]string{"html_url": "https://github.test/pr/" + fmt.Sprint(len(f.prs))})
 	case r.Method == "GET" && strings.HasSuffix(p, "/issues"):
-		f.json(w, 200, f.issues)
+        f.json(w, 200, f.issues)
+    case r.Method == "GET" && strings.HasSuffix(p, "/issues/24"):
+        for _, issue := range f.issues {
+            if issue.Number == 24 { f.json(w, 200, issue); return }
+        }
+        http.Error(w, `{"message":"Not Found"}`, 404)
+    case r.Method == "GET" && strings.HasSuffix(p, "/issues/24/comments"):
+        results := []github.Comment{}
+        for _, cm := range f.comments {
+            if cm.IssueNumber() == 24 { results = append(results, cm) }
+        }
+        page := 1
+        fmt.Sscan(r.URL.Query().Get("page"), &page)
+        lo := (page-1)*100
+        if lo >= len(results) { f.json(w, 200, []github.Comment{}); return }
+        hi := lo+100; if hi > len(results) { hi = len(results) }
+        f.json(w, 200, results[lo:hi])
 	case r.Method == "GET" && strings.HasSuffix(p, "/issues/comments"):
 		f.json(w, 200, f.comments)
 	case r.Method == "POST" && strings.HasSuffix(p, "/comments"):
@@ -175,7 +191,7 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.nextID++
 		f.comments = append(f.comments, github.Comment{ID: f.nextID, Body: b.Body, User: github.User{Login: "Arameair"},
 			IssueURL: "https://api.github.test/repos/Arameair/TASS/issues/" + n, CreatedAt: time.Now().UTC()})
-		f.json(w, 201, map[string]string{})
+		f.json(w, 201, map[string]any{"id":f.nextID})
 	default:
 		http.Error(w, `{"message":"not in fake"}`, 404)
 	}
