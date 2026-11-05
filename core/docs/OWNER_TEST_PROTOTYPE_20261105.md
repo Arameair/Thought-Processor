@@ -27,6 +27,16 @@ git fetch origin experiment/owner-ready-chat-learning-20261105:refs/remotes/orig
 
 Record the *full* installed Core/Engine/Identity SHAs and the *full* candidate Core SHA printed by `check-update`. Check the Engine/Identity candidate pins, changed-file inventory and current Identity state. This command applies **nothing**; fetch only updates the remote-tracking Git ref, not the deployed code. If branch fetch fails, stop; don't replace it with another branch or an unreviewed update.
 
+**Private GitHub authentication check:** `Arameair/TASS` is a **private repository**. This Go Core's lesson-sync client uses `~/.tass-app/secrets/github_token` (the startup script can populate it from the owner's `gh auth token` or an explicitly configured `GITHUB_TOKEN`). Identity's optional GitHub device sign-in is a **different, narrowly scoped session**, and does *not* automatically provide private-file access to the Core lesson client. Read-only checks on the owner PC:
+
+```bash
+gh auth status                    # account/auth health only; NEVER paste 'gh auth token'
+grep '^GITHUB_REPO=' ~/.tass-app/app.env
+grep '^GITHUB_BRANCH=' ~/.tass-app/app.env
+```
+
+Expect `GITHUB_REPO=Arameair/TASS` and `GITHUB_BRANCH=live`. Do **not** paste access tokens, invent a new login, or grant broader GitHub permissions just to make the prototype show lessons; stop with the exact authentication error if required access is unavailable.
+
 Confirm the candidate is the reviewed PR #66 **head SHA** and GitHub CI tests are green for that exact revision. Verify `./tass.sh status` says the existing one-app still runs, the model is the same external Nemotron, and the user-facing Core/Identity ports are the expected ones (usually 8797/8796 in this installation). **Never assume an old SHA or another machine's port.**
 
 Check your saved `Autonomous` setting **in the currently running Thought Processor**. Turn it OFF before considering the candidate. If it cannot be confirmed OFF, stop and debug the state first. Turning Autonomous OFF is an owner action, not a permission to modify anything else.
