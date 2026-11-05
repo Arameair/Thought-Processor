@@ -192,6 +192,8 @@ type Issue struct {
 	HTMLURL     string    `json:"html_url"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	PullRequest *struct{} `json:"pull_request"`
+	State       string    `json:"state"`
+	Labels      []struct{ Name string `json:"name"` } `json:"labels"`
 }
 
 type Comment struct {
@@ -235,6 +237,37 @@ func (c *Client) Comments(repo string, since time.Time, etag string) ([]Comment,
 func (c *Client) Comment(repo string, issue int, body string) error {
 	_, err := c.do("POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repo, issue), map[string]string{"body": body}, "")
 	return err
+}
+
+ // MailboxIssue validates the exact pilot issue before any new comment is read.
+func (c *Client) MailboxIssue(repo string, number int) (Issue, error) {
+    var is Issue
+    g, err := c.do("GET", fmt.Sprintf("/repos/%s/issues/%d", repo, number), nil, "")
+    if err != nil { return is, err }
+    err = json.Unmarshal(g.Body, &is)
+    return is, err
+}
+
+// MailboxComments reads one page from one issue, not a repository-wide feed.
+// Pagination is handled by the caller so a busy repository cannot hide #24.
+func (c *Client) MailboxComments(repo string, number int, since time.Time, page int) ([]Comment, error) {
+    g, err := c.do("GET", fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100&page=%d&since=%s",
+        repo, number, page, url.QueryEscape(since.UTC().Format(time.RFC3339))), nil, "")
+    if err != nil { return nil, err }
+    var comments []Comment
+    return comments, json.Unmarshal(g.Body, &comments)
+}
+
+// PostComment returns the actual ID assigned by GitHub. A response without an
+// ID is NOT a verified receipt; the caller must not pretend it was delivered.
+func (c *Client) PostComment(repo string, issue int, body string) (int64, error) {
+    g, err := c.do("POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repo, issue),
+        map[string]string{"body":body}, "")
+    if err != nil { return 0, err }
+    var receipt struct{ ID int64 `json:"id"` }
+    if err := json.Unmarshal(g.Body, &receipt); err != nil { return 0, err }
+    if receipt.ID <= 0 { return 0, fmt.Errorf("GitHub reply had no comment ID; delivery unverified") }
+    return receipt.ID, nil
 }
 
 // TreeEntry is one file in a branch's tree.
