@@ -5,6 +5,7 @@ package tass
 // The older Identity Liaison uses a separate issue and is never consulted here.
 
 import (
+    "encoding/json"
     "fmt"
     "strings"
     "time"
@@ -24,6 +25,14 @@ type RelayReceipt struct {
     CycleID string `json:"cycle_id,omitempty"`
     OutgoingCommentID int64 `json:"outgoing_comment_id,omitempty"`
     IdentityChecks []string `json:"identity_checks,omitempty"`
+}
+
+// This write must succeed before reserving, queueing or posting a remote ID.
+// Core's general saveState logs errors; the mailbox instead fails closed.
+func (c *Core) persistRelayState() error {
+    raw, err := json.MarshalIndent(c.st, "", " ")
+    if err != nil { return err }
+    return c.write("state.json", string(raw))
 }
 
 func (c *Core) relayOn() bool {
@@ -109,7 +118,7 @@ func (c *Core) relayOnce() error {
             }
             if len(comments) < 100 {
                 c.st.RelaySince = c.now().UTC().Add(-2*time.Second)
-                c.saveState()
+                if err := c.persistRelayState(); err != nil { return err }
                 c.event("github", "Mailbox #24 primed from existing comment IDs; waiting for new ChatGPT: comments")
                 return nil
             }
@@ -146,16 +155,16 @@ func (c *Core) readRelayMailbox() error {
             // RESERVED/ACCEPTED item requiring owner review, but cannot replay it.
             r := RelayReceipt{Issue:pilotMailboxIssue,SourceCommentID:cm.ID,Author:cm.User.Login,Stage:"RESERVED"}
             c.st.RelaySeen[cm.ID] = r
-            c.saveState()
+            if err := c.persistRelayState(); err != nil { return fmt.Errorf("source reservation not durable: %w", err) }
             if err := c.queue(Incoming{Text:body,From:"github",Issue:pilotMailboxIssue,
                 CommentID:cm.ID,Author:cm.User.Login}); err != nil {
                 delete(c.st.RelaySeen, cm.ID) // refused delivery remains eligible for retry
-                c.saveState()
+                if saveErr := c.persistRelayState(); saveErr != nil { return saveErr }
                 return fmt.Errorf("mailbox comment %d not queued: %w", cm.ID, err)
             }
             r.Stage = "ACCEPTED"
             c.st.RelaySeen[cm.ID] = r
-            c.saveState()
+            if err := c.persistRelayState(); err != nil { return err }
             c.appendLog("relay-audit.jsonl", map[string]any{"at":c.now().UTC(),"stage":"accepted",
                 "issue":pilotMailboxIssue,"source_comment_id":cm.ID,"author":cm.User.Login})
             c.event("github", fmt.Sprintf("Accepted GitHub issue #24 comment %d from @%s", cm.ID, cm.User.Login))
@@ -178,38 +187,36 @@ func (c *Core) postRelayOutbox() error {
         if r.Stage == "POSTED" {
             // Crash between persisted receipt and removal from outbox: no resend.
             c.st.Outbox = c.st.Outbox[1:]
-            c.saveState()
+            if err := c.persistRelayState(); err != nil { return err }
             continue
         }
         if r.Stage != "ACCEPTED" {
             return fmt.Errorf("mailbox comment %d has %s state; delivery needs owner review", o.SourceCommentID, r.Stage)
         }
+        // An Identity denial occurs before POST and is not ambiguous.
+        if ok, why := c.allowedNow("github.sync"); !ok {
+            return fmt.Errorf("Identity denied GitHub reply for comment %d: %s", o.SourceCommentID, why)
+        }
         // Persist POSTING before HTTP. Network timeout or restart is ambiguous:
         // no blind retry that could manufacture two publicly visible replies.
         r.Stage, r.CycleID, r.IdentityChecks = "POSTING", o.CycleID, o.IdentityChecks
         c.st.RelaySeen[o.SourceCommentID] = r
-        c.saveState()
-        if ok, why := c.allowedNow("github.sync"); !ok {
-            r.Stage = "AMBIGUOUS"
-            c.st.RelaySeen[o.SourceCommentID] = r
-            c.saveState()
-            return fmt.Errorf("Identity denied GitHub reply for comment %d: %s", o.SourceCommentID, why)
-        }
+        if err := c.persistRelayState(); err != nil { return fmt.Errorf("posting reservation not durable: %w", err) }
         outputID, err := c.gh.PostComment(c.cfg.Repo, pilotMailboxIssue, o.Body)
         if err != nil {
             r.Stage = "AMBIGUOUS"
             c.st.RelaySeen[o.SourceCommentID] = r
-            c.saveState()
+            if saveErr := c.persistRelayState(); saveErr != nil { return saveErr }
             return fmt.Errorf("mailbox post for comment %d unverified: %w", o.SourceCommentID, err)
         }
         r.Stage, r.OutgoingCommentID = "POSTED", outputID
         c.st.RelaySeen[o.SourceCommentID] = r
-        c.saveState()
+        if err := c.persistRelayState(); err != nil { return err }
         c.appendLog("relay-audit.jsonl", map[string]any{"at":c.now().UTC(),"stage":"posted",
             "issue":pilotMailboxIssue,"source_comment_id":o.SourceCommentID,
             "outgoing_comment_id":outputID,"cycle_id":o.CycleID,"identity_checks":o.IdentityChecks})
         c.st.Outbox = c.st.Outbox[1:]
-        c.saveState()
+        if err := c.persistRelayState(); err != nil { return err }
         c.event("github", fmt.Sprintf("Mailbox receipt: input %d -> cycle %s -> output %d",
             o.SourceCommentID, o.CycleID, outputID))
     }
