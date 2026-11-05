@@ -13,14 +13,18 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .overlay{position:fixed;inset:0;background:#02070cba;z-index:9;display:none;justify-content:flex-end}.overlay.open{display:flex}.sheet{height:100%;width:min(515px,100%);background:#111b29;border-left:1px solid #36465a;overflow:auto;padding:27px;box-shadow:-16px 0 80px #0008}.sheet-header{display:flex;justify-content:space-between;gap:12px;align-items:start}.sheet h2{font-size:26px;line-height:1.18;margin:12px 0 9px}.sheet .lede{color:var(--muted);font-size:14px;margin-bottom:25px}.sheet .detail{border-top:1px solid var(--line);padding:12px 0}.sheet dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}.sheet dd{margin:0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.sheet .actions{display:flex;gap:8px;flex-wrap:wrap;padding:20px 0}.sheet .foot{color:var(--muted);font-size:11px}.sheet #thoughtDetail{display:none;margin:15px 0;padding:12px;border:1px solid var(--line);border-radius:10px;color:var(--muted)}.sheet #thoughtDetail.open{display:block}.toast{min-height:20px;color:var(--mint);font-size:12px}
 @media(max-width:700px){nav{gap:9px;flex-wrap:wrap}nav .links{gap:11px;font-size:12px}.tile{flex-basis:204px}.toolbar input{min-width:160px}.hero{padding-top:28px}.sheet{padding:18px}}
 .sheet #thoughtDetail button{display:block;width:100%;text-align:left;margin:7px 0;overflow-wrap:anywhere}
+.pulse{margin:0 4% 10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#0f1726;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px}.pulse b{color:var(--fg)}.pulse .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.pulse .ticks{flex-basis:100%;color:var(--muted);font:12px ui-monospace,monospace}
+.linkbox{margin:0 4% 12px;padding:12px 14px;border:1px solid #5a4a2e;border-radius:12px;background:#1d1a12;font-size:13px}.linkbox.ok{border-color:#2f5d4f;background:#0f1d1a}.linkbox button{margin:4px 6px 0 0;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:#1b2738;color:var(--fg)}
 .sheet #thoughtDetail textarea{background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:9px}
 </style>
 </head>
 <body>
 <nav><span class="logo">TASS</span><div class="links" id="navigation"></div><span class="grow"></span><span class="chip" id="mode">Checking source</span></nav>
 <section class="hero"><div class="eyebrow">Cognition / The thought library</div><h1>Inside TASS's mind.</h1><p>Browse persistent Thoughts, separate recorded cycles, lessons, learning cells, and skill receipts. Select a card to see the evidence. Nothing on this page executes a cell or approves a skill.</p></section>
-<div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
-<div id="banner" class="notice" role="status">Loading…</div><div id="summary" class="summary"></div><main id="shelves"></main>
+<div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="junction" aria-pressed="false">Junctions</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
+<div id="banner" class="notice" role="status">Loading…</div>
+<div id="pulse" class="pulse" aria-live="polite"><span class="k">20-second pulse</span> <span>reading…</span></div>
+<div id="linkbox" class="linkbox" hidden></div><div id="summary" class="summary"></div><main id="shelves"></main>
 <div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
 <button id="expandEngine">Inspect recorded details</button>
 <button id="logs">View Logs</button>
@@ -39,12 +43,14 @@ const S={cards:[],lib:null,selected:null,timeline:null,cursor:-1,timer:null,filt
 const mk=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;};
 const val=x=>x===undefined||x===null||x===""?"NOT RECORDED":String(x);
 const stamp=x=>!x||String(x).startsWith("0001")?"NOT RECORDED":new Date(x).toLocaleString();
-const colors={thought:["#315e70","#244b5a"],cycle:["#304974","#3d2454"],outcome:["#345345","#183a51"],lesson:["#655033","#47304b"],cell:["#315a69","#243a6b"],skill:["#4e355d","#233d57"],note:["#4a5267","#294d50"]};
+const colors={junction:["#5a5530","#2b4a3d"],"text-cell":["#3a4e66","#2a3550"],thought:["#315e70","#244b5a"],cycle:["#304974","#3d2454"],outcome:["#345345","#183a51"],lesson:["#655033","#47304b"],cell:["#315a69","#243a6b"],skill:["#4e355d","#233d57"],note:["#4a5267","#294d50"]};
 const shelves=[["thought","Persistent thoughts","Stable Thought IDs · engine history","◈"],
   ["cycle","Recent recorded cycles","Unlinked cycles stay separate","◎"],
   ["outcome","Reported outcomes","NO_ACTION is never execution","◉"],
   ["lesson","Lessons","Read-only Core references","L"],
-  ["cell","Learning cells","Not executable from Cognition","▦"],
+  ["junction","Information junctions","requested → authorized → returned → consumed · effect not measured","⇄"],
+  ["cell","Learning cells","Code cells: not executable from Cognition","▦"],
+  ["text-cell","Notebook text cells","Read-only descriptions","¶"],
   ["skill","Supervised skills","Identity grant and owner approval still required","@"],
   ["note","Owner notes","Saved advisory context","✎"]];
 function nav(){
@@ -104,7 +110,12 @@ function select(x){
   setVisible("expandEngine",cycle||x.kind==="thought");
   setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
   setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
-  setVisible("tryDev",x.kind==="thought"||cycle);
+  setVisible("tryDev",x.kind==="thought"||cycle||x.kind==="junction");
+  if(x.kind==="junction"&&(x.related_cycle_ids||[]).length){
+    const area=$("thoughtDetail");area.classList.add("open");
+    for(const id of x.related_cycle_ids){const b=mk("button","","Open recorded cycle "+id);b.type="button";
+      b.onclick=()=>{const c=S.cards.find(v=>v.kind==="cycle"&&v.source_id===id);if(c)select(c);else message("Cycle "+id+" is not among this identity's recent recorded cycles.",true);};area.append(b);}
+  }
   $("overlay").classList.add("open");$("close").focus();
 }
 function cycleID(){return S.selected&&(S.selected.kind==="cycle"||S.selected.kind==="outcome")?S.selected.source_id:"";}
@@ -122,6 +133,7 @@ function showStep(){
   field(area,"Original Identity decision evidence",t.identity_evidence);
   field(area,"Linked Thought",t.link_status==="VERIFIED-LINK"?t.thought_id:"UNLINKED / NOT RECORDED");
   field(area,"Missing journal stages",(t.missing||[]).join(", ")||"none reported");
+  if((t.pending||[]).length)field(area,"Pending (cycle still in progress, not missing)",t.pending.join(", "));
   field(area,"Truncated / partial",String(t.truncated)+" / "+String(t.partial));
   if(t.note)field(area,"Source note",t.note);
   const all=t.steps||[];
@@ -213,7 +225,7 @@ async function showThought(){
 function devProposal(){
   if(!S.selected||!S.lib)return;
   // A navigational reference, not a Save/Run/Approve request.
-  const ref=(S.selected.kind==="thought"?"thought:":"cycle:")+S.selected.source_id;
+  const ref=(S.selected.kind==="thought"?"thought:":S.selected.kind==="junction"?"junction:":"cycle:")+S.selected.source_id;
   const q=new URLSearchParams({cognition_ref:ref,brain_revision:String(S.lib.brain_revision)});
   location.href="/dev?"+q.toString();
 }
@@ -228,7 +240,8 @@ async function refresh(){
   $("banner").textContent="Reading authorized Go projections…";
   try{
     S.lib=await get("/api/cognition/library");
-    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.library||[])];
+    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.junctions||[]),...(S.lib.library||[])];
+    drawLink(S.lib.link||{});
     $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
     $("banner").className="notice ok";
     $("banner").textContent="Engine provenance: "+val(S.lib.engine_commit)+
@@ -240,7 +253,48 @@ async function refresh(){
       ". No demo records substituted. Identity must authorize the read and Engine must support its API.";
   }
   draw();
+  loadPulse();
 }
+// ---- #82 P1: the real 20-second pulse (GET only; never starts, steps or pauses it) ----
+async function loadPulse(){
+  if(!LIVE){$("pulse").replaceChildren(mk("span","k","20-second pulse"),mk("span","","NOT CONNECTED (preview)"));return;}
+  const box=$("pulse");
+  try{
+    const p=await get("/api/cognition/pulse");
+    box.replaceChildren();
+    const add=(k,v)=>{const s=mk("span");s.append(mk("span","k",k+" "),mk("b","",val(v)));box.append(s);};
+    add("Engine pulse",p.control);add("every",p.every_s?p.every_s+" s":"NOT RECORDED");add("state",p.state);
+    add("last tick",p.last?p.last.pulse_id+" · "+stamp(p.last.at)+" · "+p.last.trigger+" · "+p.last.state+(p.last.job_id?" · "+p.last.job_id:""):"NOT RECORDED");
+    add("active job",p.active_job||"none");add("queued / running",p.queued+" / "+p.running);
+    add("Core tick",(p.core_tick_every_s||"?")+" s, next "+stamp(p.core_next_tick));
+    const j=p.junctions||{};add("junctions waiting",Object.keys(j).length?Object.entries(j).map(([k,v])=>k+" "+v).join(", "):"none");
+    const t=mk("div","ticks",(p.recent||[]).slice(0,6).map(x=>stamp(x.at)+" "+x.pulse_id+" "+x.trigger+" "+x.state+(x.job_id?" "+x.job_id:"")).join("  ·  ")||"no ticks recorded");
+    box.append(mk("div","ticks",val(p.note)),t);
+  }catch(e){box.replaceChildren(mk("span","k","20-second pulse"),mk("span","","UNAVAILABLE: "+e.message+". Nothing was started."));}
+}
+// ---- #82 P0-A: owner-reviewed Identity ↔ Engine link (an explicit owner action, not playback) ----
+function drawLink(l){
+  const box=$("linkbox");box.replaceChildren();box.hidden=false;box.className="linkbox"+(l.state==="LINKED"?" ok":"");
+  box.append(mk("b","","Engine history link: "+val(l.state)+" "),mk("span","",val(l.explanation)));
+  if(l.unscoped_cycles||l.other_entity_cycles)box.append(mk("div","",`Not shown: ${l.unscoped_cycles||0} UNSCOPED cycle(s) without an Engine entity, ${l.other_entity_cycles||0} cycle(s) of other Engine entities.`));
+  if(l.state==="LINKED"){
+    box.append(mk("div","","Linked Engine entity "+l.link.engine_entity_id+" (shown as "+val(l.link.engine_display_name)+")."));
+    const u=mk("button","","Unlink (owner action)");u.onclick=async()=>{await ownerPost("/api/cognition/unlink",{});};box.append(u);
+  } else {
+    for(const c of l.candidates||[]){
+      const row=mk("div","");row.append(mk("span","",c.engine_entity_id+" · "+val(c.display_name)+(c.same_display_name?" · same name (a hint, not proof)":"")+(c.linked_to_other_identity?" · linked to another Identity entity":"")));
+      if(!c.linked_to_other_identity){const b=mk("button","","Link to this Identity (owner action)");b.onclick=async()=>{await ownerPost("/api/cognition/link",{engine_entity_id:c.engine_entity_id});};row.append(b);}
+      box.append(row);
+    }
+    if(!(l.candidates||[]).length)box.append(mk("div","","The Engine reports no AI companion entities yet."));
+  }
+}
+async function ownerPost(path,body){
+  try{const r=await fetch(path,{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("HTTP "+r.status));await refresh();}
+  catch(e){$("banner").className="notice error";$("banner").textContent="Link change refused: "+e.message;}
+}
+setInterval(()=>{if(LIVE&&!document.hidden)loadPulse();},10000);
 nav();
 $("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{

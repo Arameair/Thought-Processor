@@ -52,6 +52,8 @@ type CognitionLibrary struct{
     Library []CognitionCard `json:"library"`
     Note string `json:"note"`
     Limited bool `json:"limited"`
+    Link CognitionLinkState `json:"link"`
+    Junctions []CognitionCard `json:"junctions"`
 }
 type CognitionThought struct {
     ThoughtID string `json:"thought_id"`
@@ -85,6 +87,7 @@ type CognitionTimeline struct {
     State string `json:"state"`
     Steps []engine.RecordedStep `json:"steps"`
     Missing []string `json:"missing"`
+    Pending []string `json:"pending"` // stages a cycle still in progress has not reached yet (not missing)
     Truncated bool `json:"truncated"`
     Partial bool `json:"partial"`
     InvalidLines int `json:"invalid_lines"`
@@ -105,6 +108,7 @@ func cognitionField(name,value string) CognitionField {
 }
 type cognitionScope struct{
     identityID,name,engineID,engineCommit string
+    link CognitionLinkState
 }
 func (c *Core) cognitionAccess()(cognitionScope,error){
     var out cognitionScope
@@ -131,40 +135,44 @@ func (c *Core) cognitionAccess()(cognitionScope,error){
             if !(r>='0'&&r<='9'||r>='a'&&r<='f') {out.engineCommit="NOT RECORDED";break}
         }
     }
-    for _,entity:=range status.Entities {
-        if strings.EqualFold(entity.Card.DisplayName,out.name)&&entity.Card.EntityType=="ai_companion" {
-            if out.engineID!="" {return out,ErrCognitionUnavailable} // ambiguous engine identity: fail closed
-            out.engineID=entity.Card.EntityID
-        }
-    }
+    // #82 P0-A: only an owner-reviewed link (canonical Identity entity → Engine entity) scopes
+    // Engine data. A matching display name is never used as evidence.
+    out.engineID,out.link=c.resolveEngineEntity(out.identityID,out.name,status)
     return out,nil
 }
+// cognitionOwnedCycle: a cycle belongs to this identity ONLY when its recorded Engine entity is
+// exactly the linked one. Cycles without an Engine entity are UNSCOPED and never shown by name.
 func cognitionOwnedCycle(cy engine.CognitionCycle,scope cognitionScope)bool {
-    if !strings.EqualFold(cy.Identity,scope.name) {return false}
-    if cy.EntityID!="" && scope.engineID!="" && cy.EntityID!=scope.engineID {return false}
-    if cy.EntityID!="" && scope.engineID=="" {return false}
-    return true
+    return scope.engineID!="" && cy.EntityID!="" && cy.EntityID==scope.engineID
 }
 func (c *Core) CognitionLibrary()(CognitionLibrary,error){
     scope,err:=c.cognitionAccess()
     if err!=nil{return CognitionLibrary{},err}
     out:=CognitionLibrary{IdentityEntityID:scope.identityID,EngineEntityID:scope.engineID,
         IdentityName:scope.name,EngineCommit:scope.engineCommit,ObservedAt:c.now().UTC(),
-        Thoughts:[]CognitionCard{},Cycles:[]CognitionCard{},Outcomes:[]CognitionCard{},Library:[]CognitionCard{}}
-    out.BrainRevision=c.Brain().Revision
+        Thoughts:[]CognitionCard{},Cycles:[]CognitionCard{},Outcomes:[]CognitionCard{},Library:[]CognitionCard{},
+        Junctions:[]CognitionCard{},Link:scope.link}
+    g:=c.Brain() // one consistent saved snapshot for revision AND notes (#82 P0-B)
+    out.BrainRevision=g.Revision
     entity:=engine.CognitionEntity{}
     if scope.engineID!="" {
         entity,err=c.engine.CognitionEntity(scope.engineID)
-        if err!=nil||entity.Card.EntityID!=scope.engineID||!strings.EqualFold(entity.Card.DisplayName,scope.name){
+        if err!=nil||entity.Card.EntityID!=scope.engineID{
             return CognitionLibrary{},ErrCognitionUnavailable
         }
     } else {
-        out.Note="No matching engine-local AI companion entity; persistent Thoughts NOT RECORDED."
+        out.Note="Engine history NOT LINKED to this Identity entity: persistent Thoughts and cycles are not shown."
     }
     cycles,err:=c.engine.CognitionCycles()
     if err!=nil{return CognitionLibrary{},ErrCognitionUnavailable}
     validCycles:=[]engine.CognitionCycle{}
-    for _,cy:=range cycles {if cognitionOwnedCycle(cy,scope){validCycles=append(validCycles,cy)}}
+    for _,cy:=range cycles {
+        switch {
+        case cognitionOwnedCycle(cy,scope):validCycles=append(validCycles,cy)
+        case cy.EntityID=="":out.Link.UnscopedCycles++
+        default:out.Link.OtherCycles++
+        }
+    }
     sort.SliceStable(validCycles,func(i,j int)bool{
         if validCycles[i].ReceivedAt.Equal(validCycles[j].ReceivedAt){return validCycles[i].CycleID<validCycles[j].CycleID}
         return validCycles[i].ReceivedAt.After(validCycles[j].ReceivedAt)
@@ -237,24 +245,37 @@ func (c *Core) CognitionLibrary()(CognitionLibrary,error){
         }
     }
     // Other shelves are actual Core-owned records, never fabricated Thoughts.
-    for _,b:=range c.BrainBlocks(nil) {
-        var kind string
+    // Notes come from the same saved revision; a revision saved under another Identity entity is not shown.
+    notes:=g.Notes
+    notesNote:=""
+    switch {
+    case g.EntityID!="" && g.EntityID!=scope.identityID:
+        notes,notesNote=nil,"Saved Development notes belong to another Identity entity and are not shown."
+    case g.EntityID=="" && len(g.Notes)>0:
+        notesNote="Development notes were saved before revisions recorded their Identity entity: IDENTITY NOT RECORDED."
+    }
+    for _,b:=range c.BrainBlocks(notes) {
+        var kind,source,verified string
         switch b.Kind {
-        case "lesson":kind="lesson"
-        case "code-cell":kind="cell"
-        case "skill":kind="skill"
-        case "note":kind="note"
+        case "lesson":kind,source,verified="lesson","TASS Core: learning status","APP-REPORTED"
+        case "code-cell":kind,source,verified="cell","TASS Core: notebook code cell (read-only, never run here)","APP-REPORTED"
+        case "text-cell":kind,source,verified="text-cell","TASS Core: notebook text cell (read-only)","APP-REPORTED"
+        case "skill":kind,source,verified="skill","TASS Core: registered skill","APP-REPORTED"
+        case "note":kind,source,verified="note",fmt.Sprintf("Core saved brain note (revision %d) — advisory, not a Thought",g.Revision),"OWNER-WRITTEN"
+            if g.EntityID=="" {verified="OWNER-WRITTEN · IDENTITY NOT RECORDED"}
         default:continue
         }
         if len(out.Library)>=cognitionCardMax {out.Limited=true;break}
         out.Library=append(out.Library,CognitionCard{
             ID:kind+":"+b.ID,Kind:kind,Title:cognitionClip(b.Title,100),
             Summary:cognitionClip(b.Purpose,240),State:b.Status,
-            Source:"TASS Core: BrainBlocks",SourceID:b.ID,Verified:"APP-REPORTED",
+            Source:source,SourceID:b.ID,Verified:verified,
             Fields:[]CognitionField{cognitionField("Source block",b.ID),cognitionField("Revision",b.Revision),
                 cognitionField("Permission/Execution",b.Runnable),cognitionField("Last receipt",b.Last)},
         })
     }
+    out.Junctions=c.junctionCards(scope.identityID)
+    if notesNote!="" {out.Note=strings.TrimSpace(out.Note+" "+notesNote)}
     if out.Note=="" && len(out.Thoughts)==0 {out.Note="Persistent Thoughts NOT RECORDED for this engine-local entity."}
     return out,nil
 }
@@ -358,8 +379,15 @@ func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
     for _,step:=range journal.Steps {
         out.Steps=append(out.Steps,cognitionSafeStep(step))
     }
+    out.Pending=[]string{}
+    inFlight:=cy.State=="awaiting_outcome"||cy.State=="started"
     for _,stage:=range journal.Missing {
         if stage=="received"||stage=="spark"||stage=="proposal"||stage=="outcome"||stage=="evaluation" {
+            // A cycle still in progress has not reached its later stages: PENDING, not missing evidence.
+            if inFlight && (stage=="outcome"||stage=="evaluation"||(cy.State=="started"&&stage=="proposal")) {
+                out.Pending=append(out.Pending,stage)
+                continue
+            }
             out.Missing=append(out.Missing,stage)
         }
     }
@@ -381,6 +409,7 @@ type CognitionReport struct{
     State string `json:"cycle_state"`
     Steps []engine.RecordedStep `json:"steps"`
     Missing []string `json:"missing"`
+    Pending []string `json:"pending"`
     Truncated bool `json:"truncated"`
     Partial bool `json:"partial"`
     InvalidLines int `json:"invalid_lines"`
@@ -395,8 +424,8 @@ func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error
     report:=CognitionReport{Format:"Cognition sanitized v1",CoreVersion:coreVersion,
         EngineCommit:v.EngineCommit,CycleID:v.CycleID,ThoughtID:v.ThoughtID,
         LinkStatus:v.LinkStatus,Source:v.Source,State:v.State,Steps:v.Steps,
-        Missing:v.Missing,Truncated:v.Truncated,Partial:v.Partial,
-        InvalidLines:v.InvalidLines,Verification:"APP-REPORTED unless independently correlated",
+        Missing:v.Missing,Pending:v.Pending,Truncated:v.Truncated,Partial:v.Partial,
+        InvalidLines:v.InvalidLines,Verification:"APP-REPORTED: an executor-reported outcome is not independently verified execution",
         IdentityEvidence:v.IdentityEvidence}
     if format=="json"{
         raw,err:=json.MarshalIndent(report,"","  ")
@@ -405,9 +434,10 @@ func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error
         return append(raw,'\n'),"application/json",nil
     }
     var b bytes.Buffer
-    fmt.Fprintf(&b,"# Cognition — sanitized recorded cycle\n\n- Core: %s\n- Engine: %s\n- Cycle: %s\n- Thought link: %s (%s)\n- Cycle state: %s\n- Source: %s\n- Verification: %s\n- Missing: %s\n- Truncated: %v / partial: %v\n\n",
+    fmt.Fprintf(&b,"# Cognition — sanitized recorded cycle\n\n- Core: %s\n- Engine: %s\n- Cycle: %s\n- Thought link: %s (%s)\n- Cycle state: %s\n- Source: %s\n- Verification: %s\n- Missing: %s\n- Pending (cycle still in progress): %s\n- Truncated: %v / partial: %v\n\n",
         coreVersion,v.EngineCommit,v.CycleID,cognitionFirst(v.ThoughtID,"NOT RECORDED"),
         v.LinkStatus,v.State,v.Source,report.Verification,cognitionFirst(strings.Join(v.Missing,", "),"none reported"),
+        cognitionFirst(strings.Join(v.Pending,", "),"none"),
         v.Truncated,v.Partial)
     for _,s:=range report.Steps {
         at:="NOT RECORDED"

@@ -1,6 +1,7 @@
 package tass
 
 import (
+	"fmt"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,9 @@ import (
 
 // fakeIdentitySvc behaves like tass-identity: LOCKED until unlocked, then allows its grants.
 type fakeIdentitySvc struct {
-	skillGranted bool
+	skillGranted    bool
+	junctionGranted bool
+	entityID, name  string // default ent_0123 / Mira
 	mu              sync.Mutex
 	state           string
 	lessonEnabled   bool
@@ -37,7 +40,17 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 		if f.skillGranted {
 			grants = append(grants, "skill.discover", "skill.run:lesson-workspace.list-lessons")
 		}
-		ent := map[string]any{"entity_id": "ent_0123", "name": "Mira", "grants": grants}
+		if f.junctionGranted {
+			grants = append(grants, "junction.read:lesson-metadata")
+		}
+		eid, ename := f.entityID, f.name
+		if eid == "" {
+			eid = "ent_0123"
+		}
+		if ename == "" {
+			ename = "Mira"
+		}
+		ent := map[string]any{"entity_id": eid, "name": ename, "grants": grants}
 		switch r.URL.Path {
 		case "/v1/github/lesson":
 			if r.Header.Get("Authorization") != "Bearer core-service-key-0123456789abcdef0123" {
@@ -74,8 +87,11 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			if allow && strings.HasPrefix(in["action"], "skill.") && !f.skillGranted { // skills need their own grant (#72)
 				allow, reason = false, "the entity has no grant for "+in["action"]
 			}
-			json.NewEncoder(w).Encode(map[string]any{"allow": allow, "decision_id": "dec_1", "reason": reason,
-				"entity_id": "ent_0123", "entity_name": "Mira"})
+			if allow && strings.HasPrefix(in["action"], "junction.") && !f.junctionGranted {
+				allow, reason = false, "the entity has no grant for "+in["action"]
+			}
+			json.NewEncoder(w).Encode(map[string]any{"allow": allow, "decision_id": fmt.Sprintf("dec_%d", len(f.decisions)), "reason": reason,
+				"entity_id": eid, "entity_name": ename})
 		}
 	}))
 	return f

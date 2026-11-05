@@ -294,6 +294,14 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(library)
     })
+    // #82 P1: the real pulse and Core tick, read-only (one GET to the Engine; never a control call).
+    mux.HandleFunc("GET /api/cognition/pulse",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        p,err:=core.CognitionPulse()
+        if err!=nil{cognitionErr(w,err);return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(p)
+    })
     mux.HandleFunc("GET /api/cognition/thoughts/{id}",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
         view,err:=core.CognitionThought(r.PathValue("id"))
@@ -520,6 +528,55 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			reply(w, http.StatusNotFound, map[string]string{"error": "check, save, restore or ask"})
 		}
 	})
+    // #82 P0-A: owner-reviewed link between the Identity entity and Engine history. This is an
+    // explicit owner action on Core state; it is not part of playback and touches no Engine data.
+    mux.HandleFunc("POST /api/cognition/{action}",func(w http.ResponseWriter,r *http.Request){
+        var body struct{ EngineEntityID string `json:"engine_entity_id"` }
+        if !pagePost(w,r,&body){return}
+        w.Header().Set("Cache-Control","no-store")
+        switch r.PathValue("action") {
+        case "link":
+            l,err:=core.LinkCognition(body.EngineEntityID)
+            if err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
+            reply(w,http.StatusOK,l)
+        case "unlink":
+            if err:=core.UnlinkCognition();err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
+            reply(w,http.StatusOK,map[string]string{"ok":"unlinked"})
+        default:
+            reply(w,http.StatusNotFound,map[string]string{"error":"link or unlink"})
+        }
+    })
+    // #82 P2/P3: junction receipts, alternative cells and comparisons for Development.
+    mux.HandleFunc("GET /api/junctions",func(w http.ResponseWriter,r *http.Request){
+        if !authed(r){http.Error(w,"missing or wrong key",http.StatusUnauthorized);return}
+        w.Header().Set("Cache-Control","no-store")
+        reply(w,http.StatusOK,core.Junctions())
+    })
+    mux.HandleFunc("POST /api/junctions/{action}",func(w http.ResponseWriter,r *http.Request){
+        var body struct{
+            Path string `json:"path"`
+            Text string `json:"text"`
+            Note string `json:"note"`
+            ProposalID string `json:"proposal_id"`
+        }
+        if !pagePost(w,r,&body){return}
+        switch r.PathValue("action") {
+        case "request":
+            rc,err:=core.RequestJunction(body.Path,"owner (Development)","","owner requested it in Development")
+            if err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
+            reply(w,http.StatusOK,rc)
+        case "propose":
+            p,err:=core.ProposeJunctionCell(body.Text,body.Note)
+            if err!=nil{reply(w,http.StatusUnprocessableEntity,map[string]string{"error":err.Error()});return}
+            reply(w,http.StatusOK,p)
+        case "compare":
+            cmp,err:=core.CompareJunctionCells(body.ProposalID,body.Path)
+            if err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
+            reply(w,http.StatusOK,cmp)
+        default:
+            reply(w,http.StatusNotFound,map[string]string{"error":"request, propose or compare"})
+        }
+    })
 	mux.HandleFunc("POST /api/conversation/new", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{}
 		if !pagePost(w, r, &body) {
