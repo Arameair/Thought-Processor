@@ -86,7 +86,15 @@ class H(BaseHTTPRequestHandler):
         elif "HOW TO ANSWER" in allm:
             if "slow" in last:
                 time.sleep(DELAY)
-            if "section" in last:
+            if "INFORMATION YOU ASKED FOR" in allm:
+                import re as _re
+                got = _re.search(r"^title: (.+)$", allm, _re.M)
+                text = ("REPLY: (TEST FIXTURE) My Core gave me the lesson metadata I asked for: " + (got.group(1) if got else "?") +
+                        "\nACTION: NONE\nPREDICTION: NONE\nWHY: Junction data arrived.")
+            elif "lesson-metadata" in last:
+                text = ("REPLY: (TEST FIXTURE) I need to look that lesson up first.\nNEED lesson-metadata: lessons/claude/01-my-work-pulse.md"
+                        "\nACTION: NONE\nPREDICTION: NONE\nWHY: I asked my Core for the lesson's metadata.")
+            elif "section" in last:
                 text = ("REPLY: (TEST FIXTURE) I think my document has 4 sections.\nACTION: tass_sections\n"
                         "PREDICTION: 4\nWHY: I can see the headings.")
             else:

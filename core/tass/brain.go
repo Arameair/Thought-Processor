@@ -71,6 +71,7 @@ type BrainGraph struct {
 	SavedAt  time.Time   `json:"saved_at"`
 	Actor    string      `json:"actor"`
 	Change   string      `json:"change"`
+	EntityID string      `json:"identity_entity_id,omitempty"` // Identity entity unlocked when saved (Cognition scoping)
 	Nodes    []BrainNode `json:"nodes"`
 	Edges    []BrainEdge `json:"edges"`
 	Notes    []BrainNote `json:"notes"`
@@ -373,6 +374,12 @@ func (c *Core) SaveBrain(g BrainGraph, actor, change string) (BrainGraph, BrainR
 		return cur, rep, errors.New("the brain didn't pass its check; nothing was saved")
 	}
 	g.Parent, g.Revision, g.SavedAt, g.Actor, g.Change = cur.Revision, cur.Revision+1, c.now().UTC(), actor, clip(change, 200)
+	g.EntityID = ""
+	if c.cfg.IdentitySvc != nil {
+		if st := c.cfg.IdentitySvc.State(); st.State == "UNLOCKED" && st.Entity != nil {
+			g.EntityID = st.Entity.EntityID
+		}
+	}
 	if err := c.writeBrainLocked(g); err != nil {
 		return cur, rep, err
 	}

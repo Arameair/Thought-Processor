@@ -41,12 +41,25 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <span id="rev" class="chip">revision —</span><span id="dirty" class="chip">saved</span>
   <span class="sp"></span>
   <label class="hint"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
+  <button id="jlabBtn" aria-expanded="false">Junction lab</button>
   <button id="undo" disabled>Undo</button>
   <button id="check">Check</button>
   <input id="change" placeholder="what changed (optional)" style="width:180px">
   <button id="save" class="primary">Save revision</button>
 </header>
 <div id="cognitionProposal" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
+<section id="jlab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:46vh;overflow:auto">
+  <div class="row"><b>Junction lab · lesson metadata</b><span class="hint">A cell describes what the fixed Go handler <code>lesson-metadata.v1</code> returns. Nothing in a cell runs. Proposals are never activated here.</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px">
+    <div><h2>Active cell</h2><div id="jActive" class="hint"></div><pre id="jActiveText"></pre>
+      <div class="row"><select id="jLesson"></select><button id="jRequest">Request through the junction</button></div>
+      <div class="hint">Read by the Core's next 20 s tick if Identity grants <code>junction.read:lesson-metadata</code>; TASS gets it in his next conversation.</div></div>
+    <div><h2>Propose an alternative cell</h2><textarea id="jProp" style="width:100%;height:150px"></textarea>
+      <input id="jNote" placeholder="why this alternative?" style="width:100%;margin-top:4px"><div class="row"><button id="jSave">Save proposal (not activated)</button></div>
+      <div id="jProps"></div></div>
+    <div><h2>Receipts &amp; comparisons</h2><div id="jReceipts"></div><div id="jCmp"></div></div>
+  </div>
+</section>
 <div class="shell">
   <aside class="lib">
     <h2>Find / add</h2>
@@ -248,7 +261,7 @@ function confirmLose() { msg("You have unsaved changes. Save or Undo them first.
 const fromCognition = new URLSearchParams(location.search);
 const cognitionRef = fromCognition.get("cognition_ref") || "";
 const cognitionRev = fromCognition.get("brain_revision") || "";
-if (/^(thought|cycle):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognitionRef) &&
+if (/^(thought|cycle|junction):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognitionRef) &&
     /^\d{1,9}$/.test(cognitionRev)) {
     const banner = document.getElementById("cognitionProposal");
     banner.hidden = false;
@@ -256,6 +269,46 @@ if (/^(thought|cycle):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognitionRef) &&
       " · source Brain revision " + cognitionRev +
       ". Review the record, then manually add an owner note or propose a change. No graph, settings, skill or file was changed.";
 }
+// ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----
+let J = null;
+async function loadJ() {
+  const r = await api("GET", "/api/junctions"); if (!r.ok) { $("jActive").textContent = "Unavailable (HTTP " + r.status + ")"; return; }
+  J = r.body; const a = J.active_cell;
+  $("jActive").replaceChildren(el("span", "", "ACTIVE · " + a.id + " v" + a.version + " · handler " + a.handler + " · fields " + a.fields.join(", ") + " · Identity "), tag(J.granted ? "GRANTED" : "NOT GRANTED"));
+  $("jActiveText").textContent = a.text; if (!$("jProp").value) $("jProp").value = a.text;
+  const lessons = blocks.filter(b => b.kind === "lesson"); const cur = $("jLesson").value; $("jLesson").replaceChildren();
+  for (const b of lessons) { const o = el("option", "", b.title + " (" + b.source + ")"); o.value = b.source; $("jLesson").append(o); } if (cur) $("jLesson").value = cur;
+  const rs = $("jReceipts"); rs.replaceChildren();
+  const focusID = cognitionRef.startsWith("junction:") ? cognitionRef.slice(9) : "";
+  for (const x of J.receipts.slice(0, 15)) {
+    const d = el("div", "item"); if (x.junction_id === focusID) d.style.outline = "2px solid #9fd2ff";
+    const h = el("div"); h.append(tag(x.status), el("b", "", " " + x.junction_id), el("span", "hint", " · " + x.input + " · " + x.origin + (x.origin_cycle_id ? " (cycle " + x.origin_cycle_id + ")" : ""))); d.append(h);
+    d.append(el("div", "hint", "cell v" + x.cell_version + " · decision " + (x.identity_decision || "NOT RECORDED") + " · " + (x.why || "") ));
+    if (x.data) d.append(el("pre", "", x.data));
+    d.append(el("div", "hint", x.consumed_at ? "consumed by cycle " + x.consumed_by_cycle : (x.not_consumed || "not consumed yet") + " · " + x.effect));
+    rs.append(d);
+  }
+  if (!J.receipts.length) rs.append(el("p", "hint", "No junction receipts yet."));
+  const ps = $("jProps"); ps.replaceChildren();
+  for (const p of J.proposals) {
+    const d = el("div", "item"); d.append(tag(p.state), el("b", "", " " + p.proposal_id), el("span", "hint", " v" + p.cell_version + " · " + (p.note || "")));
+    const b = el("button", "", "Compare with active on selected lesson"); b.onclick = async () => {
+      const r = await api("POST", "/api/junctions/compare", {proposal_id: p.proposal_id, path: $("jLesson").value});
+      if (!r.ok) return msg("Compare refused: " + (r.body.error || r.status), true); showCmp(r.body); loadJ(); };
+    d.append(el("div", "row")); d.lastChild.append(b); ps.append(d);
+  }
+  if (J.comparisons.length) showCmp(J.comparisons[0]);
+}
+function showCmp(c) {
+  const box = $("jCmp"); box.replaceChildren(el("h2", "", "Latest comparison · " + c.comparison_id));
+  box.append(el("div", "hint", c.input + " · lesson revision " + (c.source_sha || "?").slice(0, 12) + " · " + c.identity_decision));
+  for (const [k, v] of [["ACTIVE", c.active], ["PROPOSAL", c.proposal]]) { const d = el("div", "item"); d.append(el("b", "", k + " v" + v.cell_version + " · " + v.fields + " · " + v.status + " · " + v.bytes + " bytes")); d.append(el("pre", "", v.output)); box.append(d); }
+  box.append(el("div", c.same_output ? "hint" : "ok", c.same_output ? "Same output." : "Different output."), el("div", "hint", c.effect));
+}
+$("jlabBtn").onclick = () => { const open = $("jlab").hidden; $("jlab").hidden = !open; $("jlabBtn").setAttribute("aria-expanded", String(open)); if (open) loadJ(); };
+$("jRequest").onclick = async () => { const r = await api("POST", "/api/junctions/request", {path: $("jLesson").value}); msg(r.ok ? "Junction " + r.body.junction_id + ": " + r.body.status + ". The Core's next 20 s tick reads it if Identity allows." : "Refused: " + (r.body.error || r.status), !r.ok); loadJ(); };
+$("jSave").onclick = async () => { const r = await api("POST", "/api/junctions/propose", {text: $("jProp").value, note: $("jNote").value}); msg(r.ok ? "Saved proposal " + r.body.proposal_id + " (v" + r.body.cell_version + "). It is NOT active." : "Not saved: " + (r.body.error || r.status), !r.ok); loadJ(); };
+if (cognitionRef.startsWith("junction:")) setTimeout(() => { $("jlab").hidden = false; $("jlabBtn").setAttribute("aria-expanded", "true"); loadJ(); }, 300);
 $("q").oninput = drawLib; $("kind").onchange = drawLib; $("focusMode").onchange = render;
 $("wrap").addEventListener("click", ev => { if (ev.target.id === "canvas" || ev.target.id === "links" || ev.target.id === "wrap") { sel = null; connectFrom = null; render(); } });
 $("undo").onclick = () => { if (!undo.length) return; graph = JSON.parse(undo.pop()); $("undo").disabled = !undo.length; sel = null; render(); drawLib(); changed(); };

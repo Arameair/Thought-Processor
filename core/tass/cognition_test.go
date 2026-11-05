@@ -79,7 +79,15 @@ func TestCognitionUsesCanonicalIdentityAndActualIDs(t *testing.T) {
     }))
     defer mock.Close()
     c.engine=engine.New(mock.URL);c.engine.Key="testkey"
+    // #82 P0-A: before the owner links Engine history, nothing scoped is shown, even though an
+    // Engine entity has the same display name.
     lib,err:=c.CognitionLibrary()
+    if err!=nil||lib.Link.State!="NOT LINKED"||len(lib.Thoughts)!=0||len(lib.Cycles)!=0||len(lib.Link.Candidates)!=2{
+        t.Fatalf("unlinked library must be empty and list candidates: %+v %v",lib,err)
+    }
+    if _,err:=c.CognitionTimeline("tp_1");!errors.Is(err,ErrCognitionUnavailable){t.Fatalf("unlinked timeline: %v",err)}
+    if _,err:=c.LinkCognition("eng_1");err!=nil{t.Fatal(err)}
+    lib,err=c.CognitionLibrary()
     if err!=nil{t.Fatal(err)}
     if lib.IdentityEntityID!="ent_0123"||lib.EngineEntityID!="eng_1"||len(lib.Thoughts)!=1||
        len(lib.Cycles)!=2||len(lib.Outcomes)!=2||lib.Thoughts[0].SourceID!="thought_1"||

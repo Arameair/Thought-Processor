@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Arameair/Thought-Processor/core/engine"
@@ -155,6 +156,9 @@ type Core struct {
 	skills   skillState
 
 	brainMu sync.Mutex // brain/current.json and revisions (brain.go)
+	cogMu   sync.Mutex // cognition_links.json (cognition_link.go)
+	junMu   sync.Mutex // junctions.json (junction.go)
+	junBusy atomic.Bool // one junction worker at a time
 }
 
 func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
@@ -175,6 +179,7 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 	}
 	c.loadLearning()
 	c.loadSkills()
+	c.recoverJunctions()
 	if c.st.SeenIssues == nil {
 		c.st.SeenIssues = map[int]bool{}
 	}
@@ -383,6 +388,7 @@ func (c *Core) SyncOnce() time.Duration {
 	if c.cfg.IdentitySvc != nil && c.cfg.Repo == "" {
 		c.applySettings() // no GitHub here: only the pulse setting and lessons already downloaded
 		c.advanceLessons()
+		c.junctionTick()
 		return c.cfg.SyncEvery
 	}
 	if c.cfg.IdentitySvc != nil {
@@ -397,6 +403,7 @@ func (c *Core) SyncOnce() time.Duration {
 			steps = append(steps, "lessons")
 		}
 		c.advanceLessons()
+		c.junctionTick() // returns at once; the read runs in its own goroutine
 	} else {
 		err = c.syncPolicy()
 		if err == nil {
@@ -943,6 +950,7 @@ func (c *Core) context(online bool) string {
 	}
 	if c.cfg.IdentitySvc != nil {
 		b.WriteString(c.skillsForContext())
+		b.WriteString(junctionPrompt())
 	}
 	if mem := c.recentMemories(20); len(mem) > 0 {
 		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
@@ -1038,9 +1046,14 @@ func (c *Core) Answer(m Incoming) {
 		// Lesson retrieval and chat-only mode offer no executable tool, not even a read-entity tool.
 		actions = nil
 	}
+	jctx, jused := c.junctionContext() // information an earlier cycle asked for (#82 P2); data only
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
-		Request: m.Text, Context: c.context(online) + lessonContext, History: hist, Actions: actions})
+		Request: m.Text, Context: c.context(online) + lessonContext + jctx, History: hist, Actions: actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
+	if err == nil && len(jused) > 0 {
+		c.markJunctionsConsumed(jused, id) // the cycle really started with this data in its context
+		rec["junctions"] = jused
+	}
 	if m.FilePath != "" {
 		rec["context"] = m.FilePath // e.g. "brain revision 7" or a workspace file: which read-only context this cycle saw
 	}
@@ -1133,6 +1146,7 @@ func (c *Core) Answer(m Incoming) {
 	c.event("tass", text)
 	if m.From == "local" && c.cfg.IdentitySvc != nil {
 		c.proposeSkillFromReply(text, id) // a supervised request only; the owner approves on the page
+		c.junctionsFromReply(text, id)    // information needs; resolved by a later 20 s tick, never here
 	}
 	rec["reply"], rec["action"], rec["prediction"] = text, prop.Action, prop.Prediction.Text
 	if cy.Evaluation != nil {
