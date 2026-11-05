@@ -251,8 +251,9 @@ func (c *Client) MailboxIssue(repo string, number int) (Issue, error) {
 // MailboxComments reads one page from one issue, not a repository-wide feed.
 // Pagination is handled by the caller so a busy repository cannot hide #24.
 func (c *Client) MailboxComments(repo string, number int, since time.Time, page int) ([]Comment, error) {
-    g, err := c.do("GET", fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100&page=%d&since=%s",
-        repo, number, page, url.QueryEscape(since.UTC().Format(time.RFC3339))), nil, "")
+    path := fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100&page=%d", repo, number, page)
+    if !since.IsZero() { path += "&since=" + url.QueryEscape(since.UTC().Format(time.RFC3339)) }
+    g, err := c.do("GET", path, nil, "")
     if err != nil { return nil, err }
     var comments []Comment
     return comments, json.Unmarshal(g.Body, &comments)
