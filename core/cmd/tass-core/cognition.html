@@ -12,45 +12,255 @@ nav{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;pad
 main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;display:flex;gap:10px;align-items:baseline}.shelf h2{margin:0;font-size:21px;font-weight:720;letter-spacing:-.02em}.shelf-head span{font-size:12px;color:var(--muted)}.rail{display:flex;gap:14px;padding:13px 4% 21px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-color:#536176 transparent}.tile{position:relative;flex:0 0 227px;min-height:191px;padding:0;border:1px solid #324357;text-align:left;overflow:hidden;background:var(--card);border-radius:12px;scroll-snap-align:start;transition:transform .15s,border-color .15s}.tile:hover,.tile:focus-visible{border-color:var(--mint);transform:translateY(-3px)}.tile .art{height:82px;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(120deg,var(--tile-a),var(--tile-b));position:relative;overflow:hidden}.tile .art:after{content:"";width:150px;height:150px;border:1px solid #ffffff36;border-radius:50%;position:absolute;right:-43px;top:-90px}.tile .art .glyph{font-size:36px;font-weight:800;opacity:.9;line-height:1}.tile .art .category{font-size:10px;text-transform:uppercase;letter-spacing:.09em;padding:3px 6px;border:1px solid #ffffff65;border-radius:4px;background:#0004;z-index:1}.tile .content{padding:11px 13px 13px}.tile h3{margin:0 0 4px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile p{margin:0;color:var(--muted);font-size:12px;line-height:1.35;height:33px;overflow:hidden}.tile .meta{display:flex;gap:6px;align-items:center;margin-top:11px;font-size:10px;color:#d7e0ed}.status{padding:2px 7px;border-radius:5px;background:#ffffff16;color:#d9e4f2}.status.good{color:#89e5cf;background:#21483f}.status.bad{color:#ffb9bb;background:#4e282f}.status.warn{color:#f3d6a9;background:#4b3824}.empty{margin:15px 4%;border:1px dashed var(--line);color:var(--muted);padding:20px;border-radius:10px}.hidden{display:none!important}
 .overlay{position:fixed;inset:0;background:#02070cba;z-index:9;display:none;justify-content:flex-end}.overlay.open{display:flex}.sheet{height:100%;width:min(515px,100%);background:#111b29;border-left:1px solid #36465a;overflow:auto;padding:27px;box-shadow:-16px 0 80px #0008}.sheet-header{display:flex;justify-content:space-between;gap:12px;align-items:start}.sheet h2{font-size:26px;line-height:1.18;margin:12px 0 9px}.sheet .lede{color:var(--muted);font-size:14px;margin-bottom:25px}.sheet .detail{border-top:1px solid var(--line);padding:12px 0}.sheet dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}.sheet dd{margin:0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.sheet .actions{display:flex;gap:8px;flex-wrap:wrap;padding:20px 0}.sheet .foot{color:var(--muted);font-size:11px}.sheet #thoughtDetail{display:none;margin:15px 0;padding:12px;border:1px solid var(--line);border-radius:10px;color:var(--muted)}.sheet #thoughtDetail.open{display:block}.toast{min-height:20px;color:var(--mint);font-size:12px}
 @media(max-width:700px){nav{gap:9px;flex-wrap:wrap}nav .links{gap:11px;font-size:12px}.tile{flex-basis:204px}.toolbar input{min-width:160px}.hero{padding-top:28px}.sheet{padding:18px}}
+.sheet #thoughtDetail button{display:block;width:100%;text-align:left;margin:7px 0;overflow-wrap:anywhere}
+.sheet #thoughtDetail textarea{background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:9px}
 </style>
 </head>
 <body>
 <nav><span class="logo">TASS</span><div class="links" id="navigation"></div><span class="grow"></span><span class="chip" id="mode">Checking source</span></nav>
-<section class="hero"><div class="eyebrow">Cognition / The thought library</div><h1>Inside TASS's mind.</h1><p>Browse recorded thought cycles, lessons, learning cells, and skill receipts. Select a card to see the evidence. Nothing on this page executes a cell or approves a skill.</p></section>
-<div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="cycle" aria-pressed="false">Thoughts</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
+<section class="hero"><div class="eyebrow">Cognition / The thought library</div><h1>Inside TASS's mind.</h1><p>Browse persistent Thoughts, separate recorded cycles, lessons, learning cells, and skill receipts. Select a card to see the evidence. Nothing on this page executes a cell or approves a skill.</p></section>
+<div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
 <div id="banner" class="notice" role="status">Loading…</div><div id="summary" class="summary"></div><main id="shelves"></main>
-<div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions"><button id="copy">Copy card summary</button><button id="copyIDs">Copy evidence IDs</button><button id="expandEngine" class="hidden">Inspect Thought Engine</button></div><div id="toast" class="toast" role="status"></div><p class="foot">Evidence shown here comes from the selected local API or explicitly labeled demo fixtures. A model statement is not an execution receipt.</p></aside></div>
+<div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
+<button id="expandEngine">Inspect recorded details</button>
+<button id="logs">View Logs</button>
+<button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
+<button id="copy">Copy Evidence</button>
+<button id="downloadMD">Download Sanitized Markdown</button><button id="downloadJSON">Download Sanitized JSON</button>
+<button id="tryDev">Try adjustment in Development</button>
+</div><div id="toast" class="toast" role="status"></div><p class="foot">Evidence shown here comes from the selected local API or explicitly labeled demo fixtures. A model statement is not an execution receipt.</p></aside></div>
 <script>
 "use strict";
+// This page renders Go-projected records. No remote action POSTs exist here.
 const TOKEN="__PAGE_TOKEN__";
-const isLive=location.pathname==="/cognition" && /^https?:$/.test(location.protocol);
+const LIVE=location.pathname==="/cognition" && /^https?:$/.test(location.protocol);
 const $=id=>document.getElementById(id);
-const S={source:isLive?"LIVE":"DEMO",items:[],st:{},brain:{},filter:"all",search:"",selected:null};
-const fmt=v=>v===undefined||v===null||v===""?"Not recorded":String(v);
-const short=(s,n=125)=>String(s||"").length>n?String(s).slice(0,n-1)+"…":String(s||"");
-const stamp=s=>{if(!s||String(s).startsWith("0001"))return "Time not recorded";const d=new Date(s);return Number.isNaN(d.valueOf())?"Time not recorded":d.toLocaleString()};
-const tone=s=>/^(DONE|PASSED|LEARNED|MET|EXECUTED|GRANTED)$/.test(String(s).toUpperCase())?"good":/(FAILED|BLOCKED|DENIED|STUCK|INCORRECT|UNMET)/i.test(String(s))?"bad":"warn";
-const row=(name,val)=>[name,fmt(val)];
-const mk=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=String(text);return el};
-function nav(){const links=isLive?[["TASS","/"],["Identity","http://127.0.0.1:8796"],["Development","/dev"],["Cognition","/cognition"]]:[["TASS",""],["Identity",""],["Development",""],["Cognition",""]];for(const [title,href] of links){let el=mk(href?"a":"span",title==="Cognition"?"active":"",title);if(href)el.href=href;$("navigation").append(el)}}
-function fixture(){return {st:{identity:{state:"UNLOCKED",entity:{name:"TASS"}},engine:{reachable:true,last_pulse:{model_ok:true,at:"2026-11-05T18:05:00Z"}},cycles:[{cycle_id:"DEMO-CYCLE-001",received_at:"2026-11-05T18:05:29Z",request:"Which blocks help me find a lesson?",state:"EVALUATED",spark:{status:"DONE",topic:"learning",rating:4,thought_id:"DEMO-THOUGHT-A"},proposal:{reply:"I should use the lesson list skill, subject to owner approval.",action:"NONE",prediction:{state:"LOCKED",value:3}},outcome:{status:"NO_ACTION",detail:"No tool execution"},evaluation:{forecast:"UNSCORABLE",goal:"MET",explanation:"Read-only answer, not an executed skill."}}],skills:{receipts:[{receipt_id:"DEMO-SKILL-001",skill:"lesson-workspace.list-lessons",state:"AWAITING_APPROVAL",executed:false}]},learning:{}},brain:{graph:{revision:5,nodes:[],edges:[],notes:[{id:"demo-note",title:"Test the learning loop",text:"Compare what TASS predicts with what actually runs."}]},blocks:[{id:"lesson:demo",kind:"lesson",title:"My work pulse",status:"LEARNED",purpose:"Understand the work pulse and approval.",revision:"DEMO-LESSON-SHA",source:"lessons/claude/01-my-work-pulse.md",runnable:"Studied through Learning; never executed."},{id:"cell:demo",kind:"code-cell",title:"List every lesson",status:"DISCOVERED",purpose:"Describes how to list lessons.",revision:"DEMO-CELL-HASH",source:"lessons/demo.ipynb",runnable:"NOT EXECUTABLE"},{id:"skill:demo",kind:"skill",title:"@lesson-workspace.list-lessons",status:"GRANTED",purpose:"List the synced lesson files.",revision:"v1",source:"built into Core",runnable:"Requires Identity grant and owner approval."}]}}}
-function build(st,brain){const items=[];const put=x=>items.push(x);
-const cycles=Array.isArray(st.cycles)?st.cycles.slice(0,16):[];
-for(const c of cycles){const p=c.proposal||{},o=c.outcome||{},e=c.evaluation||{},spark=c.spark||{};const cid=fmt(c.cycle_id);put({id:"cycle:"+cid,kind:"cycle",title:short(spark.topic||p.reply||c.request||"Thought cycle",75),summary:short(c.request||p.reply||"Recorded cycle; open to inspect.",135),status:c.state||"UNKNOWN",when:c.received_at,fields:[row("Cycle ID",cid),row("Event / question",c.request),row("Spark",spark.status),row("Thought ID",spark.thought_id),row("Model reply",p.reply),row("Proposed action",p.action),row("Prediction (model claim)",p.prediction?.value??p.prediction?.text),row("Prediction state",p.prediction?.state),row("Observed action result",o.status),row("Evaluation",e.goal),row("Evaluation evidence",e.explanation)],evidence:cid,raw:c});put({id:"outcome:"+cid,kind:"outcome",title:short(o.status||"Unknown outcome",74),summary:short(o.detail||e.explanation||"Open the cycle receipt to inspect.",135),status:o.status||"UNKNOWN",when:c.received_at,fields:[row("Source cycle ID",cid),row("Actual action status",o.status),row("Observed result",o.detail),row("Expected prediction",p.prediction?.value??p.prediction?.text),row("Evaluation / goal",e.goal),row("Evaluation notes",e.explanation),row("Model requested action",p.action)],evidence:cid});}
-const blocks=Array.isArray(brain.blocks)?brain.blocks:[];
-for(const b of blocks){const kind=b.kind==="lesson"?"lesson":/cell$/.test(b.kind)?"cell":b.kind==="skill"?"skill":b.kind==="note"?"note":"other";if(kind==="other")continue;put({id:"block:"+fmt(b.id),kind,title:b.title||b.id||"Untitled",summary:short(b.purpose||b.preview||"No description available",135),status:b.status||"UNKNOWN",fields:[row("Block ID",b.id),row("Type",b.kind),row("Source",b.source),row("Pinned source revision",b.revision),row("Purpose",b.purpose),row("Execution contract",b.runnable),row("Last verified receipt",b.last),row("Expected checks",b.expect)],evidence:b.last||b.id});}
-for(const n of brain.graph?.notes||[]){put({id:"note:"+n.id,kind:"note",title:n.title||"Untitled note",summary:short(n.text,135),status:"NOTE",fields:[row("Note ID",n.id),row("Text",n.text),row("Saved brain revision",brain.graph?.revision)],evidence:n.id})}
-const receipts=st.skills?.receipts||[];for(const r of receipts){put({id:"receipt:"+fmt(r.receipt_id),kind:"receipt",title:"@"+fmt(r.skill),summary:"Skill request · "+fmt(r.state)+" · executed: "+(r.executed?"yes":"no"),status:r.state||"UNKNOWN",when:r.created_at,fields:[row("Skill receipt",r.receipt_id),row("Skill",r.skill),row("State",r.state),row("Executed (verified receipt)",r.executed===true?"yes":r.executed===false?"no":"not recorded"),row("Identity decision",r.run_decision),row("Observed",r.observed),row("Error",r.error)],evidence:r.receipt_id})}
-return items;}
-const rows=[{title:"Continue thinking",subtitle:"Recent recorded thought cycles",kind:"cycle",glyph:"◈",colors:["#304974","#3d2454"]},{title:"Observed outcomes",subtitle:"Actual results, not just predictions",kind:"outcome",glyph:"◎",colors:["#345345","#183a51"]},{title:"Learned & available lessons",subtitle:"Read-only lesson references",kind:"lesson",glyph:"L",colors:["#655033","#47304b"]},{title:"Learning cells",subtitle:"Discovered notebook cells, not executable here",kind:"cell",glyph:"▦",colors:["#315a69","#243a6b"]},{title:"Skills",subtitle:"Permissioned operations and actual receipts",kind:"skill",glyph:"@",colors:["#4e355d","#233d57"]},{title:"Awaiting & recent skill receipts",subtitle:"Approval and execution states",kind:"receipt",glyph:"✓",colors:["#634337","#48354f"]},{title:"Owner notes",subtitle:"Saved with the development brain",kind:"note",glyph:"✎",colors:["#4a5267","#294d50"]}];
-function render(){const host=$("shelves");host.replaceChildren();let total=0;const query=S.search.toLowerCase();const active={all:null,cycle:["cycle"],outcome:["outcome"],lesson:["lesson"],cell:["cell"],skill:["skill","receipt"]}[S.filter];for(const r of rows){if(active&&!active.includes(r.kind))continue;const subset=S.items.filter(x=>x.kind===r.kind && (!query||(x.title+" "+x.summary+" "+x.status+" "+x.evidence).toLowerCase().includes(query)));if(!subset.length)continue;total+=subset.length;let section=mk("section","shelf");section.append(mk("div","shelf-head"));section.firstChild.append(mk("h2","",r.title),mk("span","",r.subtitle+" · "+subset.length));let rail=mk("div","rail");for(const x of subset){let tile=mk("button","tile");tile.type="button";tile.setAttribute("aria-label","Inspect "+x.title);tile.style.setProperty("--tile-a",r.colors[0]);tile.style.setProperty("--tile-b",r.colors[1]);let art=mk("div","art");art.append(mk("span","glyph",r.glyph),mk("span","category",x.kind==="receipt"?"skill receipt":x.kind));let content=mk("div","content");content.append(mk("h3","",x.title),mk("p","",x.summary));let meta=mk("div","meta");meta.append(mk("span","status "+tone(x.status),x.status));if(x.when)meta.append(mk("span","",stamp(x.when)));content.append(meta);tile.append(art,content);tile.addEventListener("click",()=>show(x));rail.append(tile)}section.append(rail);host.append(section)}if(!total)host.append(mk("div","empty","No recorded items match. Nothing has been generated to fill empty shelves."));$("summary").textContent=total+" visible cards · "+S.source+" source · saved brain revision "+fmt(S.brain.graph?.revision)}
-function show(x){S.selected=x;$("detailKind").textContent=x.kind.toUpperCase()+" · "+S.source;$("detailTitle").textContent=x.title;$("detailIntro").textContent=x.summary;const dl=$("fields");dl.replaceChildren();for(const [k,v] of x.fields){const d=mk("div","detail");d.append(mk("dt","",k),mk("dd","",v));dl.append(d)}$("expandEngine").classList.toggle("hidden",x.kind!=="cycle");$("thoughtDetail").classList.remove("open");$("thoughtDetail").textContent="";$("toast").textContent="";$("overlay").classList.add("open");$("close").focus()}
-function copyText(full){if(!S.selected)return "";const x=S.selected;const prefix="TASS Cognition ("+S.source+")\nKind: "+x.kind+"\nTitle: "+x.title+"\nStatus: "+x.status+"\n";return full?prefix+x.fields.map(([a,b])=>a+": "+b).join("\n"):prefix+"Evidence ID: "+fmt(x.evidence)+"\nSource: "+S.source+"\n"}
-async function copy(full){if(!S.selected)return;try{await navigator.clipboard.writeText(copyText(full));$("toast").textContent="Copied to clipboard."}catch{$("toast").textContent="Clipboard unavailable; use normal text selection."}}
-function inspectEngine(){const d=$("thoughtDetail");if(d.classList.contains("open")){d.classList.remove("open");return}const e=S.st.engine||{},p=e.last_pulse||{};d.replaceChildren();d.append(mk("h3","","Thought Engine → model details"),mk("p","","Engine reachable: "+(e.reachable===true?"yes":e.reachable===false?"no":"unknown")),mk("p","","Nemotron model health: "+(p.model_ok===true?"OK":p.model_ok===false?"NOT OK":"NOT RECORDED")),mk("p","","Model pulse timestamp: "+stamp(p.at)));d.classList.add("open")}
-async function getJSON(path){const res=await fetch(path,{headers:{"X-TASS-Token":TOKEN},cache:"no-store"});if(!res.ok)throw Error(path+" returned HTTP "+res.status);return res.json()}
-async function refresh(){if(!isLive){const {st,brain}=fixture();S.st=st;S.brain=brain;S.items=build(st,brain);$("mode").textContent="DEMO FIXTURES";$("banner").className="notice";$("banner").textContent="PREVIEW ONLY: these are sample records, not your running TASS. Test browsing, card details, filters and copying. The live page must be served by Core at /cognition.";render();return}$("banner").className="notice";$("banner").textContent="Reading Core state…";try{const [st,brain]=await Promise.all([getJSON("/api/status"),getJSON("/api/brain")]);S.st=st;S.brain=brain;S.items=build(st,brain);$("mode").textContent="LIVE READ ONLY";$("mode").className="chip good";$("banner").className="notice ok";$("banner").textContent="LIVE: "+S.items.length+" cards from local Core. Identity: "+fmt(st.identity?.state)+". This screen never starts tests or executes skills.";render()}catch(err){S.items=[];S.st={};S.brain={};$("mode").textContent="LIVE UNAVAILABLE";$("mode").className="chip fail";$("banner").className="notice error";$("banner").textContent="Could not retrieve authenticated Core data ("+err.message+"). Reload this page from the running Core; no sample data substituted.";render()}}
-nav();$("search").addEventListener("input",e=>{S.search=e.target.value;render()});document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(c===b)));render()}));$("refresh").addEventListener("click",refresh);$("close").addEventListener("click",()=>$("overlay").classList.remove("open"));$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))$("overlay").classList.remove("open")});document.addEventListener("keydown",e=>{if(e.key==="Escape")$("overlay").classList.remove("open")});$("copy").addEventListener("click",()=>copy(true));$("copyIDs").addEventListener("click",()=>copy(false));$("expandEngine").addEventListener("click",inspectEngine);refresh();
+const S={cards:[],lib:null,selected:null,timeline:null,cursor:-1,timer:null,filter:"all",search:""};
+const mk=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;};
+const val=x=>x===undefined||x===null||x===""?"NOT RECORDED":String(x);
+const stamp=x=>!x||String(x).startsWith("0001")?"NOT RECORDED":new Date(x).toLocaleString();
+const colors={thought:["#315e70","#244b5a"],cycle:["#304974","#3d2454"],outcome:["#345345","#183a51"],lesson:["#655033","#47304b"],cell:["#315a69","#243a6b"],skill:["#4e355d","#233d57"],note:["#4a5267","#294d50"]};
+const shelves=[["thought","Persistent thoughts","Stable Thought IDs · engine history","◈"],
+  ["cycle","Recent recorded cycles","Unlinked cycles stay separate","◎"],
+  ["outcome","Reported outcomes","NO_ACTION is never execution","◉"],
+  ["lesson","Lessons","Read-only Core references","L"],
+  ["cell","Learning cells","Not executable from Cognition","▦"],
+  ["skill","Supervised skills","Identity grant and owner approval still required","@"],
+  ["note","Owner notes","Saved advisory context","✎"]];
+function nav(){
+  const links=LIVE?[["TASS","/"],["Identity","http://127.0.0.1:8796"],["Development","/dev"],["Cognition","/cognition"]]:
+   [["TASS",""],["Identity",""],["Development",""],["Cognition",""]];
+  for(const [title,href] of links){const e=mk(href?"a":"span",title==="Cognition"?"active":"",title);if(href)e.href=href;$("navigation").append(e);}
+}
+async function get(path,format="json"){
+  const r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN}});
+  if(!r.ok)throw new Error("HTTP "+r.status+"; "+(r.status===403?"Identity denied":r.status===401?"missing key":"evidence unavailable"));
+  return format==="json"?r.json():r.text();
+}
+function message(x,bad=false){$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
+function setVisible(id,on){$(id).classList.toggle("hidden",!on);}
+function stop(){if(S.timer!==null){clearInterval(S.timer);S.timer=null;}setVisible("pause",false);}
+function draw(){
+  const host=$("shelves");host.replaceChildren();
+  let shown=0;
+  for(const [kind,title,subtitle,glyph] of shelves){
+    if(S.filter!=="all"&&S.filter!==kind)continue;
+    const filtered=S.cards.filter(x=>x.kind===kind && (x.title+" "+x.summary+" "+x.status+" "+x.source_id).toLowerCase().includes(S.search));
+    const section=mk("section","shelf");
+    const head=mk("div","shelf-head");head.append(mk("h2","",title),mk("span","",subtitle+" · "+filtered.length));section.append(head);
+    const rail=mk("div","rail");
+    for(const x of filtered){
+      const tile=mk("button","tile");tile.type="button";tile.setAttribute("aria-label","Inspect "+x.title);
+      const colorsFor=colors[kind]||colors.note;tile.style.setProperty("--tile-a",colorsFor[0]);tile.style.setProperty("--tile-b",colorsFor[1]);
+      const art=mk("div","art");art.append(mk("span","glyph",glyph),mk("span","category",kind));
+      const body=mk("div","content");body.append(mk("h3","",val(x.title)),mk("p","",val(x.summary)));
+      const meta=mk("div","meta");meta.append(mk("span","status",val(x.status)),mk("span","",val(x.verification)));
+      body.append(meta);tile.append(art,body);tile.onclick=()=>select(x);rail.append(tile);
+    }
+    if(!filtered.length&&kind==="thought"&&S.filter!=="cycle"){
+      rail.append(mk("div","empty","Persistent Thoughts NOT RECORDED for this authorized entity. Recent cycles are separate records."));
+    }
+    if(filtered.length||kind==="thought") {section.append(rail);host.append(section);}
+    shown+=filtered.length;
+  }
+  if(!shown)host.append(mk("div","empty","No matching recorded evidence. No simulated thoughts were generated."));
+  $("summary").textContent=shown+" cards · Go projection · "+val(S.lib?.engine_commit)+" · Brain rev "+val(S.lib?.brain_revision);
+}
+function field(container,name,value){
+  const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
+}
+function select(x){
+  stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
+  $("detailTitle").textContent=val(x.title);
+  $("detailIntro").textContent=val(x.summary);
+  const fields=$("fields");fields.replaceChildren();
+  field(fields,"Source ID",x.source_id);field(fields,"Verification",x.verification);field(fields,"Source",x.source);
+  field(fields,"Recorded at",stamp(x.recorded_at));
+  for(const f of (x.fields||[]))field(fields,f.name,f.value);
+  $("thoughtDetail").replaceChildren();$("thoughtDetail").classList.remove("open");
+  message("");
+  const cycle=x.kind==="cycle"||x.kind==="outcome";
+  setVisible("expandEngine",cycle||x.kind==="thought");
+  setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
+  setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
+  setVisible("tryDev",x.kind==="thought"||cycle);
+  $("overlay").classList.add("open");$("close").focus();
+}
+function cycleID(){return S.selected&&(S.selected.kind==="cycle"||S.selected.kind==="outcome")?S.selected.source_id:"";}
+async function timeline(){
+  if(!cycleID())return;
+  if(S.timeline)return S.timeline;
+  const data=await get("/api/cognition/cycles/"+encodeURIComponent(cycleID())+"/timeline");
+  S.timeline=data;S.cursor=-1;return data;
+}
+function showStep(){
+  const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+  const t=S.timeline;
+  if(!t){area.append(mk("div","", "Recorded timeline NOT RECORDED."));return;}
+  field(area,"Source",t.source);field(area,"Engine commit",t.engine_commit);
+  field(area,"Linked Thought",t.link_status==="VERIFIED-LINK"?t.thought_id:"UNLINKED / NOT RECORDED");
+  field(area,"Missing journal stages",(t.missing||[]).join(", ")||"none reported");
+  field(area,"Truncated / partial",String(t.truncated)+" / "+String(t.partial));
+  if(t.note)field(area,"Source note",t.note);
+  const all=t.steps||[];
+  field(area,"Playback position",all.length?String(Math.max(0,S.cursor+1))+" of "+all.length:"No recorded events");
+  if(S.cursor>=0&&S.cursor<all.length){
+    const s=all[S.cursor];
+    field(area,"Recorded timestamp",stamp(s.at));field(area,"Stage",s.stage);
+    field(area,"Journal byte offset",s.offset);field(area,"Status",s.status);
+    for(const [k,v] of [["Event ID",s.event_id],["Trace ID",s.trace_id],["Thought ID",s.thought_id],
+      ["Model request ID",s.model_request_id],["Action proposal",s.action],
+      ["Prediction state",s.prediction_state],["Executor-reported outcome",s.outcome_status],
+      ["Forecast",s.forecast],["Goal",s.goal]])if(v)field(area,k,v);
+    if(s.duplicate)field(area,"Warning","Duplicate recorded stage");
+    if(s.out_of_order)field(area,"Warning","Recorded timestamp precedes prior journal entry");
+  }
+}
+async function loadTimeline(showAll=false){
+  try{
+    stop();
+    const t=await timeline();
+    S.cursor=showAll?(t.steps||[]).length-1:-1;
+    showStep();
+    if(showAll&&t.steps?.length){
+      const list=mk("div","");
+      for(const e of t.steps){
+        const row=mk("button","",stamp(e.at)+" | "+e.stage+" | "+e.status+" | offset "+e.offset);
+        row.type="button";row.onclick=()=>{S.cursor=t.steps.indexOf(e);showStep();};
+        list.append(row);
+      }
+      $("thoughtDetail").append(mk("h3","","View logs — recorded journal sequence"),list);
+    }
+  }catch(e){message("Journal "+e.message,true);}
+}
+async function advance(){
+  try{
+    const t=await timeline();
+    if(!t.steps||!t.steps.length){stop();showStep();return false;}
+    if(S.cursor+1>=t.steps.length){stop();return false;}
+    S.cursor++;showStep();return true;
+  }catch(e){stop();message("Playback "+e.message,true);return false;}
+}
+function copyFallback(text){
+  const area=mk("textarea","","");area.value=text;area.rows=9;area.style.width="100%";
+  $("thoughtDetail").replaceChildren(area);$("thoughtDetail").classList.add("open");area.select();
+  message("Clipboard unavailable. Select and copy the sanitized text shown.",true);
+}
+async function copyEvidence(){
+  if(!S.selected)return;
+  try{
+    const id=cycleID();
+    const output=id?await get("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format=md","text"):
+      "# Cognition reference only\nKind: "+S.selected.kind+"\nID: "+S.selected.source_id+
+      "\nSource: "+S.selected.source+"\nVerification: "+S.selected.verification+"\nNo execution evidence implied.\n";
+    try{await navigator.clipboard.writeText(output);message("Sanitized evidence copied.");}
+    catch{copyFallback(output);}
+  }catch(e){message("Copy refused: "+e.message,true);}
+}
+async function downloadEvidence(format){
+  const id=cycleID();if(!id)return;
+  try{
+    const res=await fetch("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format="+format,{
+      method:"GET",headers:{"X-TASS-Token":TOKEN},cache:"no-store"});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    const blob=await res.blob();const link=document.createElement("a");const obj=URL.createObjectURL(blob);
+    link.href=obj;link.download="cognition-"+id+"."+format;document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(obj),1000);message("Sanitized report prepared. Nothing published.");
+  }catch(e){message("Download failed: "+e.message,true);}
+}
+async function showThought(){
+  const x=S.selected;if(!x)return;
+  if(x.kind!=="thought"){await loadTimeline(true);return;}
+  try{
+    const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
+    const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+    field(area,"Canonical question",d.question);field(area,"State",d.state);
+    field(area,"Historical steps",d.history?.length??0);
+    for(const h of d.history||[])field(area,stamp(h.at)+" · "+h.kind, h.event_id||h.trace_id||"NOT RECORDED");
+    field(area,"Trace IDs (verified only)",(d.traces||[]).filter(t=>t.verified).map(t=>t.trace_id).join(", ")||"NOT RECORDED");
+    field(area,"Related recorded cycles",(d.related_cycle_ids||[]).join(", ")||"NOT RECORDED");
+    for(const id of d.related_cycle_ids||[]){
+      const btn=mk("button","","Open cycle "+id);
+      btn.onclick=()=>select(S.cards.find(v=>v.kind==="cycle"&&v.source_id===id)||{
+        kind:"cycle",id:"cycle:"+id,source_id:id,title:"Cycle "+id,summary:"Linked recorded cycle",
+        verification:"VERIFIED-LINK",source:"Thought Engine: cycle"});
+      area.append(btn);
+    }
+  }catch(e){message("Thought detail "+e.message,true);}
+}
+function devProposal(){
+  if(!S.selected||!S.lib)return;
+  // A navigational reference, not a Save/Run/Approve request.
+  const ref=(S.selected.kind==="thought"?"thought:":"cycle:")+S.selected.source_id;
+  const q=new URLSearchParams({cognition_ref:ref,brain_revision:String(S.lib.brain_revision)});
+  location.href="/dev?"+q.toString();
+}
+async function refresh(){
+  stop();S.cards=[];S.lib=null;S.selected=null;
+  if(!LIVE){
+    $("mode").textContent="PREVIEW ONLY";
+    $("banner").className="notice";
+    $("banner").textContent="Visual shell preview. No fabricated records are shown. Run this page inside the authenticated Core to view real recorded cognition.";
+    draw();return;
+  }
+  $("banner").textContent="Reading authorized Go projections…";
+  try{
+    S.lib=await get("/api/cognition/library");
+    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.library||[])];
+    $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
+    $("banner").className="notice ok";
+    $("banner").textContent="Engine provenance: "+val(S.lib.engine_commit)+
+      ". Identity scope: "+val(S.lib.identity_name)+". "+val(S.lib.note)+
+      " Nothing plays live or executes work.";
+  }catch(e){
+    S.cards=[];$("mode").textContent="EVIDENCE UNAVAILABLE";$("mode").className="chip fail";
+    $("banner").className="notice error";$("banner").textContent="Cognition data not available: "+e.message+
+      ". No demo records substituted. Identity must authorize the read and Engine must support its API.";
+  }
+  draw();
+}
+nav();
+$("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
+document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
+  S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(b===c)));draw();
+});
+$("refresh").onclick=refresh;
+$("close").onclick=()=>{stop();$("overlay").classList.remove("open");};
+$("overlay").onclick=e=>{if(e.target===$("overlay"))$("close").click();};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click();
+  else if(e.key==="ArrowRight"&&$("overlay").classList.contains("open")&&cycleID())advance();});
+$("expandEngine").onclick=showThought;
+$("logs").onclick=()=>loadTimeline(true);
+$("step").onclick=async()=>{stop();await advance();};
+$("play").onclick=async()=>{stop();if(!(await advance()))return;setVisible("pause",true);
+  S.timer=setInterval(()=>{advance();},700);};
+$("pause").onclick=stop;
+$("copy").onclick=copyEvidence;
+$("downloadMD").onclick=()=>downloadEvidence("md");
+$("downloadJSON").onclick=()=>downloadEvidence("json");
+$("tryDev").onclick=devProposal;
+refresh();
 </script>
 </body>
 </html>
