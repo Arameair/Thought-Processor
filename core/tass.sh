@@ -9,7 +9,12 @@
 #   ./tass.sh update [REF]     build the candidate, back up, switch, validate; if validation fails, put back
 #                              the previous version AND the data. Asks first (--yes to skip).
 #   ./tass.sh rollback         switch back to the previous version (--restore-data BACKUP to restore data too)
-#   ./tass.sh backup           copy the application's data and keys into a backup (nothing else changes)
+#   ./tass.sh restore-previous the version from before the last update AND its verified pre-update data
+#                              (the current data is first saved in a new verified backup). Asks first.
+#   ./tass.sh recover          finish an INTERRUPTED update/rollback/restore: put back the version and data
+#                              from before it (start/update/rollback refuse until this is done)
+#   ./tass.sh history          versions, verified backups and the update history. Read-only.
+#   ./tass.sh backup           stop, copy data and keys into a VERIFIED backup, start again
 #   ./tass.sh stop             stop this application's containers (nothing else)
 #
 # A fresh install has NO entity: open http://127.0.0.1:8796 and create your own. Nothing personal is
@@ -298,20 +303,71 @@ prepare() { # folders and THIS installation's own keys (generated here, never sh
   chmod 600 "$APP_SECRETS/github_token"
 }
 
-backup() { # → prints the backup file (data and keys; 0600 in a 0700 folder)
-  local f="$DEPLOY/backups/$(date -u +%Y%m%dT%H%M%SZ)-${1:-manual}.tgz"
-  (umask 077; tar -czf "$f" -C "$APP_HOME" data secrets 2>/dev/null) || die "backup failed: $f"
+sha256_of() { sha256sum "$1" | cut -d' ' -f1; }
+
+# backup → prints the backup file (data and keys; 0600 in a 0700 folder). Issue #79: a backup only
+# counts once it is VERIFIED: the archive is extracted to a scratch folder and every file is compared
+# with the live data (the services are stopped while this runs), then its SHA-256 is recorded next
+# to it. Nothing is ever pruned: older backups, including the last known-good one, are kept.
+backup() {
+  local name f tmp scratch
+  name="$(date -u +%Y%m%dT%H%M%SZ)-${1:-manual}.tgz"; f="$DEPLOY/backups/$name"; tmp="$DEPLOY/backups/.$name.partial"
+  rm -f -- "$tmp"
+  (umask 077; tar -czf "$tmp" -C "$APP_HOME" data secrets 2>/dev/null) || { rm -f -- "$tmp"; say "backup failed: could not write $tmp" >&2; return 1; }
+  scratch="$(mktemp -d "$DEPLOY/backups/.verify.XXXXXX")" || { rm -f -- "$tmp"; return 1; }
+  if ! tar -xzf "$tmp" -C "$scratch" 2>/dev/null || ! diff -r -q "$scratch/data" "$APP_DATA" >/dev/null 2>&1 ||
+     ! diff -r -q "$scratch/secrets" "$APP_SECRETS" >/dev/null 2>&1; then
+    rm -rf -- "$scratch" "$tmp"; say "backup FAILED verification: the archive does not match the data" >&2; return 1
+  fi
+  rm -rf -- "$scratch"
+  (umask 077; sha256_of "$tmp" >"$f.sha256.new") && mv -- "$tmp" "$f" && mv -- "$f.sha256.new" "$f.sha256" || { say "backup failed: could not finish $f" >&2; return 1; }
   printf '%s' "$f"
 }
 
+backup_ok() { # $1 = backup: present and unchanged since it was verified
+  [[ -f "$1" && -f "$1.sha256" && "$(sha256_of "$1")" == "$(cat "$1.sha256")" ]]
+}
+
 restore_data() { # $1 = backup; current data is MOVED aside (never deleted) first
-  local b="$1" aside="$DEPLOY/failed/$(date -u +%Y%m%dT%H%M%SZ)"
+  local b="$1" aside="$DEPLOY/failed/$(date -u +%Y%m%dT%H%M%SZ)-$$"
   [[ -f "$b" ]] || die "no backup $b"
+  if [[ -f "$b.sha256" ]]; then backup_ok "$b" || die "backup $b does not match its recorded SHA-256; nothing was changed"
+  else note "backup $b predates verified backups (no .sha256): restoring it unverified"; fi
   mkdir -p "$aside" && chmod 700 "$DEPLOY/failed" "$aside"
   [[ -d "$APP_DATA" ]] && mv "$APP_DATA" "$aside/data"
   [[ -d "$APP_SECRETS" ]] && mv "$APP_SECRETS" "$aside/secrets"
-  tar -xzf "$b" -C "$APP_HOME"
+  if ! tar -xzf "$b" -C "$APP_HOME"; then
+    rm -rf -- "$APP_DATA" "$APP_SECRETS"; mv "$aside/data" "$APP_DATA" 2>/dev/null; mv "$aside/secrets" "$APP_SECRETS" 2>/dev/null
+    die "could not unpack $b; the data that was there is back in place"
+  fi
   say "Restored data and keys from $b (what was there is kept in $aside)."
+}
+
+# ---- one operation at a time, and a record of any operation in progress (Issue #79)
+OPLOCK_HELD=0
+op_lock() {
+  mkdir -p "$DEPLOY" && chmod 700 "$DEPLOY"
+  exec 9>"$DEPLOY/.op.lock"
+  flock -n 9 || die "another ./tass.sh operation is running on this installation; nothing was changed"
+  OPLOCK_HELD=1
+}
+OPF() { printf '%s' "$DEPLOY/operation.env"; }
+op_begin() { # $1 = kind; records what is needed to recover if this process dies
+  local tmp; tmp="$(OPF).new"
+  cp "$DEPLOY/current.env" "$DEPLOY/operation-from.env"
+  { echo "OP_KIND=$1"; echo "OP_STARTED=$(date -u +%FT%TZ)"; echo "OP_PHASE=STARTING"; echo "OP_BACKUP="; echo "OP_RUNNING=${2:-}"; } >"$tmp"
+  mv -- "$tmp" "$(OPF)"
+}
+op_set() { # $1 = key, $2 = value
+  local tmp; tmp="$(OPF).new"
+  grep -v "^$1=" "$(OPF)" >"$tmp"; echo "$1=$2" >>"$tmp"; mv -- "$tmp" "$(OPF)"
+}
+op_end() { rm -f -- "$(OPF)" "$DEPLOY/operation-from.env"; }
+op_guard() { # refuse to act on top of an interrupted operation
+  if [[ -f "$(OPF)" ]]; then
+    ( load_env "$(OPF)"; say "An earlier $OP_KIND (started $OP_STARTED) was INTERRUPTED at phase $OP_PHASE." )
+    die "run ./tass.sh recover to put back the version and data from before it (nothing was changed now)"
+  fi
 }
 
 # ------------------------------------------------------------------------------- validate
@@ -439,19 +495,37 @@ cmd_update() {
   load_env "$DEPLOY/current.env"; [[ "$cand" == "$CORE_SHA" ]] && return 0
   if [[ $yes == 0 ]]; then read -r -p "Apply this update? Data and keys are backed up first. [y/N] " yn; [[ "$yn" == [yY]* ]] || { say "Nothing changed."; return 0; }; fi
   prepare
-  build_version "$cand" "$DEPLOY/candidate.env"
+  build_version "$cand" "$DEPLOY/candidate.env"   # a build failure stops here: nothing was stopped or changed
   local was before ent bk had_running
   had_running="$(ours)"  # preserve whether this project was actually running before update
   was="$(current_state)"; before="$(inventory)"; ent="$(current_entity)"
+  op_begin update "$had_running"
   compose "$DEPLOY/current.env" stop >/dev/null 2>&1 || true
-  bk="$(backup "before-${cand:0:12}")"; say "Backup: $bk"
+  op_set OP_PHASE STOPPED
+  if ! bk="$(backup "before-${cand:0:12}")"; then
+    # Issue #79: a failed backup must not leave the application down or half-changed.
+    say "Backup FAILED or could not be verified: the update was NOT applied."
+    [[ -n "$had_running" ]] && compose "$DEPLOY/current.env" up -d >/dev/null 2>&1 || true
+    op_end
+    echo "$(date -u +%FT%TZ) update: → $cand REFUSED (backup failed); previous version $( [[ -n "$had_running" ]] && echo restarted || echo left stopped as it was)" >>"$DEPLOY/history.log"
+    die "nothing changed; previous version $( [[ -n "$had_running" ]] && echo 'running again' || echo 'left as it was')"
+  fi
+  say "Backup (verified, SHA-256 recorded): $bk"
+  op_set OP_BACKUP "$bk"; op_set OP_PHASE BACKED_UP
   [[ -f "$DEPLOY/previous.env" ]] && cp "$DEPLOY/previous.env" "$DEPLOY/previous.env.keep" || rm -f "$DEPLOY/previous.env.keep"
   cp "$DEPLOY/current.env" "$DEPLOY/previous.env"
   cp "$DEPLOY/candidate.env" "$DEPLOY/current.env"
+  op_set OP_PHASE SWITCHED
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
+  op_set OP_PHASE VALIDATING
   if validate "$DEPLOY/current.env" "$before" "$was" "$ent"; then
+    local m; m="$DEPLOY/manifests/$(date -u +%Y%m%dT%H%M%SZ)-core-${cand:0:12}"; mkdir -p "$DEPLOY/manifests" && chmod 700 "$DEPLOY/manifests"
+    cp "$DEPLOY/current.env" "$m.env"; cp "$DEPLOY/previous.env" "$m.previous.env"
+    { echo "UPDATE_BACKUP=$bk"; echo "UPDATE_BACKUP_SHA256=$(cat "$bk.sha256")"; echo "UPDATE_PREVIOUS=$m.previous.env"; echo "UPDATE_CURRENT=$m.env"; } >"$DEPLOY/last-update.env.new"
+    mv -- "$DEPLOY/last-update.env.new" "$DEPLOY/last-update.env"
     echo "$(date -u +%FT%TZ) update: $(load_env "$DEPLOY/previous.env"; echo "$CORE_SHA") → $cand OK (backup $bk)" >>"$DEPLOY/history.log"
-    say "UPDATED to core $(short "$cand"). Previous version kept for ./tass.sh rollback."
+    op_end
+    say "UPDATED to core $(short "$cand"). Previous version kept for ./tass.sh rollback; ./tass.sh restore-previous also puts back the data from before this update."
     return 0
   fi
   say "Update FAILED validation: putting back the previous version and your data."
@@ -461,20 +535,24 @@ cmd_update() {
   # the rollback target stays what it was before this failed attempt
   if [[ -f "$DEPLOY/previous.env.keep" ]]; then cp "$DEPLOY/previous.env.keep" "$DEPLOY/previous.env"; else rm -f "$DEPLOY/previous.env"; fi
   restore_data "$bk"
+  op_set OP_PHASE RESTORED_DATA
   if [[ -z "$had_running" ]]; then
     # Fresh first-start recovery: old images were not running before the failed
     # candidate. Preserve the old env/data, but do NOT boot an unguarded Core.
     echo "$(date -u +%FT%TZ) update: → $cand FAILED; previous record/data preserved; application remains stopped" >>"$DEPLOY/history.log"
+    op_end
     say "ROLLED BACK deployment record and data; the new application remains stopped (nothing was running before this attempt)."
     return 1
   fi
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
   if validate "$DEPLOY/current.env" "$before" "$was" "$ent"; then
     echo "$(date -u +%FT%TZ) update: → $cand FAILED, restored $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA") and data ($bk)" >>"$DEPLOY/history.log"
+    op_end
     say "ROLLED BACK: running the previous version again, with your data as it was before the update."
     return 1
   fi
   echo "$(date -u +%FT%TZ) update: → $cand FAILED and the restore did not validate" >>"$DEPLOY/history.log"
+  op_end   # previous record and data ARE back in place; the services need attention
   die "the previous version didn't validate either: ./tass.sh logs (backup: $bk)"
 }
 
@@ -482,30 +560,148 @@ cmd_rollback() {
   local restore=""
   [[ "${1:-}" == --restore-data ]] && restore="${2:?backup file}"
   [[ -f "$DEPLOY/previous.env" ]] || die "no previous version recorded"
-  local before ent; before="$(inventory)"; ent="$(current_entity)"
+  local before ent guard=""; before="$(inventory)"; ent="$(current_entity)"
+  op_begin rollback "$(ours)"; op_set OP_PHASE SWITCHED
   compose "$DEPLOY/current.env" down >/dev/null 2>&1 || true
   cp "$DEPLOY/current.env" "$DEPLOY/rolled-back.env"
   cp "$DEPLOY/previous.env" "$DEPLOY/current.env"
   cp "$DEPLOY/rolled-back.env" "$DEPLOY/previous.env"
-  if [[ -n "$restore" ]]; then restore_data "$restore"; before="$(inventory)"; fi
+  if [[ -n "$restore" ]]; then
+    guard="$(backup before-rollback-restore)" || die "could not make a verified snapshot of the current data first; nothing restored"
+    op_set OP_BACKUP "$guard"; say "Current data saved first (verified): $guard"
+    restore_data "$restore"; before="$(inventory)"
+  fi
   compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
-  validate "$DEPLOY/current.env" "$before" "" "$ent" || die "rollback started but didn't validate: ./tass.sh logs"
+  if ! validate "$DEPLOY/current.env" "$before" "" "$ent"; then
+    # Issue #79: a bad rollback is undone: go back to the version that was running before it.
+    say "Rollback FAILED validation: returning to the version that was running before the rollback."
+    compose "$DEPLOY/current.env" down >/dev/null 2>&1 || true
+    cp "$DEPLOY/previous.env" "$DEPLOY/current.env"
+    cp "$DEPLOY/rolled-back.env" "$DEPLOY/previous.env"
+    [[ -n "$guard" ]] && restore_data "$guard"
+    compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
+    op_end
+    if validate "$DEPLOY/current.env" "$before" "" "$ent"; then
+      echo "$(date -u +%FT%TZ) rollback: FAILED; stayed on core $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA")" >>"$DEPLOY/history.log"
+      die "rollback failed; the version from before the rollback is running again"
+    fi
+    echo "$(date -u +%FT%TZ) rollback: FAILED and the return did not validate" >>"$DEPLOY/history.log"
+    die "rollback failed and the previous version did not validate either: ./tass.sh logs"
+  fi
+  op_end
   echo "$(date -u +%FT%TZ) rollback: now core $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA")" >>"$DEPLOY/history.log"
   say "Rolled back. (./tass.sh rollback again returns to the version you just left.)"
 }
 
-if [[ "${TASS_LIB_ONLY:-0}" == 1 ]]; then return 0 2>/dev/null || exit 0; fi
+# Restore Previous Update (Issue #79): the exact version that ran before the last update AND the
+# verified data snapshot taken right before it. The current data is first saved in a new verified
+# snapshot, so this is itself undoable. Anything recorded after that update is set aside, never deleted.
+cmd_restore_previous() {
+  local yes=0; [[ "${1:-}" == --yes ]] && yes=1
+  [[ -f "$DEPLOY/last-update.env" ]] || die "no recorded update to restore (updates made by older versions of this script don't record one)"
+  local UPDATE_BACKUP UPDATE_BACKUP_SHA256 UPDATE_PREVIOUS UPDATE_CURRENT
+  load_env "$DEPLOY/last-update.env"
+  [[ -f "$UPDATE_PREVIOUS" ]] || die "the previous version's manifest $UPDATE_PREVIOUS is missing; nothing was changed"
+  backup_ok "$UPDATE_BACKUP" || die "the pre-update backup $UPDATE_BACKUP is missing or changed; nothing was changed"
+  local to from; to="$(load_env "$UPDATE_PREVIOUS"; echo "$CORE_SHA")"; from="$(load_env "$DEPLOY/current.env"; echo "$CORE_SHA")"
+  say "Restore previous update: core $(short "$from") → $(short "$to"), data from $UPDATE_BACKUP."
+  say "Anything recorded since that update is moved aside (kept, not deleted) and first saved in a new verified backup."
+  if [[ $yes == 0 ]]; then read -r -p "Restore? [y/N] " yn; [[ "$yn" == [yY]* ]] || { say "Nothing changed."; return 0; }; fi
+  local ent had_running guard; ent="$(current_entity)"; had_running="$(ours)"
+  op_begin restore-previous "$had_running"
+  compose "$DEPLOY/current.env" stop >/dev/null 2>&1 || true
+  op_set OP_PHASE STOPPED
+  if ! guard="$(backup "before-restore-from-${from:0:12}")"; then
+    [[ -n "$had_running" ]] && compose "$DEPLOY/current.env" up -d >/dev/null 2>&1 || true
+    op_end; die "could not make a verified snapshot of the current data; nothing was changed"
+  fi
+  say "Current data saved first (verified): $guard"
+  op_set OP_BACKUP "$guard"; op_set OP_PHASE BACKED_UP
+  cp "$DEPLOY/current.env" "$DEPLOY/rolled-back.env"
+  cp "$UPDATE_PREVIOUS" "$DEPLOY/current.env"; cp "$DEPLOY/rolled-back.env" "$DEPLOY/previous.env"
+  op_set OP_PHASE SWITCHED
+  restore_data "$UPDATE_BACKUP"
+  op_set OP_PHASE RESTORED_DATA
+  local before; before="$(inventory)"
+  compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
+  if validate "$DEPLOY/current.env" "$before" "" "$ent"; then
+    rm -f "$DEPLOY/last-update.env"
+    { echo "UNDO_BACKUP=$guard"; echo "UNDO_ENV=$DEPLOY/rolled-back.env"; } >"$DEPLOY/last-restore.env"
+    echo "$(date -u +%FT%TZ) restore-previous: $from → $to with data $UPDATE_BACKUP (current data saved in $guard)" >>"$DEPLOY/history.log"
+    op_end
+    say "RESTORED core $(short "$to") with its data from before the update. Undo: ./tass.sh rollback --restore-data $guard"
+    return 0
+  fi
+  say "Restore FAILED validation: putting back the version and data that were running before the restore."
+  compose "$DEPLOY/current.env" down >/dev/null 2>&1 || true
+  cp "$DEPLOY/rolled-back.env" "$DEPLOY/current.env"
+  restore_data "$guard"
+  compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
+  op_end
+  echo "$(date -u +%FT%TZ) restore-previous: FAILED; back on $from with its data ($guard)" >>"$DEPLOY/history.log"
+  validate "$DEPLOY/current.env" "$(inventory)" "" "$ent" || die "the restore failed and the version before it did not validate either: ./tass.sh logs"
+  die "restore failed; the version and data from before the restore are running again"
+}
 
+# recover: finish an interrupted update/rollback/restore by putting back the version and data from
+# before it (the recorded verified backup), then validating.
+cmd_recover() {
+  [[ -f "$(OPF)" ]] || { say "No interrupted operation recorded. Nothing to do."; return 0; }
+  local OP_KIND OP_STARTED OP_PHASE OP_BACKUP OP_RUNNING; load_env "$(OPF)"
+  say "Recovering an interrupted $OP_KIND (started $OP_STARTED, phase $OP_PHASE)."
+  local ent; ent="$( [[ -s "$APP_DATA/identity/entity.json" ]] && json_field entity_id <"$APP_DATA/identity/entity.json" || true)"
+  compose "$DEPLOY/current.env" down >/dev/null 2>&1 || true
+  case "$OP_PHASE" in
+    STARTING|STOPPED|BACKED_UP) ;;   # the deployment record was not switched yet; data untouched since
+    *) [[ -f "$DEPLOY/operation-from.env" ]] || die "the record of the version before $OP_KIND is missing; nothing changed"
+       cp "$DEPLOY/operation-from.env" "$DEPLOY/current.env"
+       [[ -n "$OP_BACKUP" ]] && restore_data "$OP_BACKUP" ;;
+  esac
+  if [[ -n "$OP_RUNNING" ]]; then
+    compose "$DEPLOY/current.env" up -d --force-recreate >/dev/null 2>&1 || true
+    validate "$DEPLOY/current.env" "$(inventory)" "" "$ent" || die "recovered record and data, but the services did not validate: ./tass.sh logs"
+  fi
+  op_end
+  echo "$(date -u +%FT%TZ) recover: interrupted $OP_KIND at $OP_PHASE → back on core $(load_env "$DEPLOY/current.env"; echo "$CORE_SHA")" >>"$DEPLOY/history.log"
+  say "RECOVERED: core $(load_env "$DEPLOY/current.env"; short "$CORE_SHA") with the data from before the interrupted $OP_KIND."
+}
+
+cmd_history() {
+  [[ -f "$DEPLOY/current.env" ]] && say "Current:  $(load_env "$DEPLOY/current.env"; echo "core $CORE_SHA · engine $ENGINE_SHA · identity $IDENTITY_SHA")"
+  [[ -f "$DEPLOY/previous.env" ]] && say "Previous: $(load_env "$DEPLOY/previous.env"; echo "core $CORE_SHA · engine $ENGINE_SHA · identity $IDENTITY_SHA")"
+  [[ -f "$DEPLOY/last-update.env" ]] && say "Restore previous update available: $(load_env "$DEPLOY/last-update.env"; echo "$UPDATE_BACKUP")"
+  [[ -f "$(OPF)" ]] && say "INTERRUPTED operation recorded: run ./tass.sh recover"
+  say "Backups (newest first):"
+  local b
+  for b in $(ls -1t "$DEPLOY"/backups/*.tgz 2>/dev/null | head -20); do
+    if [[ -f "$b.sha256" ]]; then backup_ok "$b" && say "  verified  $b" || say "  CHANGED   $b (does not match its SHA-256)"
+    else say "  unverified (older) $b"; fi
+  done
+  say "History (newest last):"; tail -n 20 "$DEPLOY/history.log" 2>/dev/null | sed 's/^/  /' || true
+}
+
+tass_main() {
 settings
 case "${1:-help}" in
   check) check && say "Ready: ./tass.sh start" || say "Fix the [stop] items, then ./tass.sh check again." ;;
-  start) cmd_start ;;
-  status) cmd_status ;;
+  start) op_lock; op_guard; cmd_start ;;
+  status) cmd_status; [[ -f "$(OPF)" ]] && say "  INTERRUPTED operation recorded ($(load_env "$(OPF)"; echo "$OP_KIND at $OP_PHASE")): ./tass.sh recover" || true ;;
   logs) compose "$DEPLOY/current.env" logs -f --tail 80 ;;
   check-update) shift; cmd_check_update "$@" ;;
-  update) shift; cmd_update "$@" ;;
-  rollback) shift; cmd_rollback "$@" ;;
-  backup) mkdir -p "$DEPLOY/backups" && chmod 700 "$DEPLOY/backups"; say "Backup: $(backup manual)" ;;
-  stop) compose "$DEPLOY/current.env" stop && say "Stopped this application's containers (nothing else)." ;;
-  *) sed -n '2,22p' "$0" ;;
+  update) shift; op_lock; op_guard; cmd_update "$@" ;;
+  rollback) shift; op_lock; op_guard; cmd_rollback "$@" ;;
+  restore-previous) shift; op_lock; op_guard; cmd_restore_previous "$@" ;;
+  recover) op_lock; cmd_recover ;;
+  history) cmd_history ;;
+  backup) op_lock; mkdir -p "$DEPLOY/backups" && chmod 700 "$DEPLOY/backups"
+          # a consistent snapshot needs the services stopped; they are started again right after
+          r="$(ours)"; [[ -n "$r" ]] && compose "$DEPLOY/current.env" stop >/dev/null 2>&1
+          if b="$(backup manual)"; then say "Backup (verified): $b"; else say "Backup FAILED (nothing changed)"; fi
+          [[ -n "$r" ]] && compose "$DEPLOY/current.env" up -d >/dev/null 2>&1; [[ -n "${b:-}" ]] ;;
+  stop) op_lock; compose "$DEPLOY/current.env" stop && say "Stopped this application's containers (nothing else)." ;;
+  *) sed -n '2,27p' "${BASH_SOURCE[0]}" ;;
 esac
+}
+
+if [[ "${TASS_LIB_ONLY:-0}" == 1 ]]; then return 0 2>/dev/null || exit 0; fi
+tass_main "$@"
