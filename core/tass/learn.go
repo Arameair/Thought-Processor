@@ -509,6 +509,14 @@ func (c *Core) learnedForContext() string {
 	for _, ls := range c.learn.Lessons {
 		if ls.Status == "LEARNED" {
 			fmt.Fprintf(&b, "- %s: %s\n", ls.Title, firstNonEmpty(ls.Remember, ls.Goal))
+			// Only owner-approved and correctly graded answers enter effective
+			// context. This is retrieval of verified content, not model training.
+			for i,r := range ls.Results {
+				if i>=10 { break }
+				if r.Right {
+					fmt.Fprintf(&b, "  Verified check %d: %s => %s\n",r.N,oneLine(r.Check,150),oneLine(r.Given,200))
+				}
+			}
 		}
 	}
 	return b.String()
