@@ -76,13 +76,19 @@ func TestThreeCheckStudyFailureIsNotZeroOfThreeAndApprovalRequiresIdentity(t *te
         t.Fatalf("owner-approved lesson not durable: %+v",ls)
     }
     if err:=c.ApproveLesson(path);err==nil { t.Fatal("duplicate approval allowed") }
-    if !strings.Contains(c.context(true),"LESSONS YOU HAVE LEARNED") {
-        t.Fatal("approved lesson absent from effective context")
+    if !strings.Contains(c.context(true),"LESSONS YOU HAVE LEARNED") ||
+        !strings.Contains(c.context(true),"Verified check 1:") ||
+        !strings.Contains(c.context(true),"20") ||
+        !strings.Contains(c.context(true),"continue") {
+        t.Fatal("approved graded facts absent from effective context")
     }
     doc:=local(t,dir)
     if strings.Count(doc,"(lesson `"+path+"`,")!=1 { t.Fatalf("duplicate or missing local learned entry: %q",doc) }
     restored:=newLearningCore(t,dir,ids,gh,eng)
     if got:=lessonAt(restored,path);got.Status!="LEARNED" || got.Right!=3 {
         t.Fatalf("approved state not retained over restart: %+v",got)
+    }
+    if !strings.Contains(restored.context(true),"Verified check 3:") {
+        t.Fatal("verified knowledge missing from context after restart")
     }
 }
