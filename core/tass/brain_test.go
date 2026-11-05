@@ -191,7 +191,7 @@ func TestBrainCheckAndSaveRejectInvalidUsesAndNextCycle(t *testing.T) {
             report := ValidateBrain(g,c.BrainBlocks(nil))
             if report.Status != "FAIL" { t.Fatalf("Check accepted invalid graph: %+v",report) }
             found := false
-            for _,check := range report.Checks { if strings.Contains(check.Message,tt.want) { found=true } }
+            for _,check := range report.Checks { if strings.Contains(check.Text,tt.want) { found=true } }
             if !found { t.Fatalf("missing specific validation reason %q: %+v",tt.want,report.Checks) }
             saved, saveReport, err := c.SaveBrain(g,"owner","must refuse")
             if err == nil || saveReport.Status != "FAIL" || saved.Revision != 0 {
