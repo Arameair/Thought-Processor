@@ -26,6 +26,20 @@ jobs:
           Path('/tmp/tass-learning-page.js').write_text(html.split('<script>', 1)[1].split('</script>', 1)[0])
           PY
           node --check /tmp/tass-learning-page.js
+      - name: Cognition embedded JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('core/cmd/tass-core/cognition.html').read_text()
+          assert html.count('<script>')==1 and html.count('</script>')==1
+          Path('/tmp/tass-cognition.js').write_text(html.split('<script>')[1].split('</script>')[0])
+          PY
+          node --check /tmp/tass-cognition.js
+      - name: Cognition Chromium playback fixture (not owner machine)
+        run: |
+          python3 -m pip install --quiet playwright
+          python3 -m playwright install chromium
+          python3 core/test/browser/cognition_go.py
       - name: Build
         working-directory: core
         run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
