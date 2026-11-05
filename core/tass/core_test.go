@@ -204,6 +204,7 @@ type fakeEngine struct {
 	mismatchCycleID    string
 	unlockedPrediction bool
 	unreadableProposal bool
+	conflicts          int // 409 answers to duplicate job IDs
 }
 
 func newFakeEngine() *fakeEngine {
@@ -243,6 +244,15 @@ func newFakeEngine() *fakeEngine {
 			json.NewDecoder(r.Body).Decode(&in)
 			switch r.URL.Path {
 			case "/api/pulse/jobs":
+				// Like the real Engine (pulse.go Submit): a durable job ID is never accepted twice.
+				for _, j := range e.jobs {
+					if j["job_id"] == in["job_id"] {
+						e.conflicts++
+						w.WriteHeader(409)
+						json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("conflict: job %v already exists", in["job_id"]), "denied": false})
+						return
+					}
+				}
 				e.jobs = append(e.jobs, in)
 				w.WriteHeader(202)
 			case "/api/pulse/control":

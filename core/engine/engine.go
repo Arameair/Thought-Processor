@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -276,11 +277,18 @@ func (c *Client) SubmitJob(j Job) error {
 	if err != nil {
 		return err
 	}
+	if code == 409 && strings.Contains(errorOf(raw), "already exists") {
+		return fmt.Errorf("%w (409): %s", ErrJobExists, errorOf(raw))
+	}
 	if code != 202 {
 		return fmt.Errorf("Thought Engine refused the job (%d): %s", code, errorOf(raw))
 	}
 	return nil
 }
+
+// ErrJobExists: the Engine already holds a job with this ID (its job store is
+// durable). The caller must reconcile with that job, never resubmit the same ID.
+var ErrJobExists = errors.New("Thought Engine already has a job with this ID")
 
 // PulseControl sends start | pause | resume | step.
 func (c *Client) PulseControl(action string) (map[string]any, error) {
