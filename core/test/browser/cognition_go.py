@@ -67,7 +67,11 @@ with sync_playwright() as p:
         pg.add_init_script("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text)=>{window.__copied=text;}}});")
         pg.route("**/*",fake_route)
         pg.goto(ORIGIN+"/cognition")
-        pg.wait_for_selector(".tile")
+        pg.wait_for_timeout(800)
+        print("DEBUG page",pg.url,"mode",pg.locator("#mode").all_inner_texts(),
+              "banner",pg.locator("#banner").all_inner_texts(),
+              "errors",errors,"requests",methods,flush=True)
+        pg.wait_for_selector(".tile",timeout=5000)
         assert pg.locator(".tile").count()==5
         assert "LIVE / READ ONLY" in pg.locator("#mode").inner_text()
         assert "Persistent thoughts" in pg.locator("#shelves").inner_text()
