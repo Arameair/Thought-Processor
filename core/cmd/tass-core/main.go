@@ -43,7 +43,7 @@ import (
 	"github.com/Arameair/Thought-Processor/core/tass"
 )
 
-//go:embed page.html dev.html
+//go:embed page.html dev.html cognition.html
 var page embed.FS
 
 // version is set at build time: -ldflags "-X main.version=<commit>".
@@ -222,6 +222,24 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			return
 		}
 		b, _ := page.ReadFile("dev.html")
+		b = []byte(strings.Replace(string(b), "__PAGE_TOKEN__", pageToken, 1))
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
+		w.Write(b)
+	})
+	// Cognition is a read-only, same-origin browser of recorded thoughts/lessons/skills.
+	// It reuses the existing authenticated /api/status and /api/brain endpoints.
+	mux.HandleFunc("GET /cognition", func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r) {
+			http.Error(w, "host not allowed", http.StatusForbidden)
+			return
+		}
+		b, err := page.ReadFile("cognition.html")
+		if err != nil {
+			http.Error(w, "cognition page unavailable", http.StatusInternalServerError)
+			return
+		}
 		b = []byte(strings.Replace(string(b), "__PAGE_TOKEN__", pageToken, 1))
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
