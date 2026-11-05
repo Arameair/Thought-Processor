@@ -62,11 +62,26 @@
 </header>
 <div id="idbar"></div>
 <main>
+  <section class="card" id="wsCard">
+    <h2>Workspace <small>TASS and this project: identity, repository, skills, receipts, files</small></h2>
+    <div id="wsInfo" class="dim">loading…</div>
+    <h3 style="margin:12px 0 4px">Skills <small class="dim">fixed operations built into the Core · each run needs Identity's grant and your approval</small></h3>
+    <div id="wsSkills" class="dim"></div>
+    <div id="wsSkillMsg" aria-live="polite"></div>
+    <div id="wsReceipts"></div>
+    <h3 style="margin:12px 0 4px">Project file <small class="dim">read-only · from TASS's local copy of the repository</small></h3>
+    <div class="ctl"><select id="wsFile"></select> <button id="wsView">View</button></div>
+    <div id="wsFileHead" class="dim"></div>
+    <pre id="wsFileText" style="max-height:300px;overflow:auto;white-space:pre-wrap" hidden></pre>
+    <form id="wsAsk" hidden><textarea id="wsQ" style="height:40px" placeholder="Ask TASS about this file (he gets it read-only, for this one message)"></textarea><button>Ask TASS</button></form>
+    <div class="dim" style="margin-top:8px"><span class="tag unk">NOT IMPLEMENTED</span> editing files, proposed changes, running tests, notebook cells.</div>
+  </section>
   <section class="card">
     <h2>Talk <small>local conversation; lesson requests use authorized GitHub access</small></h2>
     <div class="ctl">
       <button id="talkFind">Find lessons</button>
       <button id="talkTest">Run one lesson test</button>
+      <button id="talkNew" title="Clears only the chat history TASS sees; his document, journal, lessons and receipts stay">New conversation</button>
       <span id="talkLessonNotice" class="dim" aria-live="polite">Autonomous OFF: test one lesson, then review before approval.</span>
     </div>
     <div id="relayState" class="dim" role="status" aria-live="polite">GitHub issue relay: checking local configuration…</div>
@@ -149,6 +164,7 @@ async function refresh() {
     if (r.status === 401) { $("busy").textContent = "this page is from before a restart: reload it"; return; }
     st = await r.json();
   } catch { $("engine").className = "chip off"; $("engine").textContent = "tass-core not reachable"; return; }
+  try { renderWorkspace(st); } catch (err) { $("wsInfo").textContent = "workspace view error: " + err.message; }
   const e = st.engine || {}, p = e.last_pulse;
   $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
   $("model").className = "chip " + (p ? (p.model_ok ? "ok" : "off") : "unk");
@@ -239,6 +255,64 @@ async function refresh() {
     if (keep) $("log").scrollTop = 1e9;
   }
 }
+// ---- Workspace (#31) and @ skills (#72) ----
+let wsSig = "", wsFilesSig = "";
+function stTag(v) {
+  const cls = /^(DONE|GRANTED|MET|UNLOCKED)$/.test(v) ? "good" : /^(DENIED|FAILED|INTERRUPTED|NOT GRANTED|NOT MET|LOCKED)$/.test(v) ? "bad" : "unk";
+  return `<span class="tag ${cls}">${esc(v)}</span>`;
+}
+function renderWorkspace(st) {
+  const w = st.workspace, ids = st.identity || {}, sk = st.skills || {registry: [], grants: {}, receipts: []};
+  if (!w) { $("wsInfo").innerHTML = '<span class="tag unk">NOT CONNECTED</span> no Identity service on this installation.'; return; }
+  const ent = ids.entity ? `${esc(ids.entity.name)} <span class="dim">${esc(ids.entity.entity_id)}</span>` : "no entity";
+  $("wsInfo").innerHTML = `Identity: ${ent} ${stTag(ids.state || "UNKNOWN")} · Project: <b>${esc(w.repo || "(no repository set)")}</b> @ <b>${esc(w.branch || "")}</b> · Core <code>${esc((w.core_version || "dev").slice(0, 12))}</code> · ${esc(w.doc)} blob <code>${esc((w.doc_blob_sha || "none").slice(0, 12))}</code>`;
+  const sig = JSON.stringify([sk, ids.state]);
+  if (sig !== wsSig) {
+    const open = new Set(Array.from($("wsReceipts").querySelectorAll("details[open]"), d => d.dataset.r));
+    $("wsSkills").innerHTML = sk.registry.map(d => `<div style="margin:4px 0"><code>@${esc(d.id)}</code> v${esc(d.version)} — ${esc(d.purpose)}<br>
+      Identity <code>skill.run:${esc(d.id)}</code>: ${stTag(sk.grants[d.id] || "UNKNOWN")} <button data-skill-request="${esc(d.id)}">Request a run</button>
+      <details><summary class="dim">descriptor</summary><div class="dim">inputs: ${d.inputs.length ? esc(d.inputs.join(", ")) : "none"} · result: ${esc(d.result)}<br>restrictions: ${d.restrictions.map(esc).join(" · ")}<br>expectation: ${esc(d.expect)}</div></details></div>`).join("")
+      + (sk.registry.length ? `<div class="dim">In Talk, try: <i>Find lessons using @</i>. ${Object.values(sk.grants).includes("GRANTED") ? "" : "Grant it first on Identity's page (Skills TASS may run)."}</div>` : "");
+    $("wsReceipts").innerHTML = (sk.receipts || []).length ? sk.receipts.map(r => `<div class="lesson"><div class="row">${stTag(r.state)} <b>@${esc(r.skill)}</b> <span class="dim">receipt ${esc(r.receipt_id)} · ${new Date(r.created_at).toLocaleString()} · executed: ${r.executed ? "yes, once" : "no"}</span>
+      ${r.state === "AWAITING_APPROVAL" ? `<button data-skill-approve="${esc(r.receipt_id)}">Approve run</button><button data-skill-cancel="${esc(r.receipt_id)}">Cancel</button>` : ""}</div>
+      <div class="dim">Selected by ${esc(r.selected_by)}: ${esc(r.why)}</div>
+      ${r.discover_decision ? `<div class="dim">discover: ${esc(r.discover_decision)}</div>` : ""}${r.run_decision ? `<div class="dim">run: ${esc(r.run_decision)}</div>` : ""}
+      ${r.error ? `<div style="color:var(--bad)">${esc(r.error)}</div>` : ""}
+      ${r.observed ? `<div>Expected: ${esc(r.expected)}<br>Observed: ${esc(r.observed)} → ${stTag(r.expectation_met ? "MET" : "NOT MET")}</div>` : ""}
+      ${r.output ? `<details data-r="${esc(r.receipt_id)}" ${open.has(r.receipt_id) ? "open" : ""}><summary class="dim">Real output · exit ${r.exit_code} · ${r.items} item(s) · ${r.elapsed_ms} ms · sha256 ${esc(r.output_sha256.slice(0, 16))}… · skill v${esc(r.skill_version)} · core ${esc(r.core_version.slice(0, 12))}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(r.output)}</pre></details>` : ""}</div>`).join("") : '<div class="dim">No skill receipts yet.</div>';
+    wsSig = sig;
+  }
+  const fsig = JSON.stringify(w.files);
+  if (fsig !== wsFilesSig) {
+    const cur = $("wsFile").value;
+    $("wsFile").innerHTML = (w.files || []).map(f => `<option value="${esc(f.path)}">${esc(f.path)} (${esc(f.kind)})</option>`).join("");
+    if (cur) $("wsFile").value = cur;
+    wsFilesSig = fsig;
+  }
+}
+function wsMsg(ok, text) { $("wsSkillMsg").style.color = ok ? "" : "var(--bad)"; $("wsSkillMsg").textContent = text; }
+$("wsCard").addEventListener("click", async ev => {
+  const req = ev.target.dataset.skillRequest, ap = ev.target.dataset.skillApprove, cn = ev.target.dataset.skillCancel;
+  if (!req && !ap && !cn) return;
+  ev.target.disabled = true;
+  const r = await post("/api/skills/" + (req ? "request" : ap ? "approve" : "cancel"), req ? {skill: req} : {receipt: ap || cn});
+  const rc = (r.body && r.body.receipt) || {};
+  wsMsg(r.ok && rc.state !== "DENIED" && rc.state !== "FAILED", r.ok ? `Receipt ${rc.receipt_id}: ${rc.state}${rc.error ? " — " + rc.error : ""}` : "Refused (HTTP " + r.status + "): " + (r.body.error || ""));
+  wsSig = ""; refresh();
+});
+$("wsView").onclick = async () => {
+  const r = await post("/api/workspace/file", {path: $("wsFile").value});
+  if (!r.ok) { $("wsFileHead").textContent = "Refused: " + (r.body.error || r.status); $("wsFileText").hidden = $("wsAsk").hidden = true; return; }
+  const f = r.body;
+  $("wsFileHead").innerHTML = `<b>${esc(f.repo)}@${esc(f.branch)}:${esc(f.path)}</b> · local blob <code>${esc(f.local_blob_sha.slice(0, 12))}</code>${f.github_sha ? ` · GitHub blob <code>${esc(f.github_sha.slice(0, 12))}</code> ${stTag(f.matches_github ? "MET" : "NOT MET")}` : ""} · read-only · ${esc(f.source_note)}${f.truncated ? " · TRUNCATED" : ""}`;
+  $("wsFileText").textContent = f.text; $("wsFileText").hidden = false; $("wsAsk").hidden = false;
+};
+$("wsAsk").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("wsQ").value.trim(); if (!text) return;
+  const r = await post("/api/workspace/ask", {path: $("wsFile").value, text});
+  wsMsg(r.ok, r.ok ? "Asked TASS with " + $("wsFile").value + " as read-only context (" + r.body.receipt + "). His answer appears in Talk." : "Not sent: " + (r.body.error || r.status));
+  if (r.ok) $("wsQ").value = "";
+};
 const post = (path, body) => fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-TASS-Token": TOKEN}, body: JSON.stringify(body)})
   .then(async r => ({ok: r.ok, status: r.status, body: await r.json().catch(() => ({}))}));
 function alertLine(t) { $("pmsg").textContent = t; }
@@ -260,6 +334,11 @@ $("talkFind").onclick = async () => {
     refresh();
   } catch (err) { $("talkLessonNotice").textContent = "Lesson search did not reach Core: " + String(err); }
   finally { b.disabled = false; }
+};
+$("talkNew").onclick = async () => {
+  const r = await post("/api/conversation/new", {});
+  $("talkLessonNotice").textContent = r.ok ? "New conversation: TASS's chat history was cleared; his document, journal, lessons and receipts are kept." : "Not cleared: " + (r.body.error || r.status);
+  refresh();
 };
 $("talkTest").onclick = async () => {
   const b = $("talkTest"); b.disabled = true;

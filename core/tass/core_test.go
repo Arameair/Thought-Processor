@@ -205,6 +205,7 @@ type fakeEngine struct {
 	unlockedPrediction bool
 	unreadableProposal bool
 	conflicts          int // 409 answers to duplicate job IDs
+	replyExtra         string
 }
 
 func newFakeEngine() *fakeEngine {
@@ -290,6 +291,9 @@ func newFakeEngine() *fakeEngine {
 		e.reqs = append(e.reqs, in)
 		id, last := in["cycle_id"].(string), in["request"].(string)
 		reply := "TEST FIXTURE: heard " + last
+		if e.replyExtra != "" {
+			reply += " " + e.replyExtra
+		}
 		prop := map[string]any{"reply": reply, "action": "NONE", "why": "fixture", "format": "READ",
 			"prediction": map[string]any{"state": "NOT_PREDICTED"}}
 		if strings.Contains(last, "remember") {
