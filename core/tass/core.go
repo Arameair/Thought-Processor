@@ -66,6 +66,8 @@ type Config struct {
 	Branch      string // e.g. live
 	DocPath     string // the entity's document in that repo (default tass.md)
 	LessonsDir  string // lessons folder in that repo (default lessons)
+	RelayLabel string // pilot must match tass-core
+	RelayAuthors []string // approved GitHub authors of ChatGPT: messages
 }
 
 // grantFile is what GrantFile holds.
@@ -89,11 +91,16 @@ type state struct {
 	SeenComments map[int64]bool `json:"seen_comments"`
 	Outbox       []outgoing     `json:"outbox"`
 	ConflictKey  string         `json:"conflict_key"`
+	RelaySince time.Time `json:"relay_since,omitempty"`
+	RelaySeen map[int64]RelayReceipt `json:"relay_seen,omitempty"`
 }
 
 type outgoing struct {
-	Issue int    `json:"issue"`
-	Body  string `json:"body"`
+    Issue int `json:"issue"`
+    Body string `json:"body"`
+    SourceCommentID int64 `json:"source_comment_id,omitempty"`
+    CycleID string `json:"cycle_id,omitempty"`
+    IdentityChecks []string `json:"identity_checks,omitempty"`
 }
 
 // Event is something to show on the local page.
@@ -108,6 +115,8 @@ type Incoming struct {
 	Text    string
 	From    string // "local" or "github"
 	Issue   int
+	CommentID int64 // actual GitHub comment ID
+	Author string // authenticated GitHub login
 	Receipt string
 	// FileContext: one read-only, owner-selected workspace file for this message only (#31).
 	FileContext string
@@ -144,6 +153,7 @@ type Core struct {
 	replies chan outgoing
 
 	syncHold string // why GitHub sync is on hold (app mode), e.g. Identity LOCKED
+	relayHold string // relay hold status protected by mu
 
 	manualMu sync.Mutex // serialize owner-requested lesson starts
 	learnMu  sync.Mutex // lessons loop and settings (learn.go)
@@ -181,6 +191,7 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 	if c.st.SeenComments == nil {
 		c.st.SeenComments = map[int64]bool{}
 	}
+	if c.st.RelaySeen == nil { c.st.RelaySeen = map[int64]RelayReceipt{} }
 	if old := c.file("identity-grant.json"); fileExists(old) && !fileExists(c.file(GrantFile)) {
 		_ = os.MkdirAll(filepath.Dir(c.file(GrantFile)), 0o700) // moved into its own folder (2026-11-04)
 		_ = os.Rename(old, c.file(GrantFile))
@@ -397,6 +408,7 @@ func (c *Core) SyncOnce() time.Duration {
 			steps = append(steps, "lessons")
 		}
 		c.advanceLessons()
+		if err == nil { err = c.relayOnce() }
 	} else {
 		err = c.syncPolicy()
 		if err == nil {
@@ -1257,9 +1269,10 @@ func (c *Core) Health(version string) Health {
 	if c.chatOnly() { // before c.mu: chatOnly takes learnMu, and learnMu is never taken inside c.mu
 		mode = "CHAT_ONLY"
 	}
+	relayEnabledForStatus := c.relayOn()
 	c.mu.Lock()
 	h := Health{Version: version, EngineUp: es.Reachable, PolicyValid: valid, GitHubOnline: c.online,
-		Messages: c.cfg.Messages, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode}
+		Messages: c.cfg.Messages || relayEnabledForStatus, LastSync: c.lastSync, Pending: c.pending, ActionMode: mode
 	busy := c.busy
 	c.mu.Unlock()
 	if es.LastPulse != nil {
@@ -1317,6 +1330,10 @@ type Status struct {
 	Skills       *SkillsStatus   `json:"skills,omitempty"`
 	Workspace    *WorkspaceInfo   `json:"workspace,omitempty"`
 	SyncHold     string             `json:"sync_hold,omitempty"`
+	RelayHold string `json:"relay_hold,omitempty"`
+	RelayIssue int `json:"relay_issue,omitempty"`
+	RelayAuthors []string `json:"relay_authors,omitempty"`
+	RelayLabel string `json:"relay_label,omitempty"`
 	Pending      int                `json:"replies_waiting"`
 	TassMD       string             `json:"tass_md"`
 	Events       []Event            `json:"events"`
@@ -1365,6 +1382,7 @@ func (c *Core) Status() Status {
 		w := c.Workspace() // takes fileMu and learnMu: before c.mu
 		ws = &w
 	}
+	relayEnabledForStatus := c.relayOn()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ev := c.events
@@ -1376,7 +1394,7 @@ func (c *Core) Status() Status {
 		cys[len(c.cycles)-1-i] = c.cycles[i]
 	}
 	out := Status{GitHubOnline: c.online, LastSync: c.lastSync, NextSync: c.nextSync, SyncProblem: c.syncErr,
-		Messages: c.cfg.Messages, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
+		Messages: c.cfg.Messages || relayEnabledForStatus, Policy: pol, PolicyValid: valid, Busy: c.busy, Engine: es, Cycles: cys,
 		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...), Pulse: pulse}
 	if ids != nil {
 		out.Identity = ids
@@ -1384,6 +1402,7 @@ func (c *Core) Status() Status {
 		out.Skills = skills
 		out.Workspace = ws
 		out.SyncHold = c.syncHold // c.mu is held
+		out.RelayIssue, out.RelayLabel, out.RelayAuthors, out.RelayHold = 24, c.relayLabel(), c.relayAuthors(), c.relayHold
 	}
 	return out
 }
