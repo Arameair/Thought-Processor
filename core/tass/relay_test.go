@@ -7,7 +7,6 @@ import (
     "strings"
     "strconv"
     "testing"
-    "time"
 
     "github.com/Arameair/Thought-Processor/core/engine"
     "github.com/Arameair/Thought-Processor/core/github"
