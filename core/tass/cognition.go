@@ -122,7 +122,14 @@ func (c *Core) cognitionAccess()(cognitionScope,error){
     status,err:=c.engine.CognitionStatus()
     if err!=nil {return out,ErrCognitionUnavailable}
     out.engineCommit=status.Config.Commit
-    if out.engineCommit=="" {out.engineCommit="NOT RECORDED"}
+    // Validate version provenance; never export an arbitrary server-controlled string.
+    if len(out.engineCommit)!=40 {
+        out.engineCommit="NOT RECORDED"
+    } else {
+        for _,r:=range out.engineCommit {
+            if !(r>='0'&&r<='9'||r>='a'&&r<='f') {out.engineCommit="NOT RECORDED";break}
+        }
+    }
     for _,entity:=range status.Entities {
         if strings.EqualFold(entity.Card.DisplayName,out.name)&&entity.Card.EntityType=="ai_companion" {
             if out.engineID!="" {return out,ErrCognitionUnavailable} // ambiguous engine identity: fail closed
@@ -293,6 +300,40 @@ func (c *Core) CognitionThought(id string)(CognitionThought,error){
     sort.Strings(out.RelatedCycleIDs)
     return out,nil
 }
+// Defense in depth: even if an Engine response contains an unexpected raw
+// field/value, Core exports ONLY known stages, statuses and reference-shaped IDs.
+func cognitionRef(s string) string {
+    if !engine.CognitionID.MatchString(s){return ""}
+    return s
+}
+func cognitionOneOf(s string,allowed ...string) string {
+    for _,a:=range allowed {if s==a{return s}}
+    return "NOT RECORDED"
+}
+func cognitionSafeStep(x engine.RecordedStep) engine.RecordedStep {
+    var out engine.RecordedStep
+    out.Offset=x.Offset
+    if out.Offset<0 {out.Offset=0}
+    out.At=x.At
+    out.Source="cycles.jsonl"
+    out.Stage=cognitionOneOf(x.Stage,"received","spark","proposal","outcome","evaluation","problem")
+    out.Status=cognitionOneOf(x.Status,"OBSERVED","APP-REPORTED","PROPOSED")
+    out.EventID=cognitionRef(x.EventID)
+    out.TraceID=cognitionRef(x.TraceID)
+    out.ThoughtID=cognitionRef(x.ThoughtID)
+    out.EntityID=cognitionRef(x.EntityID)
+    out.ModelRequestID=cognitionRef(x.ModelRequestID)
+    out.Action=cognitionOneOf(x.Action,"NONE","tass_sections","tass_words")
+    out.PredictionState=cognitionOneOf(x.PredictionState,"LOCKED","NOT_PREDICTED")
+    out.OutcomeStatus=cognitionOneOf(x.OutcomeStatus,"NO_ACTION","NOT_AUTHORIZED","EXECUTED","FAILED")
+    out.Forecast=cognitionOneOf(x.Forecast,"NO_ACTION","PREDICTION_CORRECT","PREDICTION_INCORRECT","UNSCORABLE")
+    out.Goal=cognitionOneOf(x.Goal,"GOAL_MET","GOAL_UNMET","GOAL_UNKNOWN")
+    out.Duplicate=x.Duplicate
+    out.OutOfOrder=x.OutOfOrder
+    // Note intentionally not projected; it could hold raw private explanation.
+    return out
+}
+
 func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
     scope,err:=c.cognitionAccess()
     if err!=nil{return CognitionTimeline{},err}
@@ -303,13 +344,21 @@ func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
     if err!=nil{return CognitionTimeline{},ErrCognitionUnavailable}
     out:=CognitionTimeline{CycleID:id,Source:"Thought Engine: cycles.jsonl",
         EngineCommit:scope.engineCommit,ObservedAt:c.now().UTC(),
-        State:cy.State,Steps:journal.Steps,Missing:journal.Missing,Truncated:journal.Truncated,
+        State:cy.State,Steps:[]engine.RecordedStep{},Missing:[]string{},Truncated:journal.Truncated,
         Partial:journal.Partial,InvalidLines:journal.InvalidLines,Note:journal.Note,LinkStatus:"UNLINKED"}
     if cy.Spark.ThoughtID!=""&&cy.EntityID!=""&&cy.EntityID==scope.engineID {
         detail,err:=c.engine.CognitionThought(scope.engineID,cy.Spark.ThoughtID)
         if err==nil&&detail.Thought.EntityID==scope.engineID&&detail.Thought.ThoughtID==cy.Spark.ThoughtID {
             out.ThoughtID=cy.Spark.ThoughtID
             out.LinkStatus="VERIFIED-LINK"
+        }
+    }
+    for _,step:=range journal.Steps {
+        out.Steps=append(out.Steps,cognitionSafeStep(step))
+    }
+    for _,stage:=range journal.Missing {
+        if stage=="received"||stage=="spark"||stage=="proposal"||stage=="outcome"||stage=="evaluation" {
+            out.Missing=append(out.Missing,stage)
         }
     }
     if len(out.Steps)==0&&out.Note==""{out.Note="Historical journal steps NOT RECORDED"}
@@ -338,6 +387,7 @@ func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error
     if format!="json"&&format!="md" {return nil,"",fmt.Errorf("unsupported Cognition export format")}
     v,err:=c.CognitionTimeline(id)
     if err!=nil{return nil,"",err}
+    if len(coreVersion)>64 {coreVersion="NOT RECORDED"}
     report:=CognitionReport{Format:"Cognition sanitized v1",CoreVersion:coreVersion,
         EngineCommit:v.EngineCommit,CycleID:v.CycleID,ThoughtID:v.ThoughtID,
         LinkStatus:v.LinkStatus,Source:v.Source,State:v.State,Steps:v.Steps,
