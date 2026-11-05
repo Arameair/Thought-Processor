@@ -67,3 +67,19 @@ func TestTalkLessonControlsAndRelayStatusAreHonest(t *testing.T) {
         t.Fatal("pulse must not overwrite the Talk lesson buttons")
     }
 }
+
+// Regression for the owner's live run: expanding "His full answer" must
+// survive the periodic status refresh that rebuilds the Learning card.
+func TestRefreshPreservesExpandedLessonAnswer(t *testing.T) {
+    b, err := os.ReadFile("page.html")
+    if err != nil { t.Fatal(err) }
+    page := string(b)
+    for _, part := range []string{
+        `querySelectorAll("details[data-lesson-path][open]")`,
+        `d => d.dataset.lessonPath`,
+        `data-lesson-path="${esc(l.path)}"`,
+        `openAnswers.has(l.path) ? "open" : ""`,
+    } {
+        if !strings.Contains(page, part) { t.Errorf("Learning refresh no longer preserves opened answer state: %s", part) }
+    }
+}
