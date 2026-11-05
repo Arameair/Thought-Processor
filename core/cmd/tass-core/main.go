@@ -60,6 +60,7 @@ func main() {
 	once := flag.Bool("once", false, "one GitHub sync, print the result, exit")
 	healthcheck := flag.Bool("healthcheck", false, "ask a running tass-core for /api/health; exit 0 if it answers (container healthcheck)")
 	flag.Parse()
+	tass.BuildVersion = version
 	log.SetFlags(log.Ltime)
 	if *healthcheck {
 		addr := strings.Replace(env("TASS_LISTEN", "127.0.0.1:8795"), "0.0.0.0", "127.0.0.1", 1)
@@ -338,6 +339,76 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		}
 		reply(w, http.StatusOK, map[string]any{"learning": core.Learning(), "receipt": receipt})
 	})
+	// Development workspace (#31): read-only view of an allowlisted project file, and one
+	// question to TASS with that file as context.
+	mux.HandleFunc("POST /api/workspace/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+			Text string `json:"text"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		switch r.PathValue("action") {
+		case "file":
+			f, err := core.ReadWorkspaceFile(body.Path)
+			if err != nil {
+				reply(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			reply(w, http.StatusOK, f)
+		case "ask":
+			id, err := core.SayAboutFile(body.Text, body.Path)
+			if errors.Is(err, tass.ErrBusy) {
+				reply(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+				return
+			}
+			if err != nil {
+				reply(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			reply(w, http.StatusAccepted, map[string]string{"receipt": id})
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "file or ask"})
+		}
+	})
+	mux.HandleFunc("POST /api/conversation/new", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		core.NewConversation()
+		reply(w, http.StatusOK, map[string]string{"ok": "new conversation"})
+	})
+	// @ skills (#72): request from Talk; approve/cancel ONLY from this local page (page token).
+	mux.HandleFunc("POST /api/skills/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Receipt string `json:"receipt"`
+			Skill   string `json:"skill"`
+			Text    string `json:"text"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		var rec tass.SkillReceipt
+		var err error
+		switch r.PathValue("action") {
+		case "request":
+			rec, err = core.RequestSkill(body.Skill, firstNonEmptyStr(body.Text, "owner pressed Request on the Skills panel"), "owner (Skills panel)", "you chose it on the Skills panel")
+		case "approve":
+			rec, err = core.ApproveSkill(body.Receipt)
+		case "cancel":
+			rec, err = core.CancelSkill(body.Receipt)
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "request, approve or cancel"})
+			return
+		}
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]any{"error": err.Error(), "receipt": rec})
+			return
+		}
+		reply(w, http.StatusOK, map[string]any{"receipt": rec, "skills": core.Skills(true)})
+	})
 	mux.HandleFunc("POST /api/pulse", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Action string `json:"action"`
@@ -353,4 +424,13 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		reply(w, http.StatusOK, out)
 	})
 	return mux
+}
+
+func firstNonEmptyStr(s ...string) string {
+	for _, x := range s {
+		if strings.TrimSpace(x) != "" {
+			return x
+		}
+	}
+	return ""
 }

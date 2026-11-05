@@ -109,6 +109,9 @@ type Incoming struct {
 	From    string // "local" or "github"
 	Issue   int
 	Receipt string
+	// FileContext: one read-only, owner-selected workspace file for this message only (#31).
+	FileContext string
+	FilePath    string
 }
 
 type Core struct {
@@ -146,6 +149,10 @@ type Core struct {
 	learnMu  sync.Mutex // lessons loop and settings (learn.go)
 	learn    learnState
 	settings Settings
+
+	skillMu  sync.Mutex // skills.json receipts (skills.go)
+	skillRun sync.Mutex // one skill execution at a time
+	skills   skillState
 }
 
 func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
@@ -165,6 +172,7 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 		}
 	}
 	c.loadLearning()
+	c.loadSkills()
 	if c.st.SeenIssues == nil {
 		c.st.SeenIssues = map[int]bool{}
 	}
@@ -931,6 +939,9 @@ func (c *Core) context(online bool) string {
 	if l := c.learnedForContext(); l != "" {
 		b.WriteString("\nLESSONS YOU HAVE LEARNED (your owner approved them; use them):\n" + l)
 	}
+	if c.cfg.IdentitySvc != nil {
+		b.WriteString(c.skillsForContext())
+	}
 	if mem := c.recentMemories(20); len(mem) > 0 {
 		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
 		for _, m := range mem {
@@ -969,6 +980,11 @@ func (c *Core) Answer(m Incoming) {
 	// Explicit local-owner lesson requests call the real, Identity-checked
 	// discovery/study controller, not a model-generated promise.
 	if c.handleLessonChat(m) {
+		return
+	}
+
+	// "@skill" from the owner's local Talk: a supervised skill request (never a run).
+	if c.handleSkillChat(m) {
 		return
 	}
 
@@ -1011,6 +1027,10 @@ func (c *Core) Answer(m Incoming) {
 	}()
 
 	id := engine.NewRequestID()
+	if m.From == "local" && m.FileContext != "" {
+		lessonContext += m.FileContext
+		c.event("sync", "Gave TASS one read-only file as context for this message: "+m.FilePath+". No action can change it.")
+	}
 	actions := Actions
 	if lessonContext != "" || c.chatOnly() {
 		// Lesson retrieval and chat-only mode offer no executable tool, not even a read-entity tool.
@@ -1106,6 +1126,9 @@ func (c *Core) Answer(m Incoming) {
 		text = "(TASS gave no reply text.)"
 	}
 	c.event("tass", text)
+	if m.From == "local" && c.cfg.IdentitySvc != nil {
+		c.proposeSkillFromReply(text, id) // a supervised request only; the owner approves on the page
+	}
 	rec["reply"], rec["action"], rec["prediction"] = text, prop.Action, prop.Prediction.Text
 	if cy.Evaluation != nil {
 		rec["forecast"], rec["goal"] = cy.Evaluation.Forecast, cy.Evaluation.Goal
@@ -1286,6 +1309,8 @@ type Status struct {
 	Identity     *identitysvc.State `json:"identity,omitempty"`
 	Pulse        map[string]any     `json:"pulse,omitempty"`
 	Learning     *LearningStatus    `json:"learning,omitempty"`
+	Skills       *SkillsStatus   `json:"skills,omitempty"`
+	Workspace    *WorkspaceInfo   `json:"workspace,omitempty"`
 	SyncHold     string             `json:"sync_hold,omitempty"`
 	Pending      int                `json:"replies_waiting"`
 	TassMD       string             `json:"tass_md"`
@@ -1327,6 +1352,14 @@ func (c *Core) Status() Status {
 		l := c.Learning() // takes learnMu: before c.mu, never inside it
 		learning = &l
 	}
+	var skills *SkillsStatus
+	var ws *WorkspaceInfo
+	if c.cfg.IdentitySvc != nil {
+		sk := c.Skills(true) // takes skillMu: before c.mu, never inside it
+		skills = &sk
+		w := c.Workspace() // takes fileMu and learnMu: before c.mu
+		ws = &w
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ev := c.events
@@ -1343,9 +1376,22 @@ func (c *Core) Status() Status {
 	if ids != nil {
 		out.Identity = ids
 		out.Learning = learning
+		out.Skills = skills
+		out.Workspace = ws
 		out.SyncHold = c.syncHold // c.mu is held
 	}
 	return out
+}
+
+// NewConversation starts a fresh conversation: TASS's short-term chat history is cleared.
+// His document, memory journal, approved lessons and skill receipts are kept, so a fresh
+// conversation shows what he retained rather than what is still in the chat window.
+func (c *Core) NewConversation() {
+	c.mu.Lock()
+	n := len(c.history)
+	c.history = nil
+	c.mu.Unlock()
+	c.event("sync", fmt.Sprintf("New conversation: cleared %d chat messages from TASS's short-term history. His document, memory journal, approved lessons and skill receipts are kept.", n))
 }
 
 func starterDoc(name string) string {
