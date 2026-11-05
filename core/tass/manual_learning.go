@@ -17,11 +17,16 @@ import (
 // numbers rather than assuming the checks are contiguous.
 func studyRequest(l lessons.Lesson) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Study this lesson: %q. Read every step, then answer every check in your REPLY. Use exactly these numbered lines, with your own short answers:\n", l.Title)
+	fmt.Fprintf(&b, "Study this lesson: %q. Read every step, then answer every check.\n", l.Title)
+	b.WriteString("Write your whole answer in exactly this format, each label at the start of its own line, " +
+		"with your own short answers in place of the <...> parts:\n\n")
+	fmt.Fprintf(&b, "REPLY: I studied %q.\n", l.Title)
 	for _, check := range l.Checks() {
 		fmt.Fprintf(&b, "ANSWER %d: <your short answer>\n", check.N)
 	}
-	b.WriteString("Then add REMEMBER: one line saying what you can do now. Use ACTION: NONE. Do not claim you ran code or already received owner approval.")
+	b.WriteString("ACTION: NONE\nPREDICTION: NONE\nWHY: I am studying a lesson.\n" +
+		"REMEMBER: <one line saying what you can do now>\n\n" +
+		"Do not claim you ran code or already received owner approval.")
 	return b.String()
 }
 
@@ -56,7 +61,11 @@ func (c *Core) DiscoverLessons() error {
 // no executable actions; it only answers checks. One explicit pulse step runs
 // the queued study job, after which the existing sync loop collects/grading.
 // PASSED stays unapproved until the owner clicks Approve.
-func (c *Core) StudyLesson(p string) (string, error) {
+func (c *Core) StudyLesson(p string) (string, error) { return c.studyLesson(p, 0) }
+
+// studyLesson: issue > 0 means the study was asked for on that GitHub issue (relay);
+// the graded result is posted back there. Approval is never possible from GitHub.
+func (c *Core) studyLesson(p string, issue int) (string, error) {
 	if c.cfg.IdentitySvc == nil || c.cfg.ChatOnly {
 		return "", errors.New("lesson study unavailable in forced safety mode")
 	}
@@ -135,7 +144,7 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	c.learnMu.Lock()
 	cur := c.learn.Lessons[p]
 	if cur != nil {
-		cur.Status, cur.JobID, cur.Attempts = "QUEUED", id, snapshot.Attempts+1
+		cur.Status, cur.JobID, cur.Attempts, cur.AskedOn = "QUEUED", id, snapshot.Attempts+1, issue
 		c.saveLearningLocked()
 	}
 	c.learnMu.Unlock()

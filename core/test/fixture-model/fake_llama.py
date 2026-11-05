@@ -28,6 +28,9 @@ def study(allm):
         else:
             a = next((v for k, v in TABLE if k in ql), "I don't know")
         lines.append(f"ANSWER {n}: {a}")
+    if os.environ.get("FIXTURE_LESSON_STYLE") == "no-reply":
+        # Issue #12 shape seen from real Nemotron: numbered answers and REMEMBER, no REPLY:/ACTION: labels.
+        return "\n".join(lines) + f"\nREMEMBER: (TEST FIXTURE) I can explain {title}"
     return ("REPLY: (TEST FIXTURE) I studied it.\n" + "\n".join(lines) +
             f"\nACTION: NONE\nPREDICTION: NONE\nWHY: studying\nREMEMBER: (TEST FIXTURE) I can explain {title}")
 

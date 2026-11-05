@@ -108,8 +108,24 @@ Check: Last?
 Answer: gamma
 `)
 	s := studyRequest(l)
-	for _, want := range []string{"ANSWER 1: <your short answer>", "ANSWER 3: <your short answer>", "Use ACTION: NONE"} {
+	for _, want := range []string{"REPLY: I studied", "ANSWER 1: <your short answer>", "ANSWER 3: <your short answer>",
+		"ACTION: NONE", "PREDICTION: NONE", "REMEMBER: <one line"} {
 		if !strings.Contains(s, want) { t.Errorf("missing study instruction %q in %q", want, s) }
 	}
 	if strings.Contains(s, "ANSWER 2:") { t.Fatalf("prompt invented an unchecked answer: %q", s) }
+}
+
+// Issue #12: the Engine reads REPLY:/ACTION:/PREDICTION:/WHY:/REMEMBER:. The lesson
+// prompt must show the answers INSIDE that format (REPLY first), and the format the
+// Core grades must survive it.
+func TestStudyRequestShowsTheEngineFormatAndAnswersStayGradeable(t *testing.T) {
+	l := lessons.Parse("# P\n## Step 1: a\nTeach: t\nCheck: q1\nAnswer: 20\n## Step 2: b\nTeach: t\nCheck: q2\nAnswer: blocked\n")
+	s := studyRequest(l)
+	if strings.Index(s, "REPLY:") > strings.Index(s, "ANSWER 1:") {
+		t.Fatalf("REPLY: must come before the ANSWER lines: %q", s)
+	}
+	reply := "I studied \"P\".\nANSWER 1: 20\nANSWER 2: I am blocked"
+	if _, right, total := lessons.Grade(l, reply); right != 2 || total != 2 {
+		t.Fatalf("graded %d/%d", right, total)
+	}
 }

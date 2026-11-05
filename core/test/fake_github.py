@@ -9,6 +9,11 @@ from urllib.parse import urlparse, parse_qs
 
 PORT, REPO, BRANCH, SEED = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 files, lock, log = {}, threading.Lock(), []
+# Issues/comments for the conversation relay. POST /fixture/issue {"number","title","user","labels"},
+# POST /fixture/comment {"issue","user","body"}; GET /fixture/comments shows everything posted.
+import time as _time
+issues, comments, next_id = [], [], [1000]
+def _now(): return _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
 for root, _, names in os.walk(SEED):
     for n in names:
         p = os.path.relpath(os.path.join(root, n), SEED).replace(os.sep, "/")
@@ -29,6 +34,7 @@ class H(BaseHTTPRequestHandler):
             log.append("GET " + u.path)
             if u.path == "/fixture/log": return self.send(200, {"requests": log[-200:], "count": len(log)})
             if u.path == "/fixture/file": return self.send(200, {"text": files.get(q["path"][0], "")})
+            if u.path == "/fixture/comments": return self.send(200, comments)
             pre = f"/repos/{REPO}/"
             if not u.path.startswith(pre): return self.send(404, {"message": "Not Found"})
             rest = u.path[len(pre):]
@@ -37,6 +43,11 @@ class H(BaseHTTPRequestHandler):
                 etag = '"' + sha("".join(x["path"] + x["sha"] for x in tree)) + '"'
                 if self.headers.get("If-None-Match") == etag: log.append("  -> 304"); return self.send(304)
                 return self.send(200, {"tree": tree, "truncated": False}, etag)
+            if rest == "issues":
+                lab = q.get("labels", [""])[0]
+                return self.send(200, [i for i in issues if not lab or lab in [l["name"] for l in i["labels"]]])
+            if rest == "issues/comments":
+                return self.send(200, comments)
             if rest.startswith("contents/"):
                 p = rest[len("contents/"):]
                 if p not in files: return self.send(404, {"message": "Not Found"})
@@ -58,6 +69,18 @@ class H(BaseHTTPRequestHandler):
         with lock:
             if self.path == "/fixture/put":
                 files[b["path"]] = b["text"]; log.append("FIXTURE put " + b["path"]); return self.send(200, {"ok": True})
+            if self.path == "/fixture/issue":
+                issues.append({"number": b["number"], "title": b["title"], "body": b.get("body", ""), "user": {"login": b["user"]},
+                               "labels": [{"name": n} for n in b.get("labels", [])]}); return self.send(200, {"ok": True})
+            pre = f"/repos/{REPO}/issues/"
+            if self.path == "/fixture/comment" or (self.path.startswith(pre) and self.path.endswith("/comments")):
+                n = b["issue"] if self.path == "/fixture/comment" else int(self.path[len(pre):].split("/")[0])
+                user = b.get("user", "Arameair")
+                next_id[0] += 1
+                comments.append({"id": next_id[0], "body": b["body"], "user": {"login": user}, "created_at": _now(),
+                                 "issue_url": f"https://api.github.com/repos/{REPO}/issues/{n}"})
+                log.append(f"POST comment #{n} by {user}")
+                return self.send(201, {"id": next_id[0]})
         self.send(404, {})
 
 ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

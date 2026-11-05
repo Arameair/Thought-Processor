@@ -115,6 +115,13 @@ func main() {
 		cfg.Branch = env("TASS_BRANCH", "live")
 		cfg.DocPath = env("TASS_DOC", "tass.md")
 		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+		// GitHub conversation relay: off until the owner turns "Talk on GitHub" on in the page.
+		cfg.RelayLabel = env("TASS_RELAY_LABEL", "tass-core")
+		for _, a := range strings.Split(os.Getenv("TASS_RELAY_AUTHORS"), ",") {
+			if a = strings.TrimSpace(a); a != "" {
+				cfg.RelayAuthors = append(cfg.RelayAuthors, a)
+			}
+		}
 		cfg.GitHub = cfg.Repo != ""
 		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
 	}

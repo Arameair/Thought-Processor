@@ -83,3 +83,19 @@ func TestRefreshPreservesExpandedLessonAnswer(t *testing.T) {
         if !strings.Contains(page, part) { t.Errorf("Learning refresh no longer preserves opened answer state: %s", part) }
     }
 }
+
+// The relay switch must be saved together with the other switches (saving any switch
+// posts all of them), and a failed job must not look like 0/N wrong answers.
+func TestRelaySwitchIsSavedAndFailedJobsAreNotShownAsZero(t *testing.T) {
+	b, err := os.ReadFile("page.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := string(b)
+	for _, want := range []string{`id="setRelay"`, `relay: $("setRelay").checked`, `$("setRelay").onchange = saveSettings`,
+		"GitHub issue relay ON in this Go Core", "not graded (the study job failed)"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("page is missing %q", want)
+		}
+	}
+}
