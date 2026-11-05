@@ -5,7 +5,7 @@ Date: 2026-11-05. Engineering task: Thought-Processor #82, evidence #80, release
 ## Immutable source and service pins
 
 - Core feature branch: `experiment/cognition-go-first-gpt6-20261105`, derived from unified integration `913a4ff687054fb8e2dddf076ccaac992398394a` and owner-running Core `60661aa807cac4d93ebc461e1447f3c1e6ad9473`.
-- Engine candidate branch: `Arameair/Thought-engine:experiment/cognition-journal-projection-20261105`, pinned `cab101c3d1d62953d99dd929e4d1b11ad55eb750` (draft PR #15). This is **not currently on the owner's computer**; it extends installed `21b3d502775b3ed065ab445b88f51909500770b3`.
+- Engine candidate branch: `Arameair/Thought-engine:experiment/cognition-journal-projection-20261105`, pinned `d69d3917d1601d806d4b2ba2254693e1adb92b6b` (draft PR #15). This is **not currently on the owner's computer**; it extends installed `21b3d502775b3ed065ab445b88f51909500770b3`.
 - Identity pin: `87dd9243c721fd11701575033d95d3dcf286f765` (unchanged). No new permission, no schema migration or standalone service.
 - Only reviewed Core candidate should ever be installed through the existing updater **after** #79 verified recovery approval. Until then, installed Core/Engine/Identity are unchanged.
 - Images/digests on owner's machine: NOT INSPECTED. Go CI tests use isolated fixtures and a Docker build but are not a running owner image manifest.
