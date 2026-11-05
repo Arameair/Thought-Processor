@@ -82,7 +82,7 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	c.learnMu.Lock()
 	var active bool
 	for _, item := range c.learn.Lessons {
-		if item.Status == "QUEUED" {
+		if item.Status == "QUEUED" || item.RetestPending != nil {
 			active = true
 			break
 		}

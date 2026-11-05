@@ -86,6 +86,7 @@
       <button id="talkNew" title="Clears only the chat history TASS sees; his document, journal, lessons and receipts stay">New conversation</button>
       <span id="talkLessonNotice" class="dim" aria-live="polite">Autonomous OFF: test one lesson, then review before approval.</span>
     </div>
+    <label class="switch"><input type="checkbox" id="setRelay"> <b>Talk on GitHub</b> <span class="dim">(issue #24 only, ChatGPT: comments from an allowed GitHub account; never executes tools or lesson commands)</span></label>
     <div id="relayState" class="dim" role="status" aria-live="polite">GitHub issue relay: checking local configuration…</div>
     <div id="log"></div>
     <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Try: how many sections does your tass.md have?"></textarea><button>Send</button></form>
@@ -177,7 +178,10 @@ async function refresh() {
   $("gh").title = st.sync_problem || "";
   // This flag reports THIS Go Core's issue-message reader, not any older Identity Liaison.
   $("relayState").textContent = st.github_messages
-    ? "GitHub issue relay configured in this Core; model delivery and publisher identity still require correlated receipts."
+    ? "GitHub issue relay ON (pilot): Arameair/TASS #24 / " + (st.relay_label || "tass-core") +
+      " / allowed: " + (st.relay_authors || []).join(", ") +
+      ". " + (st.relay_hold ? "ON HOLD: " + st.relay_hold :
+          "Replies require a real GitHub output ID, Identity authorization and Engine cycle evidence.")
     : "GitHub issue relay OFF in this Go Core. An older Liaison may post to GitHub; its reply does not prove this Core received the message.";
   $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
   $("policy").innerHTML = `${st.policy_valid_now ? '<span class="tag good">valid now</span>' : '<span class="tag bad">not valid now</span>'} ${esc(st.policy)}`;
@@ -210,6 +214,7 @@ async function refresh() {
     $("btnPulse").textContent = "Pulse: " + (pon ? "ON" : "off");
     $("btnPulse").className = "topbtn " + (pon ? "on" : "off");
     if (document.activeElement !== $("setLearn")) $("setLearn").checked = !!L.settings.learn;
+    if (document.activeElement !== $("setRelay")) $("setRelay").checked = !!L.settings.relay;
     $("ghinfo").innerHTML = L.repo
       ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
       : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
@@ -378,13 +383,13 @@ $("tf").onsubmit = async ev => {
   refresh();
 };
 async function saveSettings() {
-  const r = await post("/api/settings", {autonomous: $("setAuto").checked, pulse: $("setPulse").checked, learn: $("setLearn").checked});
+  const r = await post("/api/settings", {autonomous: $("setAuto").checked, pulse: $("setPulse").checked, learn: $("setLearn").checked, relay: $("setRelay").checked});
   alertLine(r.ok ? "Settings saved." : (r.body.error || "not saved")); refresh();
 }
 $("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
 $("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
 $("btnPulse").onclick = () => { $("setPulse").checked = !CUR.pulse; saveSettings(); };
-$("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings;
+$("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings; $("setRelay").onchange = saveSettings;
 function lessonResult(ok, text) { $("lessonMessage").style.color = ok ? "" : "var(--bad)"; $("lessonMessage").textContent = text; }
 $("findLessons").onclick = async () => {
   const b = $("findLessons"); b.disabled = true; lessonResult(true, "Looking for lessons on GitHub…");

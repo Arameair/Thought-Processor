@@ -116,6 +116,12 @@ func main() {
 		cfg.Branch = env("TASS_BRANCH", "live")
 		cfg.DocPath = env("TASS_DOC", "tass.md")
 		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+        // Bounded Github mailbox pilot; independently opt-in via local settings.
+        cfg.RelayLabel = "tass-core"
+        for _, login := range strings.Split(os.Getenv("TASS_RELAY_AUTHORS"), ",") {
+            login = strings.TrimSpace(login)
+            if login != "" { cfg.RelayAuthors = append(cfg.RelayAuthors, login) }
+        }
 		cfg.GitHub = cfg.Repo != ""
 		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
 	}
@@ -412,7 +418,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 	})
 	mux.HandleFunc("POST /api/lessons/{action}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Path string `json:"path"`
+			Path      string                `json:"path"`
+			Questions []tass.RetestQuestion `json:"questions"`
 		}
 		if !pagePost(w, r, &body) {
 			return
@@ -420,6 +427,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		var err error
 		var receipt string
 		switch r.PathValue("action") {
+		case "retest": // fresh-task retest of a LEARNED lesson; never changes its status
+			receipt, err = core.RetestLesson(body.Path, body.Questions)
 		case "discover": // explicit owner request; no pulse and no autonomous toggle
 			err = core.DiscoverLessons()
 		case "study": // exactly one selected Markdown lesson, then one pulse step
@@ -429,7 +438,7 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		case "retry":
 			err = core.RetryLesson(body.Path)
 		default:
-			reply(w, http.StatusNotFound, map[string]string{"error": "discover, study, approve or retry"})
+			reply(w, http.StatusNotFound, map[string]string{"error": "discover, study, approve, retry or retest"})
 			return
 		}
 		if err != nil {

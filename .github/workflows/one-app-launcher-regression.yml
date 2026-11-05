@@ -4,11 +4,15 @@ on:
     paths:
       - "core/tass.sh"
       - "core/test/test_launcher_regression.py"
+      - "core/test/test_updater_recovery.py"
+      - "core/test/updater_harness.sh"
       - ".github/workflows/one-app-launcher-regression.yml"
   pull_request:
     paths:
       - "core/tass.sh"
       - "core/test/test_launcher_regression.py"
+      - "core/test/test_updater_recovery.py"
+      - "core/test/updater_harness.sh"
       - ".github/workflows/one-app-launcher-regression.yml"
   workflow_dispatch:
 
@@ -27,3 +31,5 @@ jobs:
         run: bash -n core/tass.sh
       - name: Offline sudo and build-failure simulation (no Docker invoked)
         run: python3 core/test/test_launcher_regression.py
+      - name: Issue 79 update manager - backup, failure, interruption, restore (fault injection, no Docker)
+        run: python3 core/test/test_updater_recovery.py -v

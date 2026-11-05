@@ -36,6 +36,7 @@ type Settings struct {
 	Autonomous bool `json:"autonomous"`
 	Pulse      bool `json:"pulse"` // the 20-s work pulse runs (and comes back on after every restart)
 	Learn      bool `json:"learn"` // each pulse looks for new lessons on GitHub and studies them
+	Relay bool `json:"relay"` // independent, opt-in GitHub conversation; never grants execution
 }
 
 // chatOnly: no actions, tasks or pulse. Forced by TASS_CHAT_ONLY=on, or the owner's Autonomous switch is off.
@@ -69,6 +70,10 @@ type LessonState struct {
 	LearnedAt  *time.Time       `json:"learned_at,omitempty"`
 	Note       string           `json:"note,omitempty"`
 	Superseded string           `json:"superseded,omitempty"` // sha of the version learned before it changed
+	// Fresh-task retests after approval (retest.go). They never change Status.
+	RetestSeq     int            `json:"retest_seq,omitempty"`
+	RetestPending *RetestRecord  `json:"retest_pending,omitempty"`
+	Retests       []RetestRecord `json:"retests,omitempty"`
 }
 
 const maxAttempts = 3
@@ -126,7 +131,7 @@ func (c *Core) SetSettings(s Settings) error {
 	b, _ := json.Marshal(s)
 	err := os.WriteFile(c.file("settings.json"), b, 0o600)
 	c.learnMu.Unlock()
-	c.event("sync", fmt.Sprintf("Settings: autonomous %s · work pulse %s · learn from GitHub %s.", onOff(s.Autonomous), onOff(s.Pulse), onOff(s.Learn)))
+	c.event("sync", fmt.Sprintf("Settings: autonomous %s · work pulse %s · learn from GitHub %s · GitHub talk %s.", onOff(s.Autonomous), onOff(s.Pulse), onOff(s.Learn), onOff(s.Relay)))
 	c.applySettings()
 	return err
 }
@@ -276,6 +281,7 @@ func (c *Core) advanceLessons() {
 	if c.cfg.IdentitySvc == nil {
 		return
 	}
+	c.collectRetests()
 	c.learnMu.Lock()
 	var active *LessonState
 	for _, ls := range c.learn.Lessons {

@@ -46,6 +46,10 @@ type fakeGH struct {
 	treeCalls int
 	nextID    int64
 	srv       *httptest.Server
+	// failure injection for the mailbox (#76/#81): 503 on reads; post: "down" (503, nothing
+	// created) or "lost" (comment IS created but the response never arrives: uncertain delivery)
+	failRead bool
+	failPost string
 }
 
 func newFakeGH() *fakeGH {
@@ -85,6 +89,14 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p := r.URL.Path
+	if f.failRead && r.Method == "GET" && strings.Contains(p, "/issues") {
+		http.Error(w, `{"message":"Service Unavailable"}`, 503)
+		return
+	}
+	if r.Method == "POST" && strings.HasSuffix(p, "/comments") && f.failPost == "down" {
+		http.Error(w, `{"message":"Service Unavailable"}`, 503)
+		return
+	}
 	switch {
 	case r.Method == "GET" && strings.Contains(p, "/contents/"):
 		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/contents/", 2)
@@ -164,7 +176,23 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.prs = append(f.prs, b.Head+" -> "+b.Base+": "+b.Title)
 		f.json(w, 201, map[string]string{"html_url": "https://github.test/pr/" + fmt.Sprint(len(f.prs))})
 	case r.Method == "GET" && strings.HasSuffix(p, "/issues"):
-		f.json(w, 200, f.issues)
+        f.json(w, 200, f.issues)
+    case r.Method == "GET" && strings.HasSuffix(p, "/issues/24"):
+        for _, issue := range f.issues {
+            if issue.Number == 24 { f.json(w, 200, issue); return }
+        }
+        http.Error(w, `{"message":"Not Found"}`, 404)
+    case r.Method == "GET" && strings.HasSuffix(p, "/issues/24/comments"):
+        results := []github.Comment{}
+        for _, cm := range f.comments {
+            if cm.IssueNumber() == 24 { results = append(results, cm) }
+        }
+        page := 1
+        fmt.Sscan(r.URL.Query().Get("page"), &page)
+        lo := (page-1)*100
+        if lo >= len(results) { f.json(w, 200, []github.Comment{}); return }
+        hi := lo+100; if hi > len(results) { hi = len(results) }
+        f.json(w, 200, results[lo:hi])
 	case r.Method == "GET" && strings.HasSuffix(p, "/issues/comments"):
 		f.json(w, 200, f.comments)
 	case r.Method == "POST" && strings.HasSuffix(p, "/comments"):
@@ -175,7 +203,11 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.nextID++
 		f.comments = append(f.comments, github.Comment{ID: f.nextID, Body: b.Body, User: github.User{Login: "Arameair"},
 			IssueURL: "https://api.github.test/repos/Arameair/TASS/issues/" + n, CreatedAt: time.Now().UTC()})
-		f.json(w, 201, map[string]string{})
+		if f.failPost == "lost" {
+			http.Error(w, `{"message":"Bad Gateway"}`, 502)
+			return
+		}
+		f.json(w, 201, map[string]any{"id":f.nextID})
 	default:
 		http.Error(w, `{"message":"not in fake"}`, 404)
 	}
