@@ -402,8 +402,11 @@ func (c *Core) ApproveLesson(p string) error {
 		snapshot.Title,firstNonEmpty(oneLine(snapshot.Remember,200),oneLine(snapshot.Goal,200),"verified lesson"),
 		p,snapshot.Right,snapshot.Checks,now.Format("2006-01-02"))
 	c.fileMu.Lock()
-	doc,err:=c.read("tass.md")
-	if err==nil && !strings.Contains(doc,"(lesson `"+p+"`,") {
+	doc,exists:=c.read("tass.md")
+	var err error
+	if !exists {
+		err=errors.New("entity document unavailable")
+	} else if !strings.Contains(doc,"(lesson `"+p+"`,") {
 		err=c.write("tass.md",addToSection(doc,"Learned",line))
 	}
 	c.fileMu.Unlock()
