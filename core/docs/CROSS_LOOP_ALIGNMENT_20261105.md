@@ -29,7 +29,7 @@
 | `Thought-Controller` | Historical independent entity-based thought browser reference | Do not confuse reference visual concepts with live Core or canonical Identity grants |
 | `Team-Member`, `developer`, `Developmnt`, future Talk/Discord | Supporting, historical or future features and experiments | No automatic cross-repo merging, permission propagation or unreviewed runnable integration |
 
-The same named entity may have separate *runtime records* and *descriptive Markdown mind*. Identity's canonical ID and authority win; Engine-local records must be explicitly correlated to it before cross-identity links are asserted.
+**Canonical Engine selection remains an owner decision** (see [Thought-Processor #2](https://github.com/Arameair/Thought-Processor/issues/2) and [Thought #4](https://github.com/Arameair/Thought/issues/4)). The pin and schemas cited here describe the **current stack candidate**, not authorization to overwrite or merge the separate `Thought` prototype. The Engine also has a model-health check pulse separate from the work coordinator; do not mistake health probes for a second thought/Liaison scheduler.\n\nThe same named entity may have separate *runtime records* and *descriptive Markdown mind*. Identity's canonical ID and authority win; Engine-local records must be explicitly correlated to it before cross-identity links are asserted.
 
 ## 3. Truthful progression states
 
