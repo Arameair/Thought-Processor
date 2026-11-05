@@ -69,6 +69,9 @@ func TestPilotMailboxRealIDsAuthorizedChatOnlyAndRestartDedup(t *testing.T) {
     if req := eng.reqs[0]; req["actions"] != nil {
         if a, ok := req["actions"].([]any); !ok || len(a) > 0 { t.Fatalf("GitHub conversation offered actions: %v", req["actions"]) }
     }
+    if got, ok := eng.reqs[0]["source"].(string); !ok || !strings.Contains(got, "Arameair/TASS#24:comment-"+fmtID(sourceID)) {
+        t.Fatalf("Engine did not retain exact GitHub comment provenance: %v", eng.reqs[0]["source"])
+    }
     c.SyncOnce()
     gh.mu.Lock()
     posts := append([]string(nil), gh.posted...)
