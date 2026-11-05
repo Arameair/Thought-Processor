@@ -13,7 +13,7 @@ import (
 
 // studyRequest includes one numbered ANSWER line for EVERY actual checked step.
 // All current TASS@live Markdown lessons have three checks; providing only two
-// example lines caused a plausible real-Nemotron omission. Use source step
+// example lines could lead to an omitted real-Nemotron answer. Use source step
 // numbers rather than assuming the checks are contiguous.
 func studyRequest(l lessons.Lesson) string {
 	var b strings.Builder
