@@ -121,3 +121,21 @@ Answer: gamma
 	}
 	if strings.Contains(s, "ANSWER 2:") || strings.Contains(s,"Check numbers: 1 2 3") || strings.Contains(s,"REPLY:") { t.Fatalf("prompt invented an unchecked answer or conflicting model contract: %q", s) }
 }
+
+func TestManualStudyRefusesRunningBackgroundPulse(t *testing.T) {
+    ids,eng,gh:=newFakeIdentitySvc(),newFakeEngine(),newFakeGH()
+    ids.set("UNLOCKED")
+    gh.set("Mira/home@live:tass.md",entityDoc)
+    gh.set("Mira/home@live:lessons/claude/01-pulse.md",lessonPulse)
+    c:=newLearningCore(t,t.TempDir(),ids,gh,eng)
+    c.SyncOnce()
+    if err:=c.DiscoverLessons();err!=nil { t.Fatal(err) }
+    eng.mu.Lock();eng.control="RUNNING";eng.mu.Unlock()
+    if _,err:=c.StudyLesson("lessons/claude/01-pulse.md");err==nil || len(eng.jobs)!=0 {
+        t.Fatal("manual Study began while autonomous work pulse was RUNNING")
+    }
+    eng.mu.Lock();eng.control="PAUSED";eng.mu.Unlock()
+    if _,err:=c.StudyLesson("lessons/claude/01-pulse.md");err!=nil || eng.control!="PAUSED" {
+        t.Fatalf("safe manual step should keep pulse paused: %v",err)
+    }
+}
