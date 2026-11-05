@@ -43,7 +43,7 @@ import (
 	"github.com/Arameair/Thought-Processor/core/tass"
 )
 
-//go:embed page.html
+//go:embed page.html dev.html
 var page embed.FS
 
 // version is set at build time: -ldflags "-X main.version=<commit>".
@@ -215,6 +215,19 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
 		w.Write(b)
 	})
+	// Development platform (Arameair/Development ideas/tass-development-platform): same token, same origin.
+	mux.HandleFunc("GET /dev", func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r) {
+			http.Error(w, "host not allowed", http.StatusForbidden)
+			return
+		}
+		b, _ := page.ReadFile("dev.html")
+		b = []byte(strings.Replace(string(b), "__PAGE_TOKEN__", pageToken, 1))
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
+		w.Write(b)
+	})
 	authed := func(r *http.Request) bool {
 		got := r.Header.Get("X-TASS-Token")
 		if got == "" {
@@ -257,7 +270,11 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			http.Error(w, "JSON only", http.StatusUnsupportedMediaType)
 			return false
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(into); err != nil {
+		limit := int64(16 << 10)
+		if strings.HasPrefix(r.URL.Path, "/api/brain/") {
+			limit = 512 << 10 // a whole graph
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(into); err != nil {
 			http.Error(w, "bad JSON", http.StatusBadRequest)
 			return false
 		}
@@ -370,6 +387,63 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			reply(w, http.StatusAccepted, map[string]string{"receipt": id})
 		default:
 			reply(w, http.StatusNotFound, map[string]string{"error": "file or ask"})
+		}
+	})
+	mux.HandleFunc("GET /api/brain", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(r) {
+			http.Error(w, "missing or wrong key", http.StatusUnauthorized)
+			return
+		}
+		g := core.Brain()
+		blocks := core.BrainBlocks(g.Notes)
+		reply(w, http.StatusOK, map[string]any{"graph": g, "blocks": blocks, "report": tass.ValidateBrain(g, blocks),
+			"history": core.BrainHistory(), "relations": tass.BrainRelations()})
+	})
+	mux.HandleFunc("POST /api/brain/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Graph    tass.BrainGraph `json:"graph"`
+			Change   string          `json:"change"`
+			Revision int             `json:"revision"`
+			BasedOn  int             `json:"based_on"`
+			Text     string          `json:"text"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		switch r.PathValue("action") {
+		case "check":
+			reply(w, http.StatusOK, tass.ValidateBrain(body.Graph, core.BrainBlocks(body.Graph.Notes)))
+		case "save":
+			g, rep, err := core.SaveBrain(body.Graph, "owner", body.Change)
+			if errors.Is(err, tass.ErrBrainConflict) {
+				reply(w, http.StatusConflict, map[string]any{"error": err.Error(), "graph": g})
+				return
+			}
+			if err != nil {
+				reply(w, http.StatusUnprocessableEntity, map[string]any{"error": err.Error(), "report": rep})
+				return
+			}
+			reply(w, http.StatusOK, map[string]any{"graph": g, "report": rep})
+		case "restore":
+			g, err := core.RestoreBrain(body.Revision, body.BasedOn)
+			if err != nil {
+				reply(w, http.StatusConflict, map[string]any{"error": err.Error(), "graph": g})
+				return
+			}
+			reply(w, http.StatusOK, map[string]any{"graph": g})
+		case "ask":
+			id, rev, err := core.AskWithBrain(body.Text)
+			if errors.Is(err, tass.ErrBusy) {
+				reply(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+				return
+			}
+			if err != nil {
+				reply(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			reply(w, http.StatusAccepted, map[string]any{"receipt": id, "revision": rev})
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "check, save, restore or ask"})
 		}
 	})
 	mux.HandleFunc("POST /api/conversation/new", func(w http.ResponseWriter, r *http.Request) {

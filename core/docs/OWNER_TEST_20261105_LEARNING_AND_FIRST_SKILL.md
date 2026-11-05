@@ -70,6 +70,32 @@ Unlock Identity again with the same passphrase. Same entity.
 
 Send for each step: PASS / FAIL / NOT RUN, receipt or job ID, and any error text. Never send passphrases or tokens.
 
+## Checkpoint 3 — Development page: build TASS's brain together
+
+Branch `experiment/dev-platform-brain-20261105` (on top of Checkpoint 2; same Engine/Identity pins). It brings the Arameair/Development *Brain Builder* idea into this Core as a **Development** page over TASS's real data. There is no separate app.
+
+```bash
+./tass.sh backup
+git fetch origin experiment/dev-platform-brain-20261105:refs/remotes/origin/experiment/dev-platform-brain-20261105
+./tass.sh check-update origin/experiment/dev-platform-brain-20261105
+sudo -v
+./tass.sh update <the full Candidate core SHA it printed>
+```
+
+12. On the TASS page press **Development →** (top left). The left list shows his real lessons (with LEARNED/NEW…), the notebook's cells (DISCOVERED, NOT EXECUTABLE) and `@lesson-workspace.list-lessons` (GRANTED or NOT GRANTED).
+13. Add *List every lesson* (notebook cell), the skill, and *My work pulse*. Drag them around. Select *List every lesson* and use **Connect this block to…** to choose `uses` → the skill, then write why. Connect *My work pulse* `supports` → *List every lesson* by pressing **…or click a block on the canvas**.
+14. **Check**: it says PASS and **NOT RUN**. Then **Save revision**. Reload: everything is still there.
+15. Click a connection's label: change its relation, edit its reason, or **Unlink**. **Undo** works before you save. Save again, then use **Restore** on an older revision in History. It becomes a *new* revision, and the history is kept.
+16. **Brain view**: select a block. Only it and its direct neighbors stay bright.
+17. **Ask TASS using this brain**: TASS gets the last *saved* revision, read-only, for that one message. His reply appears there and in Talk. The conversation log records which revision he saw.
+18. Select the skill block and press **Request a run**. Approve it in Workspace on the TASS page. Same receipt, same rules as Checkpoint 2.
+
+**Not built yet:**
+- TASS proposing connections himself (planned: shown as a diff for you to accept or reject).
+- Comparing runs with and without the brain (Development M5).
+- Running notebook cells.
+- An embedding model.
+
 ## Rollback
 
 ```bash

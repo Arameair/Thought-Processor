@@ -153,6 +153,8 @@ type Core struct {
 	skillMu  sync.Mutex // skills.json receipts (skills.go)
 	skillRun sync.Mutex // one skill execution at a time
 	skills   skillState
+
+	brainMu sync.Mutex // brain/current.json and revisions (brain.go)
 }
 
 func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
@@ -1039,6 +1041,9 @@ func (c *Core) Answer(m Incoming) {
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
 		Request: m.Text, Context: c.context(online) + lessonContext, History: hist, Actions: actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "message": m.Text}
+	if m.FilePath != "" {
+		rec["context"] = m.FilePath // e.g. "brain revision 7" or a workspace file: which read-only context this cycle saw
+	}
 	if err != nil {
 		rec["error"] = err.Error()
 		c.appendLog("conversation.jsonl", rec)
