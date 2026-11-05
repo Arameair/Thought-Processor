@@ -67,6 +67,10 @@ func (c *Core) StudyLesson(p string) (string, error) {
 	if c.GetSettings().Autonomous {
 		return "", errors.New("turn Autonomous OFF for the supervised Study action")
 	}
+	pulse,err:=c.engine.PulseStatus()
+	if err!=nil || pulse.Control!="PAUSED" {
+		return "",errors.New("manual Study requires the repeating work pulse to be PAUSED")
+	}
 	for _, action := range []string{"lesson.learn", "pulse.run"} {
 		if ok, why := c.allowedNow(action); !ok {
 			return "", fmt.Errorf("Identity denied %s: %s", action, why)
