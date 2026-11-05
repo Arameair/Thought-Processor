@@ -37,6 +37,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
 <header>
   <h1>TASS <small>· Development</small></h1>
   <a href="/" style="color:#9fd2ff">← Talk / Core</a>
+  <a href="/cognition" style="color:#9fd2ff">Cognition →</a>
   <span id="rev" class="chip">revision —</span><span id="dirty" class="chip">saved</span>
   <span class="sp"></span>
   <label class="hint"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
@@ -45,6 +46,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <input id="change" placeholder="what changed (optional)" style="width:180px">
   <button id="save" class="primary">Save revision</button>
 </header>
+<div id="cognitionProposal" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
 <div class="shell">
   <aside class="lib">
     <h2>Find / add</h2>
@@ -241,6 +243,19 @@ function showHistory(h) {
   }
 }
 function confirmLose() { msg("You have unsaved changes. Save or Undo them first.", true); return false; }
+// Cognition navigation supplies a reference only. It does not create a graph
+// edge, call a model, trigger a skill, or save an experiment.
+const fromCognition = new URLSearchParams(location.search);
+const cognitionRef = fromCognition.get("cognition_ref") || "";
+const cognitionRev = fromCognition.get("brain_revision") || "";
+if (/^(thought|cycle):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognitionRef) &&
+    /^\d{1,9}$/.test(cognitionRev)) {
+    const banner = document.getElementById("cognitionProposal");
+    banner.hidden = false;
+    banner.textContent = "UNEXECUTED DEVELOPMENT PROPOSAL · Cognition reference " + cognitionRef +
+      " · source Brain revision " + cognitionRev +
+      ". Review the record, then manually add an owner note or propose a change. No graph, settings, skill or file was changed.";
+}
 $("q").oninput = drawLib; $("kind").onchange = drawLib; $("focusMode").onchange = render;
 $("wrap").addEventListener("click", ev => { if (ev.target.id === "canvas" || ev.target.id === "links" || ev.target.id === "wrap") { sel = null; connectFrom = null; render(); } });
 $("undo").onclick = () => { if (!undo.length) return; graph = JSON.parse(undo.pop()); $("undo").disabled = !undo.length; sel = null; render(); drawLib(); changed(); };

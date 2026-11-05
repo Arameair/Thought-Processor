@@ -43,7 +43,7 @@ import (
 	"github.com/Arameair/Thought-Processor/core/tass"
 )
 
-//go:embed page.html dev.html
+//go:embed page.html dev.html cognition.html
 var page embed.FS
 
 // version is set at build time: -ldflags "-X main.version=<commit>".
@@ -228,6 +228,24 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
 		w.Write(b)
 	})
+	// Cognition is a read-only, same-origin browser of recorded thoughts/lessons/skills.
+	// It reuses the existing authenticated /api/status and /api/brain endpoints.
+	mux.HandleFunc("GET /cognition", func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r) {
+			http.Error(w, "host not allowed", http.StatusForbidden)
+			return
+		}
+		b, err := page.ReadFile("cognition.html")
+		if err != nil {
+			http.Error(w, "cognition page unavailable", http.StatusInternalServerError)
+			return
+		}
+		b = []byte(strings.Replace(string(b), "__PAGE_TOKEN__", pageToken, 1))
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'")
+		w.Write(b)
+	})
 	authed := func(r *http.Request) bool {
 		got := r.Header.Get("X-TASS-Token")
 		if got == "" {
@@ -253,6 +271,62 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(core.Status())
 	})
+
+    // Cognition reads: Core page-token AND current Identity authorization.
+    // No browser endpoint mounts Engine/Identity directories or starts work.
+    cognitionResponse := func(w http.ResponseWriter, r *http.Request) bool {
+        w.Header().Set("Cache-Control","no-store")
+        w.Header().Set("X-Content-Type-Options","nosniff")
+        if !authed(r) {http.Error(w,"Cognition token required",http.StatusUnauthorized);return false}
+        return true
+    }
+    cognitionErr := func(w http.ResponseWriter,err error) {
+        if errors.Is(err,tass.ErrCognitionDenied) {
+            http.Error(w,"Identity denied Cognition read",http.StatusForbidden)
+        } else {
+            http.Error(w,"Cognition evidence NOT RECORDED or temporarily unavailable",http.StatusServiceUnavailable)
+        }
+    }
+    mux.HandleFunc("GET /api/cognition/library",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        library,err:=core.CognitionLibrary()
+        if err!=nil{cognitionErr(w,err);return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(library)
+    })
+    mux.HandleFunc("GET /api/cognition/thoughts/{id}",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        view,err:=core.CognitionThought(r.PathValue("id"))
+        if err!=nil{cognitionErr(w,err);return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(view)
+    })
+    mux.HandleFunc("GET /api/cognition/cycles/{id}/timeline",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        view,err:=core.CognitionTimeline(r.PathValue("id"))
+        if err!=nil{cognitionErr(w,err);return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(view)
+    })
+    mux.HandleFunc("GET /api/cognition/cycles/{id}/export",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        format:=r.URL.Query().Get("format")
+        if format!="md"&&format!="json"{
+            http.Error(w,"format must be md or json",http.StatusBadRequest);return
+        }
+        id:=r.PathValue("id")
+        if !engine.CognitionID.MatchString(id){
+            http.Error(w,"invalid cycle ID",http.StatusBadRequest);return
+        }
+        raw,media,err:=core.CognitionExport(id,format,version)
+        if err!=nil{cognitionErr(w,err);return}
+        suffix:=".md"
+        if format=="json"{suffix=".json"}
+        w.Header().Set("Content-Type",media+"; charset=utf-8")
+        w.Header().Set("Content-Disposition","attachment; filename=\"cognition-"+id+suffix+"\"")
+        w.Write(raw)
+    })
+
 	// pagePost: the key, a local Origin (blocks other websites in your browser) and JSON.
 	pagePost := func(w http.ResponseWriter, r *http.Request, into any) bool {
 		if !authed(r) {

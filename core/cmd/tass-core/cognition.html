@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TASS · Cognition</title>
+<style>
+:root{color-scheme:dark;--bg:#090d15;--panel:#141c2b;--card:#1b2738;--line:#304052;--fg:#eef3fa;--muted:#9dadc1;--mint:#76d3bd;--amber:#edc286;--rose:#ed9195;--blue:#9baefd}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.52 system-ui,-apple-system,"Segoe UI",sans-serif}button,input,a{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+a{color:inherit;text-decoration:none}a:hover{text-decoration:underline}
+nav{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;padding:16px 3.5%;background:rgba(9,13,21,.94);backdrop-filter:blur(12px);border-bottom:1px solid #273144}nav .logo{font-size:21px;font-weight:800;letter-spacing:.09em;color:var(--mint)}nav .links{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted)}nav .active{color:var(--fg);font-weight:750}nav .grow{flex:1}.chip{border:1px solid var(--line);padding:4px 10px;border-radius:100px;font-size:11px;color:var(--muted)}.chip.good{color:var(--mint);border-color:#317261}.chip.warn{color:var(--amber);border-color:#725e37}.chip.fail{color:var(--rose);border-color:#814a51}
+.hero{padding:42px 4% 35px;min-height:218px;background:radial-gradient(circle at 75% 15%,#1d3b44 0,transparent 42%),linear-gradient(145deg,#101a2e,#090d15 78%)}.eyebrow{text-transform:uppercase;letter-spacing:.17em;color:var(--mint);font-size:11px;font-weight:800}.hero h1{font-size:clamp(30px,5vw,54px);letter-spacing:-.04em;line-height:1.05;margin:12px 0 8px}.hero p{color:var(--muted);max-width:730px;font-size:15px}.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:18px 4%}.toolbar input{border:1px solid var(--line);background:#111b29;color:var(--fg);padding:10px 13px;border-radius:9px;min-width:230px;flex:1}.toolbar button,.sheet button{border:1px solid var(--line);background:#1b2839;color:var(--fg);border-radius:8px;padding:9px 12px}.toolbar button[aria-pressed="true"]{border-color:var(--mint);color:var(--mint)}.toolbar button:hover,.sheet button:hover{background:#26394d}.toolbar button:disabled{cursor:not-allowed;opacity:.4}.notice{margin:0 4% 13px;padding:11px 15px;border-radius:9px;border:1px solid #63522f;background:#302719;color:#f5d49e}.notice.error{border-color:#8a474b;background:#321d24;color:#ffc0c4}.notice.ok{border-color:#306b5e;background:#112d2a;color:#8ce4c7}.summary{padding:0 4% 10px;color:var(--muted);font-size:12px}
+main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;display:flex;gap:10px;align-items:baseline}.shelf h2{margin:0;font-size:21px;font-weight:720;letter-spacing:-.02em}.shelf-head span{font-size:12px;color:var(--muted)}.rail{display:flex;gap:14px;padding:13px 4% 21px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-color:#536176 transparent}.tile{position:relative;flex:0 0 227px;min-height:191px;padding:0;border:1px solid #324357;text-align:left;overflow:hidden;background:var(--card);border-radius:12px;scroll-snap-align:start;transition:transform .15s,border-color .15s}.tile:hover,.tile:focus-visible{border-color:var(--mint);transform:translateY(-3px)}.tile .art{height:82px;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(120deg,var(--tile-a),var(--tile-b));position:relative;overflow:hidden}.tile .art:after{content:"";width:150px;height:150px;border:1px solid #ffffff36;border-radius:50%;position:absolute;right:-43px;top:-90px}.tile .art .glyph{font-size:36px;font-weight:800;opacity:.9;line-height:1}.tile .art .category{font-size:10px;text-transform:uppercase;letter-spacing:.09em;padding:3px 6px;border:1px solid #ffffff65;border-radius:4px;background:#0004;z-index:1}.tile .content{padding:11px 13px 13px}.tile h3{margin:0 0 4px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile p{margin:0;color:var(--muted);font-size:12px;line-height:1.35;height:33px;overflow:hidden}.tile .meta{display:flex;gap:6px;align-items:center;margin-top:11px;font-size:10px;color:#d7e0ed}.status{padding:2px 7px;border-radius:5px;background:#ffffff16;color:#d9e4f2}.status.good{color:#89e5cf;background:#21483f}.status.bad{color:#ffb9bb;background:#4e282f}.status.warn{color:#f3d6a9;background:#4b3824}.empty{margin:15px 4%;border:1px dashed var(--line);color:var(--muted);padding:20px;border-radius:10px}.hidden{display:none!important}
+.overlay{position:fixed;inset:0;background:#02070cba;z-index:9;display:none;justify-content:flex-end}.overlay.open{display:flex}.sheet{height:100%;width:min(515px,100%);background:#111b29;border-left:1px solid #36465a;overflow:auto;padding:27px;box-shadow:-16px 0 80px #0008}.sheet-header{display:flex;justify-content:space-between;gap:12px;align-items:start}.sheet h2{font-size:26px;line-height:1.18;margin:12px 0 9px}.sheet .lede{color:var(--muted);font-size:14px;margin-bottom:25px}.sheet .detail{border-top:1px solid var(--line);padding:12px 0}.sheet dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}.sheet dd{margin:0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.sheet .actions{display:flex;gap:8px;flex-wrap:wrap;padding:20px 0}.sheet .foot{color:var(--muted);font-size:11px}.sheet #thoughtDetail{display:none;margin:15px 0;padding:12px;border:1px solid var(--line);border-radius:10px;color:var(--muted)}.sheet #thoughtDetail.open{display:block}.toast{min-height:20px;color:var(--mint);font-size:12px}
+@media(max-width:700px){nav{gap:9px;flex-wrap:wrap}nav .links{gap:11px;font-size:12px}.tile{flex-basis:204px}.toolbar input{min-width:160px}.hero{padding-top:28px}.sheet{padding:18px}}
+.sheet #thoughtDetail button{display:block;width:100%;text-align:left;margin:7px 0;overflow-wrap:anywhere}
+.sheet #thoughtDetail textarea{background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:9px}
+</style>
+</head>
+<body>
+<nav><span class="logo">TASS</span><div class="links" id="navigation"></div><span class="grow"></span><span class="chip" id="mode">Checking source</span></nav>
+<section class="hero"><div class="eyebrow">Cognition / The thought library</div><h1>Inside TASS's mind.</h1><p>Browse persistent Thoughts, separate recorded cycles, lessons, learning cells, and skill receipts. Select a card to see the evidence. Nothing on this page executes a cell or approves a skill.</p></section>
+<div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
+<div id="banner" class="notice" role="status">Loading…</div><div id="summary" class="summary"></div><main id="shelves"></main>
+<div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
+<button id="expandEngine">Inspect recorded details</button>
+<button id="logs">View Logs</button>
+<button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
+<button id="copy">Copy Evidence</button>
+<button id="downloadMD">Download Sanitized Markdown</button><button id="downloadJSON">Download Sanitized JSON</button>
+<button id="tryDev">Try adjustment in Development</button>
+</div><div id="toast" class="toast" role="status"></div><p class="foot">Evidence shown here comes from the selected local API or explicitly labeled demo fixtures. A model statement is not an execution receipt.</p></aside></div>
+<script>
+"use strict";
+// This page renders Go-projected records. No remote action POSTs exist here.
+const TOKEN="__PAGE_TOKEN__";
+const LIVE=location.pathname==="/cognition" && /^https?:$/.test(location.protocol);
+const $=id=>document.getElementById(id);
+const S={cards:[],lib:null,selected:null,timeline:null,cursor:-1,timer:null,filter:"all",search:""};
+const mk=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;};
+const val=x=>x===undefined||x===null||x===""?"NOT RECORDED":String(x);
+const stamp=x=>!x||String(x).startsWith("0001")?"NOT RECORDED":new Date(x).toLocaleString();
+const colors={thought:["#315e70","#244b5a"],cycle:["#304974","#3d2454"],outcome:["#345345","#183a51"],lesson:["#655033","#47304b"],cell:["#315a69","#243a6b"],skill:["#4e355d","#233d57"],note:["#4a5267","#294d50"]};
+const shelves=[["thought","Persistent thoughts","Stable Thought IDs · engine history","◈"],
+  ["cycle","Recent recorded cycles","Unlinked cycles stay separate","◎"],
+  ["outcome","Reported outcomes","NO_ACTION is never execution","◉"],
+  ["lesson","Lessons","Read-only Core references","L"],
+  ["cell","Learning cells","Not executable from Cognition","▦"],
+  ["skill","Supervised skills","Identity grant and owner approval still required","@"],
+  ["note","Owner notes","Saved advisory context","✎"]];
+function nav(){
+  const links=LIVE?[["TASS","/"],["Identity","http://127.0.0.1:8796"],["Development","/dev"],["Cognition","/cognition"]]:
+   [["TASS",""],["Identity",""],["Development",""],["Cognition",""]];
+  for(const [title,href] of links){const e=mk(href?"a":"span",title==="Cognition"?"active":"",title);if(href)e.href=href;$("navigation").append(e);}
+}
+async function get(path,format="json"){
+  const r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN}});
+  if(!r.ok)throw new Error("HTTP "+r.status+"; "+(r.status===403?"Identity denied":r.status===401?"missing key":"evidence unavailable"));
+  return format==="json"?r.json():r.text();
+}
+function message(x,bad=false){$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
+function setVisible(id,on){$(id).classList.toggle("hidden",!on);}
+function stop(){if(S.timer!==null){clearInterval(S.timer);S.timer=null;}setVisible("pause",false);}
+function draw(){
+  const host=$("shelves");host.replaceChildren();
+  let shown=0;
+  for(const [kind,title,subtitle,glyph] of shelves){
+    if(S.filter!=="all"&&S.filter!==kind)continue;
+    const filtered=S.cards.filter(x=>x.kind===kind && (x.title+" "+x.summary+" "+x.status+" "+x.source_id).toLowerCase().includes(S.search));
+    const section=mk("section","shelf");
+    const head=mk("div","shelf-head");head.append(mk("h2","",title),mk("span","",subtitle+" · "+filtered.length));section.append(head);
+    const rail=mk("div","rail");
+    for(const x of filtered){
+      const tile=mk("button","tile");tile.type="button";tile.setAttribute("aria-label","Inspect "+x.title);
+      const colorsFor=colors[kind]||colors.note;tile.style.setProperty("--tile-a",colorsFor[0]);tile.style.setProperty("--tile-b",colorsFor[1]);
+      const art=mk("div","art");art.append(mk("span","glyph",glyph),mk("span","category",kind));
+      const body=mk("div","content");body.append(mk("h3","",val(x.title)),mk("p","",val(x.summary)));
+      const meta=mk("div","meta");meta.append(mk("span","status",val(x.status)),mk("span","",val(x.verification)));
+      body.append(meta);tile.append(art,body);tile.onclick=()=>select(x);rail.append(tile);
+    }
+    if(!filtered.length&&kind==="thought"&&S.filter!=="cycle"){
+      rail.append(mk("div","empty","Persistent Thoughts NOT RECORDED for this authorized entity. Recent cycles are separate records."));
+    }
+    if(filtered.length||kind==="thought") {section.append(rail);host.append(section);}
+    shown+=filtered.length;
+  }
+  if(!shown)host.append(mk("div","empty","No matching recorded evidence. No simulated thoughts were generated."));
+  $("summary").textContent=shown+" cards · Go projection · "+val(S.lib?.engine_commit)+" · Brain rev "+val(S.lib?.brain_revision);
+}
+function field(container,name,value){
+  const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
+}
+function select(x){
+  stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
+  $("detailTitle").textContent=val(x.title);
+  $("detailIntro").textContent=val(x.summary);
+  const fields=$("fields");fields.replaceChildren();
+  field(fields,"Source ID",x.source_id);field(fields,"Verification",x.verification);field(fields,"Source",x.source);
+  field(fields,"Recorded at",stamp(x.recorded_at));
+  for(const f of (x.fields||[]))field(fields,f.name,f.value);
+  $("thoughtDetail").replaceChildren();$("thoughtDetail").classList.remove("open");
+  message("");
+  const cycle=x.kind==="cycle"||x.kind==="outcome";
+  setVisible("expandEngine",cycle||x.kind==="thought");
+  setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
+  setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
+  setVisible("tryDev",x.kind==="thought"||cycle);
+  $("overlay").classList.add("open");$("close").focus();
+}
+function cycleID(){return S.selected&&(S.selected.kind==="cycle"||S.selected.kind==="outcome")?S.selected.source_id:"";}
+async function timeline(){
+  if(!cycleID())return;
+  if(S.timeline)return S.timeline;
+  const data=await get("/api/cognition/cycles/"+encodeURIComponent(cycleID())+"/timeline");
+  S.timeline=data;S.cursor=-1;return data;
+}
+function showStep(){
+  const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+  const t=S.timeline;
+  if(!t){area.append(mk("div","", "Recorded timeline NOT RECORDED."));return;}
+  field(area,"Source",t.source);field(area,"Engine commit",t.engine_commit);
+  field(area,"Original Identity decision evidence",t.identity_evidence);
+  field(area,"Linked Thought",t.link_status==="VERIFIED-LINK"?t.thought_id:"UNLINKED / NOT RECORDED");
+  field(area,"Missing journal stages",(t.missing||[]).join(", ")||"none reported");
+  field(area,"Truncated / partial",String(t.truncated)+" / "+String(t.partial));
+  if(t.note)field(area,"Source note",t.note);
+  const all=t.steps||[];
+  field(area,"Playback position",all.length?String(Math.max(0,S.cursor+1))+" of "+all.length:"No recorded events");
+  if(S.cursor>=0&&S.cursor<all.length){
+    const s=all[S.cursor];
+    field(area,"Recorded timestamp",stamp(s.at));field(area,"Stage",s.stage);
+    field(area,"Journal byte offset",s.offset);field(area,"Status",s.status);
+    for(const [k,v] of [["Event ID",s.event_id],["Trace ID",s.trace_id],["Thought ID",s.thought_id],
+      ["Model request ID",s.model_request_id],["Action proposal",s.action],
+      ["Prediction state",s.prediction_state],["Executor-reported outcome",s.outcome_status],
+      ["Forecast",s.forecast],["Goal",s.goal]])if(v)field(area,k,v);
+    if(s.duplicate)field(area,"Warning","Duplicate recorded stage");
+    if(s.out_of_order)field(area,"Warning","Recorded timestamp precedes prior journal entry");
+  }
+}
+async function loadTimeline(showAll=false){
+  try{
+    stop();
+    const t=await timeline();
+    S.cursor=showAll?(t.steps||[]).length-1:-1;
+    showStep();
+    if(showAll&&t.steps?.length){
+      const list=mk("div","");
+      for(const e of t.steps){
+        const row=mk("button","",stamp(e.at)+" | "+e.stage+" | "+e.status+" | offset "+e.offset);
+        row.type="button";row.onclick=()=>{S.cursor=t.steps.indexOf(e);showStep();};
+        list.append(row);
+      }
+      $("thoughtDetail").append(mk("h3","","View logs — recorded journal sequence"),list);
+    }
+  }catch(e){message("Journal "+e.message,true);}
+}
+async function advance(){
+  try{
+    const t=await timeline();
+    if(!t.steps||!t.steps.length){stop();showStep();return false;}
+    if(S.cursor+1>=t.steps.length){stop();return false;}
+    S.cursor++;showStep();return true;
+  }catch(e){stop();message("Playback "+e.message,true);return false;}
+}
+function copyFallback(text){
+  const area=mk("textarea","","");area.value=text;area.rows=9;area.style.width="100%";
+  $("thoughtDetail").replaceChildren(area);$("thoughtDetail").classList.add("open");area.select();
+  message("Clipboard unavailable. Select and copy the sanitized text shown.",true);
+}
+async function copyEvidence(){
+  if(!S.selected)return;
+  try{
+    const id=cycleID();
+    const output=id?await get("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format=md","text"):
+      "# Cognition reference only\nKind: "+S.selected.kind+"\nID: "+S.selected.source_id+
+      "\nSource: "+S.selected.source+"\nVerification: "+S.selected.verification+"\nNo execution evidence implied.\n";
+    try{await navigator.clipboard.writeText(output);message("Sanitized evidence copied.");}
+    catch{copyFallback(output);}
+  }catch(e){message("Copy refused: "+e.message,true);}
+}
+async function downloadEvidence(format){
+  const id=cycleID();if(!id)return;
+  try{
+    const res=await fetch("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format="+format,{
+      method:"GET",headers:{"X-TASS-Token":TOKEN},cache:"no-store"});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    const blob=await res.blob();const link=document.createElement("a");const obj=URL.createObjectURL(blob);
+    link.href=obj;link.download="cognition-"+id+"."+format;document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(obj),1000);message("Sanitized report prepared. Nothing published.");
+  }catch(e){message("Download failed: "+e.message,true);}
+}
+async function showThought(){
+  const x=S.selected;if(!x)return;
+  if(x.kind!=="thought"){await loadTimeline(true);return;}
+  try{
+    const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
+    const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+    field(area,"Canonical question",d.question);field(area,"State",d.state);
+    field(area,"Historical steps",d.history?.length??0);
+    for(const h of d.history||[])field(area,stamp(h.at)+" · "+h.kind, h.event_id||h.trace_id||"NOT RECORDED");
+    field(area,"Trace IDs (verified only)",(d.traces||[]).filter(t=>t.verified).map(t=>t.trace_id).join(", ")||"NOT RECORDED");
+    field(area,"Related recorded cycles",(d.related_cycle_ids||[]).join(", ")||"NOT RECORDED");
+    for(const id of d.related_cycle_ids||[]){
+      const btn=mk("button","","Open cycle "+id);
+      btn.onclick=()=>select(S.cards.find(v=>v.kind==="cycle"&&v.source_id===id)||{
+        kind:"cycle",id:"cycle:"+id,source_id:id,title:"Cycle "+id,summary:"Linked recorded cycle",
+        verification:"VERIFIED-LINK",source:"Thought Engine: cycle"});
+      area.append(btn);
+    }
+  }catch(e){message("Thought detail "+e.message,true);}
+}
+function devProposal(){
+  if(!S.selected||!S.lib)return;
+  // A navigational reference, not a Save/Run/Approve request.
+  const ref=(S.selected.kind==="thought"?"thought:":"cycle:")+S.selected.source_id;
+  const q=new URLSearchParams({cognition_ref:ref,brain_revision:String(S.lib.brain_revision)});
+  location.href="/dev?"+q.toString();
+}
+async function refresh(){
+  stop();S.cards=[];S.lib=null;S.selected=null;
+  if(!LIVE){
+    $("mode").textContent="PREVIEW ONLY";
+    $("banner").className="notice";
+    $("banner").textContent="Visual shell preview. No fabricated records are shown. Run this page inside the authenticated Core to view real recorded cognition.";
+    draw();return;
+  }
+  $("banner").textContent="Reading authorized Go projections…";
+  try{
+    S.lib=await get("/api/cognition/library");
+    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.library||[])];
+    $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
+    $("banner").className="notice ok";
+    $("banner").textContent="Engine provenance: "+val(S.lib.engine_commit)+
+      ". Identity scope: "+val(S.lib.identity_name)+". "+val(S.lib.note)+
+      " Nothing plays live or executes work.";
+  }catch(e){
+    S.cards=[];$("mode").textContent="EVIDENCE UNAVAILABLE";$("mode").className="chip fail";
+    $("banner").className="notice error";$("banner").textContent="Cognition data not available: "+e.message+
+      ". No demo records substituted. Identity must authorize the read and Engine must support its API.";
+  }
+  draw();
+}
+nav();
+$("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
+document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
+  S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(b===c)));draw();
+});
+$("refresh").onclick=refresh;
+$("close").onclick=()=>{stop();$("overlay").classList.remove("open");};
+$("overlay").onclick=e=>{if(e.target===$("overlay"))$("close").click();};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click();
+  else if(e.key==="ArrowRight"&&$("overlay").classList.contains("open")&&cycleID())advance();});
+$("expandEngine").onclick=showThought;
+$("logs").onclick=()=>loadTimeline(true);
+$("step").onclick=async()=>{stop();await advance();};
+$("play").onclick=async()=>{stop();if(!(await advance()))return;setVisible("pause",true);
+  S.timer=setInterval(()=>{advance();},700);};
+$("pause").onclick=stop;
+$("copy").onclick=copyEvidence;
+$("downloadMD").onclick=()=>downloadEvidence("md");
+$("downloadJSON").onclick=()=>downloadEvidence("json");
+$("tryDev").onclick=devProposal;
+refresh();
+</script>
+</body>
+</html>
