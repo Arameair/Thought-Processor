@@ -964,7 +964,8 @@ func (c *Core) context(online bool) string {
 // locked prediction, on Nemotron) → the proposed action only if Identity allows it now →
 // outcome back to the engine, which evaluates the prediction → reply.
 func (c *Core) Answer(m Incoming) {
-    if m.From == "github" {
+    isRelayMessage := m.From == "github" && c.cfg.IdentitySvc != nil
+    if isRelayMessage {
         if !c.relayOn() || m.Issue != 24 || m.CommentID <= 0 || !c.relayAllowed(m.Author) {
             c.event("problem", "GitHub message refused: relay OFF or uncorrelated sender/issue.")
             return
@@ -974,10 +975,10 @@ func (c *Core) Answer(m Incoming) {
         c.event("you", m.Text)
     }
     name := c.entityName()
-    if m.From != "github" { c.ensureDocument(name) } // no GitHub-originated file initialization
+    if !isRelayMessage { c.ensureDocument(name) } // no GitHub-originated file initialization
     checks := []string{identity.ModelRequest, identity.ThoughtProcess}
     if c.cfg.IdentitySvc != nil { checks = append([]string{"conversation"}, checks...) }
-    if m.From == "github" { checks = append(checks, "github.sync") }
+    if isRelayMessage { checks = append(checks, "github.sync") }
     identityChecks := []string{}
     for _, a := range checks {
         ok, why := c.allowedNow(a)
@@ -986,7 +987,7 @@ func (c *Core) Answer(m Incoming) {
             c.appendLog("relay-audit.jsonl", map[string]any{"at":c.now().UTC(),"source_comment_id":m.CommentID,"issue":m.Issue,"stage":"identity_denied","permission":a,"reason":why})
             return
         }
-        if m.From == "github" { identityChecks = append(identityChecks, a+": "+why) }
+        if isRelayMessage { identityChecks = append(identityChecks, a+": "+why) }
     }
 
 	// Explicit local-owner lesson requests call the real, Identity-checked
@@ -1035,14 +1036,14 @@ func (c *Core) Answer(m Incoming) {
 
 	id := engine.NewRequestID()
 	actions := Actions
-	if lessonContext != "" || c.chatOnly() || m.From == "github" {
+	if lessonContext != "" || c.chatOnly() || isRelayMessage {
 		// Lesson retrieval and chat-only mode offer no executable tool, not even a read-entity tool.
 		actions = nil
 	}
 	cy, err := c.engine.StartCycle(engine.CycleRequest{CycleID: id, Identity: name, Source: "thought-processor:" + m.From,
 		Request: m.Text, Context: c.context(online) + lessonContext, History: hist, Actions: actions})
 	rec := map[string]any{"at": c.now().UTC(), "cycle_id": id, "from": m.From, "issue": m.Issue, "source_comment_id": m.CommentID, "identity_checks": identityChecks}
-	if m.From != "github" { rec["message"] = m.Text }
+	if !isRelayMessage { rec["message"] = m.Text }
 	if err != nil {
 		rec["error"] = err.Error()
 		c.appendLog("conversation.jsonl", rec)
@@ -1072,7 +1073,7 @@ func (c *Core) Answer(m Incoming) {
 	// The proposed action runs only if Identity allows it at this moment.
 	out := engine.Outcome{Status: "NO_ACTION", Executor: "thought-processor"}
 	if prop.Action != "NONE" {
-		if c.chatOnly() || m.From == "github" {
+		if c.chatOnly() || isRelayMessage {
 			out = engine.Outcome{Status: "NOT_AUTHORIZED",
 				Detail:   "CHAT_ONLY: model-proposed actions run only while the owner has Autonomous on",
 				Executor: "thought-processor"}
@@ -1112,7 +1113,7 @@ func (c *Core) Answer(m Incoming) {
     c.keepCycle(cy)
 
 	text := strings.TrimSpace(prop.Reply)
-	if !c.chatOnly() && m.From != "github" {
+	if !c.chatOnly() && !isRelayMessage {
 		if mm := nowRe.FindStringSubmatch(text); mm != nil {
 			_ = c.write("now.txt", mm[1]+"\n")
 		}
@@ -1124,27 +1125,27 @@ func (c *Core) Answer(m Incoming) {
 			remember = mm[1]
 		}
 	}
-	if remember != "" && !c.chatOnly() && m.From != "github" {
+	if remember != "" && !c.chatOnly() && !isRelayMessage {
 		c.addMemory(remember, id, m.From)
 		c.event("sync", "TASS noted in his memory journal: "+remember)
 	}
 	if text == "" {
 		text = "(TASS gave no reply text.)"
 	}
-	if m.From == "github" { c.event("github", fmt.Sprintf("Engine cycle %s completed for comment %d (action %s)", id, m.CommentID, out.Status)) } else { c.event("tass", text) }
-	if m.From != "github" { rec["reply"], rec["action"], rec["prediction"] = text, prop.Action, prop.Prediction.Text }
+	if isRelayMessage { c.event("github", fmt.Sprintf("Engine cycle %s completed for comment %d (action %s)", id, m.CommentID, out.Status)) } else { c.event("tass", text) }
+	if !isRelayMessage { rec["reply"], rec["action"], rec["prediction"] = text, prop.Action, prop.Prediction.Text }
 	rec["outcome"] = out.Status
-	if cy.Evaluation != nil && m.From != "github" {
+	if cy.Evaluation != nil && !isRelayMessage {
 		rec["forecast"], rec["goal"] = cy.Evaluation.Forecast, cy.Evaluation.Goal
 	}
 	c.appendLog("conversation.jsonl", rec)
-	if m.From != "github" {
+	if !isRelayMessage {
 		c.mu.Lock()
 		c.history = append(c.history, engine.Message{Role: "user", Content: m.Text}, engine.Message{Role: "assistant", Content: text})
 		if len(c.history) > 16 { c.history = c.history[len(c.history)-16:] }
 		c.mu.Unlock()
 	}
-    if m.From == "github" {
+    if isRelayMessage {
         reply := fmt.Sprintf("TASS: %s\n\nSource: Arameair/TASS#%d comment %d\nCycle: %s\n%s",
             text, m.Issue, m.CommentID, id, Marker)
         select {
@@ -1152,6 +1153,15 @@ func (c *Core) Answer(m Incoming) {
             c.mu.Lock(); c.pending++; c.mu.Unlock()
         default:
             c.event("problem", fmt.Sprintf("Mailbox reply for source comment %d could not be queued; no success claimed", m.CommentID))
+        }
+    } else if m.From == "github" {
+        // Preserve the old standalone policy-file prototype's message reply.
+        // It is distinct from the Identity-backed issue #24 mailbox.
+        select {
+        case c.replies <- outgoing{Issue:m.Issue, Body:text+"\n\n<sub>cycle "+id+"</sub>\n"+Marker}:
+            c.mu.Lock(); c.pending++; c.mu.Unlock()
+        default:
+            c.event("problem", "Legacy GitHub reply queue full; no delivery claimed")
         }
     }
 }
