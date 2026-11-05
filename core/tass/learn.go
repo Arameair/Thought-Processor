@@ -53,7 +53,7 @@ type LessonState struct {
 	Title      string           `json:"title"`
 	By         string           `json:"by,omitempty"`
 	Goal       string           `json:"goal,omitempty"`
-	Status     string           `json:"status"` // NEW | QUEUED | PASSED | RETRY | STUCK | LEARNED | NEEDS_WORKSPACE | NO_CHECKS
+	Status     string           `json:"status"` // NEW | QUEUED | MODEL_FAILED | PASSED | RETRY | STUCK | LEARNED | NEEDS_WORKSPACE | NO_CHECKS
 	Checks     int              `json:"checks"`
 	Attempts   int              `json:"attempts"`
 	JobID      string           `json:"job_id,omitempty"`
@@ -288,16 +288,13 @@ func (c *Core) advanceLessons() {
 	}
 	l := lessons.Parse(string(text))
 	name := c.entityName()
-	c.fileMu.Lock()
-	doc, _ := c.read("tass.md")
-	c.fileMu.Unlock()
 	jobID := fmt.Sprintf("lesson_%s_%d", hash(next.Path + next.SHA)[:10], next.Attempts+1)
 	req := studyRequest(l)
-	ctx := "LESSON (from " + c.cfg.Repo + "/" + next.Path + "):\n" + l.ForStudy() + "\n\nYOUR DOCUMENT:\n" + doc
+	ctx := "LESSON (from " + c.cfg.Repo + "/" + next.Path + "):\n" + l.ForStudy()
 	if len(ctx) > 60<<10 {
 		ctx = ctx[:60<<10]
 	}
-	if err := c.engine.SubmitJob(engine.Job{JobID: jobID, Identity: name, Request: req, Context: ctx}); err != nil {
+	if err := c.engine.SubmitJob(engine.Job{JobID: jobID, Identity: name, Request: req, Context: ctx, LessonChecks: studyCheckNumbers(l)}); err != nil {
 		c.noteLearning("Couldn't hand the lesson to the pulse: " + err.Error())
 		return
 	}
@@ -344,39 +341,27 @@ func (c *Core) collect(ls *LessonState) {
 	}
 	l := lessons.Parse(string(text))
 	now := c.now().UTC()
-	autoApprove := ""
-	defer func() { // runs after the unlock below (defers run last-in, first-out)
-		if autoApprove != "" {
-			_ = c.ApproveLesson(autoApprove)
-		}
-	}()
 	c.learnMu.Lock()
 	defer c.learnMu.Unlock()
 	ls.CycleID, ls.StudiedAt, ls.Reply, ls.Remember = job.CycleID, &now, job.Result, job.Remember
 	if job.State != "DONE" {
-		ls.Results, ls.Right = nil, 0
-		ls.Note = "the study job ended " + job.State + ": " + oneLine(job.Result, 160)
-	} else {
-		ls.Results, ls.Right, _ = lessons.Grade(l, job.Result)
-		ls.Note = ""
+		ls.Results, ls.Right, ls.Status = nil, 0, "MODEL_FAILED"
+		ls.Note = "Model/Engine failure — NOT GRADED (" + job.State + "): " + oneLine(job.Result, 160)
+		c.eventLocked("problem", fmt.Sprintf("Lesson %q: Engine job %s; not graded and not learned.",ls.Title,job.State))
+		c.saveLearningLocked()
+		return
 	}
-	switch {
-	case job.State == "DONE" && ls.Right == ls.Checks:
-		ls.Status = "PASSED"
-		if c.settings.Autonomous {
-			ls.Note = "auto-approved (Autonomous on): every check was right"
-			c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d checks right. Autonomous: approving it.", ls.Title, ls.Right, ls.Checks))
-			c.saveLearningLocked()
-			autoApprove = ls.Path // approved after learnMu is released (deferred below)
-			return
-		}
-		c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d checks right. Waiting for your approval.", ls.Title, ls.Right, ls.Checks))
-	case ls.Attempts >= maxAttempts:
-		ls.Status = "STUCK"
-		c.eventLocked("problem", fmt.Sprintf("Lesson %q: %d/%d right after %d attempts. Stuck until you press Try again.", ls.Title, ls.Right, ls.Checks, ls.Attempts))
-	default:
-		ls.Status = "RETRY"
-		c.eventLocked("sync", fmt.Sprintf("Lesson %q: %d/%d right. It tries again on a later pulse.", ls.Title, ls.Right, ls.Checks))
+	ls.Results, ls.Right, _ = lessons.Grade(l, job.Result)
+	ls.Note = ""
+	if ls.Checks>0 && ls.Right==ls.Checks {
+		ls.Status="PASSED"
+		c.eventLocked("sync",fmt.Sprintf("Lesson %q: %d/%d checks right. Waiting for explicit owner approval.",ls.Title,ls.Right,ls.Checks))
+	} else if ls.Attempts>=maxAttempts {
+		ls.Status="STUCK"
+		c.eventLocked("problem",fmt.Sprintf("Lesson %q: %d/%d graded correct after %d attempts; owner review required.",ls.Title,ls.Right,ls.Checks,ls.Attempts))
+	} else {
+		ls.Status="RETRY"
+		c.eventLocked("sync",fmt.Sprintf("Lesson %q: %d/%d graded correct; not approved.",ls.Title,ls.Right,ls.Checks))
 	}
 	c.saveLearningLocked()
 }
@@ -389,38 +374,51 @@ var ErrNoLesson = errors.New("no such lesson")
 // ApproveLesson: the owner says a PASSED lesson counts. It becomes LEARNED and is written into the
 // "## Learned" section of the entity's document (which syncs to GitHub).
 func (c *Core) ApproveLesson(p string) error {
+	if c.cfg.IdentitySvc==nil || c.cfg.ChatOnly {
+		return errors.New("owner approval unavailable in forced safety mode")
+	}
+	if ok,why:=c.allowedNow("lesson.learn");!ok {
+		return fmt.Errorf("Identity denied lesson approval: %s",why)
+	}
+	// Prevent two simultaneous approvals from creating duplicate learned entries.
+	c.manualMu.Lock()
+	defer c.manualMu.Unlock()
 	c.learnMu.Lock()
-	ls := c.learn.Lessons[p]
-	if ls == nil {
+	ls:=c.learn.Lessons[p]
+	if ls==nil { c.learnMu.Unlock(); return ErrNoLesson }
+	if ls.Status!="PASSED" || ls.Right!=ls.Checks || ls.Checks==0 || len(ls.Results)!=ls.Checks {
+		state:=ls.Status
 		c.learnMu.Unlock()
-		return ErrNoLesson
+		return fmt.Errorf("only a fully graded PASSED lesson can be approved (this one is %s)",state)
 	}
-	if ls.Status != "PASSED" {
+	snapshot:=*ls
+	c.learnMu.Unlock()
+	// Point-of-use authorization, including a lock/revocation after grading.
+	if ok,why:=c.allowedNow("lesson.learn");!ok {
+		return fmt.Errorf("Identity denied lesson approval: %s",why)
+	}
+	now:=c.now().UTC()
+	line:=fmt.Sprintf("- %s: %s (lesson `%s`, %d/%d, approved %s)",
+		snapshot.Title,firstNonEmpty(oneLine(snapshot.Remember,200),oneLine(snapshot.Goal,200),"verified lesson"),
+		p,snapshot.Right,snapshot.Checks,now.Format("2006-01-02"))
+	c.fileMu.Lock()
+	doc,err:=c.read("tass.md")
+	if err==nil && !strings.Contains(doc,"(lesson `"+p+"`,") {
+		err=c.write("tass.md",addToSection(doc,"Learned",line))
+	}
+	c.fileMu.Unlock()
+	if err!=nil { return fmt.Errorf("could not persist approved lesson: %w",err) }
+	c.learnMu.Lock()
+	current:=c.learn.Lessons[p]
+	if current==nil || current.Status!="PASSED" || current.SHA!=snapshot.SHA {
 		c.learnMu.Unlock()
-		return fmt.Errorf("only a lesson that passed its checks can be approved (this one is %s)", ls.Status)
+		return errors.New("lesson changed during approval; reconcile source and local evidence")
 	}
-	now := c.now().UTC()
-	ls.Status, ls.LearnedAt = "LEARNED", &now
-	title, remember, cycle := ls.Title, ls.Remember, ls.CycleID
-	auto := strings.HasPrefix(ls.Note, "auto-approved")
+	current.Status,current.LearnedAt="LEARNED",&now
 	c.saveLearningLocked()
 	c.learnMu.Unlock()
-	line := fmt.Sprintf("- %s: %s (lesson `%s`, %d/%d, approved %s)", title, firstNonEmpty(oneLine(remember, 200), "learned"), p,
-		ls.Right, ls.Checks, now.Format("2006-01-02"))
-	c.fileMu.Lock()
-	doc, _ := c.read("tass.md")
-	err := c.write("tass.md", addToSection(doc, "Learned", line))
-	c.fileMu.Unlock()
-	if err != nil {
-		return err
-	}
-	if auto {
-		c.addMemory("learned "+title, cycle, "Autonomous: every check right")
-		c.event("sync", fmt.Sprintf("Lesson %q LEARNED (auto-approved: Autonomous ON, every check right). Added to my document's Learned section.", title))
-		return nil
-	}
-	c.addMemory("learned "+title, cycle, "owner approval")
-	c.event("sync", fmt.Sprintf("Lesson %q LEARNED (you approved it). Added to my document's Learned section.", title))
+	c.addMemory("learned "+snapshot.Title,snapshot.CycleID,"owner approval")
+	c.event("sync",fmt.Sprintf("Lesson %q LEARNED after explicit owner approval. Recorded in local Learned section.",snapshot.Title))
 	return nil
 }
 
