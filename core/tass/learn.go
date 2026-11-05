@@ -70,6 +70,10 @@ type LessonState struct {
 	LearnedAt  *time.Time       `json:"learned_at,omitempty"`
 	Note       string           `json:"note,omitempty"`
 	Superseded string           `json:"superseded,omitempty"` // sha of the version learned before it changed
+	// Fresh-task retests after approval (retest.go). They never change Status.
+	RetestSeq     int            `json:"retest_seq,omitempty"`
+	RetestPending *RetestRecord  `json:"retest_pending,omitempty"`
+	Retests       []RetestRecord `json:"retests,omitempty"`
 }
 
 const maxAttempts = 3
@@ -277,6 +281,7 @@ func (c *Core) advanceLessons() {
 	if c.cfg.IdentitySvc == nil {
 		return
 	}
+	c.collectRetests()
 	c.learnMu.Lock()
 	var active *LessonState
 	for _, ls := range c.learn.Lessons {

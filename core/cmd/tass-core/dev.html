@@ -41,6 +41,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <span id="rev" class="chip">revision —</span><span id="dirty" class="chip">saved</span>
   <span class="sp"></span>
   <label class="hint"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
+  <button id="llabBtn" aria-expanded="false">Teach &amp; test</button>
   <button id="jlabBtn" aria-expanded="false">Junction lab</button>
   <button id="undo" disabled>Undo</button>
   <button id="check">Check</button>
@@ -48,6 +49,24 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <button id="save" class="primary">Save revision</button>
 </header>
 <div id="cognitionProposal" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
+<section id="llab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
+  <div class="row"><b>Teach &amp; test one lesson</b>
+    <span class="hint">Choose → Study → Inspect answer → Check grade → Approve → Test again → Evidence. <b>PASSED</b> (graded) ≠ <b>LEARNED</b> (you approved) ≠ <b>RETESTED</b> (applied on a new question) ≠ a <b>skill</b> (separate Identity grant + your approval + run receipt). Nothing here runs code.</span></div>
+  <div class="row"><span class="kv">1 · Choose</span><select id="lPick" style="min-width:320px"></select><button id="lReload">Reload</button><span id="lPulse" class="hint"></span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:14px">
+    <div><h2>2 · Study &nbsp;·&nbsp; 3 · Inspect answer</h2><div id="lCard" class="hint"></div>
+      <div class="row"><button id="lStudy" class="primary">Study (one pulse step)</button><button id="lRetry">Retry</button></div>
+      <div class="kv">TASS's answer (raw, from the Engine job)</div><pre id="lReply">—</pre></div>
+    <div><h2>4 · Check grade &nbsp;·&nbsp; 5 · Approve</h2><div id="lGrade" class="hint">Not graded yet.</div>
+      <div class="row"><button id="lApprove">Approve (counts as LEARNED)</button></div>
+      <h2 style="margin-top:12px">6 · Test again on a new question</h2>
+      <div class="hint">After approval. TASS gets only what he has learned, never the lesson text. One per line: <code>question =&gt; expected answer</code> (empty: use the lesson's own <code>## Retest</code> sections).</div>
+      <textarea id="lQs" style="width:100%;height:70px" placeholder="If the pulse has ticked three times, how many seconds have passed? => 60"></textarea>
+      <div class="row"><button id="lRetest">Test again</button></div><div id="lRetestOut" class="hint"></div></div>
+    <div><h2>7 · Evidence</h2><div id="lEvidence" class="hint"></div></div>
+  </div>
+  <div id="lMsg" class="hint" role="status"></div>
+</section>
 <section id="jlab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:46vh;overflow:auto">
   <div class="row"><b>Junction lab · lesson metadata</b><span class="hint">A cell describes what the fixed Go handler <code>lesson-metadata.v1</code> returns. Nothing in a cell runs. Proposals are never activated here.</span></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px">
@@ -366,6 +385,76 @@ async function pollReplies() {
   }
 }
 setInterval(pollReplies, 1500);
+// ---------------------------------------------------------------- Teach & test (learning lab)
+let lStatus = null;
+const NR = "NOT RECORDED";
+function lMsg(t, bad) { $("lMsg").replaceChildren(el("div", bad ? "err" : "ok", t)); }
+async function loadL(keep) {
+  const r = await api("GET", "/api/status");
+  if (!r.ok) return lMsg("Couldn't load status (HTTP " + r.status + ").", true);
+  lStatus = r.body;
+  const ls = ((lStatus.learning || {}).lessons || []), pick = $("lPick"), was = keep || pick.value;
+  pick.replaceChildren();
+  for (const l of ls) { const o = el("option", "", l.title + " · " + l.status + " · " + l.path); o.value = l.path; if (l.path === was) o.selected = true; pick.append(o); }
+  if (!ls.length) pick.append(el("option", "", "No lessons yet: Find lessons on the Core page"));
+  const p = lStatus.pulse || {};
+  $("lPulse").textContent = "Engine work pulse: " + (p.control || p.state || "unknown") + " (Study and Test again need it PAUSED; this never starts it) · Core sync is separate";
+  showL();
+}
+function lCur() { return (((lStatus || {}).learning || {}).lessons || []).find(l => l.path === $("lPick").value); }
+function showL() {
+  const l = lCur(); const card = $("lCard"), g = $("lGrade"), ev = $("lEvidence"); card.replaceChildren(); g.replaceChildren(); ev.replaceChildren();
+  if (!l) return;
+  const m = el("div"); m.append(tag(l.status)); if (l.retests && l.retests.length) m.append(tag(l.retests[l.retests.length - 1].outcome === "RETEST_PASSED" ? "RETESTED" : "RETEST_FAILED"));
+  card.append(m);
+  kv(card, "Source", l.path + " @ " + (l.sha || NR).slice(0, 12) + " (Git blob) · " + l.checks + " checks");
+  kv(card, "Current job / cycle", (l.job_id || "—") + " / " + (l.cycle_id || NR));
+  if (l.note) kv(card, "Note", l.note);
+  $("lReply").textContent = l.reply || "—";
+  $("lStudy").disabled = !/^(NEW|RETRY|MODEL_FAILED|QUEUED)$/.test(l.status);
+  $("lRetry").disabled = /^(QUEUED|LEARNED|NEEDS_WORKSPACE|NO_CHECKS|GONE)$/.test(l.status);
+  $("lApprove").disabled = l.status !== "PASSED";
+  $("lRetest").disabled = l.status !== "LEARNED";
+  if (l.results && l.results.length) {
+    g.append(el("div", "", "Graded by Core: " + l.right + "/" + l.checks + (l.status === "PASSED" ? " — PASSED, waiting for your approval (not learned yet)" : l.status === "LEARNED" ? " — LEARNED (approved " + new Date(l.learned_at).toLocaleString() + ")" : " — " + l.status)));
+    for (const x of l.results) g.append(el("div", "ev", (x.right ? "✔ " : "✘ ") + "Check " + x.n + ": " + x.check + " → \"" + (x.given || "") + "\" (" + x.reason + ")"));
+  } else g.append(el("div", "hint", l.status === "MODEL_FAILED" ? "NOT GRADED: the model/Engine failed (" + (l.note || "") + ")" : "Not graded yet."));
+  const rp = l.retest_pending;
+  $("lRetestOut").textContent = rp ? "Retest " + rp.job_id + " QUEUED (" + rp.questions.length + " new questions). Press Test again to step the pulse, or wait for the Core's next sync to collect it." : "";
+  // evidence: attempts, approval, retests, skills
+  ev.append(el("div", "kv", "Attempts (every study job, never deleted)"));
+  for (const h of (l.history || [])) ev.append(el("div", "ev", new Date(h.at).toLocaleString() + " · job " + h.job_id + " · cycle " + (h.cycle_id || NR) + " · " + h.state + " → " + (h.outcome || "—") + (h.checks ? " " + h.right + "/" + h.checks : "") + " · " + h.source));
+  if (!(l.history || []).length) ev.append(el("div", "hint", NR));
+  ev.append(el("div", "kv", "Owner approval"));
+  ev.append(el("div", "ev", l.learned_at ? "Approved " + new Date(l.learned_at).toLocaleString() + " (written to tass.md ## Learned)" : "Not approved"));
+  ev.append(el("div", "kv", "Fresh-task retests"));
+  for (const r of (l.retests || [])) {
+    ev.append(el("div", "ev", new Date(r.at).toLocaleString() + " · job " + r.job_id + " · cycle " + (r.cycle_id || NR) + " · " + r.outcome + " " + r.right + "/" + r.checks + " · " + r.context));
+    for (const x of (r.results || [])) ev.append(el("div", "ev", "  " + (x.right ? "✔ " : "✘ ") + x.check + " → \"" + (x.given || "") + "\""));
+  }
+  if (!(l.retests || []).length) ev.append(el("div", "hint", "None yet"));
+  ev.append(el("div", "kv", "Skill receipts (separate from learning)"));
+  const recs = (((lStatus.skills || {}).receipts) || []).slice(-5);
+  for (const r of recs) ev.append(el("div", "ev", r.receipt_id + " · @" + r.skill + " · " + r.state + " · executed " + (r.executed ? "yes" : "no")));
+  if (!recs.length) ev.append(el("div", "hint", "No skill runs. Learning a lesson never grants or runs a skill."));
+}
+async function lPost(action, body) {
+  const l = lCur(); if (!l) return;
+  const r = await api("POST", "/api/lessons/" + action, Object.assign({path: l.path}, body || {}));
+  if (!r.ok) lMsg(action + " refused: " + (r.body.error || "HTTP " + r.status), true);
+  else lMsg(action + " OK" + (r.body.receipt ? " · job " + r.body.receipt : "") + ". Nothing was executed.");
+  await loadL(l.path);
+}
+$("llabBtn").onclick = () => { const open = $("llab").hidden; $("llab").hidden = !open; $("llabBtn").setAttribute("aria-expanded", String(open)); if (open) loadL(); };
+$("lPick").onchange = showL; $("lReload").onclick = () => loadL();
+$("lStudy").onclick = () => lPost("study"); $("lRetry").onclick = () => lPost("retry"); $("lApprove").onclick = () => lPost("approve");
+$("lRetest").onclick = () => {
+  const qs = [];
+  for (const line of $("lQs").value.split("\n")) { const i = line.indexOf("=>"); if (line.trim() === "") continue; if (i < 0) return lMsg("Each line needs: question => expected answer", true); qs.push({n: qs.length + 1, ask: line.slice(0, i).trim(), answer: line.slice(i + 2).trim(), from: "owner"}); }
+  lPost("retest", {questions: qs});
+};
+setInterval(() => { if (!$("llab").hidden) loadL(); }, 5000);
+if (new URLSearchParams(location.search).get("learn")) setTimeout(() => { $("llab").hidden = false; $("llabBtn").setAttribute("aria-expanded", "true"); loadL(new URLSearchParams(location.search).get("learn")); }, 200);
 load();
 </script>
 </body>

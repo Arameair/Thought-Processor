@@ -418,7 +418,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 	})
 	mux.HandleFunc("POST /api/lessons/{action}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Path string `json:"path"`
+			Path      string                `json:"path"`
+			Questions []tass.RetestQuestion `json:"questions"`
 		}
 		if !pagePost(w, r, &body) {
 			return
@@ -426,6 +427,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		var err error
 		var receipt string
 		switch r.PathValue("action") {
+		case "retest": // fresh-task retest of a LEARNED lesson; never changes its status
+			receipt, err = core.RetestLesson(body.Path, body.Questions)
 		case "discover": // explicit owner request; no pulse and no autonomous toggle
 			err = core.DiscoverLessons()
 		case "study": // exactly one selected Markdown lesson, then one pulse step
@@ -435,7 +438,7 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 		case "retry":
 			err = core.RetryLesson(body.Path)
 		default:
-			reply(w, http.StatusNotFound, map[string]string{"error": "discover, study, approve or retry"})
+			reply(w, http.StatusNotFound, map[string]string{"error": "discover, study, approve, retry or retest"})
 			return
 		}
 		if err != nil {

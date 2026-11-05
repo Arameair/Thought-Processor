@@ -37,12 +37,14 @@ type Lesson struct {
 	By        string `json:"by,omitempty"`
 	Goal      string `json:"goal,omitempty"`
 	Steps     []Step `json:"steps"`
+	Retests   []Step `json:"-"` // "## Retest N" sections: fresh questions for after approval, never shown in study
 	Checkable bool   `json:"checkable"` // every lesson the app can grade has at least one Check with an Answer
 	HasCode   bool   `json:"has_code"`
 }
 
 var (
 	stepRe   = regexp.MustCompile(`(?i)^##\s*step\s*(\d+)\s*[:.)-]?\s*(.*)$`)
+	retestRe = regexp.MustCompile(`(?i)^##\s*retest\s*(\d+)\s*[:.)-]?\s*(.*)$`)
 	fieldRe  = regexp.MustCompile(`(?i)^(teach|check|answer)\s*:\s*(.*)$`)
 	answerRe = regexp.MustCompile(`(?i)^[\s*_>-]*answer\s*(\d+)\s*[:.)-]\s*(.*)$`)
 	numRe    = regexp.MustCompile(`-?\d+(?:\.\d+)?`)
@@ -71,6 +73,12 @@ func Parse(text string) Lesson {
 			continue
 		case cur == nil && strings.HasPrefix(strings.ToLower(t), "by:"):
 			l.By = strings.TrimSpace(t[3:])
+			continue
+		}
+		if m := retestRe.FindStringSubmatch(t); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			l.Retests = append(l.Retests, Step{N: n, Name: strings.TrimSpace(m[2])})
+			cur, field = &l.Retests[len(l.Retests)-1], ""
 			continue
 		}
 		if m := stepRe.FindStringSubmatch(t); m != nil {
@@ -158,6 +166,11 @@ type Result struct {
 
 // Grade compares the entity's "ANSWER n: …" lines with the lesson's expected answers.
 func Grade(l Lesson, reply string) (results []Result, right, total int) {
+	return GradeSteps(l.Checks(), reply)
+}
+
+// GradeSteps grades "ANSWER n: …" lines against any list of checks (a lesson's, or a retest's).
+func GradeSteps(checks []Step, reply string) (results []Result, right, total int) {
 	given := map[int]string{}
 	for _, line := range strings.Split(reply, "\n") {
 		if m := answerRe.FindStringSubmatch(line); m != nil {
@@ -167,7 +180,7 @@ func Grade(l Lesson, reply string) (results []Result, right, total int) {
 			}
 		}
 	}
-	for _, s := range l.Checks() {
+	for _, s := range checks {
 		total++
 		g, ok := given[s.N]
 		r := Result{N: s.N, Check: s.Check, Given: g}

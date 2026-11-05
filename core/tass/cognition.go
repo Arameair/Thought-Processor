@@ -266,13 +266,19 @@ func (c *Core) CognitionLibrary()(CognitionLibrary,error){
         default:continue
         }
         if len(out.Library)>=cognitionCardMax {out.Limited=true;break}
-        out.Library=append(out.Library,CognitionCard{
+        card:=CognitionCard{
             ID:kind+":"+b.ID,Kind:kind,Title:cognitionClip(b.Title,100),
             Summary:cognitionClip(b.Purpose,240),State:b.Status,
             Source:source,SourceID:b.ID,Verified:verified,
             Fields:[]CognitionField{cognitionField("Source block",b.ID),cognitionField("Revision",b.Revision),
                 cognitionField("Permission/Execution",b.Runnable),cognitionField("Last receipt",b.Last)},
-        })
+        }
+        if kind=="lesson" {
+            f,cyc:=c.lessonEvidence(strings.TrimPrefix(b.ID,"lesson:"))
+            card.Fields=append(card.Fields,f...)
+            card.RelatedCycleIDs=cyc
+        }
+        out.Library=append(out.Library,card)
     }
     out.Junctions=c.junctionCards(scope.identityID)
     if notesNote!="" {out.Note=strings.TrimSpace(out.Note+" "+notesNote)}
