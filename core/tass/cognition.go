@@ -80,6 +80,7 @@ type CognitionTimeline struct {
     LinkStatus string `json:"link_status"`
     Source string `json:"source"`
     EngineCommit string `json:"engine_commit"`
+    IdentityEvidence string `json:"identity_evidence"`
     ObservedAt time.Time `json:"observed_at"`
     State string `json:"state"`
     Steps []engine.RecordedStep `json:"steps"`
@@ -344,8 +345,9 @@ func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
     if err!=nil{return CognitionTimeline{},ErrCognitionUnavailable}
     out:=CognitionTimeline{CycleID:id,Source:"Thought Engine: cycles.jsonl",
         EngineCommit:scope.engineCommit,ObservedAt:c.now().UTC(),
-        State:cy.State,Steps:[]engine.RecordedStep{},Missing:[]string{},Truncated:journal.Truncated,
-        Partial:journal.Partial,InvalidLines:journal.InvalidLines,Note:journal.Note,LinkStatus:"UNLINKED"}
+        State:cognitionOneOf(cy.State,"evaluated","awaiting_outcome","failed","denied","started"),Steps:[]engine.RecordedStep{},Missing:[]string{},Truncated:journal.Truncated,
+        Partial:journal.Partial,InvalidLines:journal.InvalidLines,LinkStatus:"UNLINKED",
+        IdentityEvidence:"NOT RECORDED: original cycle Identity decision receipt was not independently joined"}
     if cy.Spark.ThoughtID!=""&&cy.EntityID!=""&&cy.EntityID==scope.engineID {
         detail,err:=c.engine.CognitionThought(scope.engineID,cy.Spark.ThoughtID)
         if err==nil&&detail.Thought.EntityID==scope.engineID&&detail.Thought.ThoughtID==cy.Spark.ThoughtID {
@@ -361,6 +363,7 @@ func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
             out.Missing=append(out.Missing,stage)
         }
     }
+    if out.Truncated {out.Note="Journal bounded tail or event limit: historical entries may be missing"}
     if len(out.Steps)==0&&out.Note==""{out.Note="Historical journal steps NOT RECORDED"}
     return out,nil
 }
@@ -382,6 +385,7 @@ type CognitionReport struct{
     Partial bool `json:"partial"`
     InvalidLines int `json:"invalid_lines"`
     Verification string `json:"verification"`
+    IdentityEvidence string `json:"identity_evidence"`
 }
 func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error){
     if format!="json"&&format!="md" {return nil,"",fmt.Errorf("unsupported Cognition export format")}
@@ -392,7 +396,8 @@ func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error
         EngineCommit:v.EngineCommit,CycleID:v.CycleID,ThoughtID:v.ThoughtID,
         LinkStatus:v.LinkStatus,Source:v.Source,State:v.State,Steps:v.Steps,
         Missing:v.Missing,Truncated:v.Truncated,Partial:v.Partial,
-        InvalidLines:v.InvalidLines,Verification:"APP-REPORTED unless independently correlated"}
+        InvalidLines:v.InvalidLines,Verification:"APP-REPORTED unless independently correlated",
+        IdentityEvidence:v.IdentityEvidence}
     if format=="json"{
         raw,err:=json.MarshalIndent(report,"","  ")
         if err!=nil{return nil,"",err}
