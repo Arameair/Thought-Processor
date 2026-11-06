@@ -4,7 +4,7 @@
 
 ## Current engineering references
 
-- [Pinned Go integration and status index](https://github.com/Arameair/Thought-Processor/blob/docs/current-go-stack-index-20261106/core/docs/CURRENT_GO_STACK_20261106.md) — exact source revisions, component responsibilities, tested/untested boundaries and historical/prototype distinction.
+- [Pinned Go integration and status index](https://github.com/Arameair/Thought-Processor/blob/af59e7d9213170669eddd4f269ba1f1b50c427e9/core/docs/CURRENT_GO_STACK_20261106.md) — exact source revisions, component responsibilities, tested/untested boundaries and historical/prototype distinction.
 - [Integrated draft PR #88](https://github.com/Arameair/Thought-Processor/pull/88) — current candidate; reported isolated and fixture model tests, **not** real owner Nemotron/deployment acceptance.
 - [Owner acceptance checklist #89](https://github.com/Arameair/Thought-Processor/issues/89) — one real authorized execution → Cognition evidence → measured graph A/B; [recovery #79](https://github.com/Arameair/Thought-Processor/issues/79) must be independently verified before install.
 - [Portability review #90](https://github.com/Arameair/Thought-Processor/issues/90) and [C1–C10 conflict cleanup PR #91](https://github.com/Arameair/Thought-Processor/pull/91) — open issues, not completed fixes.
