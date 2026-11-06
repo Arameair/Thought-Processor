@@ -103,10 +103,13 @@ func main() {
 		}
 		cfg.IdentitySvc = ids
 		cfg.Identity = "tass-identity at " + u
-		cfg.GitHub = strings.EqualFold(env("TASS_GITHUB", "off"), "on")
-		if !cfg.GitHub {
-			cfg.Messages = false
-		}
+		// GitHub only when the owner set a repository for THIS installation (nothing is built in).
+		cfg.Repo = strings.TrimSpace(os.Getenv("TASS_REPO"))
+		cfg.Branch = env("TASS_BRANCH", "live")
+		cfg.DocPath = env("TASS_DOC", "tass.md")
+		cfg.LessonsDir = env("TASS_LESSONS", "lessons")
+		cfg.GitHub = cfg.Repo != ""
+		cfg.Messages = false // GitHub issue messages are the prototype's path; app mode talks on the page
 	}
 	gh := github.New(token)
 	if b := os.Getenv("TASS_GITHUB_API"); b != "" { // tests and dry runs only
@@ -282,6 +285,40 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
 			return
 		}
 		reply(w, http.StatusAccepted, map[string]string{"job_id": id})
+	})
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var body tass.Settings
+		if !pagePost(w, r, &body) {
+			return
+		}
+		if err := core.SetSettings(body); err != nil {
+			reply(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.GetSettings())
+	})
+	mux.HandleFunc("POST /api/lessons/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+		}
+		if !pagePost(w, r, &body) {
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "approve": // the owner's approval: only from this page, with its token
+			err = core.ApproveLesson(body.Path)
+		case "retry":
+			err = core.RetryLesson(body.Path)
+		default:
+			reply(w, http.StatusNotFound, map[string]string{"error": "approve or retry"})
+			return
+		}
+		if err != nil {
+			reply(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		reply(w, http.StatusOK, core.Learning())
 	})
 	mux.HandleFunc("POST /api/pulse", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

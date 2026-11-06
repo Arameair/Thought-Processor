@@ -61,6 +61,10 @@ type Config struct {
 	// authority (the prototype policy file isn't used) and GitHub sync is off unless GitHub is set.
 	IdentitySvc *identitysvc.Client
 	GitHub      bool
+	Repo        string
+	Branch      string
+	DocPath     string
+	LessonsDir  string
 }
 
 // grantFile is what GrantFile holds.
@@ -134,6 +138,11 @@ type Core struct {
 
 	inbox   chan Incoming
 	replies chan outgoing
+
+	syncHold string
+	learnMu  sync.Mutex
+	learn    learnState
+	settings Settings
 }
 
 func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
@@ -152,6 +161,7 @@ func New(cfg Config, gh *github.Client, eng *engine.Client) (*Core, error) {
 			return nil, fmt.Errorf("state.json is damaged (move it aside to start fresh): %w", err)
 		}
 	}
+	c.loadLearning()
 	if c.st.SeenIssues == nil {
 		c.st.SeenIssues = map[int]bool{}
 	}
@@ -196,8 +206,12 @@ func (c *Core) ensureDocument(name string) {
 	if name == "" || fileExists(c.file("tass.md")) {
 		return
 	}
-	doc := "# " + name + "\n\n<!-- This entity's own document. It lives only on this computer. -->\n\n## Who I am\n\nI am " + name +
-		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Now\n\nJust created.\n"
+	if c.cfg.Repo != "" {
+		// With a repository, the document only ever comes from it (or is created there by syncTass
+		// when missing): a local starter could otherwise be merged over the owner's real document.
+		return
+	}
+	doc := starterDoc(name)
 	c.fileMu.Lock()
 	defer c.fileMu.Unlock()
 	if !fileExists(c.file("tass.md")) {
@@ -317,12 +331,11 @@ func (c *Core) Run(stop <-chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() { defer wg.Done(); c.think(stop) }()
-	if c.cfg.IdentitySvc == nil || c.cfg.GitHub {
-		wg.Add(1)
-		go func() { defer wg.Done(); c.syncLoop(stop) }()
-	} else {
-		c.event("sync", "GitHub sync is off for this installation: everything stays on this computer.")
+	if c.cfg.IdentitySvc != nil && c.cfg.Repo == "" {
+		c.event("sync", "No GitHub repository is set for this installation: everything stays on this computer.")
 	}
+	wg.Add(1) // in app mode this loop also applies the pulse setting and moves lessons along
+	go func() { defer wg.Done(); c.syncLoop(stop) }()
 	wg.Wait()
 }
 
@@ -353,18 +366,38 @@ func (c *Core) SyncOnce() time.Duration {
 	}
 	start := c.now()
 	steps := []string{}
-	err := c.syncPolicy()
-	if err == nil {
-		steps = append(steps, "policy")
+	var err error
+	if c.cfg.IdentitySvc != nil && c.cfg.Repo == "" {
+		c.applySettings() // no GitHub here: only the pulse setting and lessons already downloaded
+		c.advanceLessons()
+		return c.cfg.SyncEvery
+	}
+	if c.cfg.IdentitySvc != nil {
+		// App mode: Identity decides; the document and lessons come from the owner's repository.
+		c.applySettings()
 		err = c.syncTass()
-	}
-	if err == nil {
-		steps = append(steps, "tass.md")
-		err = c.readMessages()
-	}
-	if err == nil {
-		steps = append(steps, "messages")
-		err = c.flushOutbox()
+		if err == nil {
+			steps = append(steps, "document")
+			err = c.syncLessons()
+		}
+		if err == nil {
+			steps = append(steps, "lessons")
+		}
+		c.advanceLessons()
+	} else {
+		err = c.syncPolicy()
+		if err == nil {
+			steps = append(steps, "policy")
+			err = c.syncTass()
+		}
+		if err == nil {
+			steps = append(steps, "tass.md")
+			err = c.readMessages()
+		}
+		if err == nil {
+			steps = append(steps, "messages")
+			err = c.flushOutbox()
+		}
 	}
 	c.saveState()
 	c.mu.Lock()
@@ -465,13 +498,37 @@ func (c *Core) syncPolicy() error {
 	return nil
 }
 
-func (c *Core) syncTass() error {
+func (c *Core) syncTarget() (repo, branch, path string, ok bool, err error) {
+	if c.cfg.IdentitySvc != nil {
+		if c.cfg.Repo == "" {
+			return "", "", "", false, nil
+		}
+		if allowed, why := c.allowedNow("github.sync"); !allowed {
+			c.mu.Lock()
+			c.syncHold = why
+			c.mu.Unlock()
+			return "", "", "", false, nil
+		}
+		c.mu.Lock()
+		c.syncHold = ""
+		c.mu.Unlock()
+		b := strings.ToLower(c.cfg.Branch)
+		if b == "main" || b == "alpha" || b == "stable" {
+			return "", "", "", false, fmt.Errorf("the entity's document may not sync straight onto %s; use its own branch (for example live)", c.cfg.Branch)
+		}
+		return c.cfg.Repo, c.cfg.Branch, firstNonEmpty(c.cfg.DocPath, "tass.md"), true, nil
+	}
 	p := c.pol()
 	if !p.Allowed(identity.SyncTassMD) {
-		return nil
+		return "", "", "", false, nil
 	}
-	repo, branch, path, err := p.Target()
-	if err != nil {
+	repo, branch, path, err = p.Target()
+	return repo, branch, path, err == nil, err
+}
+
+func (c *Core) syncTass() error {
+	repo, branch, path, ok, err := c.syncTarget()
+	if err != nil || !ok {
 		return err
 	}
 	c.fileMu.Lock()
@@ -483,6 +540,26 @@ func (c *Core) syncTass() error {
 		etag = c.st.FileETag
 	}
 	f, got, err := c.gh.GetFile(repo, branch, path, etag)
+	if errors.Is(err, github.ErrNotFound) && c.cfg.IdentitySvc != nil && !haveLocal {
+		// App mode, a new entity: give it its own starter document, in its repository too.
+		name := c.entityName()
+		if name == "" {
+			return nil
+		}
+		doc := starterDoc(name)
+		sha, perr := c.gh.PutFile(repo, branch, path, doc, "", name+": my own document")
+		if perr != nil {
+			return fmt.Errorf("%s isn't on %s@%s and couldn't be created: %w", path, repo, branch, perr)
+		}
+		c.fileMu.Lock()
+		defer c.fileMu.Unlock()
+		c.st.RemoteSHA, c.st.FileETag = sha, ""
+		c.event("sync", "Created "+name+"'s own document at "+repo+"@"+branch+":"+path+".")
+		if err := c.write("tass.md", doc); err != nil {
+			return err
+		}
+		return c.write("tass.base.md", doc)
+	}
 	if errors.Is(err, github.ErrNotFound) {
 		return fmt.Errorf("%s isn't on %s@%s yet: create it there first", path, repo, branch)
 	}
@@ -533,6 +610,13 @@ func (c *Core) syncTass() error {
 		return err
 	}
 	if norm(merged) != norm(remote) {
+		// Reading approved lessons must never silently grant write authority.
+		if c.cfg.IdentitySvc != nil {
+			if ok, why := c.allowedNow("github.write"); !ok {
+				c.event("problem", "Local document changed; GitHub write held for Identity permission: "+why)
+				return nil
+			}
+		}
 		sha, err := c.gh.PutFile(repo, branch, path, merged, c.st.RemoteSHA, "TASS: update tass.md")
 		if errors.Is(err, github.ErrConflict) {
 			c.st.FileETag = ""
@@ -558,6 +642,12 @@ func (c *Core) syncTass() error {
 
 // askDustin opens one pull request offering TASS's version of the sections both sides changed.
 func (c *Core) askDustin(repo, branch, path, mine string, conflicts []string) error {
+	if c.cfg.IdentitySvc != nil {
+		if ok, why := c.allowedNow("github.write"); !ok {
+			c.event("problem", "Document conflict needs owner review; GitHub PR blocked by Identity: "+why)
+			return nil
+		}
+	}
 	key := hash(mine)
 	if c.st.ConflictKey == key {
 		return nil
@@ -820,6 +910,9 @@ func (c *Core) context(online bool) string {
 		talk = strings.ReplaceAll(howToTalkEntity, "{name}", c.entityName())
 	}
 	b.WriteString("\n\n---\n" + talk + "\n")
+	if l := c.learnedForContext(); l != "" {
+		b.WriteString("\nLESSONS YOU HAVE LEARNED (your owner approved them; use them):\n" + l)
+	}
 	if mem := c.recentMemories(20); len(mem) > 0 {
 		b.WriteString("\nYOUR RECENT MEMORIES (local journal, newest last):\n")
 		for _, m := range mem {
@@ -853,6 +946,9 @@ func (c *Core) Answer(m Incoming) {
 			c.event("problem", "Not sent to the Thought Engine: "+why+".")
 			return
 		}
+	}
+	if c.handleLessonChat(m) {
+		return
 	}
 
 	// @identity-test is a reference lookup, NEVER an execution request.
@@ -1141,6 +1237,8 @@ type Status struct {
 	Memories     []Memory           `json:"memories"`
 	Identity     *identitysvc.State `json:"identity,omitempty"`
 	Pulse        map[string]any     `json:"pulse,omitempty"`
+	Learning     *LearningStatus    `json:"learning,omitempty"`
+	SyncHold     string             `json:"sync_hold,omitempty"`
 	Pending      int                `json:"replies_waiting"`
 	TassMD       string             `json:"tass_md"`
 	Events       []Event            `json:"events"`
@@ -1176,6 +1274,11 @@ func (c *Core) Status() Status {
 			pol += " · NOT VALID NOW: " + why
 		}
 	}
+	var learning *LearningStatus
+	if c.cfg.IdentitySvc != nil {
+		l := c.Learning()
+		learning = &l
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ev := c.events
@@ -1191,6 +1294,13 @@ func (c *Core) Status() Status {
 		Memories: mem, Pending: c.pending, TassMD: doc, Events: append([]Event(nil), ev...), Pulse: pulse}
 	if ids != nil {
 		out.Identity = ids
+		out.Learning = learning
+		out.SyncHold = c.syncHold
 	}
 	return out
+}
+
+func starterDoc(name string) string {
+	return "# " + name + "\n\n<!-- This entity's own document. -->\n\n## Who I am\n\nI am " + name +
+		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Learned\n\n## Now\n\nJust created.\n"
 }

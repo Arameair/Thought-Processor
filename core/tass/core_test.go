@@ -43,6 +43,7 @@ type fakeGH struct {
 	comments []github.Comment
 	posted   []string // "issue#n: body"
 	prs      []string
+	treeCalls int
 	nextID   int64
 	srv      *httptest.Server
 }
@@ -101,6 +102,25 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", etag)
 		json.NewEncoder(w).Encode(map[string]string{"content": base64.StdEncoding.EncodeToString([]byte(x.text)),
 			"encoding": "base64", "sha": fmt.Sprintf("sha%d", x.ver)})
+	case r.Method == "GET" && strings.Contains(p, "/git/trees/"):
+		parts := strings.SplitN(strings.TrimPrefix(p, "/repos/"), "/git/trees/", 2)
+		prefix := parts[0] + "@" + parts[1] + ":"
+		tree := []map[string]string{}
+		sig := ""
+		for k, v := range f.files {
+			if strings.HasPrefix(k, prefix) {
+				tree = append(tree, map[string]string{"path": strings.TrimPrefix(k, prefix), "type": "blob", "sha": fmt.Sprintf("sha%d", v.ver)})
+				sig += k + fmt.Sprint(v.ver)
+			}
+		}
+		etag := fmt.Sprintf(`"t%x"`, hash(sig)[:8])
+		f.treeCalls++
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(304)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		json.NewEncoder(w).Encode(map[string]any{"tree": tree})
 	case r.Method == "PUT" && strings.Contains(p, "/contents/"):
 		var b struct{ Message, Content, SHA, Branch string }
 		json.NewDecoder(r.Body).Decode(&b)
@@ -173,6 +193,8 @@ func (f *fakeGH) say(issue int, who, body string) {
 // (The real engine's cycle is tested in the Thought-engine repo; this stands in for its HTTP contract.)
 
 type fakeEngine struct {
+	control  string
+	jobState map[string]map[string]any
 	mu       sync.Mutex
 	reqs     []map[string]any
 	outcomes []map[string]any
@@ -200,17 +222,36 @@ func newFakeEngine() *fakeEngine {
 			e.mu.Lock()
 			e.pulse = append(e.pulse, r.URL.Path)
 			e.mu.Unlock()
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			if e.control == "" {
+				e.control = "PAUSED"
+			}
 			if r.Method == "GET" {
-				json.NewEncoder(w).Encode(map[string]any{"control": "PAUSED", "state": "READY"})
+				jobs := []map[string]any{}
+				for _, j := range e.jobs {
+					if st, ok := e.jobState[j["job_id"].(string)]; ok {
+						jobs = append(jobs, st)
+					} else {
+						jobs = append(jobs, map[string]any{"job_id": j["job_id"], "state": "QUEUED"})
+					}
+				}
+				json.NewEncoder(w).Encode(map[string]any{"control": e.control, "state": "READY", "jobs": jobs})
 				return
 			}
 			var in map[string]any
 			json.NewDecoder(r.Body).Decode(&in)
-			if r.URL.Path == "/api/pulse/jobs" {
-				e.mu.Lock()
+			switch r.URL.Path {
+			case "/api/pulse/jobs":
 				e.jobs = append(e.jobs, in)
-				e.mu.Unlock()
 				w.WriteHeader(202)
+			case "/api/pulse/control":
+				switch in["action"] {
+				case "start", "resume":
+					e.control = "RUNNING"
+				case "pause":
+					e.control = "PAUSED"
+				}
 			}
 			json.NewEncoder(w).Encode(in)
 			return
@@ -551,4 +592,14 @@ func TestIdentityCanWithdrawPermission(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, GrantFile)); err == nil {
 		t.Fatal("a removed policy must be removed locally too (the engine then refuses)")
 	}
+}
+
+// finish marks a pulse job done with the entity's reply.
+func (e *fakeEngine) finish(jobID, state, result, remember string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.jobState == nil {
+		e.jobState = map[string]map[string]any{}
+	}
+	e.jobState[jobID] = map[string]any{"job_id": jobID, "state": state, "result": result, "remember": remember, "cycle_id": jobID + ":cycle"}
 }
