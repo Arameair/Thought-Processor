@@ -3,7 +3,7 @@
 **Scope:** A complete review of the 72 GitHub issues open at the start of this pass in Thought-Processor (including Cognition), Thought-engine, Identity, TASS and Development. Classification is based on issue bodies and recorded discussions, not a new real-owner-machine test. The live GitHub issue state remains authoritative.
 
 
-**ARCHIVAL VERIFIED (2026-11-06): 37 historical/superseded issues were annotated individually BEFORE closing.** The five repositories now have **35 open issues**: 22 marked NOW and 13 marked LATER. No issue body, comment, commit history, code, grants or running installation was deleted/changed. Every historical closure explicitly distinguishes a superseded approach from a completed bounded report; no open security, recovery or owner-acceptance blocker was closed.
+**ARCHIVAL VERIFIED (2026-11-06), with independent audit corrections below: 37 historical/superseded issues were annotated individually BEFORE closing.** The five repositories now have **35 open issues**: 22 marked NOW and 13 marked LATER. No issue body, comment, commit history, code, grants or running installation was deleted/changed. Every historical closure explicitly distinguishes a superseded approach from a completed bounded report; no open security, recovery or owner-acceptance blocker was closed.
 
 | Repository | Initial open | Historical issues closed | Still open |
 | --- | ---: | ---: | ---: |
@@ -122,3 +122,11 @@
 5. **Future product:** #90 synthetic second installation before real KYSSA; feature registry, Developer service, five-card thinking, mobile sessions and licensing later.
 
 **NOTE:** Closing historical issues is administrative and does not delete records, merge code, grant permissions, fix old defects or change the running owner installation. Each closed issue keeps its exact original rationale and link to this register. If a historical approach becomes active again, reopen or create a narrowly scoped issue with new evidence.
+
+## Independent review correction — November 6, 2026
+
+**Documentation hazard fixed:** The prior `core/README.md` still included an obsolete rollback telling operators to delete local TASS data directories. The draft README now removes this dangerous legacy procedure and points only to pinned, separately approved backup/restore instructions. Do not use `start.sh` or file deletion from the 2026-11-04 prototype against the installed one-app Docker data.
+
+**Five historical closure reasons corrected:** Thought-Processor #17, #20, #23 and #42, plus Thought-engine #2 were previously closed as `completed`, even though their full historical owner-acceptance/design conditions were not proved. The dated issue comments now explicitly mark them as `not_planned` / superseded, *not* owner-verified. Their successor security, execution and recovery gates remain open. Counts remain 37 archived / 35 open.
+
+**Evidence scope:** All 72 issue bodies and the current GitHub states were inventoried; comments were **sampled/selected**, not every comment of every issue re-read. Documentation PRs remain draft; no live owner-machine tests were conducted in this cleanup.
