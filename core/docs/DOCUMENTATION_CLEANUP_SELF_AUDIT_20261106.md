@@ -4,7 +4,7 @@
 
 ## Scope examined
 
-- All **72 issue bodies** in the five repositories (Thought Processor, including Cognition; Thought Engine; Identity; TASS; Development), with selected relevant discussions and follow-ups. Do **not** claim every comment in every issue was read.
+- All **72 open issue entries** were inventoried, and titles/body excerpts were evaluated alongside selected full issue threads and follow-ups. This was **not** a full line-by-line reading of every long issue body or comment. Reopen a historical item if later evidence shows its requirement lacks a proper successor.
 - 37 historical issue closures. Each received a dated explanation and retained its full thread; 35 issues remain open (22 core/current acceptance, 13 later).
 - Eight documentation PRs: [Core conflict PR #91](https://github.com/Arameair/Thought-Processor/pull/91), [current Core docs #92](https://github.com/Arameair/Thought-Processor/pull/92), [public docs #93](https://github.com/Arameair/Thought-Processor/pull/93), [Engine #18](https://github.com/Arameair/Thought-engine/pull/18), [Identity #41](https://github.com/Arameair/identity/pull/41), [TASS main #27](https://github.com/Arameair/TASS/pull/27), [TASS live #28](https://github.com/Arameair/TASS/pull/28), [Development #4](https://github.com/Arameair/Development/pull/4). Seven are landing/docs cleanup; Core PR #91 is the separate earlier conflict-remediation handoff.
 - Checked GitHub changed-filename listings: every changed file in those eight PRs is Markdown; **no Go/Python/JavaScript/Compose runtime files changed** in those PRs.
@@ -23,7 +23,7 @@
 ## Checked and still true
 
 - The integrated Go candidate [Processor #88](https://github.com/Arameair/Thought-Processor/pull/88) pins Engine `d69d3917d1601d806d4b2ba2254693e1adb92b6b` and Identity `7da7f7c5bbecc42d3a7e9316a2037243eda10b88`, and remains draft/not owner deployed at the time of this source review.
-- The original issue triage still has **37 archived / 35 remaining open**; archived issues include a distinct prior-approach explanation, and actual current security, recovery and real-execution acceptance issues are still open.
+- The issue triage still has **37 archived / 35 remaining open**; archived issues include a distinct prior-approach explanation, and actual current security, recovery and real-execution acceptance issues are still open.
 - Current Core references `core/docs/CURRENT_GO_STACK_20261106.md`, `COGNITION_STATUS_20261106.md`, `ISSUE_TRIAGE_20261106.md`, the pinned owner runbook and `core/tass.sh` were confirmed to exist on the docs candidate branch. This is **not** a comprehensive external-link crawl of GitHub history.
 - Cognition is **inside Core**, not an independently deployed repository/service. Engine Pulse and Core Sync remain separate timers.
 - The corrections do not relax the restricted GitHub mailbox or Identity authorization controls.
