@@ -1,6 +1,6 @@
 # Thought Processor — implementation status and evidence
 
-**UPDATE (2026-11-06): This page is an OCTOBER 27 historical status snapshot, not the current TASS Go integration.** For the actual November experimental Core/Engine/Identity pins, acceptance gaps and the [open-issue reconciliation](https://github.com/Arameair/Thought-Processor/blob/docs/current-go-stack-index-20261106/core/docs/ISSUE_TRIAGE_20261106.md), use the [November current-stack index](https://github.com/Arameair/Thought-Processor/blob/docs/current-go-stack-index-20261106/core/docs/CURRENT_GO_STACK_20261106.md). Keep the older tests and commits below as dated evidence; do not apply their status to the new candidate.
+**UPDATE (2026-11-06): This page is an OCTOBER 27 historical status snapshot, not the current TASS Go integration.** For the actual November experimental Core/Engine/Identity pins, acceptance gaps and the [open-issue reconciliation](https://github.com/Arameair/Thought-Processor/blob/af59e7d9213170669eddd4f269ba1f1b50c427e9/core/docs/ISSUE_TRIAGE_20261106.md), use the [November current-stack index](https://github.com/Arameair/Thought-Processor/blob/af59e7d9213170669eddd4f269ba1f1b50c427e9/core/docs/CURRENT_GO_STACK_20261106.md). Keep the older tests and commits below as dated evidence; do not apply their status to the new candidate.
 
 **Reviewed:** October 27, 2026. Distinguish **code present**, **reported developer testing**, **independent review**, **owner-observed acceptance** and **branch promotion**. No publication or production security is implied.
 
