@@ -106,7 +106,7 @@
 
 ## 6. C5 — A graph that renders is not a graph that governs execution
 
-**Source evidence:** [Brain Builder README](https://github.com/Arameair/Development/blob/experiment/go-brain-builder-prototype-20261105/brain-builder/README.md) states **structural review only** and no Engine/Identity/executor integration. Core's brain revisions are read-only/advisory; [Cognition runbook](https://github.com/Arameair/Thought-Processor/blob/experiment/claude-cognition-repair-junction-20261105/core/docs/OWNER_ACCEPTANCE_COGNITION_JUNCTION_20261106.md) says proposed alternative cells are unactivated and **EFFECT NOT MEASURED**. [TP #89](https://github.com/Arameair/Thought-Processor/issues/89) already defines first authorized skill and controlled A/B milestone.
+**Source evidence:** [Brain Builder README](https://github.com/Arameair/Development/blob/experiment/go-brain-builder-prototype-20261105/brain-builder/README.md) states **structural review only** and no Engine/Identity/executor integration. Core's brain revisions are editable and structurally validated, but advisory for actual tool routing/execution; [Cognition runbook](https://github.com/Arameair/Thought-Processor/blob/experiment/claude-cognition-repair-junction-20261105/core/docs/OWNER_ACCEPTANCE_COGNITION_JUNCTION_20261106.md) says proposed alternative cells are unactivated and **EFFECT NOT MEASURED**. [TP #89](https://github.com/Arameair/Thought-Processor/issues/89) already defines first authorized skill and controlled A/B milestone.
 
 **Risk:** A connection is drawn, the prompt says a different action was selected, and the UI reports improvement despite the actual executor doing the same operation or none at all.
 
