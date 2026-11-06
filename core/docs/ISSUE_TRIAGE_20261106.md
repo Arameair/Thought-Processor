@@ -1,63 +1,112 @@
-# November 6 issue and discussion reconciliation — Go TASS repositories
+# Go TASS cross-repository issue triage — November 6, 2026
 
-**Status:** Documentation reconciliation, not verification that defects are fixed. Issues here were inventoried via their currently open GitHub results and sampled supporting comments/PRs. **No code, grants, deployed services or owner data changed.** Historical comments remain intact as evidence; a draft PR does not make a defect CLOSED.
+**Scope:** A complete review of the 72 GitHub issues open at the start of this pass in Thought-Processor (including Cognition), Thought-engine, Identity, TASS and Development. Classification is based on issue bodies and recorded discussions, not a new real-owner-machine test. The live GitHub issue state remains authoritative.
 
-## Inventory snapshot
+**NOW** = currently relevant security/correctness or first real Go integrated acceptance work. **LATER** = valid product/design/UX work without blocking the first stable Go loop. **ARCHIVE** = a completed narrow report or historical approach that should be closed with a dated explanation; not proof old defects were fixed.
 
-| Repository / surface | Open issues reviewed* | Current treatment |
-| --- | ---: | --- |
-| Thought-Processor, including Cognition | 39 | One integrated acceptance line; pending security, recovery, action and Cognition owner tests |
-| Thought-engine | 8 | Canonical entity-ID routing, ingress authority, Engine runtime and learning contract |
-| Identity | 10 | Privacy, service authorization, credential/owner boundary and feature-grant acceptance |
-| TASS | 14 | Entity mind/lessons, manual mailbox, future vision, historical communications |
-| Development | 1 | Hub consolidation and role separation from Developer, /dev and Brain Builder |
-| **Total** | **72** | Search snapshot only; **not** 72 confirmed bugs |
+**Triage:** 22 NOW, 13 LATER, 37 ARCHIVE. NOW issues are not all confirmed bugs; many are acceptance or architecture tasks.
 
-*Numbers are a search snapshot on 2026-11-06, not a live tracker projection. Open design issues, historical experiments, one-shot communication messages and unresolved defects are mixed. `Cognition` is currently a **Core-hosted feature** tracked in Thought-Processor #82, not a separate production repo. Old `developer` and `Developmnt` are historical/candidate sources; do not remove their evidence or silently migrate state.
+## Important preservation rules
 
-## Do not close merely because code exists
+- Issue history, evidence, comments and source commits must remain available. For each ARCHIVE issue, post a dated closure note **before** closing it. `completed` means only a bounded delivered report/reply; otherwise use `not_planned` for a superseded path.
+- Preserve owner-approved boundaries: Identity alone issues grants; every service enforces authorization, default deny; trusted, specifically approved first-party code until OS sandboxing is proven; no Markdown, GitHub, model or graph can authorize itself. Do not enable full autonomy or expose current localhost APIs to mobile/LAN.
+- A fixture PASS, source edit or older P0/P1 owner test is not a PASS for the current version-pinned Go stack.
 
-| Issue | Correct current classification | Why it stays visible |
-| --- | --- | --- |
-| [TP #79](https://github.com/Arameair/Thought-Processor/issues/79) safe updates | **CANDIDATE FIX / OWNER NOT RUN** | PR #88 reports 14/14 simulated updater/fake Docker cases; real owner Docker backup/restore and failure recovery not accepted |
-| [TP #71](https://github.com/Arameair/Thought-Processor/issues/71) duplicate lesson job 409 | **FIXTURE PASS / OWNER RETEST NOT RUN** | PR #73 and PR #88 isolated tests repaired unique attempt IDs; the specific owner failed-history scenario on actual installed TASS still requires acceptance |
-| [TP #50](https://github.com/Arameair/Thought-Processor/issues/50) prediction lock | **SOURCE FIX / NEGATIVE FIXTURE TEST PASS; LIVE ACTION NOT ACCEPTED** | PR #62 reports strict test pass; the end-to-end real-model action gate remains unresolved |
-| [TP #41](https://github.com/Arameair/Thought-Processor/issues/41) Atrium while Full Auto | **PR #43 CI PASS / OWNER TEST NOT RUN** | Real hardware/chat while modes ON, busy behavior and chat-only authority have not been accepted |
-| [TP #46](https://github.com/Arameair/Thought-Processor/issues/46) inbox 202 despite drop | **OPEN DEFECT / CURRENT CANDIDATE STATUS NOT RECHECKED** | A documented failing reproduction exists; no proven owner acceptance or verified code correction in this sweep |
-| [TP #47](https://github.com/Arameair/Thought-Processor/issues/47) browser token | **OPEN SECURITY LIMIT** | Loopback page token is not authenticated remote owner session; particularly blocks mobile/LAN exposure |
-| [TP #82](https://github.com/Arameair/Thought-Processor/issues/82) Cognition | **INTEGRATED DRAFT / OWNER NOT RUN** | PR #86–#88 source/fixture testing, but no real local acceptance; Engine entity mapping remains open |
-| [Engine #17](https://github.com/Arameair/Thought-engine/issues/17) entity IDs | **OPEN P0 CORRECTNESS/SECURITY** | Engine name-based entity routing, despite Cognition's safer explicit viewer link |
-| [Identity #15](https://github.com/Arameair/identity/issues/15) source grant | **DESIGN/IMPLEMENTATION TEST OPEN** | Receiver-side authenticated identity authorization and revocation needed |
-| [Identity #30](https://github.com/Arameair/identity/issues/30) multi-identity | **DESIGN; PRIVACY NOT VERIFIED** | Synthetic second-install isolation tests not run |
-| [Dev #1](https://github.com/Arameair/Development/issues/1) consolidation | **COORDINATION OPEN** | Standalone Developer vs Core /dev roles still require owner choice |
-| [TASS #25](https://github.com/Arameair/TASS/issues/25) thought batch | **FUTURE DESIGN** | Five-card dynamic batch and autonomous learning not yet implemented |
+## Exhaustive 72-issue classification
 
-## Historical and small-scope discussions: preserve, classify, then optionally close
+| Repo | Issue | Triage | Reason and current successor |
+| --- | --- | --- | --- |
+| Thought-Processor | [#2](https://github.com/Arameair/Thought-Processor/issues/2) Decision required — one canonical Thought Engine for Thought Processor | **NOW** | Canonical Engine authority/data migration unresolved; C1 and Engine #17. |
+| Thought-Processor | [#4](https://github.com/Arameair/Thought-Processor/issues/4) Contracts — independent log-source feature feeds and replaceable AI workers | **LATER** | Feature observation/replaceable worker contracts remain future generalized capability. |
+| Thought-Processor | [#6](https://github.com/Arameair/Thought-Processor/issues/6) Design: Identity authority and feature self-registration for Thought Processor | **LATER** | Self-registration and independent feature design still relevant; not first Go loop gate. |
+| Thought-Processor | [#7](https://github.com/Arameair/Thought-Processor/issues/7) Architecture review: Identity-first coordination and the Identity–Experience hypothesis (Grok / other AI critiques) | **ARCHIVE** | Oct architecture critique and alignment notes recorded; current authority analysis in #91; retain default-deny decision. |
+| Thought-Processor | [#8](https://github.com/Arameair/Thought-Processor/issues/8) Plan the first Identity ↔ Engine authorization test through Thought Processor | **ARCHIVE** | Early Identity-Engine test plan superseded by Go Core #89, Engine #1/#17. |
+| Thought-Processor | [#13](https://github.com/Arameair/Thought-Processor/issues/13) Design plan needed: install Thought Engine only if Identity allows (plan first, no code) | **ARCHIVE** | Oct repository-visibility eligibility plan/demo not a secure grant; use Identity #15 and Core #89. |
+| Thought-Processor | [#15](https://github.com/Arameair/Thought-Processor/issues/15) Design gate: first usable Thought Processor workspace (Profiles → Catalog → Collections) | **ARCHIVE** | Earlier Profiles/Catalog UX gate replaced as active UI by Go Core /dev; owner acceptance #89. |
+| Thought-Processor | [#16](https://github.com/Arameair/Thought-Processor/issues/16) Integration notes: how Thought Processor, Identity and features connect (Identity alpha-candidate-20261026) | **ARCHIVE** | Identity/1 alpha pairing notes superseded by identity/2 and Go service; Core #91. |
+| Thought-Processor | [#17](https://github.com/Arameair/Thought-Processor/issues/17) P0 implementation candidate — Windows owner acceptance and release blockers | **ARCHIVE** | Historic P0 Windows build blocked by OS application-control policy; WSL first-run followed; current release #79. |
+| Thought-Processor | [#18](https://github.com/Arameair/Thought-Processor/issues/18) Independent P0 test report (Linux): feature onboarding ae9e96b + Identity c8c0a54 — REVISE | **ARCHIVE** | Independent P0 Grok REVISE report delivered; historical negative findings preserved; not a blanket fix. |
+| Thought-Processor | [#19](https://github.com/Arameair/Thought-Processor/issues/19) P1 plan — durable feature identities, utility onboarding and Fast AI Worker integration | **ARCHIVE** | Old P1 feature-lifecycle plan led to experimental code; product-neutral design now #90. |
+| Thought-Processor | [#20](https://github.com/Arameair/Thought-Processor/issues/20) Voice-chat handoff — P1 feature identities, admin authority and connection design | **ARCHIVE** | Voice design handoff documented trusted-first-party-only, default deny and no arbitrary third-party code without OS isolation; carry forward #91. |
+| Thought-Processor | [#21](https://github.com/Arameair/Thought-Processor/issues/21) Claude assignment — Build runnable P1 feature foundation from approved Alpha | **ARCHIVE** | P1 Claude experimental candidate delivered/fixture-tested, not owner accepted or promoted; current #88/#89. |
+| Thought-Processor | [#22](https://github.com/Arameair/Thought-Processor/issues/22) Grok independent QA — adversarial review and reproducibility test of Claude P1 | **ARCHIVE** | Independent P1 Grok QA report delivered; corrective P1 scope #23; not production certification. |
+| Thought-Processor | [#23](https://github.com/Arameair/Thought-Processor/issues/23) Claude P1 cleanup — resolve Grok QA findings before Alpha consideration | **ARCHIVE** | P1 cleanup candidate and fixture report delivered, not owner accepted; current #88/#89. |
+| Thought-Processor | [#24](https://github.com/Arameair/Thought-Processor/issues/24) Portfolio follow-up — real P1 owner demo, licensing and verified evidence | **LATER** | Licensing, business boundary and verified portfolio demo deliberately deferred. |
+| Thought-Processor | [#31](https://github.com/Arameair/Thought-Processor/issues/31) Owner acceptance: build TASS-connected local Developer Workstation; preserve identity through upgrade | **LATER** | Developer Workstation still a candidate capability; /dev exists but real service integration not approved. |
+| Thought-Processor | [#32](https://github.com/Arameair/Thought-Processor/issues/32) P0 Owner usability: Windows/WSL one-click launcher + safe Check Updates / Update + audit sign-in, secrets and lifecycle | **NOW** | Owner launcher and update/recovery usability overlaps #79; reconcile distinct requests before closing. |
+| Thought-Processor | [#33](https://github.com/Arameair/Thought-Processor/issues/33) Owner blocked at Establish Admin: missing or wrong anti-forgery token; needs verified path to real TASS chat | **ARCHIVE** | Old P1 Establish Admin token UI defect tied to replaced launcher; current token threat #47 still open. |
+| Thought-Processor | [#34](https://github.com/Arameair/Thought-Processor/issues/34) [UX REVIEW — NO BUILD] TASS Thought Processor Brain / Service Map — complete proposal v1.0 | **LATER** | Brain/Service Map UX proposal partly overlaps /dev and Cognition; inspect later. |
+| Thought-Processor | [#39](https://github.com/Arameair/Thought-Processor/issues/39) [DISCUSSION ONLY] Reconcile Workshop, Go Processor, Atrium and TASS mind source | **ARCHIVE** | Old Workshop/mind-source reconciliation replaced by C1-C10 audit #91; preserve launch hazards. |
+| Thought-Processor | [#41](https://github.com/Arameair/Thought-Processor/issues/41) Atrium: allow owner conversation while Full Auto and Autonomy remain enabled | **ARCHIVE** | Older Python Atrium Full Auto chat-only fix fixture CI PASS (PR #43) but not owner accepted; current Go path #89. |
+| Thought-Processor | [#42](https://github.com/Arameair/Thought-Processor/issues/42) Go TASS core: owner specification, Thought Engine cycle, local-first and security acceptance | **ARCHIVE** | Original Go Core spec yielded experimental code; actual live acceptance and restore #89/#79 still open. |
+| Thought-Processor | [#44](https://github.com/Arameair/Thought-Processor/issues/44) Containerize verified Go TASS core and add safe Update/Rollback workflow | **NOW** | Docker Go deployment exists, but safe update/rollback acceptance unresolved; coordinate #79. |
+| Thought-Processor | [#46](https://github.com/Arameair/Thought-Processor/issues/46) P1: Go /api/say returns 202 when bounded inbox silently drops an owner message | **NOW** | May acknowledge dropped inbox message with 202; reproduce and fix current code. |
+| Thought-Processor | [#47](https://github.com/Arameair/Thought-Processor/issues/47) P1 security: localhost GET / leaks bearer-equivalent browser token for Go chat API | **NOW** | Browser token insufficient as authenticated owner/remote mobile session; security blocker. |
+| Thought-Processor | [#50](https://github.com/Arameair/Thought-Processor/issues/50) P0 Go Core must reject unlocked or mismatched Engine proposals before executing actions | **NOW** | Locked prediction and cycle identity integrity need full execution acceptance. |
+| Thought-Processor | [#51](https://github.com/Arameair/Thought-Processor/issues/51) Atrium: approved test cards and evidence receipts on 20-second pulses (GPT-6) | **ARCHIVE** | Earlier Python Atrium test cards path replaced by Go /dev and Engine loop; #70/#89. |
+| Thought-Processor | [#60](https://github.com/Arameair/Thought-Processor/issues/60) P0: TASS learn from chat — one restricted notebook step and real pulse receipt | **NOW** | Restricted authorized notebook/lesson read-only execution with real receipt unproved. |
+| Thought-Processor | [#70](https://github.com/Arameair/Thought-Processor/issues/70) [DESIGN HANDOFF] TASS ongoing 20-second predictive thought, five dynamic Markdown cards, GitHub teaching and bounded autonomy | **LATER** | Five-card predictive 20-second design intent; cannot call implemented before first loop. |
+| Thought-Processor | [#71](https://github.com/Arameair/Thought-Processor/issues/71) P0 owner acceptance blocker: manual Study reuses prior Engine job ID after upgrade (HTTP 409) | **NOW** | Owner observed duplicate lesson job 409; retain regression until owner-history retest. |
+| Thought-Processor | [#72](https://github.com/Arameair/Thought-Processor/issues/72) P0 skill invocation: TASS should resolve @skill and execute one Identity-authorized, supervised workspace operation | **NOW** | Supervised @skill operation and Identity decision must be demonstrated. |
+| Thought-Processor | [#76](https://github.com/Arameair/Thought-Processor/issues/76) P1: Prove one GPT-6 ↔ Go TASS mailbox round trip via TASS issue #24 before hourly loop | **NOW** | Go mailbox pilot fixture PASS but owner real GitHub/Nemotron roundtrip pending. |
+| Thought-Processor | [#78](https://github.com/Arameair/Thought-Processor/issues/78) Owner test: Development Platform 60661aa — partial; Brain relation validation defects | **NOW** | Owner Development PARTIAL and graph-validation bugs; retest repaired candidate. |
+| Thought-Processor | [#79](https://github.com/Arameair/Thought-Processor/issues/79) P0: Single TASS integration branch, automatic verified backups and Restore Previous Update | **NOW** | Automatic backup and restore/rollback critical acceptance. |
+| Thought-Processor | [#80](https://github.com/Arameair/Thought-Processor/issues/80) P1 Development UX: Copy reply, correlated test logs and safe evidence export | **LATER** | Sanitized copy/log/evidence UX is worthwhile post core stabilization. |
+| Thought-Processor | [#82](https://github.com/Arameair/Thought-Processor/issues/82) P1 Cognition: Go-first persistent thought library, playback, evidence and Development bridge | **NOW** | Cognition integrated draft; real record playback and isolation acceptance pending. |
+| Thought-Processor | [#89](https://github.com/Arameair/Thought-Processor/issues/89) Nov 6 owner start: prove one authorized agentic execution, then Brain Builder A/B outcome | **NOW** | Central real model/authorized skill/evaluation and graph A/B owner test. |
+| Thought-Processor | [#90](https://github.com/Arameair/Thought-Processor/issues/90) Product portability audit: remove TASS-only runtime assumptions before second installation | **LATER** | Generic installs, no machine-specific assumptions, second synthetic identity before KYSSA. |
+| Thought-engine | [#1](https://github.com/Arameair/Thought-engine/issues/1) Design gate: Engine must verify Identity grant before accepting or processing observations | **NOW** | Authenticated observation source and fail-closed receiver grants. |
+| Thought-engine | [#2](https://github.com/Arameair/Thought-engine/issues/2) Build: working Engine prototype testable through Thought Processor (Attach + Send observation) | **ARCHIVE** | Old Chat-Jimmy ↔ Processor attach prototype built; current Nemotron Go stack #89 supersedes. |
+| Thought-engine | [#3](https://github.com/Arameair/Thought-engine/issues/3) Design handoff — future Thought Engine foundation, decisions and first test gate | **ARCHIVE** | Future Engine/five-Spark design handoff preserved in TASS #25/TP #70; old build order no longer current. |
+| Thought-engine | [#4](https://github.com/Arameair/Thought-engine/issues/4) P1: prove scoped ticket → Engine enforcement → AI Worker with identity/grant memory isolation | **NOW** | Scoped ticket → receiver → model worker and per-identity data enforcement not accepted. |
+| Thought-engine | [#5](https://github.com/Arameair/Thought-engine/issues/5) [DISCUSSION ONLY] Canonical Engine choice, event semantics and first integration evidence | **ARCHIVE** | Nov 4 Engine choice/IDLE discussion superseded by TP #2, #91 and Engine #17. |
+| Thought-engine | [#6](https://github.com/Arameair/Thought-engine/issues/6) P1 security hardening: legacy write endpoints unauthenticated; optional grant fails open | **NOW** | Unauthenticated legacy write routes and optional grants require hardening. |
+| Thought-engine | [#12](https://github.com/Arameair/Thought-engine/issues/12) P0: Real Nemotron supervised lesson fails plan parser (REMEMBER only; no REPLY) | **NOW** | Real Nemotron parser failure had candidate repair; require preserved-owner-history regression. |
+| Thought-engine | [#17](https://github.com/Arameair/Thought-engine/issues/17) P0: bind Engine execution and evidence to canonical Identity entity IDs, not display names | **NOW** | Replace display-name entity routing with canonical Identity ID and negative tests. |
+| identity | [#9](https://github.com/Arameair/identity/issues/9) Identity GitHub account manager: real secure connection, read-only repos, then approved writes | **LATER** | GitHub account manager wider read/write scope beyond existing sign-in still needs consent/permissions. |
+| identity | [#14](https://github.com/Arameair/identity/issues/14) Open design review: first-run Identity, organized feature storage, and background service | **ARCHIVE** | Oct P1 first-run/security design review superseded by current #15/#30 and Core #89. |
+| identity | [#15](https://github.com/Arameair/identity/issues/15) Design gate: authoritative observation grant check, revocation and failure behavior | **NOW** | Source-authenticated, entity-scoped grant check and revocation at dispatch/use. |
+| identity | [#19](https://github.com/Arameair/identity/issues/19) Alpha-candidate trial: setup PASS, new-user friction list | **ARCHIVE** | Oct early Identity setup friction trial and comparison delivered; current UI #37 not thereby fixed. |
+| identity | [#20](https://github.com/Arameair/identity/issues/20) Alpha promotion gate — what the Identity candidate must prove | **ARCHIVE** | Old Identity alpha promotion checklist no longer applies to pinned Go candidate; Core #79/#89. |
+| identity | [#21](https://github.com/Arameair/identity/issues/21) Portfolio polish follow-up — licensing, verifiable demos and repository presentation | **LATER** | Owner explicitly deferred licensing/product policy; not solved by docs cleanup. |
+| identity | [#24](https://github.com/Arameair/identity/issues/24) Liaison test 1: what does the Team Liaison do? | **ARCHIVE** | Single Liaison question answered with three rules in DONE comment, not general team reliability. |
+| identity | [#25](https://github.com/Arameair/identity/issues/25) Liaison test 2: evidence rule | **ARCHIVE** | Legacy Liaison evidence-rule edit reached proposed PR #28, not verified merged; not current Go Core. |
+| identity | [#30](https://github.com/Arameair/identity/issues/30) [DISCUSSION ONLY] Multi-identity grants, Liaison mirror ownership and token boundaries | **LATER** | Independent KYSSA/privacy ownership design; consent and synthetic isolation later (#90). |
+| identity | [#37](https://github.com/Arameair/identity/issues/37) UI cleanup: remove obsolete 'Approve lesson #51 for TASS' developer-test panel from normal Identity screen | **NOW** | Approve lesson #51 dev-test panel needs UI removal and owner verification. |
+| TASS | [#2](https://github.com/Arameair/TASS/issues/2) Next prototype: natural Discord conversation with recent context | **ARCHIVE** | Discord-first natural chatbot prototype replaced by Go Core local Nemotron conversation. |
+| TASS | [#3](https://github.com/Arameair/TASS/issues/3) Next pass: browser management screen for TASS; Discord remains chat | **ARCHIVE** | Discord-primary management UI/SSH approach no longer current; present Go Core has separate UI. |
+| TASS | [#4](https://github.com/Arameair/TASS/issues/4) Claude handoff: standalone ScreenBridge visual capture prototype | **ARCHIVE** | Standalone ScreenBridge handoff remains historical optional-perception experiment. |
+| TASS | [#5](https://github.com/Arameair/TASS/issues/5) Claude handoff: independent Communication Bridge (Discord + local chat) | **ARCHIVE** | CommunicationBridge/Discord/local chat handoff replaced by Go chat and restricted GitHub pilot. |
+| TASS | [#6](https://github.com/Arameair/TASS/issues/6) Next TASS prototype: connect CommunicationBridge and ScreenBridge to existing agent | **ARCHIVE** | Browser-engine ScreenBridge/CommunicationBridge integration, B1 simulator and failure evidence preserved; local Go model path replaced it. |
+| TASS | [#8](https://github.com/Arameair/TASS/issues/8) Hello from KYSSA — Jessica’s AI Chief of Staff 💜 | **ARCHIVE** | KYSSA greeting completed as correspondence only; not proof KYSSA installed or authorized. |
+| TASS | [#9](https://github.com/Arameair/TASS/issues/9) Connection receipt test — Kyssa212 and TASS project collaboration | **ARCHIVE** | Old GitHub collaboration receipt lacks explicit ACK; archive UNVERIFIED, not PASS; future Identity #30. |
+| TASS | [#14](https://github.com/Arameair/TASS/issues/14) Chief of Staff handoff: today’s setup for TASS and KYSSA as active project participants | **ARCHIVE** | Oct Chief-of-Staff team setup superseded by Go core-first priority; no KYSSA account action. |
+| TASS | [#18](https://github.com/Arameair/TASS/issues/18) Read-only direct Workshop bridge test — TASS-DIRECT-1103-C | **ARCHIVE** | Old Workshop direct marker never independently correlated; archive NOT VERIFIED, Go mailbox #24 successor. |
+| TASS | [#19](https://github.com/Arameair/TASS/issues/19) Workshop collaboration feed — owner-enabled execution evidence | **ARCHIVE** | Old Workshop collaboration feed replaced by separate Go mailbox #24; history preserved. |
+| TASS | [#20](https://github.com/Arameair/TASS/issues/20) Talk with TASS — private GitHub companion conversation | **ARCHIVE** | Liaison conversation reply marker observed but not proof of Go Engine; now use #24. |
+| TASS | [#21](https://github.com/Arameair/TASS/issues/21) [DISCUSSION ONLY] Nov 4 repository ownership, cleanup and integration evidence audit | **ARCHIVE** | Earlier repo/ownership inventory recorded; updated cross-repo conflict #91 and portability #90. |
+| TASS | [#24](https://github.com/Arameair/TASS/issues/24) Talk with TASS (Go Core relay) | **NOW** | Restricted Go Core mailbox remains active, linked Processor #76. |
+| TASS | [#25](https://github.com/Arameair/TASS/issues/25) OWNER DESIGN HANDOFF — Continuous local thinking, dynamic five-card 20-second batches, GitHub teaching and bounded autonomy | **LATER** | Five-card bounded autonomy/thought design is future, not currently executed. |
+| Development | [#1](https://github.com/Arameair/Development/issues/1) Consolidate existing TASS Development Platform work without losing history | **LATER** | Design/prototype hub vs integrated /dev vs standalone Developer boundary unresolved; #89 C4. |
 
-- [Identity #24](https://github.com/Arameair/identity/issues/24), one-time "what does Team Liaison do?" **appears answered** by a recorded three-bullet `DONE` comment. Candidate to close **completed for the question only**, without claiming the Liaison engine is generally verified.
-- [Identity #25](https://github.com/Arameair/identity/issues/25), separate evidence rule edit, has PR #27/#28 claims and historical WORKING/BLOCKED records. **Do not conflate with #24** or mark merged/verified from a model's own DONE claim.
-- [TASS #8](https://github.com/Arameair/TASS/issues/8) is an introduction, not an unresolved executable bug. May be archived/closed as correspondence **only by an authorized repository owner** after deciding whether conversation history should remain open.
-- [TASS #18](https://github.com/Arameair/TASS/issues/18) direct Workshop test has unrelated handoff comments but no independently verified event timeline for its original marker; **do not mark PASS**.
-- [TASS #9](https://github.com/Arameair/TASS/issues/9) asks for an ACK not recorded in the sampled thread; **not proven completed**.
-- [TP #33](https://github.com/Arameair/Thought-Processor/issues/33) and [#39](https://github.com/Arameair/Thought-Processor/issues/39) refer to earlier P1/Admin/Workshop states; tag/annotate them **HISTORICAL / candidate superseded by the Go integration**, but preserve evidence, especially where no owner regression exists.
-- [TP #24](https://github.com/Arameair/Thought-Processor/issues/24) and [Identity #21](https://github.com/Arameair/identity/issues/21) are **OPEN / LICENSING DEFERRED**, not resolved by cleaned docs. Owner has not selected product license or commercial redistribution policy.
+## What the older experiments taught us
 
-**Do not delete comments** just to hide obsolete approaches. Old comments frequently contain source SHA, security reports, commands, an actual failed owner test, or decisions that prevent a regression. Use a dated summary and explicit superseding pointer; remove only an independently verified secret or unlawful material through a separate secure process.
+**Discord/ChatGPT browser TASS + CommunicationBridge/ScreenBridge:** supplied early proof-of-concept messaging/perception and in some cases simulated tests, but no longer defines the runtime; local Go/Nemotron and scoped GitHub pilot are the accepted direction. Do not claim the old image/browser integration passed real local-model acceptance.
 
-## Documentation change inventory (draft, not merged)
+**Chat-Jimmy / Thought Controller:** the first Spark/Trace/Thought worker/visualization contracts were useful, but should not compete with the pinned Go Thought-engine as the canonical operational store. Historic evidence is retained; routing by display name remains a fresh concern (Engine #17).
 
-- [TP PR #92](https://github.com/Arameair/Thought-Processor/pull/92): candidate root README, [current Go stack](CURRENT_GO_STACK_20261106.md), [Cognition current status](COGNITION_STATUS_20261106.md), this issue ledger.
-- [TP PR #93](https://github.com/Arameair/Thought-Processor/pull/93): public `main` landing.
-- [Engine PR #18](https://github.com/Arameair/Thought-engine/pull/18): Nemotron/current candidate instead of historical Chat-Jimmy instructions.
-- [Identity PR #41](https://github.com/Arameair/identity/pull/41): present grant/authority status and privacy limits.
-- [TASS PRs #27 and #28](https://github.com/Arameair/TASS/pulls): `main` and `live` readme cleanups; no mind-file or lesson changes.
-- [Development PR #4](https://github.com/Arameair/Development/pull/4): hub vs integrated Core /dev responsibility.
-- [TP PR #91](https://github.com/Arameair/Thought-Processor/pull/91): detailed C1–C10 conflicts and regression gates.
+**October P0/P1 feature installer, pairing, and Profiles/Catalog UI:** produced real user feedback and independent QA, but test results on old SHA/version are not proof of the modern Go Docker candidate. One prior Windows test failed because OS application-control policy blocked execution; that does not itself demonstrate a Go runtime bug.
 
-## What counts as resolution
+**Python Workshop/Atrium and Identity Liaison conversations:** generated overlapping UI, scheduler and GitHub pathways. Current Go uses its distinct Core Sync and Engine Pulse plus restricted TASS issue #24 mailbox; a Liaison comment is not a verified local Go Engine cycle.
 
-A ticket may be **completed** only for a proven, bounded deliverable and the specifically required evidence; product-wide security and user-machine acceptance require their own tests. Closing old communications as `not_planned` or `completed` is an archive decision, not proof the system is fixed. Record before close: reason, exact candidate SHA, test/owner evidence, successor issue if any, and whether the issue is historical.
+**Brain Builder/Cognition prototypes:** visual graph/edit/playback are not equivalent to permission-checked executed skills and independent outcome evaluation; verify through Core #89.
 
-## Remaining documentation work (not silently completed)
+## Fix order and closure evidence
 
-This pass refreshed repository **entry points** and created source-of-truth pages, but it did not line-by-line rewrite every historical markdown document, inspect every issue comment's entire history, delete repositories or scrub all references across all branches. Deep cleanup requires the owner to confirm which historical branches remain important, after the current candidate and data migration decisions. Preserve Git history and keep all safety-gate issues open until separately accepted.
+1. **Security and authority:** Processor #2/#47/#50, Engine #1/#6/#17, Identity #15 and #37.
+2. **One measured loop:** Processor #46/#60/#71/#72/#78/#89, Engine #12, owner-tested real Nemotron decision/skill/grant/outcome.
+3. **Recovery and observations:** Processor #32/#44/#79/#82; inspect backups and safe rollback, distinct Sync/Pulse timings.
+4. **Transport:** Processor #76 and TASS #24; no broadened GitHub scopes, prove actual comment/cycle and dedup.
+5. **Future product:** #90 synthetic second installation before real KYSSA; feature registry, Developer service, five-card thinking, mobile sessions and licensing later.
+
+**NOTE:** Closing historical issues is administrative and does not delete records, merge code, grant permissions, fix old defects or change the running owner installation. Each closed issue keeps its exact original rationale and link to this register. If a historical approach becomes active again, reopen or create a narrowly scoped issue with new evidence.
