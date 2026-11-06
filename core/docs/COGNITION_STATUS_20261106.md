@@ -6,7 +6,7 @@
 
 - **Engine** owns persistent Thoughts/Traces, cycles, ordered append-only journal entries and actual pulse state. [Engine PR #15](https://github.com/Arameair/Thought-engine/pull/15) provides an authenticated, bounded read-only cycle journal projection.
 - **Core** builds authorized, bounded Cognition view models and sanitized export. [Core #82](https://github.com/Arameair/Thought-Processor/issues/82), [PR #86](https://github.com/Arameair/Thought-Processor/pull/86), [repair PR #87](https://github.com/Arameair/Thought-Processor/pull/87), integrated as candidate [PR #88](https://github.com/Arameair/Thought-Processor/pull/88). Browser replay must not call the model, start jobs, approve lessons or modify graph records.
-- **Identity** links the canonical entity to the Engine entity through an explicit owner-reviewed step. **Engine's internal name-based routing is still open**, [Thought-engine #17](https://github.com/Arameair/Thought-engine/issues/17); a Cognition link does not fix it.
+- **Identity/Core integration candidate** requires an explicit owner-reviewed canonical Identity-to-Engine link; the owner-machine link has not yet been accepted. **Engine's internal name-based routing is still open**, [Thought-engine #17](https://github.com/Arameair/Thought-engine/issues/17); a Cognition link does not fix it.
 - **Development** receives only unexecuted adjustment proposals. A displayed graph difference is not evidence of changed real agent behavior.
 
 ## What the tests demonstrate — and what they do not
