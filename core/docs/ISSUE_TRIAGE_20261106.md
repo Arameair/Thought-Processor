@@ -2,6 +2,18 @@
 
 **Scope:** A complete review of the 72 GitHub issues open at the start of this pass in Thought-Processor (including Cognition), Thought-engine, Identity, TASS and Development. Classification is based on issue bodies and recorded discussions, not a new real-owner-machine test. The live GitHub issue state remains authoritative.
 
+
+**ARCHIVAL VERIFIED (2026-11-06): 37 historical/superseded issues were annotated individually BEFORE closing.** The five repositories now have **35 open issues**: 22 marked NOW and 13 marked LATER. No issue body, comment, commit history, code, grants or running installation was deleted/changed. Every historical closure explicitly distinguishes a superseded approach from a completed bounded report; no open security, recovery or owner-acceptance blocker was closed.
+
+| Repository | Initial open | Historical issues closed | Still open |
+| --- | ---: | ---: | ---: |
+| Thought-Processor (including Cognition) | 39 | 17 | 22 |
+| Thought-engine | 8 | 3 | 5 |
+| Identity | 10 | 5 | 5 |
+| TASS | 14 | 12 | 2 |
+| Development | 1 | 0 | 1 |
+| **TOTAL** | **72** | **37** | **35** |
+
 **NOW** = currently relevant security/correctness or first real Go integrated acceptance work. **LATER** = valid product/design/UX work without blocking the first stable Go loop. **ARCHIVE** = a completed narrow report or historical approach that should be closed with a dated explanation; not proof old defects were fixed.
 
 **Triage:** 22 NOW, 13 LATER, 37 ARCHIVE. NOW issues are not all confirmed bugs; many are acceptance or architecture tasks.
