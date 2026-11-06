@@ -1,134 +1,19 @@
 # Thought Processor
 
-For the fresh TASS alpha, launcher, private-key boundary, and IBM Granite setup, see [the alpha guide](docs/ALPHA.md).
+**Current Go TASS integration (November 6, 2026): experimental, not a released or owner-accepted build.** Thought Processor is the human/admin interface and Go Core for one local-first companion application. Thought Engine supplies the cognitive runtime; Identity supplies canonical authority; Development proposes/tests; Cognition is the **Core-hosted read-only** evidence view, not another service.
 
-## P1 experimental quick start — WSL/Linux (not Alpha)
+**Start at the [current stack and documentation map](core/docs/CURRENT_GO_STACK_20261106.md).** It identifies the exact pinned Core, Engine and Identity revisions, open conflict gates, links to the TASS mind source and Development prototype, and what is **not** implemented. The [Cognition status](core/docs/COGNITION_STATUS_20261106.md) distinguishes actual Engine records from visual demonstrations.
 
-**P1 cleanup experiment only.** This is a source-built local trial, not Alpha, an installer, or an accepted release. The launcher builds both matching P1 components and keeps GitHub sign-in, Identity pairing, and approval **manual**. It does **not** automatically approve GitHub access.
+## Status and next acceptance
 
-**Prerequisites:** WSL (Linux shell) or native Linux, Git, Bash, Go **1.22+**, Python **3.8+**, and network access to clone the repositories. Open your **Ubuntu/WSL Linux terminal** (not Windows PowerShell or Command Prompt). On native Linux, use your Linux terminal. Run the following checks there before cloning:
+The integrated draft [PR #88](https://github.com/Arameair/Thought-Processor/pull/88) reports component/fixture tests but **not deployment or a real-Nemotron owner acceptance**. First verify installed versions and safe restore [#79](https://github.com/Arameair/Thought-Processor/issues/79); then test one approved real skill invocation, inspect it in Cognition and compare a controlled Brain graph change [#89](https://github.com/Arameair/Thought-Processor/issues/89). [Portability issues](https://github.com/Arameair/Thought-Processor/issues/90) and [cross-repo conflicts](https://github.com/Arameair/Thought-Processor/pull/91) remain open.
 
-```bash
-git --version
-bash --version | head -n 1
-go version
-python3 --version
-```
+## How to run or inspect
 
-If any command is missing, **stop** and install that prerequisite; stop as well if Go is older than **1.22** or Python is older than **3.8**. Refer to [Git installation](https://git-scm.com/downloads), [Go installation](https://go.dev/doc/install), and [Python installation](https://docs.python.org/3/using/index.html) as needed. This check does not verify network access.
+For the **candidate only**, review [Core runbook](core/docs/OWNER_SESSION_FOUNDATION_20261105.md) and [launcher](core/tass.sh). `./tass.sh status` is a read-only inventory; install/update/rollback instructions are **not approved simply because they are documented**. On a fresh installation, Identity creates an entity; GitHub sync is optional. Do not expose the loopback API to a phone or the internet without a separate authentication design.
 
-**Use a new, clean `~/p1c` directory.** If `~/p1c` already exists, **stop**: inspect your previous trial instead of copying commands over it. Do not delete existing data or reuse active profiles. Paste the entire four-line launch block below into the Linux terminal, and **keep that terminal open** while the launcher runs.
+## Historical documents
 
-```bash
-mkdir -p ~/p1c && cd ~/p1c
-git clone --branch experiment/p1-cleanup-claude-20261026 https://github.com/Arameair/identity.git
-git clone --branch experiment/p1-launcher-gpt6-20261028 https://github.com/Arameair/Thought-Processor.git
-bash ~/p1c/Thought-Processor/run-p1.sh
-```
+This repository also contains earlier P0/P1 Processor launcher, Chat-Jimmy/Thought Controller, Atrium and Workshop experiments. Their README instructions, models and ports may be valid **for their own dated branches only**. They are not the current Go integrated TASS setup; retain them as Git history and experiment-specific documentation, not active startup advice.
 
-The last command **builds and starts** Identity P1 and Thought-Processor P1. Wait for `P1 Processor ready on 127.0.0.1:7862` in the launcher terminal; that is the launcher's Processor HTTP readiness result, **not** proof of pairing, authorization, or feature execution. Default trial ports: Identity `7792`, Processor `7862`.
-
-**Next in the UI:** (1) In the Processor page, choose **Connect to Identity** (or the equivalent connection action shown by this experimental build); (2) follow its manual pairing-code flow; (3) complete any required GitHub sign-in and Identity approval yourself. A loaded page or HTTP-ready message **does not** establish connection or authorization. Dustin's WSL observation must confirm the exact UI label.
-
-The launcher shows the **current private Processor URL** with a **DO NOT SHARE** warning when run directly in your trusted interactive Linux/WSL terminal (both input and output must be terminals). It also tries to open a browser automatically. **A successful opener command does not prove a browser window appeared.** If needed, copy the private link from that same terminal into your own browser.
-
-If your interactive terminal does not show the link, or you need to recover it after an opener failure, run this **only in your own local terminal**:
-
-```bash
-grep -Em1 '^[[:space:]]*open[[:space:]]*:' ~/p1c/p1-launcher/processor-private.log
-```
-
-The command matches the actual `open    :` log label despite variable spacing. Copy **only the private URL**, not the surrounding log text. Never paste terminal output, private links, codes, or logs into GitHub, chat, an issue, TheBrain, or Drive. Request and enter a **fresh pairing challenge manually** when Processor prompts for it; human Identity approval is still required.
-
-**Stop:** press **Ctrl+C in the launcher terminal**. **Repeat start** after it exits:
-
-```bash
-bash ~/p1c/Thought-Processor/run-p1.sh
-```
-
-**Privacy — trusted local session only:** the private `#code=` link is visible in your own interactive terminal and may briefly appear in local browser-opener process arguments on graphical Linux or WSL. This exposure is **not fixed**. Redirected/noninteractive launcher output withholds the link. Do not use on an untrusted shared host or record/share your terminal, and never publish URLs, URL fragments, pairing/device codes, or private logs.
-
-For full setup, ports, profile behavior, restart limitations, and diagnostics, see **[P1 launcher instructions](docs/P1/LAUNCHER.md)**. Independent Linux retest and Dustin's WSL/Windows-browser verification are separate acceptance gates.
-
-> **Other P1 work:** the older `experiment/p1-feature-foundation-claude-20261026` experiment is distinct from this cleanup launcher. For **this branch**, follow the P1 experimental quick start above and [P1 launcher instructions](docs/P1/LAUNCHER.md).
-
-> **Experiment branch `experiment/p0-feature-onboarding-20261026`:** a runnable Thought Processor P0 lives in [`processor/`](processor/). Run it on Windows with [AGENTS.md](AGENTS.md); the [report](docs/experiments/P0_FEATURE_ONBOARDING_2026-10-26.md) covers results and limits. This branch is not promoted.
-
-
-**The control point for the optional Thought Processing feature.**
-
-Thought Processor is the operator's place to **configure, observe, test, and troubleshoot** Thought Processing for an identity. It is not the thought database, a particular AI model, an identity authority, or a global router for unrelated applications.
-
-> **Status for this experimental branch:** a source-built P1 cleanup launcher is available for Linux/WSL testing; independent retest and owner WSL verification are pending. A successful launch does not establish pairing, authorization, or product acceptance. Other branches have separate status.
-
-## The product boundary
-
-- **Identity** owns identity records, feature entitlements, grants and whether Thought Processing is enabled for a particular identity.
-- **Source features** (TASS, ScreenBridge, logs, Discord, etc.) keep working independently. When permitted and individually connected, their logs/observations can be *fed into* Thought Processing. Disabling Thought Processing must not shut down the source application.
-- **Thought Engine** owns the actual observation queue, Sparks, Traces, Thoughts, processing rules and their persistent history. Model answers are inputs, not an unchecked authority to rewrite history.
-- **Thought Processor (this project)** is the **real control point**: connect/disconnect allowed feeds, inspect service readiness, manage processing policy and queue operations, observe decisions/evidence, select a suitable worker, see logs and metrics. Every control must perform a real operation and report its actual outcome.
-- **AI workers** are interchangeable. Chat-Jimmy is the current candidate fast worker, *not* a permanent dependency, product identity, or place where thought history is stored.
-
-**Feature-based product principle:** Thought Processing is a separable, optional capability. Installing a source feature does not imply Thought Processing access. Enabling Thought Processing does not automatically authorize every possible log source. A customer may buy/use one feature without the others.
-
-## First mental model
-
-```text
-Identity: TASS
-   └── Thought Processing grant: enabled / disabled
-             |
-Authorized, selected feeds (TASS logs / ScreenBridge / Discord / ...)
-             |
-             v
-      Thought Engine  <---->  Replaceable worker interface
-      observations              (Chat-Jimmy today)
-      Sparks / Traces
-      persistent Thoughts
-             ^
-             | operational status, controls, read-only views
-             v
-      Thought Processor
-      CONTROL POINT: feeds, readiness, queues, policy, workers, diagnostics
-```
-
-Thought Engine is the destination for **thought-related incoming information**, not a mandatory router for GitHub authentication, Discord operation or every other system action.
-
-## Start here
-
-| Document | What it answers |
-|---|---|
-| [Current state and branch ledger](docs/STATUS.md) | What exists on Stable, Alpha and experiments, and what is *actually verified*? |
-| [Vision and boundaries](docs/VISION.md) | What is the feature we intend to sell, and what doesn't belong here? |
-| [Architecture and data ownership](docs/ARCHITECTURE.md) | What talks to what; who owns which records and permissions? |
-| [Control surface and evidence](docs/CONTROL_POINT.md) | What must the operator see and control? |
-| [Interfaces and contracts](docs/INTERFACES.md) | What a feed, engine and replaceable worker need to exchange |
-| [Branch and promotion workflow](docs/WORKFLOW.md) | How experiments become Alpha, Stable and eventually Main |
-| [Roadmap and gates](docs/ROADMAP.md) | What to prove next and in what order |
-| [Decision log](docs/DECISIONS.md) | Decisions made, and questions still open |
-
-For every iteration: update the **status ledger**, use an issue for the goal, and link the experimental branch, exact commit, tests, limitations and owner decision. Do not quietly overwrite previous evidence.
-
-## Branch policy
-
-| Branch | Meaning | Promotion |
-|---|---|---|
-| `main` | Public-facing release lane *when approved*; the repository may still be private | Owner approval only |
-| `stable` | Latest owner-accepted **reproducible snapshot** | Owner approval only; never automatic |
-| `alpha` | Owner-tested integration candidate; may change as approved | Owner approval only |
-| `experiment/<topic>-YYYYMMDD` | Isolated hypothesis/prototype; **always branch from current Alpha** | Validate, compare and ask owner; no auto-merge |
-
-**Empty-repo bootstrap exception:** The first documentation commit must initialize `main`; `stable` and `alpha` can then be created at that *same documentation-only commit*. This does **not** count as a runnable release. From that point, **every experiment starts from `alpha`**. Experiments may cherry-pick or explicitly port code from other repos/branches, with provenance documented, but never silently replace Alpha.
-
-## Related active experiments (not yet integrated into this repository)
-
-- [Thought-engine — model-assisted Spark/Trace/Thought experiment](https://github.com/Arameair/Thought-engine/tree/experiment/thought-engine-v1-20261023) — separate experimental service; currently Chat-Jimmy-specific. Do not treat live website reasoning as verified on the owner's machine without tests.
-- [Thought — deterministic Spark/Trace/Thought experiment](https://github.com/Arameair/Thought/tree/experiment/spark-trace-thought-v1-20261023) — different implementation; avoid two concurrent authoritative thought stores.
-- [Thought-Controller — live engine dashboard experiment](https://github.com/Arameair/Thought-Controller/tree/experiment/real-thought-dashboard-20261023) — existing prototype; source for control UI requirements, **not** an automatic migration.
-- [Identity](https://github.com/Arameair/identity) — future owner of real feature grants.
-- [chat-jimmy](https://github.com/Arameair/chat-jimmy/tree/experiment/fast-clean-worker-20261023) — current independent candidate worker.
-
-**Nothing has been merged, renamed, deployed or promoted by writing these notes.**
-
-## Owner acceptance rule
-
-Do not call a behavior working based on source code, screenshots, HTTP 200 on the UI, fake fixtures, or a green unit test alone. Demonstrate it with the actual running independent components; distinguish **process running**, **connected**, **authorized**, **data received**, **worker ready**, **processed**, and **persisted**. If any stage fails, say where and expose enough diagnostics to reproduce it.
+**Safety:** no code, deployment, Identity grant, owner data or policy change is implied by these documentation links. Historical CI passes and fixture-model results are not real live tests.
