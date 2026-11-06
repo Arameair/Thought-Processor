@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "audit_completed": "2026-11-06",
+  "timezone": "America/Chicago",
+  "verdict": "FOUNDATION PARTIAL",
+  "candidate": {
+    "core": "8e040b33e7a492f042a1f4449b8c7b013c227965",
+    "engine": "d69d3917d1601d806d4b2ba2254693e1adb92b6b",
+    "identity": "7da7f7c5bbecc42d3a7e9316a2037243eda10b88"
+  },
+  "safety": {
+    "owner_install_touched": false,
+    "owner_services_restarted": false,
+    "owner_pulse_changed": false,
+    "owner_autonomous_changed": false,
+    "fixture_ports": [18895, 18896, 17798, 18081, 28998]
+  },
+  "totals": {
+    "matrix_pass": 16,
+    "matrix_fail": 0,
+    "matrix_blocked": 1,
+    "matrix_not_run": 6,
+    "scripted_assertions_pass": 136,
+    "scripted_assertions_total": 136,
+    "go_commands_pass": 9,
+    "go_commands_total": 9
+  },
+  "acceptance_suites": [
+    {"name": "cognition_junction_e2e", "status": "PASS", "passed": 11, "total": 11, "environment": "real binaries; fixture model and GitHub; Chrome"},
+    {"name": "lesson_retry_native", "status": "PASS", "passed": 24, "total": 24, "environment": "real binaries; fixture model and GitHub"},
+    {"name": "skill_native", "status": "PASS", "passed": 22, "total": 22, "environment": "real binaries; fixture model and GitHub"},
+    {"name": "mailbox_native", "status": "PASS", "passed": 20, "total": 20, "environment": "real binaries; fixture model and GitHub"},
+    {"name": "learning_e2e", "status": "PASS", "passed": 21, "total": 21, "environment": "real binaries; fixture model and GitHub; Chrome"},
+    {"name": "pulse_multicycle_native", "status": "PASS", "passed": 24, "total": 24, "environment": "real binaries; fixture model and GitHub"},
+    {"name": "test_updater_recovery", "status": "PASS", "passed": 14, "total": 14, "environment": "real tass.sh; fake Docker"}
+  ],
+  "blocked": [
+    {
+      "name": "raw_pr87_pr81_merge",
+      "status": "BLOCKED",
+      "reason": "Substantive conflicts in shared Core sync, cycle construction, and reply paths. PR #88 is the independently tested resolution."
+    }
+  ],
+  "not_run": [
+    "real Docker updater and recovery",
+    "real Nemotron behavior and quality",
+    "live GitHub GPT-6 mailbox delivery",
+    "owner running installation and UI",
+    "sustained CPU, memory, and disk measurement",
+    "real multi-identity binary isolation"
+  ],
+  "owner_next_action": "Run one supervised owner-machine acceptance window with verified backup and rollback: real Docker recovery, real Nemotron learning and retest, explicitly authorized GitHub mailbox canary, then a time-boxed resource-measured pulse run."
+}
+
