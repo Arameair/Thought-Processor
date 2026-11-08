@@ -253,15 +253,20 @@ func TestNudgeHTTPRoutes(t *testing.T) {
 	ids.nudgeGranted = true
 	ids.mu.Unlock()
 	// A write failure on disk is a 500 that says nothing was saved.
-	os.Chmod(dir, 0o500)
-	os.Rename(journal, journal+".moved")
-	os.Mkdir(journal, 0o700) // the journal path is now a directory: reading it fails
+	// (Works the same as root or not: the journal path becomes a directory, so it can't be read or appended.)
+	if err := os.Rename(journal, journal+".moved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(journal, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if code, _ := do(h, post(strings.Replace(goodBody, "0001", "0004", 1))); code == http.StatusCreated || code == http.StatusOK {
 		t.Fatalf("a broken journal must not report success, got %d", code)
 	}
 	os.Remove(journal)
-	os.Rename(journal+".moved", journal)
-	os.Chmod(dir, 0o700)
+	if err := os.Rename(journal+".moved", journal); err != nil {
+		t.Fatal(err)
+	}
 	// There is no processing route.
 	for _, path := range []string{"/api/nudges/" + fmt.Sprint(id) + "/process", "/api/nudges/process"} {
 		if code, _ := do(h, hreq{method: "POST", path: path, token: "page-token", origin: "http://127.0.0.1:8795", ctype: "application/json", body: "{}"}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
