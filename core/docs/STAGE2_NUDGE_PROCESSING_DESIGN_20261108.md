@@ -1,6 +1,6 @@
 # Stage 2 design: one supervised nudge → one verified Thought development
 
-**Revision 3 (2026-11-08).** Answers GPT-6's review of revision 2 (PR #101 comment 6726234836: P0-1, P0-2, P1-3–P1-7). Revision 2 (`ac83ead`) answered the Codex audit (PR #102, A-01–A-12, X1–X14); revision 1 was `033b797`.
+**Revision 4 (2026-11-08).** Answers the Codex revision-3 re-review (PR #103: R3-02, R3-03/05, R3-04, R3-08, R3-09 + R3-11–R3-14) and GPT-6's handoff (PR #101 comment 6726428727). Revision 3 was `d21caf5`, revision 2 `ac83ead`, revision 1 `033b797`. **All runtime tests (S, X, F) remain NOT RUN; nothing here is a runtime PASS.**
 **Status:** DESIGN FOR RE-REVIEW. Not approved, not implemented, nothing deployed, no grant changed, no nudge processed.
 **Baseline (read, not changed):** Core `094f43ba2bc167ace8835bf286f37951fee432c9`, Thought Engine `d69d3917d1601d806d4b2ba2254693e1adb92b6b`, Identity `64fdf8e8cf926df5ea6bb6c23fbab864d0f09e3b`.
 
@@ -8,7 +8,23 @@
 
 ---
 
-## 0. Revision 3: resolution of GPT-6's review of revision 2
+## 0. Revision 4: resolution of the five blocker themes (Codex PR #103)
+
+| # | Finding | Resolution (revision 4) | Testable guarantee | Where |
+|---|---|---|---|---|
+| 1 | **R3-02** Void authorized by the shared Engine key alone | **Bound, single-use stop decision**, same mechanism as processing: a new Identity action `cognition.nudge.stop`, minted only by `core` and redeemed only by `engine`, bound to (owner, Engine entity, Thought, nudge ID, **digest of Core's `submitted.json`**). Core mints it only for a nudge that **has a durable submission** and only after the owner presses **Stop** or confirms **Copy as new**. It needs Identity **UNLOCKED** and the current entity, but **no process grant**, so Stop still works after the process grant is revoked (D15). The Engine redeems it **before** it creates the void. The key alone, an arbitrary ID, another entity, a reused or expired decision, or a never-submitted nudge → 403, and no folder or file is created. | **G1′:** a void exists only for a nudge with a Core submission and a redeemed stop decision bound to it; a valid void still wins/loses the same `O_EXCL` race as in revision 3 | §2, §2.1, §4.5, §6, X19 |
+| 2 | **R3-03/R3-05** Restore publishes unfenced data | **Stage, fence, then publish with one rename.** `restore_data()` now (1) unpacks into a private staging folder on the same filesystem, **leaving live data untouched**; (2) computes the fence and writes it **into the staged** `data/core/restore-fence.json`; (3) syncs the fence file and the staged directories; (4) publishes with `mv data → aside` + `mv staged/data → data` + sync of `$APP_HOME`. Every `data/` directory that ever becomes visible either is the old live data, is absent, or **already contains its fence**. There is no window with restored-but-unfenced data, so no Core-visible pending marker is needed (challenged below). Services are stopped for the whole operation, and `op_guard` refuses `start` until an interrupted operation is recovered (existing). A crash at any step → `recover` re-runs `restore_data()` from the verified backup. | **G2′:** no published `data/` contains restored drafts without a durable fence covering them | §4.6, X16 |
+| 3 | **R3-04** `wc -l` under-covers | **Byte-prefix fence, no JSON parsing in bash:** `{"journal_bytes": L, "journal_sha256": H}`, where L = size of the restored `nudges.jsonl` and H = its sha256 (`stat`, `sha256sum`). **Core decides by byte offset:** a record whose **first byte is before L** is PRE_RESTORE, whatever the line endings. That covers a newline-free last record, invalid middle lines and duplicates (an ID with any record before L is PRE_RESTORE). On every read Core verifies `sha256(first L bytes) = H` and size ≥ L. A mismatch, a truncated file or a scanner error (oversized line) → **read-only RECOVERY_REQUIRED for all processing**, no Identity decision, 0 model calls. Repeated restores: the new fence covers the whole newly restored file, a superset of any earlier fence's prefix. | **G2″:** every byte of the restored journal is behind the fence; any change to that prefix locks processing | §4.6, X17 |
+| 4 | **R3-08** Unbound check followed by a bound one | **One fresh bound decision before C3.** Core mints exactly one `cognition.nudge.process` decision bound to the exact tuple (C2). Existing run → return it, and the unredeemed decision is simply left to expire (120 s): it can only be redeemed by the Engine for this same nudge, where E3 returns the existing run with no call. New run → the same decision goes to C5 and the Engine. No unbound authorization exists. Process grant revoked → C2 403 even if a run exists; GET status unchanged. | revoked replay 403; replay 0 HTTP; one decision per POST | §3, S16 |
+| 5 | **R3-09** Different-ID admission race | **One Core per data folder, enforced:** a process-lifetime `flock` on `<core data>/.core.lock` (a second Core exits at start) **plus** an in-process `admitMu` held from C1 through a successful C5 (submitted file + dir fsync). "Active run" is derived from the per-nudge files, so it survives restarts. Two concurrent POSTs for different IDs → one `submitted.json`, the loser gets 409. | ≤1 durable submission per admission window; ≤1 Engine/model request | §3, §4.7, S18 |
+
+**Non-blocking corrections:** §5 no longer lists the removed `nudge-runs.jsonl` (R3-12). F16 recovery is now Stop → VOID → Copy as new (R3-13). `model_http: attempted` is renamed **`attempt_uncertain`**: `http.json` means "intent durable; server receipt unknown" (R3-11). Copy as new after UNCERTAIN or PRE_RESTORE can **repeat the task semantically** under a new ID; the dialog says so and requires a new approval. G1/G2 are per-ID guarantees, not semantic exactly-once (R3-14, D3/D13/D14).
+
+**Genuinely unresolved:** (a) the owner's real data filesystem must be checked to be local POSIX (D12); (b) restores outside `tass.sh` are not covered (R4); (c) an UNCERTAIN run can't be resolved without model-server receipts (R3); (d) the plain `think` route is out of scope (R1/D11); (e) `coreutils sync FILE` (≥ 8.24) must exist on the host for file/dir fsync from `tass.sh`, checked by `tass.sh check`.
+
+**Challenged:** a separate restore-pending marker visible to Core (GPT-6 #2 / R3-05). With staged publication, Core can never see unfenced restored data, and services are stopped with `start` refused until `recover`, so a pending marker adds a second state machine without closing any remaining gap. Making `operation.env` fsync-durable is still worthwhile for **data** recovery (#79) and is listed as a small `tass.sh` hardening, but G2 does not depend on it.
+
+## 0a. Revision 3: resolution of GPT-6's review of revision 2 (kept for traceability; the P0-2 line-count fence, the void-without-decision and the unbound C2 are superseded by revision 4, §0)
 
 | ID | Counterexample / finding | Resolution (revision 3) | Testable guarantee | Where |
 |---|---|---|---|---|
@@ -59,10 +75,10 @@
 
 | Repo | Change |
 |---|---|
-| **Identity** | (1) Allowlisted owner grant `cognition.nudge-process` → `cognition.nudge.process` (same pattern as #42). (2) **Bound decisions** for that action only: `POST /v1/authorize` accepts `binding` (sha256 hex). For `cognition.nudge.process` a binding is **required**, only the `core` service may ask, and an allowed decision is kept **in memory** with `expires_at = now + 120 s`. (3) `POST /v1/decisions/redeem` (only the `engine` service): `{decision_id, action, binding}` → allowed only if the decision exists, is unexpired and unused, has the same action and binding, the entity is unchanged, the entity is UNLOCKED, **and the grant is still held now**. It is then marked used. Both steps are audited in `decisions.jsonl`. An Identity restart forgets every bound decision, which fails closed. |
+| **Identity** | (0) **Revision 4:** a second bound action `cognition.nudge.stop`: binding required, mint `core` only, redeem `engine` only, needs UNLOCKED + the current entity, **no grant required** (D15), single-use, TTL 120 s, in memory, same code path as below. (1) Allowlisted owner grant `cognition.nudge-process` → `cognition.nudge.process` (same pattern as #42). (2) **Bound decisions** for that action only: `POST /v1/authorize` accepts `binding` (sha256 hex). For `cognition.nudge.process` a binding is **required**, only the `core` service may ask, and an allowed decision is kept **in memory** with `expires_at = now + 120 s`. (3) `POST /v1/decisions/redeem` (only the `engine` service): `{decision_id, action, binding}` → allowed only if the decision exists, is unexpired and unused, has the same action and binding, the entity is unchanged, the entity is UNLOCKED, **and the grant is still held now**. It is then marked used. Both steps are audited in `decisions.jsonl`. An Identity restart forgets every bound decision, which fails closed. |
 | **Engine** | (1) `POST /api/entities/{eid}/thoughts/{tid}/nudge` + `POST /api/entities/{eid}/nudges/{nid}/void` + `GET /api/entities/{eid}/nudges/{nid}`. (2) Per-nudge run folder `<entity dir>/nudge-runs/<nudge_id>/` holding immutable phase files (§4). (3) A Think variant: attention block in the prompt, pre-generated request ID, P1 hook after the model slot, P2 check before the save, `source_nudge_id` on Note and step. (4) `writeJSONAtomic` also fsyncs the parent directory. (5) `flock` data-folder lock on Unix. (6) A startup ledger scan (§4.6). Plain `think` is unchanged. |
-| **Core** | `POST /api/nudges/{id}/process` and `/void`; per-nudge receipt folder `<core data>/nudge-runs/<id>/` (`submitted.json`, `outcome.json`, `O_EXCL`); one tracked dispatcher; read-only reconciliation; verification; link/unlink refused while a run is active; ledger lock; restore fence (PRE_RESTORE); UI (confirm dialog, receipt, Copy as new); pin bump. |
-| **tass.sh** | In `restore_data()`, after a successful unpack: write `data/core/restore-fence.json` (`draft_lines` = lines of the restored `nudges.jsonl`, 0600). About 5 lines; nothing else changes. |
+| **Core** | `POST /api/nudges/{id}/process` and `/void`; per-nudge receipt folder `<core data>/nudge-runs/<id>/` (`submitted.json`, `outcome.json`, `O_EXCL`); one tracked dispatcher; read-only reconciliation; verification; link/unlink refused while a run is active; ledger lock; restore fence (PRE_RESTORE, byte-offset rule, prefix hash check); **`.core.lock` `flock` + `admitMu`** (revision 4); UI (confirm dialog, receipt, Stop, Copy as new); pin bump. |
+| **tass.sh** | **Revision 4:** `restore_data()` becomes stage → fence → sync → publish (§4.6). It keeps its signature and callers, and the old data is still moved aside, never deleted. About 30 lines. Optional #79 hardening: `sync` `operation.env` and `$DEPLOY` after each `op_begin`/`op_set`. `check` verifies `sync FILE` support and free space for staging. |
 
 ### 2.1 The binding digest
 
@@ -71,7 +87,13 @@ binding = sha256( canonical JSON of
   {"action":"cognition.nudge.process","owner_entity_id":…,"engine_entity_id":…,"thought_id":…,
    "nudge_id":…,"attention_sha256":…,"recipient":"self","draft_expires_at":…} )
 ```
-Core computes it from the immutable draft. The Engine recomputes it from the request body and its own path values. Identity compares the two. Any substitution (another nudge, Thought, entity, text or expiry) changes the digest, and the redeem is refused (X1).
+**Stop binding (revision 4):**
+```
+stop_binding = sha256( canonical JSON of
+  {"action":"cognition.nudge.stop","owner_entity_id":…,"engine_entity_id":…,"thought_id":…,
+   "nudge_id":…,"submitted_sha256": sha256 of Core's submitted.json bytes} )
+```
+Core computes both bindings from the immutable draft (and, for Stop, the submission). The Engine recomputes them from the request body and its own path values. Identity compares the two. Any substitution (another nudge, Thought, entity, text or expiry) changes the digest, and the redeem is refused (X1).
 
 ## 3. Authorization and dispatch flow
 
@@ -80,17 +102,20 @@ Owner: "Process once…" on a DRAFT (self) → dialog: nudge ID, Thought, attent
        "Thought changed since the draft: yes/no", "This makes one model request. Not undoable after it is saved."
   │ POST /api/nudges/{id}/process {body_digest}   (page token, local Origin, JSON)
   ▼
+    ── admitMu held from here to the end of C5 (one Core per data folder: .core.lock) ──
 C1  draft exists; owner = current Identity entity; Engine link = draft's; recipient self; unexpired;
-    body_digest = stored; NOT PRE_RESTORE (§4.6); forced TASS_CHAT_ONLY off; ledger not locked  → 4xx, nothing written
-C2  Identity /v1/authorize {cognition.nudge.process} (unbound; current grant)  → denied: 403, even if a run exists
-C3  run folder for this nudge exists → 200 with its state (read-derived; never sent again)
+    body_digest = stored; NOT PRE_RESTORE and fence verified (§4.6); forced TASS_CHAT_ONLY off;
+    ledger not locked                                                               → 4xx, nothing written
+C2  Identity /v1/authorize {cognition.nudge.process, binding}  (bound, TTL 120 s, the ONLY authorization)
+                                                                → denied: 403, even if a run exists
+C3  run folder for this nudge exists → 200 with its state (read-derived; never sent again; the decision expires unused)
 C4  no other run SUBMITTED/RUNNING (derived from files + Engine reads)          → 409
-    Identity /v1/authorize {cognition.nudge.process, binding}  (bound, TTL 120 s) → denied: 403
 C5  create nudge-runs/<id>/submitted.json (O_EXCL) {decision_id, binding, revision, engine entity, thought};
     fsync file; close; fsync dir
       create fails → 500 "nothing was sent"
       later error  → the file exists → RECOVERY_REQUIRED for this nudge; nothing sent
-    reply 202 "accepted locally; delivery not confirmed"; dispatcher (this process only) sends one POST
+    ── admitMu released ──
+    reply 202 "accepted locally; delivery not confirmed"; dispatcher (this process only) sends one POST with the C2 decision
   ▼
 E1  key, local, JSON; entity exists; Thought belongs to it; attention ≤500 and sha256 matches → 4xx, no claim
 E2  Identity /v1/decisions/redeem {decision_id, action, binding (recomputed)}  → refused: 403, no claim, no call
@@ -104,6 +129,7 @@ E6  ModelLink.run(thought.process) [existing: authorize, take slot, authorize ag
     P1 hook (after slot, before HTTP): current cognition.nudge.process + Thought Processing ON + Thought unresolved
       fails → outcome FAILED(p1_<reason>), model_http none
     create http.json (O_EXCL, fsync, dir fsync) → fails: outcome FAILED(not_sent), model_http none
+      (http.json = "intent durable; server receipt unknown": from here a crash is attempt_uncertain)
     HTTP POST to the model (existing ask)
     write response.json {ok|error, reply sha256, elapsed} (best effort; its absence after a crash = UNCERTAIN)
 E7  parse NOTE/STATE (existing parseThink) → unreadable: outcome FAILED(unreadable_reply), responded
@@ -149,7 +175,7 @@ A **void** is `claim.json` = `{"void":true, "at", "by":"core"}` created by the v
 | `outcome` | consistent with outcome (§4.4) | that outcome | per files |
 | `outcome` | conflicting | `RECOVERY_REQUIRED (inconsistent)` | per files |
 | claim only (after a restart) | none | `FAILED(interrupted_before_http)` | **none** |
-| claim + `http`, no `response` (after a restart) | none | **`UNCERTAIN`** | **attempted** |
+| claim + `http`, no `response` (after a restart) | none | **`UNCERTAIN`** | **attempt_uncertain** |
 | claim + `http` + `response ok`, no `outcome` | exactly 1 Note + 1 step | `COMPLETED (recovered)`; `outcome.json` written by the startup scan | responded |
 | same | none | `FAILED(interrupted_after_response)` | responded |
 | any unparsable or empty phase file, or other mixes | — | `RECOVERY_REQUIRED` | unknown |
@@ -170,7 +196,8 @@ The startup scan writes only `outcome.json` for the recovered-COMPLETED case (an
 
 Revision 2 used a time window (TTL + 60 s). That is unsound: a handler can redeem in time, pause, and claim later. **Revision 3 uses the claim primitive itself as the fence.**
 
-- `POST …/nudges/{nid}/void` (Engine key; local; JSON `{reason}`) does exactly one thing: `mkdir` the run folder (ok if it exists) and **create `claim.json` = `{"void":true}` with `O_CREAT|O_EXCL`**, then fsync file and dir. It needs no Identity decision, because it can only **prevent** processing.
+- `POST …/nudges/{nid}/void` (Engine key; local; JSON `{owner_entity_id, thought_id, submitted_sha256, decision_id}`). **Revision 4:** the Engine first **redeems a bound `cognition.nudge.stop` decision** (`stop_binding`, §2.1) at Identity. Refused → 403, **no folder, no file**. Only then does it `mkdir` the run folder (ok if it exists) and **create `claim.json` = `{"void":true, "stop_decision":…}` with `O_CREAT|O_EXCL`**, then fsync file and dir.
+- **Core mints a stop decision only when** the owner pressed Stop (or confirmed Copy as new) on the page, for a nudge of the current owner and linked Engine entity that **has a valid `submitted.json`**. A never-submitted draft needs no void: no process decision was ever sent for it, so Copy as new is allowed directly. A Stop is possible after the process grant is revoked (D15), but not while Identity is LOCKED.
   - create succeeds → `VOID`. From now on every handler gets `EEXIST` at E5 and returns `VOID` with no call, including one that redeemed long ago and paused.
   - `EEXIST` → a handler (or an earlier void) won. Return the existing state; the run is **not** NOT_DELIVERED.
   - create fails for another reason → `503`; nothing changed; Core keeps showing SUBMITTED.
@@ -183,15 +210,25 @@ Revision 2 used a time window (TTL + 60 s). That is unsound: a handler can redee
 
 **Counterexample accepted:** backup B holds draft `nudge_A`; `nudge_A` is processed; B is restored. Core, Engine and the Thought rewind together, and without a fence `nudge_A` looks unprocessed. The first HTTP request to the model really happened, so processing it again would be a second call for the same ID.
 
-**Fence (G2):** `tass.sh restore_data()` is the one function every supported restore uses (`restore-previous`, `rollback --restore-data`, `recover`, and auto-restore after a failed update; `tass.sh` L332–345 and its callers). After a successful unpack it writes:
+**Fence (G2, revision 4: staged publication + byte-prefix boundary).** `tass.sh restore_data()` is the one function every supported data restore uses (failed-update auto-restore, `rollback --restore-data` and its guard restore, `restore-previous` and its guard restore, `recover`; confirmed by Codex R3-06). The services are stopped first by every caller. New order, in which the **live data is not touched until the last step**:
 
-```json
-data/core/restore-fence.json   (0600, created after the restore, so never part of the restored backup)
-{"schema":"tass.restore-fence/1","restored_at":"…","backup":"<file name>","draft_lines":N}
 ```
-where N = number of lines in the restored `data/core/nudges.jsonl` (0 if absent). If a fence already exists (an earlier restore), N becomes the new line count, so the earlier drafts stay covered.
+R1  verify backup (existing backup_ok/sha256); check free space ≥ archive size × 2   → fail: nothing changed
+R2  stage = $DEPLOY/restore-stage.<time>.<pid>  (same filesystem as $APP_HOME, 0700); tar -xzf backup -C stage
+                                                                                   → fail: rm stage; nothing changed
+R3  j = stage/data/core/nudges.jsonl;  L = size(j) (0 if absent);  H = sha256(j) (sha256 of empty if absent)
+    write stage/data/core/restore-fence.json.tmp  {"schema":"tass.restore-fence/2","restored_at","backup","journal_bytes":L,"journal_sha256":H}
+    sync it; mv to restore-fence.json; sync stage/data/core; sync stage/data; sync stage   → fail: rm stage; nothing changed
+R4  mv $APP_DATA → aside/data ; mv $APP_SECRETS → aside/secrets           (existing "moved aside, never deleted")
+R5  mv stage/data → $APP_DATA ; mv stage/secrets → $APP_SECRETS ; sync $APP_HOME ; rm -r stage
+                                                                                   → fail between R4 and R5: put aside back (existing behavior)
+```
+- **At every crash point** the visible `data/` is the old live data (R1–R3), absent (between the R4 and R5 renames), or the restored data **with its fence already inside** (after R5). It is never restored-and-unfenced. The operation record already makes `start` refuse until `./tass.sh recover`, which re-runs `restore_data()` from the verified backup. A leftover `restore-stage.*` is removed at the next `restore_data()` and never published.
+- **Boundary (R3-04):** bytes, not lines. Core reads `nudges.jsonl` while tracking each record's **starting byte offset**. A draft is **PRE_RESTORE iff any record with its ID starts before `journal_bytes`**. On every read, Core first verifies the fence: file size ≥ L and `sha256(first L bytes) = H`. Anything else (fence unparsable or wrong schema, file shorter, hash mismatch, scanner error) → **processing locked** (read-only RECOVERY_REQUIRED for the whole workbench): no Identity decision, 0 model calls. Drafts remain viewable where they parse. Appends after the restore start at offset ≥ L (newline repair adds a `\n` first if the file didn't end with one), so new drafts are processable.
+- **Repeated restores:** each writes a fence for the whole newly restored file, and drafts are append-only, so the new prefix contains every earlier one. If the backup itself contains an older fence, R3 replaces it.
+- **Code-only rollback** does not call `restore_data()` and does not write a fence (unchanged, tested).
 
-Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RESTORE`**. It is viewable and copyable, and **never processable**: C1 refuses it (409). Because Core never requests a bound decision for it, the Engine route can't process it either (E2). The owner can **Copy as new**: a new nudge ID, with a dialog stating that "the original may already have been processed before the restore" and requiring a new approval.
+Core, on every read and process request: a PRE_RESTORE draft is viewable and copyable, and **never processable**: C1 refuses it (409). Because Core never requests a bound decision for it, the Engine route can't process it either (E2). The owner can **Copy as new**: a new nudge ID, with a dialog stating that "the original may already have been processed before the restore; copying may repeat that work", and a new approval.
 
 **Why not lock all processing after a restore (GPT-6's alternative)?** It adds an unlock step and stops new, unrelated nudges. PRE_RESTORE blocks exactly the IDs whose history may have been erased; new drafts are safe because their IDs never existed in the erased future.
 
@@ -212,7 +249,8 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 | Where | What of the nudge | Notes |
 |---|---|---|
 | Core `nudges.jsonl` | full draft incl. attention text | as today; 0600 |
-| Core `nudge-runs.jsonl` | IDs, digests, decision IDs, states | no attention text |
+| Core `nudge-runs/<id>/` (`submitted.json`, `void.json`, `outcome.json`) | IDs, digests, decision IDs, states | no attention text |
+| Core `restore-fence.json` | byte length + sha256 of the journal | no content |
 | Engine run folder | IDs, digests, request ID, states | no attention text |
 | Engine `calls.jsonl` | prompt (2,000 chars) + reply | **D10 proposal:** for nudges, the attention is replaced by `[owner attention sha256:…]` in the stored prompt. The model still receives the real text. |
 | Engine `model-requests.jsonl` | reply text + reasoning, request ID | as for any Think |
@@ -227,20 +265,20 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 
 **Engine**
 - `POST …/thoughts/{tid}/nudge` `{nudge_id, owner_entity_id, attention, attention_sha256, draft_expires_at, decision_id}` → `200 {run}` after the outcome, or immediately for an authorized replay. `400` invalid · `403` redeem refused / processing off / ledger locked · `404` · `503` claim not created (no claim exists).
-- `POST …/nudges/{nid}/void` (Engine key; local; JSON) → `200 {run: VOID}` | `200 {run: <existing>}` (`EEXIST`) | `503`. Prevents only; needs no Identity decision.
+- `POST …/nudges/{nid}/void` (Engine key; local; JSON `{owner_entity_id, thought_id, submitted_sha256, decision_id}`) → redeem the bound `cognition.nudge.stop` decision first → `403` (no file) | `200 {run: VOID}` | `200 {run: <existing>}` (`EEXIST`) | `503`.
 - `GET …/nudges/{nid}` (existing `sensitive()` key check) → `{run}` | `404 NOT_CLAIMED`. Read-only, no side effects.
 
-`run = {nudge_id, thought_id, state, reason, model_http: none|attempted|responded, request_id, revisions {claim,p1,p2}, step_at, suggested, applied:false, decisions {authorize, redeem}}`
+`run = {nudge_id, thought_id, state, reason, model_http: none|attempt_uncertain|responded, request_id, revisions {claim,p1,p2}, step_at, suggested, applied:false, decisions {authorize, redeem}}`
 
 **Core**
 - `POST /api/nudges/{id}/process` `{body_digest}` → `202 "accepted locally; delivery not confirmed"` · `200` existing (only after a fresh grant check) · `400` · `403` · `409` (PRE_RESTORE / another run active / digest) · `423` processing locked · `500` SUBMITTED not created (nothing sent).
-- `POST /api/nudges/{id}/void` (owner "Stop this nudge"; page token) → Engine void → `NOT_DELIVERED` or the existing run. No grant needed: it can only prevent.
+- `POST /api/nudges/{id}/void` (owner "Stop this nudge"; page token; under `admitMu`) → requires a valid `submitted.json` and Identity UNLOCKED → mint a bound `cognition.nudge.stop` → Engine void → Core `void.json` → `NOT_DELIVERED`, or the existing run. `403` LOCKED/denied; `409` no submission (nothing to stop).
 - `GET /api/nudges` → each nudge + `run` (read-reconciled with at most one Engine GET per active run).
 - `POST /api/cognition/link|unlink` → `409` while a run is SUBMITTED/RUNNING (A-11).
 
 **Dispatcher (A-09):** one goroutine per accepted run, at most one active, tracked by Core's shutdown waitgroup; context = Core lifetime (not the HTTP request); Engine client timeout 10 min. On shutdown it cancels and does not wait for the Engine. After a restart, runs left SUBMITTED are **only read**, never re-sent.
 
-**UI states (10; each is backed by evidence):** `DRAFT`, `PRE_RESTORE` (viewable, copy only), `EXPIRED`, `SUBMITTED` (accepted locally / not claimed yet: **never terminal**), `RUNNING`, `COMPLETED` (verified), `FAILED` (+ reason + model request none/attempted/responded), `UNCERTAIN` (a model request may have been sent), `NOT_DELIVERED` (**only** after a successful void), `RECOVERY_REQUIRED`.
+**UI states (10; each is backed by evidence):** `DRAFT`, `PRE_RESTORE` (viewable, copy only), `EXPIRED`, `SUBMITTED` (accepted locally / not claimed yet: **never terminal**), `RUNNING`, `COMPLETED` (verified), `FAILED` (+ reason + model request none/attempt_uncertain/responded), `UNCERTAIN` (a model request may have been sent), `NOT_DELIVERED` (**only** after a successful void), `RECOVERY_REQUIRED`.
 
 ## 7. Failure matrix (revised F1–F14 + new)
 
@@ -255,7 +293,7 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 | F5 | claim create fails / later claim write error | — / claimed | 0 | 503 / RECOVERY_REQUIRED | — / never |
 | F6 | Engine crash after claim, before `http.json` | yes | 0 | FAILED(interrupted_before_http) | never; copy allowed |
 | F6b | Engine crash after `http.json` | yes | 0 or 1 | **UNCERTAIN** | never; copy allowed with warning |
-| F7 | model error / timeout / unreadable reply | yes | 1 | FAILED, responded or attempted | never |
+| F7 | model error / timeout / unreadable reply | yes | 1 (0 if the connection failed before sending) | FAILED, responded or attempt_uncertain | never |
 | F8 | save error | yes | 1 | FAILED(save_failed), or RECOVERY_REQUIRED if the re-read finds the step | never |
 | F9 | crash after save, before outcome | yes | 1 | COMPLETED (recovered) only with exact evidence | — |
 | F10 | Core shutdown/crash during the Engine call | yes | 1 | read-reconciled outcome | never re-sent |
@@ -264,13 +302,19 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 | F13 | grant revoked: before P1 / between P1 and P2 / after the save | yes | 0 / 1 / 1 | FAILED(p1) / FAILED(p2), note discarded / COMPLETED | — |
 | F14 | relink during a run | — | — | relink refused (409) | — |
 | F15 | resolve / Thought Processing off mid-call | yes | 1 | FAILED(p2_…), note not saved | — |
-| F16 | Identity restart between C3 and E2 | — | 0 | FAILED(redeem refused) → owner clicks again | — |
+| F16 | Identity restart between C2 and E2 | — | 0 | the Engine reports FAILED(redeem refused), no claim; the Core submission is permanent, so **clicking again returns the same run**. Recovery: Stop → VOID (a new stop decision) → NOT_DELIVERED → Copy as new | never automatic |
 | F17 | two Engines on one data folder | — | ≤1 | second exits at the lock; claims stay single anyway | — |
 | F18 | divergent restore (Core-only / Engine-only) | — | 0 | processing locked | `tass.sh` restore only (D9) |
 | F19 | whole-app `tass.sh` restore to before the claim | erased | 0 for the old ID | the old draft shows PRE_RESTORE; process → 409 | only Copy as new (new ID, new approval) |
 | F20 | handler redeemed, paused, owner voids, handler resumes | void wins | 0 | NOT_DELIVERED; the handler returns VOID at E5 | — |
 | F21 | handler claims first, owner voids | claim wins | ≤1 | void returns the run; it is shown, not NOT_DELIVERED | — |
 | F22 | restore outside `tass.sh` | erased | **not covered** (R4) | — | — |
+| F23 | crash at each restore step R1–R5 | — | 0 | `start` refused until `recover`; visible data is old, absent, or fenced | `recover` re-stages |
+| F24 | restored journal: no final newline / invalid middle line / duplicate ID / oversized line | — | 0 | covered by byte offset / covered / PRE_RESTORE / processing locked | — |
+| F25 | fence prefix mutated or file truncated after restore | — | 0 | processing locked (read-only) | `tass.sh` restore only |
+| F26 | void with the Engine key only / arbitrary ID / other entity / reused or expired stop decision / never-submitted nudge | — | 0 | 403 or 409; **no folder, no file** | — |
+| F27 | two Core POSTs for different IDs at the same instant | — | ≤1 | one 202, one 409 | — |
+| F28 | second Core process on the same data folder | — | — | exits at start (`.core.lock`) | — |
 
 ## 8. Requirements I challenge
 
@@ -310,9 +354,10 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 | S12 | revoke before P1 / between P1 and P2 | 0 HTTP / 1 HTTP, note discarded |
 | S13 | heartbeat ON; owner resolves / switches off / revokes before P1 and before P2 | nudge steps found by `source_nudge_id`; each mid-call change gives its FAILED(p1/p2) with no note |
 | S14 | regressions (draft-only, plain `think`, mailbox, pulse, lessons, Cognition, browser, updater 14/14, vet/test/race ×3) + X4 | unchanged |
-| S15 | privacy (see X12) | the attention text appears only where §5 says |
+| S15 | privacy (see X12) | **original input bytes** are found only where §5 says; **model-output echoes** of them are inventoried separately (model-requests, calls, Thought note, API responses, backups) and reported; GitHub, `tass.md` and the event log contain neither |
 | S16 | revoke the grant, then POST process for a nudge that already has a run (P1-3) | 403; the existing run is still shown by GET; 0 HTTP |
 | S17 | Stop/void: before any claim / after a claim / twice | NOT_DELIVERED / the existing run / the same answer; 0 extra HTTP |
+| S18 | different-ID admission race (R3-09): barrier before C4 and before C5, 100×; with a Core crash after the winner's submission | exactly one `submitted.json`; loser 409; ≤1 Engine POST and ≤1 model POST; restart + GET never dispatch |
 | O1 | owner, real Nemotron (after re-review, CI, owner approval) | preflight (exact Thought unresolved, Thought Processing ON, heartbeat/pulse state, model ready, counts) → grant → one run → COMPLETED verified; `model-requests.jsonl` +1 for this request ID; survives restart; revoke after |
 
 ### 10.2 Design-verification matrix X1–X14 (from Codex #102; all **OPEN** until implemented and run)
@@ -333,8 +378,12 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 | X11a partial restores | §4.6 | Core-only / Engine-only / Thought-without-ledger → processing locked until a `tass.sh` restore |
 | X11b **whole-app pre-claim restore, draft survives** (GPT-6 P0-2) | §4.6 fence | after `tass.sh restore-previous` the old draft is PRE_RESTORE; process → 409; direct Engine POST without a bound decision → 403; **0 HTTP for the old ID**; Copy as new works with a new ID |
 | X11c repeated restores; restore of the guard snapshot | §4.6 | the fence's N always covers every draft that existed at the latest restore; no old ID becomes processable |
-| X12 privacy boundaries | §5 | a synthetic marker in the attention is **not** in the stored prompt in `calls.jsonl` (digest only), Engine run files, Core run files, Identity, Core event log, GitHub or `tass.md`. The reply files may contain it only if the model echoed it; that is reported, not asserted absent |
+| X12 privacy boundaries (R3-12) | §5 | a synthetic marker in the attention is **not** in the stored prompt in `calls.jsonl` (digest only), Engine run files, Core run files, Identity, Core event log, GitHub or `tass.md`. The reply files may contain it only if the model echoed it; that is reported, not asserted absent |
 | X13 disk/read-only/cap | §4.7 | refused before HTTP; status readable; nothing rotated or truncated |
+| X16 **interrupted restore publication** (R3-03/05) | §4.6 R1–R5 | for every `restore_data` caller (update auto-restore, rollback --restore-data + guard, restore-previous + guard, recover, recover interrupted and repeated): kill after each of R1–R5 → `start` refused until recover; every visible `data/` is old, absent, or contains a valid fence; after recover every restored ID is PRE_RESTORE (409), 0 model POSTs; new IDs processable; code-only rollback writes no fence |
+| X17 **journal-boundary falsification** (R3-04) | §4.6 boundary | backups with normal JSONL, valid final record without newline, truncated record, invalid middle line then valid record, duplicate ID, oversized line; plus post-restore prefix mutation/truncation: every restored ID PRE_RESTORE; every ambiguity → processing locked, no Identity decision, 0 model POSTs |
+| X18 bound replay order (R3-08) | §3 C2–C3 | grant on → replay 200, 0 POST; revoke → 403; restore grant → new draft runs with **the decision minted at C2** (Identity audit shows one mint + one redeem); every tuple substitution, expiry, reuse and Identity restart → 403 before the claim |
+| X19 stop authorization (R3-02) | §4.5 | Engine-key-only void, arbitrary ID, wrong entity, wrong Thought, wrong `submitted_sha256`, reused, expired, LOCKED, never-submitted → 403/409 with **no folder or file**; valid stop after the process grant is revoked → VOID; X9b repeated with authorized voids |
 | X15 Core submit ambiguity (P1-4) | §3 C5, §4.2 | short write / fsync error / dir-fsync error / crash after create, each followed by a restart: never a second send; unparsable → RECOVERY_REQUIRED, persistent; a new click on that nudge → 200 with that state |
 | X14 completion cross-product | §4.4 | outcome {COMPLETED, FAILED, missing} × Notes {0,1,2} × steps {0,1,2}: only (COMPLETED or recovered, 1, 1) is COMPLETED; all conflicts RECOVERY_REQUIRED |
 
@@ -344,15 +393,17 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 |---|---|---|---|
 | D1 | Revocation while the model answers | Discard the note (P2); after the save it stands | — |
 | D2 | Allowed with the Autonomous switch OFF? | Yes; refused when `TASS_CHAT_ONLY=on` is forced | — |
-| D3 | One attempt per nudge | Yes; Copy as new only when terminal | — |
+| D3 | One attempt per nudge | Yes; Copy as new only when terminal. After UNCERTAIN, the copy **may repeat the task** (the first may have reached the model); the dialog says so and asks for a new approval | — |
 | D4 | Thought changed since the draft | Shown in the dialog, not refused; resolved = refused | — |
 | D5 | Engine-side check | Yes: bound decision redeemed + grant at P1/P2 | — |
 | D6 | Per-run consent | Dialog + bound decision (no passphrase per run) | stronger: passphrase per run (one more Identity step) |
 | D7 | Retention | Keep run folders; refuse past 1,000 | owner archive/export later |
 | D8 | O1 preflight | Exact Thought ID, Thought Processing switch, heartbeat/pulse state, model ready, grants, counts; read-only | — |
 | D9 | Unlocking after a detected ledger divergence | **BLOCKED** except a `tass.sh` restore of a consistent backup; a read-only audit command for diagnosis | a reviewed repair operation later, if ever needed |
-| D13 | After a `tass.sh` restore, old drafts are PRE_RESTORE (copy only) instead of locking all processing | Yes | locking everything is stricter but blocks unrelated new nudges |
-| D14 | Owner "Stop this nudge" (void) | Yes; also run automatically before Copy as new | — |
+| D13 | After a `tass.sh` restore, old drafts are PRE_RESTORE (copy only) instead of locking all processing | Yes; a copy **may repeat work done before the restore**; the dialog says so | locking everything is stricter but blocks unrelated new nudges |
+| D14 | Owner "Stop this nudge" (void) | Yes; also run automatically before Copy as new of a submitted nudge | — |
+| D15 | Stop needs the process grant? | **No**: needs Identity UNLOCKED + a bound stop decision only, so Stop works after revoking processing | requiring a grant would let a revocation strand SUBMITTED runs |
+| D16 | Supported topology | One Core process per data folder, enforced by `.core.lock` | multi-Core would need a filesystem-wide admission claim (not designed) |
 | D10 | Attention text in `calls.jsonl` | Store only its digest for nudges | keeping it helps debugging |
 | D11 | Gate the plain `think` route too | Separate later change | leave as R1 for now |
 | D12 | Supported data-folder filesystems | Local POSIX only; `tass.sh check` warns otherwise | — |
@@ -366,14 +417,14 @@ Core, on every read and process request: a draft on **line ≤ N** is **`PRE_RES
 
 If any piece turns out to need more than this one slice (for example, the filesystem assumption fails on the owner's machine), it is marked **BLOCKED** rather than generalized.
 
-## 13. Handoff for Codex (re-review)
+## 13. Handoff for Codex: one focused, blocker-only review of revision 4
 
-Revision 3 first: please try to break **G1** (the void tombstone vs. a paused handler: X9b) and **G2** (the restore fence: X11b/c, including restores via every `tass.sh` path that calls `restore_data`), the Core C2→C3 order (S16), and per-nudge Core files (X15). Then, as before:
-1. A-01/A-02: can any POST reach a claim or a successful replay without redeeming a fresh decision bound to the exact tuple? Is the `core`-only obtain / `engine`-only redeem split enforceable with Identity's existing service-key mapping?
-2. A-03/A-04: is `O_EXCL` + file fsync + dir fsync, with "the file exists ⇒ claimed forever", a sufficient fence on the owner's filesystem? Does `flock` behave across the two PID namespaces in X4?
-3. A-05/A-06: are P1 and P2 at the right lines (`ModelLink.run` after the slot; before `tx.put` in `Think`)? Is `http.json`-before-POST enough to make "none" truthful?
-4. A-07/A-12: do you accept the per-continuous-history guarantee and divergence lock (§4.6, §8.1) instead of a restore-surviving ledger? If not, give the failure case.
-5. A-09–A-11: the void tombstone (which replaces the time window), the single active run, relink refusal.
-6. Mark S1–S15, X1–X14 and F1–F18 PASS-able / FAIL / OPEN as written.
+Please review only the five blocker themes, against the pinned source, and mark each **DESIGN PASS / FAIL** (all runtime tests stay NOT RUN):
 
-No implementation, deployment, grant change or real nudge processing.
+1. **R3-02 stop authorization (§4.5, §2.1, X19):** can any request create a void, or any folder, without redeeming a fresh `cognition.nudge.stop` decision bound to an existing Core submission? Is "no grant, UNLOCKED required" (D15) acceptable?
+2. **R3-03/05 restore publication (§4.6 R1–R5, X16):** is there any crash point at which a published `data/` holds restored drafts without a durable fence? Is the challenge to a separate restore-pending marker valid given stopped services and `op_guard`?
+3. **R3-04 boundary (§4.6, X17):** does the byte-offset + prefix-hash rule cover every restored record under the pinned `readNudges` behavior, and does every ambiguity lock processing?
+4. **R3-08 order (§3 C2–C3, X18):** exactly one bound decision per POST, before replay; no unbound path.
+5. **R3-09 admission (§3 `admitMu`, `.core.lock`, S18):** is the one-Core-per-folder assumption enforced, and is C1–C5 serialized for different IDs?
+
+Anything outside these five is out of scope for this review unless it breaks one of them. No implementation, deployment, grant change or real nudge processing.
