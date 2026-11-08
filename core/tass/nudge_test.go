@@ -250,3 +250,15 @@ func TestNudgeJournalDamagedLineIsKept(t *testing.T) {
 		t.Fatal("the damaged line was overwritten")
 	}
 }
+
+func TestStarterDocKeepsPrivateStateOut(t *testing.T) {
+	doc := starterDoc("Kyssa")
+	for _, gone := range []string{"## Memory", "## Now", "lives only on this computer"} {
+		if strings.Contains(doc, gone) {
+			t.Fatalf("starter document still contains %q", gone)
+		}
+	}
+	if !strings.Contains(doc, "# Kyssa") || !strings.Contains(doc, "## Learned") || strings.Contains(doc, "TASS") {
+		t.Fatalf("starter document must be entity-neutral with a Learned section:\n%s", doc)
+	}
+}
