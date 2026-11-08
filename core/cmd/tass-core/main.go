@@ -555,6 +555,36 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusNotFound,map[string]string{"error":"link or unlink"})
         }
     })
+    // #96: manual nudge workbench. GET lists this Identity entity's drafts (read authorization);
+    // POST saves ONE draft (fresh Identity decision, local write, zero model calls). There is no
+    // process endpoint: processing stays BLOCKED until a reviewed Identity grant and route exist.
+    mux.HandleFunc("GET /api/nudges",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        list,err:=core.NudgeHistory(r.URL.Query().Get("thought_id"))
+        if err!=nil{cognitionErr(w,err);return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(list)
+    })
+    mux.HandleFunc("POST /api/nudges",func(w http.ResponseWriter,r *http.Request){
+        var body tass.NudgeDraft
+        if !pagePost(w,r,&body){return}
+        w.Header().Set("Cache-Control","no-store")
+        v,err:=core.SaveNudgeDraft(body)
+        switch {
+        case err==nil && v.Replayed:
+            reply(w,http.StatusOK,v)
+        case err==nil:
+            reply(w,http.StatusCreated,v)
+        case errors.Is(err,tass.ErrNudgeConflict):
+            reply(w,http.StatusConflict,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrNudgeInvalid):
+            reply(w,http.StatusBadRequest,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrCognitionDenied):
+            reply(w,http.StatusForbidden,map[string]string{"error":"Identity denied the nudge draft"})
+        default:
+            reply(w,http.StatusServiceUnavailable,map[string]string{"error":"source Thought NOT RECORDED or Engine unavailable; nothing saved"})
+        }
+    })
     // #82 P2/P3: junction receipts, alternative cells and comparisons for Development.
     mux.HandleFunc("GET /api/junctions",func(w http.ResponseWriter,r *http.Request){
         if !authed(r){http.Error(w,"missing or wrong key",http.StatusUnauthorized);return}
