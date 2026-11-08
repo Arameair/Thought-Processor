@@ -31,7 +31,8 @@ here="$(pwd)"
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
 ENGINE_COMMIT_PIN="d69d3917d1601d806d4b2ba2254693e1adb92b6b"
-IDENTITY_COMMIT_PIN="7da7f7c5bbecc42d3a7e9316a2037243eda10b88"
+# identity: experiment/nudge-draft-grant-20261108 (adds the owner grant cognition.nudge.draft, Core #96)
+IDENTITY_COMMIT_PIN="64fdf8e8cf926df5ea6bb6c23fbab864d0f09e3b"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"

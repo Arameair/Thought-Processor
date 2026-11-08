@@ -168,6 +168,7 @@ type Core struct {
 	brainMu sync.Mutex // brain/current.json and revisions (brain.go)
 	cogMu   sync.Mutex // cognition_links.json (cognition_link.go)
 	junMu   sync.Mutex // junctions.json (junction.go)
+	nudgeMu sync.Mutex // nudges.jsonl (nudge.go)
 	junBusy atomic.Bool // one junction worker at a time
 }
 
@@ -1474,7 +1475,11 @@ func (c *Core) NewConversation() {
 	c.event("sync", fmt.Sprintf("New conversation: cleared %d chat messages from TASS's short-term history. His document, memory journal, approved lessons and skill receipts are kept.", n))
 }
 
+// starterDoc is a new entity's identity document: who it is and what it has learned. Memories,
+// conversations and thoughts are NOT kept here (they stay in local journals on this computer);
+// this document may sync to the owner's own GitHub repository when the owner turns that on.
 func starterDoc(name string) string {
-	return "# " + name + "\n\n<!-- This entity's own document. -->\n\n## Who I am\n\nI am " + name +
-		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Memory\n\n## Learned\n\n## Now\n\nJust created.\n"
+	return "# " + name + "\n\n<!-- Who " + name + " is. Approved identity text and lessons may sync to the owner's GitHub " +
+		"repository; memories, conversations and thoughts stay on this computer. -->\n\n## Who I am\n\nI am " + name +
+		", a local AI companion. I'm new: I learn who I am with my owner.\n\n## Learned\n"
 }

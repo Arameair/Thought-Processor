@@ -32,10 +32,12 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 <button id="copy">Copy Evidence</button>
 <button id="downloadMD">Download Sanitized Markdown</button><button id="downloadJSON">Download Sanitized JSON</button>
 <button id="tryDev">Try adjustment in Development</button>
+<button id="nudge" class="hidden">Manual nudge (draft)</button><button id="nudgeHistory" class="hidden">Nudge history</button>
 </div><div id="toast" class="toast" role="status"></div><p class="foot">Evidence shown here comes from the selected local API or explicitly labeled demo fixtures. A model statement is not an execution receipt.</p></aside></div>
 <script>
 "use strict";
-// This page renders Go-projected records. No remote action POSTs exist here.
+// This page renders Go-projected records. Its only POSTs are owner actions: the Engine link and
+// saving a manual nudge DRAFT (#96). Nothing here processes a nudge, runs a cell or approves a skill.
 const TOKEN="__PAGE_TOKEN__";
 const LIVE=location.pathname==="/cognition" && /^https?:$/.test(location.protocol);
 const $=id=>document.getElementById(id);
@@ -111,6 +113,7 @@ function select(x){
   setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
   setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
   setVisible("tryDev",x.kind==="thought"||cycle||x.kind==="junction");
+  setVisible("nudge",x.kind==="thought"&&LIVE);setVisible("nudgeHistory",x.kind==="thought"&&LIVE);
   if(x.kind==="junction"&&(x.related_cycle_ids||[]).length){
     const area=$("thoughtDetail");area.classList.add("open");
     for(const id of x.related_cycle_ids){const b=mk("button","","Open recorded cycle "+id);b.type="button";
@@ -294,6 +297,71 @@ async function ownerPost(path,body){
     const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("HTTP "+r.status));await refresh();}
   catch(e){$("banner").className="notice error";$("banner").textContent="Link change refused: "+e.message;}
 }
+
+// ---- #96: manual nudge workbench. Save Draft = one local owner write, zero model calls. ----
+// Process is BLOCKED: no Identity action for nudge processing exists yet.
+const NUDGE_RECIPIENTS=[["self","TASS (this entity)"],["position-1","Card position 1"],["position-2","Card position 2"],
+  ["position-3","Card position 3"],["position-4","Card position 4"],["position-5","Card position 5"]];
+const NUDGE_REASONS=[["owner_request","Owner request"],["new_evidence","New evidence"],["follow_up","Follow up"],["question","Question"],["correction","Correction"]];
+function nudgeKey(){const b=new Uint8Array(12);crypto.getRandomValues(b);return "nudge-"+Array.from(b,x=>x.toString(16).padStart(2,"0")).join("");}
+function selectBox(options){const s=mk("select","");for(const [v,t] of options){const o=mk("option","",t);o.value=v;s.append(o);}
+  s.style.cssText="width:100%;margin:4px 0 10px;background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:7px";return s;}
+function nudgeForm(){
+  const x=S.selected;if(!x||x.kind!=="thought")return;
+  const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+  area.append(mk("h3","","Manual nudge — draft"));
+  field(area,"Source persistent Thought",x.source_id);
+  field(area,"Sender","The unlocked Identity entity (set by Core, not typed)");
+  field(area,"Permission","Saving needs the owner grant cognition.nudge-draft (enable it on Identity's page with your passphrase; revoke any time)");
+  area.append(mk("label","","Who needs attention"));const to=selectBox(NUDGE_RECIPIENTS);area.append(to);
+  area.append(mk("div","","The Liaison is one of the five positions; which one is not decided yet, so positions are numbered."));
+  area.append(mk("label","","Reason"));const why=selectBox(NUDGE_REASONS);area.append(why);
+  area.append(mk("label","","Requested attention (what should happen next, up to 500 characters)"));
+  const what=mk("textarea","");what.rows=4;what.maxLength=500;what.style.width="100%";area.append(what);
+  area.append(mk("label","","Priority"));const pri=selectBox([["normal","Normal"],["low","Low"],["high","High"]]);area.append(pri);
+  area.append(mk("label","","Expires after (hours, 1–168)"));
+  const exp=mk("input","");exp.type="number";exp.min="1";exp.max="168";exp.value="24";
+  exp.style.cssText="width:100%;margin:4px 0 10px;background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:7px";area.append(exp);
+  const key=nudgeKey(); // one key per form: a double click or retry can never create two drafts
+  const save=mk("button","","Save draft (local only, no model call)");save.type="button";
+  const proc=mk("button","","Process — BLOCKED: no Identity processing grant exists yet");proc.type="button";proc.disabled=true;
+  proc.title="Processing needs a separate owner-reviewed Identity policy change (Thought-Processor #96).";
+  save.onclick=async()=>{
+    save.disabled=true;
+    try{
+      const r=await fetch("/api/nudges",{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},
+        body:JSON.stringify({source_thought_id:x.source_id,recipient_id:to.value,reason_code:why.value,requested_action:what.value,
+          priority:pri.value,expires_in_hours:Number(exp.value)||24,idempotency_key:key})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
+      message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+". Not processed.");
+      await nudgeHistory(x.source_id);
+    }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
+  };
+  area.append(save,proc);
+}
+async function nudgeHistory(thoughtID){
+  if(!thoughtID)return;
+  try{
+    const d=await get("/api/nudges?thought_id="+encodeURIComponent(thoughtID));
+    const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+    area.append(mk("h3","","Nudge history for "+thoughtID));
+    field(area,"Processing",val(d.processing?.state)+" — "+val(d.processing?.reason));
+    if(d.invalid_lines)field(area,"Warning",d.invalid_lines+" damaged journal line(s) were kept, not shown");
+    if(!(d.nudges||[]).length){area.append(mk("div","empty","No nudges recorded for this Thought."));}
+    for(const n of d.nudges||[]){
+      const box=mk("div","detail");box.style.cssText="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0";
+      box.append(mk("b","",n.status+" · "+n.nudge_id));
+      for(const [k,v] of [["To",n.recipient_id+" ("+n.recipient_kind+")"],["Reason",n.reason_code],["Requested attention",n.requested_action],
+        ["Priority",n.priority],["Created",stamp(n.created_at)],["Expires",stamp(n.expires_at)],
+        ["Source revision",n.source_revision],["Source evidence",(n.source_evidence_refs||[]).join(", ")],
+        ["Draft Identity decision",n.draft_identity_decision_id],["Model calls",String(n.model_calls)],
+        ["Processing",n.processing?.state],["Processing cycle",n.processing_cycle_id],["Result Thought",n.result_thought_id]])field(box,k,v);
+      area.append(box);
+    }
+    field(area,"Note",d.note);
+  }catch(e){message("Nudge history "+e.message,true);}
+}
 setInterval(()=>{if(LIVE&&!document.hidden)loadPulse();},10000);
 nav();
 $("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
@@ -315,6 +383,8 @@ $("copy").onclick=copyEvidence;
 $("downloadMD").onclick=()=>downloadEvidence("md");
 $("downloadJSON").onclick=()=>downloadEvidence("json");
 $("tryDev").onclick=devProposal;
+$("nudge").onclick=nudgeForm;
+$("nudgeHistory").onclick=()=>nudgeHistory(S.selected&&S.selected.source_id);
 refresh();
 </script>
 </body>
