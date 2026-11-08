@@ -312,6 +312,7 @@ function nudgeForm(){
   area.append(mk("h3","","Manual nudge — draft"));
   field(area,"Source persistent Thought",x.source_id);
   field(area,"Sender","The unlocked Identity entity (set by Core, not typed)");
+  field(area,"Permission","Saving needs the owner grant cognition.nudge-draft (enable it on Identity's page with your passphrase; revoke any time)");
   area.append(mk("label","","Who needs attention"));const to=selectBox(NUDGE_RECIPIENTS);area.append(to);
   area.append(mk("div","","The Liaison is one of the five positions; which one is not decided yet, so positions are numbered."));
   area.append(mk("label","","Reason"));const why=selectBox(NUDGE_REASONS);area.append(why);

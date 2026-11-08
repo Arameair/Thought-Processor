@@ -8,8 +8,10 @@ package tass
 // What this file does:
 //   - validates the draft at the Go boundary and checks that the source Thought really exists in
 //     the owner-reviewed, linked Engine entity (GET-only Engine reads; no model call);
-//   - asks Identity for a fresh decision before the one local write ("thought.process", the same
-//     action the owner-reviewed Cognition link uses for owner writes on Core state);
+//   - asks Identity for its own owner-granted action, cognition.nudge.draft, before the one local
+//     write. It is NOT a default grant and is not implied by thought.process (which every unlocked
+//     entity has and which Cognition reads use): the owner enables it on Identity's page with the
+//     passphrase (Arameair/identity "cognition.nudge-draft"), and can revoke it at any time;
 //   - appends an immutable record to a local, owner-scoped journal (nudges.jsonl, 0600, fsync).
 //
 // What it deliberately does NOT do:
@@ -55,9 +57,13 @@ var NudgeReasons = []string{"owner_request", "new_evidence", "follow_up", "quest
 
 var nudgeKeyRE = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,128}$`)
 
+// NudgeDraftAction is the Identity action a draft write needs (owner-granted, never a default).
+const NudgeDraftAction = "cognition.nudge.draft"
+
 var (
-	ErrNudgeInvalid  = errors.New("nudge refused")
-	ErrNudgeConflict = errors.New("nudge idempotency conflict")
+	ErrNudgeInvalid    = errors.New("nudge refused")
+	ErrNudgeConflict   = errors.New("nudge idempotency conflict")
+	ErrNudgeNotGranted = errors.New("Identity has not granted nudge drafts: enable \"cognition.nudge-draft\" on Identity's page (127.0.0.1:8796) with your passphrase")
 )
 
 // NudgeDraft is what the owner submits.
@@ -176,7 +182,8 @@ func (d *NudgeDraft) normalize() (recipientKind string, expiry time.Duration, er
 	if !nudgeOneOf(d.Priority, []string{"low", "normal", "high"}) {
 		return bad("priority must be low, normal or high")
 	}
-	if d.ExpiresInHours < 0 || time.Duration(d.ExpiresInHours)*time.Hour > nudgeMaxExpiry {
+	// Compare hours before multiplying: a huge int must not overflow past the bound.
+	if d.ExpiresInHours < 0 || d.ExpiresInHours > int(nudgeMaxExpiry/time.Hour) {
 		return bad("expires_in_hours must be 0-168")
 	}
 	expiry = nudgeDefaultExpiry
@@ -282,6 +289,11 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 	}
 	for _, n := range all {
 		if n.OwnerEntityID == scope.identityID && n.IdempotencyKey == d.IdempotencyKey {
+			// A key from before a relink belongs to other Engine history: never replay it (it would
+			// return a draft that GET hides). Refuse without returning any of its content.
+			if n.SourceEngineEntityID != scope.engineID {
+				return NudgeView{}, fmt.Errorf("%w: that key belongs to a different Engine link; use a new form", ErrNudgeConflict)
+			}
 			if n.BodyDigest != digest {
 				return NudgeView{}, fmt.Errorf("%w: that key was already used for a different nudge", ErrNudgeConflict)
 			}
@@ -306,10 +318,10 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 			refs = append(refs, "cycle:"+id)
 		}
 	}
-	// A fresh decision for the one local write (a read grant is not reused as write permission).
-	dec := c.cfg.IdentitySvc.Authorize("thought.process", "thought-processor:cognition.nudge.draft "+d.SourceThoughtID)
+	// Its own owner-granted action for the one local write: the read grants are never reused.
+	dec := c.cfg.IdentitySvc.Authorize(NudgeDraftAction, "thought-processor:cognition.nudge.draft "+d.SourceThoughtID)
 	if !dec.Allow || dec.DecisionID == "" || dec.EntityID != scope.identityID {
-		return NudgeView{}, ErrCognitionDenied
+		return NudgeView{}, ErrNudgeNotGranted
 	}
 	rnd := make([]byte, 10)
 	if _, err := rand.Read(rnd); err != nil {

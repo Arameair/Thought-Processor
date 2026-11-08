@@ -3,6 +3,7 @@ package tass
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -109,6 +110,16 @@ func TestNudgeDraftSavesLocallyWithZeroModelCalls(t *testing.T) {
 	if _, err := c.LinkCognition("eng_1"); err != nil {
 		t.Fatal(err)
 	}
+	// GPT-6 review P0: thought.process (a default grant every unlocked entity has) is NOT enough.
+	if _, err := c.SaveNudgeDraft(goodDraft("key-no-grant-01")); !errors.Is(err, ErrNudgeNotGranted) {
+		t.Fatalf("draft without the owner grant: %v", err)
+	}
+	if _, err := os.Stat(c.file(nudgeFile)); !os.IsNotExist(err) {
+		t.Fatal("a refused draft wrote the journal")
+	}
+	ids.mu.Lock()
+	ids.nudgeGranted = true
+	ids.mu.Unlock()
 
 	// M3: a draft is saved, scoped and carries real source evidence.
 	v, err := c.SaveNudgeDraft(goodDraft("key-first-00001"))
@@ -131,7 +142,7 @@ func TestNudgeDraftSavesLocallyWithZeroModelCalls(t *testing.T) {
 	ids.mu.Lock()
 	decisions := strings.Join(ids.decisions, " ")
 	ids.mu.Unlock()
-	if !strings.Contains(decisions, "thought.process") {
+	if !strings.Contains(decisions, "cognition.nudge.draft") {
 		t.Fatalf("no fresh Identity decision for the write: %s", decisions)
 	}
 	// Zero model calls: every Engine call was a GET to a read endpoint.
@@ -185,6 +196,7 @@ func TestNudgeDraftRefusesBadInputs(t *testing.T) {
 	t.Cleanup(ids.srv.Close)
 	c := nudgeCore(t, t.TempDir(), ids, ne)
 	ids.set("UNLOCKED")
+	ids.nudgeGranted = true
 	if _, err := c.LinkCognition("eng_1"); err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +213,8 @@ func TestNudgeDraftRefusesBadInputs(t *testing.T) {
 		"control chars": func(d *NudgeDraft) { d.RequestedAction = "hi\x00there" },
 		"bad priority":  func(d *NudgeDraft) { d.Priority = "urgent" },
 		"long expiry":   func(d *NudgeDraft) { d.ExpiresInHours = 169 },
+		"max int":       func(d *NudgeDraft) { d.ExpiresInHours = math.MaxInt },
+		"overflow wrap": func(d *NudgeDraft) { d.ExpiresInHours = int(math.MaxInt64/int64(time.Hour)) + 1 },
 		"short key":     func(d *NudgeDraft) { d.IdempotencyKey = "abc" },
 		"traversal":     func(d *NudgeDraft) { d.SourceThoughtID = "../secrets" },
 	}
@@ -232,6 +246,7 @@ func TestNudgeJournalDamagedLineIsKept(t *testing.T) {
 	t.Cleanup(ids.srv.Close)
 	c := nudgeCore(t, t.TempDir(), ids, ne)
 	ids.set("UNLOCKED")
+	ids.nudgeGranted = true
 	if _, err := c.LinkCognition("eng_1"); err != nil {
 		t.Fatal(err)
 	}
@@ -260,5 +275,45 @@ func TestStarterDocKeepsPrivateStateOut(t *testing.T) {
 	}
 	if !strings.Contains(doc, "# Kyssa") || !strings.Contains(doc, "## Learned") || strings.Contains(doc, "TASS") {
 		t.Fatalf("starter document must be entity-neutral with a Learned section:\n%s", doc)
+	}
+}
+
+// GPT-6 review P1: after a relink, an old key must not replay the old Engine entity's draft.
+func TestNudgeReplayDoesNotCrossEngineLinks(t *testing.T) {
+	ids, ne := newFakeIdentitySvc(), newNudgeEngine(t)
+	t.Cleanup(ids.srv.Close)
+	c := nudgeCore(t, t.TempDir(), ids, ne)
+	ids.set("UNLOCKED")
+	ids.nudgeGranted = true
+	if _, err := c.LinkCognition("eng_1"); err != nil {
+		t.Fatal(err)
+	}
+	old, err := c.SaveNudgeDraft(goodDraft("key-before-relink"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UnlinkCognition(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.LinkCognition("eng_other"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := c.SaveNudgeDraft(goodDraft("key-before-relink"))
+	if !errors.Is(err, ErrNudgeConflict) || v.NudgeID != "" || v.RequestedAction != "" || v.DraftDecisionID != "" {
+		t.Fatalf("relinked replay returned the old draft: %+v %v", v, err)
+	}
+	if strings.Contains(err.Error(), old.NudgeID) || strings.Contains(err.Error(), old.RequestedAction) {
+		t.Fatal("the refusal leaked the old draft")
+	}
+	if list, _ := c.NudgeHistory(""); len(list.Nudges) != 0 {
+		t.Fatalf("relinked history shows the old Engine's drafts: %+v", list)
+	}
+	// Linking back shows it again (history is kept, never rewritten).
+	c.UnlinkCognition()
+	if _, err := c.LinkCognition("eng_1"); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := c.SaveNudgeDraft(goodDraft("key-before-relink")); err != nil || !again.Replayed || again.NudgeID != old.NudgeID {
+		t.Fatalf("same-link replay: %+v %v", again, err)
 	}
 }

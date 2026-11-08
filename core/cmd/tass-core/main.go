@@ -556,7 +556,7 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         }
     })
     // #96: manual nudge workbench. GET lists this Identity entity's drafts (read authorization);
-    // POST saves ONE draft (fresh Identity decision, local write, zero model calls). There is no
+    // POST saves ONE draft (owner-granted cognition.nudge.draft, local write, zero model calls). There is no
     // process endpoint: processing stays BLOCKED until a reviewed Identity grant and route exist.
     mux.HandleFunc("GET /api/nudges",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
@@ -579,8 +579,10 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusConflict,map[string]string{"error":err.Error()})
         case errors.Is(err,tass.ErrNudgeInvalid):
             reply(w,http.StatusBadRequest,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrNudgeNotGranted):
+            reply(w,http.StatusForbidden,map[string]string{"error":err.Error()})
         case errors.Is(err,tass.ErrCognitionDenied):
-            reply(w,http.StatusForbidden,map[string]string{"error":"Identity denied the nudge draft"})
+            reply(w,http.StatusForbidden,map[string]string{"error":"Identity denied the Cognition read: unlock Identity first"})
         default:
             reply(w,http.StatusServiceUnavailable,map[string]string{"error":"source Thought NOT RECORDED or Engine unavailable; nothing saved"})
         }

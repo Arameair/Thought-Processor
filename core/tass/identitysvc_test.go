@@ -21,6 +21,7 @@ import (
 type fakeIdentitySvc struct {
 	skillGranted    bool
 	junctionGranted bool
+	nudgeGranted    bool // cognition.nudge.draft: an owner grant, never a default
 	entityID, name  string // default ent_0123 / Mira
 	mu              sync.Mutex
 	state           string
@@ -85,6 +86,9 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			allow := f.state == "UNLOCKED"
 			reason := map[bool]string{true: "granted", false: "LOCKED"}[allow]
 			if allow && strings.HasPrefix(in["action"], "skill.") && !f.skillGranted { // skills need their own grant (#72)
+				allow, reason = false, "the entity has no grant for "+in["action"]
+			}
+			if allow && strings.HasPrefix(in["action"], "cognition.nudge.") && !(f.nudgeGranted && in["action"] == "cognition.nudge.draft") {
 				allow, reason = false, "the entity has no grant for "+in["action"]
 			}
 			if allow && strings.HasPrefix(in["action"], "junction.") && !f.junctionGranted {
