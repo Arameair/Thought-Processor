@@ -583,6 +583,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusForbidden,map[string]string{"error":err.Error()})
         case errors.Is(err,tass.ErrCognitionDenied):
             reply(w,http.StatusForbidden,map[string]string{"error":"Identity denied the Cognition read: unlock Identity first"})
+        case errors.Is(err,tass.ErrNudgeWrite):
+            reply(w,http.StatusInternalServerError,map[string]string{"error":tass.ErrNudgeWrite.Error()})
         default:
             reply(w,http.StatusServiceUnavailable,map[string]string{"error":"source Thought NOT RECORDED or Engine unavailable; nothing saved"})
         }

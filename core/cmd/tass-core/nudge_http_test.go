@@ -235,6 +235,33 @@ func TestNudgeHTTPRoutes(t *testing.T) {
 	if list, _ := out["nudges"].([]any); code != http.StatusOK || len(list) != 1 {
 		t.Fatalf("history: %d %v", code, out)
 	}
+	// Revoke the owner grant: the SAME request (a replay) is now 403, a new one too; nothing is added.
+	ids.mu.Lock()
+	ids.nudgeGranted = false
+	ids.mu.Unlock()
+	for _, body := range []string{goodBody, strings.Replace(goodBody, "0001", "0003", 1)} {
+		if code, out := do(h, post(body)); code != http.StatusForbidden || out["nudge_id"] != nil {
+			t.Fatalf("after revoke: want 403 with no draft, got %d %v", code, out)
+		}
+	}
+	// Reading history is independently authorized and unchanged.
+	code, out = do(h, hreq{method: "GET", path: "/api/nudges", token: "page-token"})
+	if list, _ := out["nudges"].([]any); code != http.StatusOK || len(list) != 1 {
+		t.Fatalf("history after revoke: %d %v", code, out)
+	}
+	ids.mu.Lock()
+	ids.nudgeGranted = true
+	ids.mu.Unlock()
+	// A write failure on disk is a 500 that says nothing was saved.
+	os.Chmod(dir, 0o500)
+	os.Rename(journal, journal+".moved")
+	os.Mkdir(journal, 0o700) // the journal path is now a directory: reading it fails
+	if code, _ := do(h, post(strings.Replace(goodBody, "0001", "0004", 1))); code == http.StatusCreated || code == http.StatusOK {
+		t.Fatalf("a broken journal must not report success, got %d", code)
+	}
+	os.Remove(journal)
+	os.Rename(journal+".moved", journal)
+	os.Chmod(dir, 0o700)
 	// There is no processing route.
 	for _, path := range []string{"/api/nudges/" + fmt.Sprint(id) + "/process", "/api/nudges/process"} {
 		if code, _ := do(h, hreq{method: "POST", path: path, token: "page-token", origin: "http://127.0.0.1:8795", ctype: "application/json", body: "{}"}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {

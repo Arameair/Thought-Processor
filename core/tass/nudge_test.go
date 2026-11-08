@@ -317,3 +317,96 @@ func TestNudgeReplayDoesNotCrossEngineLinks(t *testing.T) {
 		t.Fatalf("same-link replay: %+v %v", again, err)
 	}
 }
+
+// GPT-6 follow-up: revocation is immediate, a replay included. GET history stays readable.
+func TestNudgeRevokedGrantRefusesReplay(t *testing.T) {
+	ids, ne := newFakeIdentitySvc(), newNudgeEngine(t)
+	t.Cleanup(ids.srv.Close)
+	c := nudgeCore(t, t.TempDir(), ids, ne)
+	ids.set("UNLOCKED")
+	grant := func(on bool) { ids.mu.Lock(); ids.nudgeGranted = on; ids.mu.Unlock() }
+	grant(true)
+	if _, err := c.LinkCognition("eng_1"); err != nil {
+		t.Fatal(err)
+	}
+	first, err := c.SaveNudgeDraft(goodDraft("key-revoke-0001"))
+	if err != nil || first.Replayed {
+		t.Fatalf("save: %+v %v", first, err)
+	}
+	again, err := c.SaveNudgeDraft(goodDraft("key-revoke-0001"))
+	if err != nil || !again.Replayed || again.NudgeID != first.NudgeID {
+		t.Fatalf("ordinary replay: %+v %v", again, err)
+	}
+	grant(false)
+	for _, key := range []string{"key-revoke-0001", "key-revoke-0002"} {
+		if v, err := c.SaveNudgeDraft(goodDraft(key)); !errors.Is(err, ErrNudgeNotGranted) || v.NudgeID != "" {
+			t.Fatalf("after revoke, key %s: %+v %v", key, v, err)
+		}
+	}
+	all, _, _ := c.readNudges()
+	if len(all) != 1 {
+		t.Fatalf("want exactly one record, got %d", len(all))
+	}
+	// Reading history is a separate, read-authorized operation and is unchanged.
+	if list, err := c.NudgeHistory(""); err != nil || len(list.Nudges) != 1 || list.Nudges[0].NudgeID != first.NudgeID {
+		t.Fatalf("history after revoke: %+v %v", list, err)
+	}
+	grant(true)
+	if v, err := c.SaveNudgeDraft(goodDraft("key-revoke-0001")); err != nil || !v.Replayed || v.NudgeID != first.NudgeID {
+		t.Fatalf("replay after re-grant: %+v %v", v, err)
+	}
+}
+
+// Failed writes save nothing usable, say so, and never break later records.
+func TestNudgeFailedWritesSaveNothing(t *testing.T) {
+	ids, ne := newFakeIdentitySvc(), newNudgeEngine(t)
+	t.Cleanup(ids.srv.Close)
+	dir := t.TempDir()
+	c := nudgeCore(t, dir, ids, ne)
+	ids.set("UNLOCKED")
+	ids.nudgeGranted = true
+	if _, err := c.LinkCognition("eng_1"); err != nil {
+		t.Fatal(err)
+	}
+	orig := nudgeOpenFile
+	t.Cleanup(func() { nudgeOpenFile = orig })
+
+	nudgeOpenFile = func(string, int, os.FileMode) (nudgeWriter, error) { return nil, errors.New("read-only disk (test)") }
+	if _, err := c.SaveNudgeDraft(goodDraft("key-fail-open-01")); !errors.Is(err, ErrNudgeWrite) {
+		t.Fatalf("open failure: %v", err)
+	}
+	// A cut-off write: half a line reaches the disk, then an error.
+	nudgeOpenFile = func(name string, flag int, perm os.FileMode) (nudgeWriter, error) {
+		f, err := os.OpenFile(name, flag, perm)
+		if err != nil {
+			return nil, err
+		}
+		return partialFile{f}, nil
+	}
+	if _, err := c.SaveNudgeDraft(goodDraft("key-fail-part-01")); !errors.Is(err, ErrNudgeWrite) {
+		t.Fatalf("partial write: %v", err)
+	}
+	nudgeOpenFile = orig
+	if list, _ := c.NudgeHistory(""); len(list.Nudges) != 0 || list.InvalidLines != 1 {
+		t.Fatalf("failed writes must show no draft and count the damaged line: %+v", list)
+	}
+	// The same key works afterwards (nothing was saved under it), and the record is readable.
+	v, err := c.SaveNudgeDraft(goodDraft("key-fail-part-01"))
+	if err != nil || v.Replayed {
+		t.Fatalf("save after failures: %+v %v", v, err)
+	}
+	list, _ := c.NudgeHistory("")
+	if len(list.Nudges) != 1 || list.Nudges[0].NudgeID != v.NudgeID || list.InvalidLines != 1 {
+		t.Fatalf("record after a cut-off line must stay readable: %+v", list)
+	}
+}
+
+// partialFile writes half of what it is given to the real file, then fails.
+type partialFile struct{ f *os.File }
+
+func (p partialFile) Write(b []byte) (int, error) {
+	n, _ := p.f.Write(b[:len(b)/2])
+	return n, errors.New("disk full (test)")
+}
+func (p partialFile) Sync() error  { return p.f.Sync() }
+func (p partialFile) Close() error { return p.f.Close() }

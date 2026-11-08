@@ -63,6 +63,7 @@ const NudgeDraftAction = "cognition.nudge.draft"
 var (
 	ErrNudgeInvalid    = errors.New("nudge refused")
 	ErrNudgeConflict   = errors.New("nudge idempotency conflict")
+	ErrNudgeWrite      = errors.New("the draft could not be saved on this computer; nothing was saved")
 	ErrNudgeNotGranted = errors.New("Identity has not granted nudge drafts: enable \"cognition.nudge-draft\" on Identity's page (127.0.0.1:8796) with your passphrase")
 )
 
@@ -231,21 +232,43 @@ func (c *Core) readNudges() ([]Nudge, int, error) {
 	return out, invalid, nil
 }
 
+// nudgeOpenFile is os.OpenFile; tests replace it to inject write failures.
+var nudgeOpenFile = func(name string, flag int, perm os.FileMode) (nudgeWriter, error) {
+	return os.OpenFile(name, flag, perm)
+}
+
+type nudgeWriter interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
 func (c *Core) appendNudge(n Nudge) error {
 	p := c.file(nudgeFile)
 	if fi, err := os.Stat(p); err == nil && fi.Size() > nudgeJournalMax {
 		return fmt.Errorf("%w: the local nudge journal is full; export and archive it first", ErrNudgeInvalid)
 	}
-	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
 	b, err := json.Marshal(n)
 	if err != nil {
-		f.Close()
 		return err
 	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
+	// If an earlier write was cut off mid-line, start on a fresh line so this record stays
+	// readable (the damaged partial line is kept and counted, never rewritten).
+	line := append(b, '\n')
+	if r, err := os.Open(p); err == nil {
+		if fi, err := r.Stat(); err == nil && fi.Size() > 0 {
+			last := make([]byte, 1)
+			if _, err := r.ReadAt(last, fi.Size()-1); err == nil && last[0] != '\n' {
+				line = append([]byte{'\n'}, line...)
+			}
+		}
+		r.Close()
+	}
+	f, err := nudgeOpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(line); err != nil {
 		f.Close()
 		return err
 	}
@@ -280,6 +303,13 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 		return NudgeView{}, fmt.Errorf("%w: link this Identity to its Engine history in Cognition first", ErrNudgeInvalid)
 	}
 	digest := d.digest()
+	// Every POST success, a replay included, needs a FRESH owner grant: revoking
+	// cognition.nudge.draft takes effect immediately, even for a key that was saved before.
+	// (Reading saved drafts is GET /api/nudges, which needs only the Cognition read grants.)
+	dec := c.cfg.IdentitySvc.Authorize(NudgeDraftAction, "thought-processor:cognition.nudge.draft "+d.SourceThoughtID)
+	if !dec.Allow || dec.DecisionID == "" || dec.EntityID != scope.identityID {
+		return NudgeView{}, ErrNudgeNotGranted
+	}
 
 	c.nudgeMu.Lock()
 	defer c.nudgeMu.Unlock()
@@ -318,11 +348,6 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 			refs = append(refs, "cycle:"+id)
 		}
 	}
-	// Its own owner-granted action for the one local write: the read grants are never reused.
-	dec := c.cfg.IdentitySvc.Authorize(NudgeDraftAction, "thought-processor:cognition.nudge.draft "+d.SourceThoughtID)
-	if !dec.Allow || dec.DecisionID == "" || dec.EntityID != scope.identityID {
-		return NudgeView{}, ErrNudgeNotGranted
-	}
 	rnd := make([]byte, 10)
 	if _, err := rand.Read(rnd); err != nil {
 		return NudgeView{}, err
@@ -342,7 +367,10 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 		Status: "DRAFT", DraftDecisionID: dec.DecisionID, Processing: nudgeBlocked(),
 	}
 	if err := c.appendNudge(n); err != nil {
-		return NudgeView{}, err
+		if errors.Is(err, ErrNudgeInvalid) {
+			return NudgeView{}, err
+		}
+		return NudgeView{}, fmt.Errorf("%w: %v", ErrNudgeWrite, err)
 	}
 	c.event("sync", fmt.Sprintf("Saved manual nudge draft %s for %s (not processed: no processing grant exists).", n.NudgeID, n.RecipientID))
 	return c.nudgeView(n), nil
