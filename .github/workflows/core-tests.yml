@@ -40,6 +40,7 @@ jobs:
           python3 -m pip install --quiet playwright
           python3 -m playwright install chromium
           python3 core/test/browser/cognition_go.py
+          python3 core/test/browser/cognition_nudge.py
       - name: Build
         working-directory: core
         run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
