@@ -348,6 +348,8 @@ async function nudgeHistory(thoughtID){
     area.append(mk("h3","","Nudge history for "+thoughtID));
     field(area,"Processing",val(d.processing?.state)+" — "+val(d.processing?.reason));
     if(d.invalid_lines)field(area,"Warning",d.invalid_lines+" damaged journal line(s) were kept, not shown");
+    if(d.processing_locked){const w=mk("div","detail","Processing is locked: "+d.processing_locked+". Restore a consistent backup with ./tass.sh; drafts stay readable.");
+      w.style.cssText="border:1px solid #c55;border-radius:10px;padding:8px 10px;margin:8px 0";area.append(w);}
     if(!(d.nudges||[]).length){area.append(mk("div","empty","No nudges recorded for this Thought."));}
     for(const n of d.nudges||[]){
       const box=mk("div","detail");box.style.cssText="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0";
@@ -355,12 +357,87 @@ async function nudgeHistory(thoughtID){
       for(const [k,v] of [["To",n.recipient_id+" ("+n.recipient_kind+")"],["Reason",n.reason_code],["Requested attention",n.requested_action],
         ["Priority",n.priority],["Created",stamp(n.created_at)],["Expires",stamp(n.expires_at)],
         ["Source revision",n.source_revision],["Source evidence",(n.source_evidence_refs||[]).join(", ")],
-        ["Draft Identity decision",n.draft_identity_decision_id],["Model calls",String(n.model_calls)],
-        ["Processing",n.processing?.state],["Processing cycle",n.processing_cycle_id],["Result Thought",n.result_thought_id]])field(box,k,v);
+        ["Draft Identity decision",n.draft_identity_decision_id],
+        ["Processing",n.run?"":val(n.processing?.state)+(n.pre_restore?" (existed before a restore)":"")]])if(v)field(box,k,v);
+      if(n.run)runFields(box,n.run);
+      nudgeActions(box,n,d,thoughtID);
       area.append(box);
     }
     field(area,"Note",d.note);
+    // While a run is open, refresh its receipt (reads only; nothing is ever re-sent).
+    if((d.nudges||[]).some(n=>n.run&&(n.run.state==="SUBMITTED"||n.run.state==="RUNNING"))){
+      clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if($("thoughtDetail").textContent.includes("Nudge history for "+thoughtID))nudgeHistory(thoughtID);},3000);
+    }
   }catch(e){message("Nudge history "+e.message,true);}
+}
+// ---- Stage 2: process ONE confirmed nudge to TASS himself, stop it, or copy it. ----
+const RUN_TEXT={SUBMITTED:"Accepted locally; not confirmed by the Engine yet",RUNNING:"The Engine is developing the Thought",
+  COMPLETED:"Done and verified: one note and one development step",FAILED:"Failed",UNCERTAIN:"Uncertain: the model may have received the request",
+  NOT_DELIVERED:"Stopped: the model was never asked",RECOVERY_REQUIRED:"Needs recovery: this nudge will never run again"};
+const MODEL_TEXT={none:"not contacted",attempt_uncertain:"may have been contacted",responded:"answered"};
+function runFields(box,r){
+  for(const [k,v] of [["Run",(RUN_TEXT[r.state]||r.state)+(r.detail?" — "+r.detail:"")],["Model",MODEL_TEXT[r.model_http]||r.model_http],
+    ["Model request",r.request_id],["Developed at",r.step_at?stamp(r.step_at):""],["Verified",r.state==="COMPLETED"?(r.verified?"yes":"NO"):""],
+    ["Suggested state (never applied)",r.engine?.suggested_state],["Process decision",r.process_decision_id],["Stop decision",r.stop_decision_id]])if(v)field(box,k,v);
+}
+async function nudgePost(path,body){
+  const r=await fetch(path,{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
+  return d;
+}
+function nudgeActions(box,n,d,thoughtID){
+  const row=mk("div","");row.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px";
+  const canProcess=!n.run&&n.status==="DRAFT"&&n.recipient_id==="self"&&!n.pre_restore&&!d.processing_locked;
+  if(canProcess){
+    const b=mk("button","","Process once…");b.type="button";
+    b.onclick=()=>{
+      b.disabled=true;
+      const c=mk("div","detail");c.style.cssText="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px";
+      c.append(mk("b","","Process this nudge once?"));
+      field(c,"Thought",n.source_thought_id);field(c,"What TASS should pay attention to",n.requested_action);
+      field(c,"What happens","One request to the local model. If it answers, TASS adds one note to this Thought. A saved note can't be undone. The suggested state is never applied.");
+      const ok=mk("button","","Confirm: process once");ok.type="button";
+      const no=mk("button","","Cancel");no.type="button";no.onclick=()=>{c.remove();b.disabled=false;};
+      ok.onclick=async()=>{ok.disabled=true;no.disabled=true;
+        try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/process",{body_digest:n.body_digest});
+          message(r.note||"Processing: "+(RUN_TEXT[r.run?.state]||r.run?.state));await nudgeHistory(thoughtID);}
+        catch(e){message("Not processed: "+e.message,true);ok.disabled=false;no.disabled=false;}};
+      c.append(ok,no);box.append(c);
+    };
+    row.append(b);
+  }
+  if(n.run&&n.run.can_stop){
+    const s=mk("button","","Stop this nudge");s.type="button";
+    s.onclick=async()=>{s.disabled=true;
+      try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
+        message(r.run?.state==="NOT_DELIVERED"?"Stopped: the model will never be asked for this nudge.":"Too late to stop: "+(RUN_TEXT[r.run?.state]||r.run?.state));
+        await nudgeHistory(thoughtID);}catch(e){message("Not stopped: "+e.message,true);s.disabled=false;}};
+    row.append(s);
+    // D14: copying a submitted nudge stops it first; the copy is made only if the stop succeeded.
+    const sc=mk("button","","Stop and copy as new");sc.type="button";
+    sc.onclick=async()=>{sc.disabled=true;
+      try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
+        if(r.run?.state!=="NOT_DELIVERED"){message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.run?.state]||r.run?.state)+"). Wait for it to finish.",true);await nudgeHistory(thoughtID);return;}
+        const c=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
+          requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
+        message("Stopped, and copied as new draft "+c.nudge_id+". It needs its own confirmation to run.");await nudgeHistory(thoughtID);}
+      catch(e){message("Not done: "+e.message,true);sc.disabled=false;}};
+    row.append(sc);
+  }
+  if(n.pre_restore||(n.run&&n.run.can_copy)){
+    const cp=mk("button","","Copy as new");cp.type="button";
+    cp.onclick=async()=>{
+      const risky=n.pre_restore||n.run?.state==="UNCERTAIN"||n.run?.state==="RECOVERY_REQUIRED";
+      if(risky&&!cp.dataset.armed){cp.dataset.armed="1";cp.textContent="Copy anyway (the original may already have run; this may repeat it)";return;}
+      cp.disabled=true;
+      try{const r=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
+          requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
+        message("Copied as new draft "+r.nudge_id+". It needs its own confirmation to run.");await nudgeHistory(thoughtID);}
+      catch(e){message("Not copied: "+e.message,true);cp.disabled=false;}};
+    row.append(cp);
+  }
+  if(row.children.length)box.append(row);
 }
 setInterval(()=>{if(LIVE&&!document.hidden)loadPulse();},10000);
 nav();

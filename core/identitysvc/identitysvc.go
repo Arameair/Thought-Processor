@@ -125,3 +125,27 @@ func (c *Client) GetApprovedLesson() (ApprovedLesson, error) {
 	}
 	return lesson, nil
 }
+
+// BoundDecision is a bound, single-use decision (Stage 2). Only Core may obtain one.
+type BoundDecision struct {
+	Decision
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// AuthorizeBound obtains a decision for action bound to binding (sha256 hex of the exact tuple).
+func (c *Client) AuthorizeBound(action, binding, detail string) BoundDecision {
+	body, _ := json.Marshal(map[string]string{"action": action, "binding": binding, "detail": detail})
+	req, _ := http.NewRequest("POST", c.URL+"/v1/authorize", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Key)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return BoundDecision{Decision: Decision{Reason: "Identity not reachable: " + err.Error()}}
+	}
+	defer resp.Body.Close()
+	var d BoundDecision
+	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&d) != nil {
+		return BoundDecision{Decision: Decision{Reason: fmt.Sprintf("Identity answered %d", resp.StatusCode)}}
+	}
+	return d
+}

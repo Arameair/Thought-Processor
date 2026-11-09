@@ -30,9 +30,10 @@ here="$(pwd)"
 
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
-ENGINE_COMMIT_PIN="d69d3917d1601d806d4b2ba2254693e1adb92b6b"
-# identity: experiment/nudge-draft-grant-20261108 (adds the owner grant cognition.nudge.draft, Core #96)
-IDENTITY_COMMIT_PIN="64fdf8e8cf926df5ea6bb6c23fbab864d0f09e3b"
+# engine: experiment/stage2-nudge-run-20261108 (durable nudge runs, Stop, verified development; Stage 2 + ST2-I01 repair)
+ENGINE_COMMIT_PIN="8bed0fc522905b3c2e110a0b426f4e258812a9b9"
+# identity: experiment/nudge-process-stop-20261108 (single-use bound decisions for nudge process / stop; Stage 2)
+IDENTITY_COMMIT_PIN="cfc4079b690e2f7dc57afb9f14c6832ae38fdf54"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"
@@ -202,6 +203,9 @@ check() {
       blockers=1
     else ok "No other model server running: the application starts exactly one"; fi
   fi
+  # Stage 2 restore fence: restore_data must be able to flush single files and folders.
+  local probe; probe="$(mktemp 2>/dev/null)" && if sync "$probe" 2>/dev/null; then ok "sync can flush single files (needed by a safe restore)"
+  else bad "this system's sync can't flush a single file (coreutils 8.24+ needed for a safe restore)"; blockers=1; fi; rm -f -- "${probe:-}"
   for p in "$CORE_PORT" "$IDENTITY_PORT"; do
     if port_busy "$p" && [[ -z "$( [[ $docker_ok == 1 ]] && ours)" ]]; then bad "Port $p is used by another program (set CORE_PORT / IDENTITY_PORT in app.env)"; blockers=1
     else ok "Port 127.0.0.1:$p available (or already this application's)"; fi
@@ -329,19 +333,54 @@ backup_ok() { # $1 = backup: present and unchanged since it was verified
   [[ -f "$1" && -f "$1.sha256" && "$(sha256_of "$1")" == "$(cat "$1.sha256")" ]]
 }
 
+# restore_data $1 = backup. Stage 2 (design rev 4 §4.6): the backup is unpacked into a STAGING folder
+# first, a restore fence is written into the staged Core data (so every nudge draft in the restored
+# journal is PRE_RESTORE and can't be processed), the staged files are synced, and only then is the
+# live data moved aside (never deleted) and the staged data renamed into place. A crash before the
+# rename leaves the old data live; a crash after it leaves restored data that already carries its
+# fence. Same signature and callers as before.
+restore_fence_write() { # $1 = staged data folder
+  local core="$1/core" j fence tmp bytes hash
+  mkdir -p "$core" && chmod 700 "$core"
+  j="$core/nudges.jsonl"; fence="$core/restore-fence.json"; tmp="$core/.restore-fence.json.tmp"
+  if [[ -f "$j" ]]; then bytes="$(stat -c %s "$j")"; hash="$(sha256_of "$j")"
+  else bytes=0; hash="$(printf '' | sha256sum | cut -d' ' -f1)"; fi
+  (umask 077; printf '{"schema":"tass.restore-fence/2","restored_at":"%s","backup":"%s","journal_bytes":%s,"journal_sha256":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$2")" "$bytes" "$hash" >"$tmp") || return 1
+  sync "$tmp" && mv -f -- "$tmp" "$fence" && sync "$fence" "$core"
+}
+
 restore_data() { # $1 = backup; current data is MOVED aside (never deleted) first
-  local b="$1" aside="$DEPLOY/failed/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  local b="$1" aside="$DEPLOY/failed/$(date -u +%Y%m%dT%H%M%SZ)-$$" stage="$DEPLOY/restore-stage.$(date -u +%Y%m%dT%H%M%SZ).$$" need free
+  # R1: verify the backup, and that there is room for an unpacked copy beside the live data
   [[ -f "$b" ]] || die "no backup $b"
   if [[ -f "$b.sha256" ]]; then backup_ok "$b" || die "backup $b does not match its recorded SHA-256; nothing was changed"
   else note "backup $b predates verified backups (no .sha256): restoring it unverified"; fi
+  need="$(tar -tvzf "$b" 2>/dev/null | awk '{s+=$3} END {printf "%d", s/1024+1024}')" || die "could not read $b; nothing was changed"
+  free="$(df -Pk "$DEPLOY" | awk 'NR==2 {print $4}')"
+  [[ -n "$need" && -n "$free" && "$free" -gt "$need" ]] || die "not enough free space to restore $b (need about ${need} KB, have ${free:-?} KB); nothing was changed"
+  # R2: unpack into the staging folder (the live data is untouched)
+  rm -rf -- "$DEPLOY"/restore-stage.*   # left by an interrupted restore (operations hold the op lock, so none is live)
+  mkdir -p "$stage" && chmod 700 "$stage"
+  if ! tar -xzf "$b" -C "$stage" || [[ ! -d "$stage/data" ]]; then
+    rm -rf -- "$stage"; die "could not unpack $b; nothing was changed"
+  fi
+  mkdir -p "$stage/secrets" && chmod 700 "$stage/secrets"
+  # R3: fence the restored nudge journal, then make the staged copy durable
+  restore_fence_write "$stage/data" "$b" || { rm -rf -- "$stage"; die "could not write the restore fence; nothing was changed"; }
+  sync -f "$stage" 2>/dev/null || sync
+  # R4: move the live data aside (never deleted)
   mkdir -p "$aside" && chmod 700 "$DEPLOY/failed" "$aside"
   [[ -d "$APP_DATA" ]] && mv "$APP_DATA" "$aside/data"
   [[ -d "$APP_SECRETS" ]] && mv "$APP_SECRETS" "$aside/secrets"
-  if ! tar -xzf "$b" -C "$APP_HOME"; then
+  # R5: publish the staged data with renames (same file system), then sync the parent folder
+  if ! mv -- "$stage/data" "$APP_DATA" || ! mv -- "$stage/secrets" "$APP_SECRETS"; then
     rm -rf -- "$APP_DATA" "$APP_SECRETS"; mv "$aside/data" "$APP_DATA" 2>/dev/null; mv "$aside/secrets" "$APP_SECRETS" 2>/dev/null
-    die "could not unpack $b; the data that was there is back in place"
+    rm -rf -- "$stage"; die "could not put the restored data in place; the data that was there is back in place"
   fi
-  say "Restored data and keys from $b (what was there is kept in $aside)."
+  sync "$APP_HOME" 2>/dev/null || sync
+  rm -rf -- "$stage"
+  say "Restored data and keys from $b (what was there is kept in $aside; nudge drafts from before the restore are marked and can't be processed)."
 }
 
 # ---- one operation at a time, and a record of any operation in progress (Issue #79)

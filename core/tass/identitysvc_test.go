@@ -22,6 +22,8 @@ type fakeIdentitySvc struct {
 	skillGranted    bool
 	junctionGranted bool
 	nudgeGranted    bool // cognition.nudge.draft: an owner grant, never a default
+	processGranted  bool              // Stage 2: cognition.nudge.process (bound decisions only)
+	bound           map[string]string // decision ID → binding (Stage 2)
 	entityID, name  string // default ent_0123 / Mira
 	mu              sync.Mutex
 	state           string
@@ -87,6 +89,23 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			reason := map[bool]string{true: "granted", false: "LOCKED"}[allow]
 			if allow && strings.HasPrefix(in["action"], "skill.") && !f.skillGranted { // skills need their own grant (#72)
 				allow, reason = false, "the entity has no grant for "+in["action"]
+			}
+			if in["action"] == "cognition.nudge.process" || in["action"] == "cognition.nudge.stop" { // Stage 2: bound only
+				if in["binding"] == "" || len(in["binding"]) != 64 {
+					allow, reason = false, "a binding is required"
+				} else if in["action"] == "cognition.nudge.process" && !f.processGranted {
+					allow, reason = false, "the entity has no grant for cognition.nudge.process"
+				}
+				id := fmt.Sprintf("dec_b%d", len(f.decisions))
+				if allow {
+					if f.bound == nil {
+						f.bound = map[string]string{}
+					}
+					f.bound[id] = in["action"] + " " + in["binding"]
+				}
+				json.NewEncoder(w).Encode(map[string]any{"allow": allow, "decision_id": id, "reason": reason, "entity_id": eid,
+					"expires_at": time.Now().Add(2 * time.Minute)})
+				return
 			}
 			if allow && strings.HasPrefix(in["action"], "cognition.nudge.") && !(f.nudgeGranted && in["action"] == "cognition.nudge.draft") {
 				allow, reason = false, "the entity has no grant for "+in["action"]

@@ -8,6 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 DELAY = float(os.environ.get("FIXTURE_DELAY") or 45)
 lock = threading.Lock()
 count = 0
+# Stage 2: owner nudges (Engine prompt: the Think prompt + "The owner asked you to pay attention").
+# Counted on their own and the last one kept, so a test can prove ONE model request per nudge and see
+# exactly what the Engine sent. Attention text containing "slow" waits FIXTURE_DELAY seconds.
+nudges = 0
+last_nudge = ""
 
 # TEST FIXTURE answers for lesson checks, from a lookup table (a real model reads the lesson).
 # The first attempt at "attempts" is wrong on purpose, so the retry path is exercised.
@@ -66,18 +71,28 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/fixture/requests":
-            return self.reply(200, {"requests": count})
+            return self.reply(200, {"requests": count, "nudges": nudges})
+        if self.path == "/fixture/last-nudge":
+            return self.reply(200, {"prompt": last_nudge})
         self.reply(200, {"status": "ok"})
 
     def do_POST(self):
-        global count
+        global count, nudges, last_nudge
         req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0") or 0)) or b"{}")
         msgs = req.get("messages", [])
         allm = "\n".join(str(m.get("content", "")) for m in msgs)
         last = str(msgs[-1].get("content", "")) if msgs else ""
         with lock:
             count += 1
-        if "OWNER-SUPERVISED LESSON ANSWERS" in allm:
+        if "You are developing an ongoing thought" in allm and "The owner asked you to pay attention" in allm:
+            with lock:
+                nudges += 1
+                last_nudge = allm
+            if "slow" in allm.split("The owner asked you to pay attention", 1)[1]:
+                time.sleep(DELAY)
+            text = ("NOTE: (TEST FIXTURE) Following the owner's pointer, check whether the pattern holds "
+                    f"on the next session (nudge {nudges}).\nSTATE: keep")
+        elif "OWNER-SUPERVISED LESSON ANSWERS" in allm:
             text = lesson_answers(allm)
         elif "IMPORTANCE: <a whole number" in allm:
             text = "IMPORTANCE: 6\nTOPIC: local work"

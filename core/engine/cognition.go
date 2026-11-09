@@ -56,6 +56,12 @@ type ThoughtStep struct{
     EventID string `json:"event_id"`
     TraceID string `json:"trace_id"`
     RequestID string `json:"worker_request_id"`
+    NudgeID string `json:"source_nudge_id,omitempty"` // Stage 2
+}
+// ThoughtNote: only the fields Core needs to verify a nudge (never the note text).
+type ThoughtNote struct{
+    RequestID string `json:"worker_request_id"`
+    NudgeID string `json:"source_nudge_id,omitempty"`
 }
 type Thought struct{
     ThoughtID string `json:"thought_id"`
@@ -68,6 +74,7 @@ type Thought struct{
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
     History []ThoughtStep `json:"history"`
+    Notes []ThoughtNote `json:"notes"`
 }
 type Trace struct{
     TraceID string `json:"trace_id"`
