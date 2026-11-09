@@ -69,3 +69,24 @@ python3 test/test_updater_recovery.py
 - G1 and G2 are per-ID guarantees. **Copy as new** after UNCERTAIN or PRE_RESTORE can repeat the task under a new ID. The page warns about this and asks for a new approval (D13/D14).
 - A crashed restore leaves `deploy/restore-stage.*` behind. The next `restore_data` removes it; operations hold the op lock.
 - After `recover`, which re-runs the restore from the guard backup, drafts are fenced again. This is conservative and intended.
+
+## Repair round 1 (2026-11-09): ST2-I01 and isolated harness, for Codex's retest
+
+These answer Codex's audit (PR #105) and GPT-6's repair handoff (issue #100).
+
+- **Engine `8bed0fc`** (PR #19). The `before_save` hook now runs before the final P2 check. The order is:
+  1. Identity re-check (the bound decision is still valid and the process grant is still held);
+  2. take `e.mu`;
+  3. `thoughtGateLocked` (entity, Thought, Thought Processing ON, not resolved; `RevP2` is taken from the state being saved);
+  4. atomic file write and in-memory update;
+  5. release `e.mu`.
+
+  `TestNudgeFinalCheckCoversTheBeforeSaveWindow` changes state in the `before_save` window in three ways: grant revoked, Thought resolved, Thought Processing off. Each case must end with 1 model POST, FAILED with the exact `p2_*` reason, 0 notes and 0 developed steps in memory and on disk, a read-back of FAILED, and no new POST when asked again. All three cases **fail on `02df481`** and pass on `8bed0fc`.
+- **Core** (PR #104).
+  - The Engine pin is moved to `8bed0fc`.
+  - `test/nudge_process_native.py` now uses its own ports from `S2_PORT_BASE` (default 39100: Core +0, Identity +1, Engine +2, proxy +3, model +4).
+  - It refuses owner ports outright.
+  - A preflight runs **before any process start or request**. It checks that every test port is free (SO_REUSEADDR, so only a live listener blocks) and that APP_HOME is new or carries the test's marker; otherwise it aborts.
+  - Services get a clean environment with no inherited tokens or URLs, and `HOME` inside APP_HOME.
+  - Sentinels listen on every free owner port, with a positive control, and the run FAILs on any hit.
+- **Remaining window, by design:** a revoke that lands in Identity *after* the Engine's final Identity check and before the file write can't be closed by the Engine, because Identity is an external authority. Everything the Engine owns is checked under the same lock as the write.

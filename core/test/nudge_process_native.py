@@ -18,22 +18,117 @@ Core, the TEST FIXTURE model (NOT Nemotron), no Docker, no GitHub, a throwaway A
 
     APP_HOME=/tmp/e2e/s2 BIN=/tmp/e2e/bin SEED=/tmp/e2e/seed \\
     CORE_BIN=tass-core-s2 ENGINE_BIN=thought-engine-s2 IDENTITY_BIN=tass-identity-s2 \\
-    python3 core/test/nudge_process_native.py
+    [S2_PORT_BASE=39100] python3 core/test/nudge_process_native.py
+
+ISOLATION (Codex audit PR #105 / GPT-6 handoff): this test must never reach the owner's running TASS.
+  - Every service uses its own port from S2_PORT_BASE (default 39100): Core +0, Identity +1, Engine +2,
+    fault proxy +3, fixture model +4. The owner's ports (8795 Core, 8796 Identity, 7798 Engine,
+    8081/18083 model, 7790/7860/7791) are refused outright, as is any base that overlaps them.
+  - Preflight, BEFORE any request or process start: every test port must be free to bind (else abort),
+    and APP_HOME must be new or a folder this test made before (marker file), never the owner's.
+  - Services get a CLEAN environment (no inherited GITHUB_TOKEN, CHAT_JIMMY_URL, THOUGHT_ENGINE_*,
+    IDENTITY_*, TASS_* ...) and HOME inside APP_HOME, and every address is passed explicitly.
+  - Sentinels: each owner port that is FREE here is bound by a listener that counts connections; the
+    run fails if any test component touched one. (A port in use, e.g. the owner's live Identity, can't
+    be watched, but no test address points at it.)
 """
 import glob, json, os, signal, subprocess, sys, threading, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("CAND", "x"); os.environ.setdefault("ALPHA", "x")
 os.environ.setdefault("FIXTURE_DELAY", "8")
-import lesson_retry_native as n  # noqa: E402
-from acceptance import CORE, check, core_post, http, idn_post, log, results, token, wait  # noqa: E402
+import socket  # noqa: E402
 
+OWNER_PORTS = (8795, 8796, 7798, 7799, 8081, 18083, 7790, 7860, 7791)
+BASE = int(os.environ.get("S2_PORT_BASE", "39100"))
+P_CORE, P_IDN, P_ENG, P_PROXY, P_MODEL = (BASE + i for i in range(5))
+TEST_PORTS = (P_CORE, P_IDN, P_ENG, P_PROXY, P_MODEL)
+
+
+def preflight():
+    """Abort before anything starts or any request is made, unless the run is provably isolated."""
+    bad = [p for p in TEST_PORTS if p in OWNER_PORTS or not 1024 < p < 65536]
+    if bad:
+        sys.exit(f"ABORT: S2_PORT_BASE={BASE} uses owner/invalid port(s) {bad}; pick another base. Nothing was started.")
+    for p in TEST_PORTS:
+        sock = socket.socket()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # TIME_WAIT is not "in use"; a listener is
+        try:
+            sock.bind(("127.0.0.1", p))
+        except OSError as err:
+            sys.exit(f"ABORT: test port {p} is already in use ({err}); something else is running there. Nothing was started or contacted.")
+        finally:
+            sock.close()
+    app = os.environ["APP_HOME"]
+    if os.path.exists(app) and os.listdir(app) and not os.path.exists(os.path.join(app, ".s2-native-test")):
+        sys.exit(f"ABORT: APP_HOME={app} exists and was not made by this test (no .s2-native-test marker); "
+                 "use a new throwaway folder. Nothing was started.")
+    for name in ("TASS_DATA", "IDENTITY_DATA"):
+        if os.environ.get(name):
+            print(f"note: ignoring inherited {name}; services get a clean environment", flush=True)
+
+
+preflight()
+os.makedirs(os.environ["APP_HOME"], exist_ok=True)
+open(os.path.join(os.environ["APP_HOME"], ".s2-native-test"), "w").write("throwaway Stage 2 native test folder\n")
+
+import acceptance  # noqa: E402
+import lesson_retry_native as n  # noqa: E402
+from acceptance import check, core_post, http, idn_post, log, results, token, wait  # noqa: E402
+
+CORE = acceptance.CORE = f"http://127.0.0.1:{P_CORE}"   # core_post / idn_post read these at call time
+IDN = acceptance.IDN = f"http://127.0.0.1:{P_IDN}"
 APP, BIN = n.APP, n.BIN
+os.makedirs(f"{APP}/home", exist_ok=True)
+
+
+def clean_env(extra):
+    """Only what the services need: no inherited tokens, URLs or data folders from the caller's shell."""
+    return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": f"{APP}/home", "LANG": "C.UTF-8",
+            "TMPDIR": f"{APP}/home", **extra}
+
+
+def start(name, cmd, env, health_url):
+    out = open(f"{APP}/logs/{name}.log", "a")
+    n.procs[name] = subprocess.Popen(cmd, env=clean_env(env), stdout=out, stderr=subprocess.STDOUT)
+    ok = wait(name, lambda: n.up(health_url), 40, 1)
+    log(f"started {name}: {cmd[0]} healthy={bool(ok)}")
+    if not ok:
+        raise SystemExit(f"{name} did not come up on its isolated port; see {APP}/logs/{name}.log")
+
+
+SENTINEL_HITS = []
+
+
+def start_sentinels():
+    """Listen on every owner port that is free here; any connection from this run is a FAIL."""
+    watched = []
+    for p in OWNER_PORTS:
+        sock = socket.socket()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", p))
+        except OSError:
+            sock.close()
+            continue
+        sock.listen(8)
+
+        def serve(s=sock, port=p):
+            while True:
+                try:
+                    c, _ = s.accept()
+                except OSError:
+                    return
+                SENTINEL_HITS.append(port)
+                c.close()
+        threading.Thread(target=serve, daemon=True).start()
+        watched.append(p)
+    return watched
 CORE_BIN = os.environ.get("CORE_BIN", "tass-core-s2")
 ENGINE_BIN = os.environ.get("ENGINE_BIN", "thought-engine-s2")
 IDENTITY_BIN = os.environ.get("IDENTITY_BIN", "tass-identity-s2")
-MODEL = "http://127.0.0.1:8081"
-ENG = "http://127.0.0.1:7798"
+MODEL = f"http://127.0.0.1:{P_MODEL}"
+ENG = f"http://127.0.0.1:{P_ENG}"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -51,7 +146,7 @@ def ekey():
 
 # Fault proxy between Core and the Engine (test only): passes every request through, except that while
 # DROP_NUDGE is set it answers a nudge POST with a 502 WITHOUT forwarding it (a lost delivery).
-PROXY = "http://127.0.0.1:7799"
+PROXY = f"http://127.0.0.1:{P_PROXY}"
 DROP_NUDGE = threading.Event()
 PROXIED = []
 
@@ -71,7 +166,7 @@ def start_proxy():
                 if DROP_NUDGE.is_set():
                     self.send_response(502); self.end_headers(); return
             try:
-                c = http.client.HTTPConnection("127.0.0.1", 7798, timeout=600)
+                c = http.client.HTTPConnection("127.0.0.1", P_ENG, timeout=600)
                 c.request(self.command, self.path, body or None, {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")})
                 r = c.getresponse(); data = r.read()
                 self.send_response(r.status)
@@ -84,22 +179,23 @@ def start_proxy():
 
         do_GET = do_POST = go
 
-    srv = ThreadingHTTPServer(("127.0.0.1", 7799), P)
+    srv = ThreadingHTTPServer(("127.0.0.1", P_PROXY), P)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 
 def start_core():
-    n.start("core", [f"{BIN}/{CORE_BIN}"], {
-        "HOME": "/tmp", "TASS_DATA": f"{APP}/data/core", "TASS_LISTEN": "127.0.0.1:8795",
+    start("core", [f"{BIN}/{CORE_BIN}"], {
+        "TASS_DATA": f"{APP}/data/core", "TASS_LISTEN": f"127.0.0.1:{P_CORE}",
         "TASS_ENGINE_URL": PROXY, "TASS_ENGINE_KEY": f"{APP}/data/engine/api-key",
-        "TASS_IDENTITY_URL": "http://127.0.0.1:8796", "TASS_IDENTITY_KEY_FILE": f"{APP}/secrets/core.key",
-        "TASS_REPO": "", "TASS_TOKEN_FILE": f"{APP}/secrets/github_token"}, CORE + "/api/health")
+        "TASS_IDENTITY_URL": IDN, "TASS_IDENTITY_KEY_FILE": f"{APP}/secrets/core.key",
+        "TASS_REPO": "", "TASS_TOKEN_FILE": f"{APP}/secrets/github_token",
+        "TASS_GITHUB_API": f"http://127.0.0.1:{P_MODEL}/no-github"}, CORE + "/api/health")
 
 
 def start_engine():
-    n.start("engine", [f"{BIN}/{ENGINE_BIN}", "-data", f"{APP}/data/engine", "-model", MODEL, "-worker", "nemotron",
-            "-identity-url", "http://127.0.0.1:8796", "-identity-key-file", f"{APP}/secrets/engine.key", "-pulse", "20s"],
-            {"PORT": "7798", "HOME": "/tmp"}, ENG + "/api/model")
+    start("engine", [f"{BIN}/{ENGINE_BIN}", "-data", f"{APP}/data/engine", "-model", MODEL, "-worker", "nemotron",
+          "-identity-url", IDN, "-identity-key-file", f"{APP}/secrets/engine.key", "-pulse", "20s"],
+          {"PORT": str(P_ENG)}, ENG + "/api/model")
 
 
 def kill9(name):
@@ -146,9 +242,17 @@ def thought_detail(eid, tid):
 
 def main():
     n.prepare()
-    n.start("model", ["python3", f"{HERE}/fixture-model/fake_llama.py", "8081"], {}, MODEL + "/health")
-    n.start("identity", [f"{BIN}/{IDENTITY_BIN}"], {"HOME": "/tmp", "IDENTITY_DATA": f"{APP}/data/identity", "IDENTITY_LISTEN": "127.0.0.1:8796",
-            "IDENTITY_SERVICE_KEYS": f"{APP}/secrets/service-keys", "IDENTITY_CORE_URL": "http://127.0.0.1:8795/"}, "http://127.0.0.1:8796/v1/health")
+    watched = start_sentinels()
+    if watched:  # positive control: a sentinel really counts a connection
+        socket.create_connection(("127.0.0.1", watched[0]), timeout=2).close()
+        time.sleep(0.2)
+        check("ISOLATION: sentinel positive control counts a connection", SENTINEL_HITS == [watched[0]], str(SENTINEL_HITS))
+        SENTINEL_HITS.clear()
+    log(f"isolated ports: core {P_CORE}, identity {P_IDN}, engine {P_ENG}, proxy {P_PROXY}, model {P_MODEL}; "
+        f"sentinels on free owner ports {watched}")
+    start("model", ["python3", f"{HERE}/fixture-model/fake_llama.py", str(P_MODEL)], {"FIXTURE_DELAY": os.environ["FIXTURE_DELAY"]}, MODEL + "/health")
+    start("identity", [f"{BIN}/{IDENTITY_BIN}"], {"IDENTITY_DATA": f"{APP}/data/identity", "IDENTITY_LISTEN": f"127.0.0.1:{P_IDN}",
+          "IDENTITY_SERVICE_KEYS": f"{APP}/secrets/service-keys", "IDENTITY_CORE_URL": CORE + "/"}, IDN + "/v1/health")
     start_engine()
     start_proxy()
     start_core()
@@ -157,6 +261,7 @@ def main():
     finally:
         for name in list(n.procs):
             n.stop(name)
+    check("ISOLATION: no connection to any watched owner port during the run", not SENTINEL_HITS, str(sorted(set(SENTINEL_HITS))))
     print()
     for name, res, detail in results:
         print(f"{res:4}  {name}  {detail}")
@@ -344,7 +449,8 @@ def run():
     # ---- F: restore fence written by tass.sh's own function
     n.stop("core")
     p = subprocess.run(["bash", "-c", 'TASS_LIB_ONLY=1 source "$1" && restore_fence_write "$2" /x/backups/native.tgz',
-                        "_", os.path.join(HERE, "..", "tass.sh"), f"{APP}/data"], capture_output=True, text=True)
+                        "_", os.path.join(HERE, "..", "tass.sh"), f"{APP}/data"], capture_output=True, text=True,
+                       env=clean_env({"APP_HOME": APP}))
     check("F: tass.sh restore_fence_write ran", p.returncode == 0, p.stderr[-200:])
     start_core()
     v4 = view(d4["nudge_id"])
