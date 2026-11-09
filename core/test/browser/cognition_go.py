@@ -74,8 +74,9 @@ with sync_playwright() as p:
         pg.get_by_role("button",name="Thoughts",exact=True).click()
         assert pg.locator(".tile").count()==1
         pg.get_by_role("button",name="Inspect Real persistent Thought").click()
-        pg.get_by_role("button",name="Inspect recorded details").click()
-        pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes('Canonical question')")
+        pg.get_by_role("button",name="What TASS has written").click()
+        pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes(\"The Thought's question\")")
+        pg.locator("summary",has_text="Recorded details").click()
         pg.get_by_role("button",name="Open cycle tp_1").click()
         pg.get_by_role("button",name="Step",exact=True).click()
         pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes('received')")
@@ -90,7 +91,7 @@ with sync_playwright() as p:
         with pg.expect_download() as d:
             pg.get_by_role("button",name="Download Sanitized Markdown").click()
         assert d.value.suggested_filename=="cognition-tp_1.md"
-        pg.get_by_role("button",name="Try adjustment in Development").click()
+        pg.get_by_role("button",name="Open Development (general workspace, not this run)").click()
         pg.wait_for_url("**/dev?*")
         assert "cognition_ref=cycle%3Atp_1" in pg.url and "brain_revision=7" in pg.url
         assert all(m=="GET" for m in methods),methods

@@ -61,8 +61,9 @@ func newRunEngine(t *testing.T) *runEngine {
 			e.mu.Lock()
 			var notes, hist []any
 			for _, nid := range e.completed {
-				notes = append(notes, map[string]any{"worker_request_id": e.reqID[nid], "source_nudge_id": nid})
-				hist = append(hist, map[string]any{"at": stamp, "kind": "developed", "worker_request_id": e.reqID[nid], "source_nudge_id": nid})
+				notes = append(notes, map[string]any{"at": stamp, "text": "NOTE-TEXT-" + nid, "by": "Nemotron (owner-nudge)", "suggested_state": "resolve",
+					"worker_request_id": e.reqID[nid], "source_nudge_id": nid})
+				hist = append(hist, map[string]any{"at": stamp, "kind": "developed", "detail": "DETAIL-REPEATS-NOTE", "by": "owner-nudge", "worker_request_id": e.reqID[nid], "source_nudge_id": nid})
 			}
 			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"thought": map[string]any{"thought_id": "thought_1", "entity_id": "eng_1", "topic": "t",

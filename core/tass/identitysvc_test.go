@@ -46,6 +46,12 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 		if f.junctionGranted {
 			grants = append(grants, "junction.read:lesson-metadata")
 		}
+		if f.nudgeGranted {
+			grants = append(grants, "cognition.nudge.draft")
+		}
+		if f.processGranted {
+			grants = append(grants, "cognition.nudge.process")
+		}
 		eid, ename := f.entityID, f.name
 		if eid == "" {
 			eid = "ent_0123"

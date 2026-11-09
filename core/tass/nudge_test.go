@@ -134,8 +134,9 @@ func TestNudgeDraftSavesLocallyWithZeroModelCalls(t *testing.T) {
 	if strings.Join(v.SourceEvidenceRefs, ",") != "trace:trace_1,cycle:tp_1" {
 		t.Fatalf("evidence refs: %v", v.SourceEvidenceRefs)
 	}
-	// M7/M8: processing is BLOCKED and results are NOT RECORDED (null), never invented.
-	if v.Processing.State != "BLOCKED" || v.ProcessingCycleID != nil || v.ResultThoughtID != nil || v.AuthorizationDecisionID != nil {
+	// M7/M8 (+ P0 #106): a card-position draft is NOT_FOR_PROCESSING (derived, not a stale BLOCKED);
+	// results are NOT RECORDED (null), never invented.
+	if v.Processing.State != "NOT_FOR_PROCESSING" || v.ProcessingCycleID != nil || v.ResultThoughtID != nil || v.AuthorizationDecisionID != nil {
 		t.Fatalf("processing must be blocked with no result: %+v", v)
 	}
 	// Identity was asked for a fresh write decision, not just the read grants.
@@ -169,7 +170,8 @@ func TestNudgeDraftSavesLocallyWithZeroModelCalls(t *testing.T) {
 	// Restart: a new Core on the same folder sees exactly one record.
 	c2 := nudgeCore(t, dir, ids, ne)
 	list, err := c2.NudgeHistory("")
-	if err != nil || len(list.Nudges) != 1 || list.Nudges[0].NudgeID != v.NudgeID || list.Processing.State != "BLOCKED" {
+	if err != nil || len(list.Nudges) != 1 || list.Nudges[0].NudgeID != v.NudgeID ||
+		list.Processing.State != "NOT_READY" || list.Readiness.ProcessGrant != "NOT_ENABLED" || !strings.Contains(list.Processing.Reason, "cognition.nudge-process") {
 		t.Fatalf("after restart: %+v %v", list, err)
 	}
 	if l2, _ := c2.NudgeHistory("thought_9"); len(l2.Nudges) != 0 {

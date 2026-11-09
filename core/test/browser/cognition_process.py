@@ -15,7 +15,7 @@ LIB={"identity_entity_id":"ent_0123","engine_entity_id":"eng_1","identity_name":
 def nudge(i,**kw):
     n={"nudge_id":"nudge_%020x"%i,"status":"DRAFT","recipient_id":"self","recipient_kind":"local_entity","reason_code":"owner_request",
        "requested_action":"Look again %d"%i,"priority":"normal","created_at":NOW,"expires_at":NOW,"source_thought_id":"thought_1",
-       "body_digest":"digest%d"%i,"processing":{"state":"AVAILABLE","reason":"x"}}
+       "body_digest":"digest%d"%i,"processing":{"state":"READY","reason":"x"}}
     n.update(kw); return n
 state={"run":None,"gets":0}; posts=[]
 def route(req):
@@ -38,7 +38,11 @@ def route(req):
     if "/api/nudges?" in url:
         state["gets"]+=1
         ns=[nudge(1,run=state["run"]) if state["run"] else nudge(1), nudge(2,pre_restore=True,processing={"state":"PRE_RESTORE","reason":"x"})]
-        req.fulfill(status=200,content_type="application/json",body=json.dumps({"nudges":ns,"processing":{"state":"BLOCKED","reason":"x"},"note":"local"}));return
+        req.fulfill(status=200,content_type="application/json",body=json.dumps({"nudges":ns,"processing":{"state":"READY","reason":"Ready"},
+          "readiness":{"identity":"UNLOCKED","process_grant":"ENABLED","engine":"REACHABLE"},"note":"local"}));return
+    if "/api/cognition/thoughts/" in url:
+        req.fulfill(status=200,content_type="application/json",body=json.dumps({"thought_id":"thought_1","question":"q","state":"active",
+          "history":[],"history_total":0,"developments":[],"traces":[],"related_cycle_ids":[]}));return
     req.fulfill(status=404)
 
 with sync_playwright() as p:

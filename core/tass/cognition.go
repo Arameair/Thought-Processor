@@ -68,6 +68,12 @@ type CognitionThought struct {
     Source string `json:"source"`
     Verification string `json:"verification"`
     Truncated bool `json:"truncated"`
+    // P0 (#106): history keeps the NEWEST cognitionHistoryMax steps; HistoryTotal is the Engine's count.
+    HistoryTotal int `json:"history_total"`
+    // P0 (#106, D1): what TASS wrote, newest first. Single-Thought detail only.
+    Developments []CognitionDevelopment `json:"developments"`
+    DevelopmentsTotal int `json:"developments_total"`
+    DevelopmentsTruncated bool `json:"developments_truncated"`
 }
 type CognitionTrace struct {
     TraceID string `json:"trace_id"`
@@ -289,7 +295,10 @@ func cognitionCycleOutcome(c engine.CognitionCycle) string{
     if c.Outcome==nil{return "NOT RECORDED"}
     return c.Outcome.Status
 }
-func (c *Core) CognitionThought(id string)(CognitionThought,error){
+func (c *Core) CognitionThought(id string)(CognitionThought,error){return c.cognitionThought(id,true)}
+// cognitionThought: withDevelopments=false for internal checks (e.g. SaveNudgeDraft, which holds
+// nudgeMu; developments read the nudge journal under nudgeMu, and Note text isn't needed there).
+func (c *Core) cognitionThought(id string,withDevelopments bool)(CognitionThought,error){
     scope,err:=c.cognitionAccess()
     if err!=nil{return CognitionThought{},err}
     if !engine.CognitionID.MatchString(id)||scope.engineID==""{return CognitionThought{},ErrCognitionUnavailable}
@@ -299,13 +308,19 @@ func (c *Core) CognitionThought(id string)(CognitionThought,error){
     out:=CognitionThought{ThoughtID:id,Topic:cognitionClip(th.Topic,180),Question:cognitionClip(th.Question,900),
         State:th.State,CreatedAt:th.CreatedAt,UpdatedAt:th.UpdatedAt,Source:"Thought Engine: persistent Thought",
         Verification:"OBSERVED",History:[]engine.ThoughtStep{},Traces:[]CognitionTrace{},RelatedCycleIDs:[]string{}}
-    for _,h:=range th.History{
-        if len(out.History)>=64 {out.Truncated=true;break}
-        // No free-form Detail: includes private worker-generated strings.
+    // P0 (#106): keep the NEWEST steps (the oldest are dropped first) and say how many exist.
+    out.HistoryTotal=len(th.History)
+    hist:=th.History
+    if len(hist)>cognitionHistoryMax {hist=hist[len(hist)-cognitionHistoryMax:];out.Truncated=true}
+    for _,h:=range hist{
+        // Still no free-form Detail (it repeats the worker text); the Note text is shown once, in Developments.
         out.History=append(out.History,engine.ThoughtStep{
-            At:h.At,Kind:h.Kind,EventID:h.EventID,TraceID:h.TraceID,RequestID:h.RequestID,
+            At:h.At,Kind:cognitionClip(h.Kind,32),EventID:h.EventID,TraceID:h.TraceID,
+            RequestID:cognitionRef(h.RequestID),NudgeID:cognitionNudgeRef(h.NudgeID),By:cognitionClip(h.By,40),
         })
     }
+    out.Developments=[]CognitionDevelopment{}
+    if withDevelopments {out.Developments,out.DevelopmentsTotal,out.DevelopmentsTruncated=c.cognitionDevelopments(scope,id,th)}
     for _,v:=range raw.Evidence {
         if len(out.Traces)>=64 {out.Truncated=true;break}
         trace:=v.Trace

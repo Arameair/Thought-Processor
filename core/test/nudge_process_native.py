@@ -22,7 +22,7 @@ Core, the TEST FIXTURE model (NOT Nemotron), no Docker, no GitHub, a throwaway A
 
 ISOLATION (Codex audit PR #105 / GPT-6 handoff): this test must never reach the owner's running TASS.
   - Every service uses its own port from S2_PORT_BASE (default 39100): Core +0, Identity +1, Engine +2,
-    fault proxy +3, fixture model +4. The owner's ports (8795 Core, 8796 Identity, 7798 Engine,
+    fault proxy +3, fixture model +4. The owner's ports (8795/8797 Core, 8796 Identity, 7798 Engine,
     8081/18083 model, 7790/7860/7791) are refused outright, as is any base that overlaps them.
   - Preflight, BEFORE any request or process start: every test port must be free to bind (else abort),
     and APP_HOME must be new or a folder this test made before (marker file), never the owner's.
@@ -39,7 +39,7 @@ os.environ.setdefault("CAND", "x"); os.environ.setdefault("ALPHA", "x")
 os.environ.setdefault("FIXTURE_DELAY", "8")
 import socket  # noqa: E402
 
-OWNER_PORTS = (8795, 8796, 7798, 7799, 8081, 18083, 7790, 7860, 7791)
+OWNER_PORTS = (8795, 8796, 8797, 7798, 7799, 8081, 18083, 7790, 7860, 7791)  # 8797: owner's second Core port (#100)
 BASE = int(os.environ.get("S2_PORT_BASE", "39100"))
 P_CORE, P_IDN, P_ENG, P_PROXY, P_MODEL = (BASE + i for i in range(5))
 TEST_PORTS = (P_CORE, P_IDN, P_ENG, P_PROXY, P_MODEL)
@@ -69,6 +69,7 @@ def preflight():
 
 
 preflight()
+os.environ["TASS_TEST_ISOLATED_PORTS"] = "1"  # tells the shared fixed-port guard (lesson_retry_native) this run is isolated
 os.makedirs(os.environ["APP_HOME"], exist_ok=True)
 open(os.path.join(os.environ["APP_HOME"], ".s2-native-test"), "w").write("throwaway Stage 2 native test folder\n")
 
@@ -350,6 +351,40 @@ def run():
     check("B: Process again returns the SAME run (200), no new request", code == 200 and (r.get("run") or {}).get("state") == "COMPLETED"
           and fixture()["nudges"] == f["nudges"], str(code))
 
+    # ---- P0 (#106): Cognition shows what was produced (real binaries; GET only)
+    import hashlib
+    tfiles = glob.glob(f"{APP}/data/engine/**/thoughts/{tid}.json", recursive=True)
+    tsha = hashlib.sha256(open(tfiles[0], "rb").read()).hexdigest() if tfiles else ""
+    m0, n0 = fixture()["requests"], fixture()["nudges"]
+    code, tv = get(f"/api/cognition/thoughts/{tid}")
+    devs = (tv.get("developments") or []) if isinstance(tv, dict) else []
+    dmine = [x for x in devs if x.get("source_nudge_id") == d1["nudge_id"]]
+    dv = dmine[0] if dmine else {}
+    check("P0-A1: Thought detail shows the Note TASS wrote (full text), its author and time",
+          code == 200 and "(TEST FIXTURE) Following the owner's pointer" in ((dv.get("note") or {}).get("text") or "")
+          and (dv.get("note") or {}).get("by") and (dv.get("note") or {}).get("at"), json.dumps(dv)[:300])
+    check("P0-A2: the development carries the SAME request ID as the verified receipt, and Core's receipt verified it",
+          dv.get("request_id") == v.get("request_id") and dv.get("persistence") == "NOTE_AND_STEP_CORRELATED"
+          and dv.get("nudge_receipt") == "COMPLETED_VERIFIED", json.dumps({k: dv.get(k) for k in ("request_id", "persistence", "nudge_receipt")}))
+    check("P0: suggested state shown as not applied; meaning separates saved from useful",
+          (dv.get("note") or {}).get("suggested_state_applied") is False and "not that it answers" in (dv.get("meaning") or ""), "")
+    hsteps = [h for h in (tv.get("history") or []) if h.get("source_nudge_id") == d1["nudge_id"]]
+    check("P0: the developed history step keeps nudge and request IDs (no more NOT RECORDED)",
+          len(hsteps) == 1 and hsteps[0].get("worker_request_id") == v.get("request_id") and tv.get("history_total", 0) >= len(tv.get("history") or []), json.dumps(hsteps)[:200])
+    code, lib = get("/api/cognition/library")
+    note_text = (dv.get("note") or {}).get("text") or "(none)"
+    check("P0-A6: the library list carries no Note text", code == 200 and note_text not in json.dumps(lib), "")
+    code, hs = http("GET", f"{CORE}/api/cognition/thoughts/{tid}", headers={"X-TASS-Token": token(CORE)})
+    check("P0: Thought detail needs the page token (no token -> 401)", http("GET", f"{CORE}/api/cognition/thoughts/{tid}")[0] == 401, "")
+    lst = nudges(tid)
+    check("P0-A3: nudge list readiness is derived (UNLOCKED, grant ENABLED, Engine REACHABLE), no stale BLOCKED",
+          (lst.get("readiness") or {}).get("process_grant") == "ENABLED" and lst.get("processing", {}).get("state") == "READY"
+          and "BLOCKED" not in json.dumps(lst), json.dumps(lst.get("readiness")))
+    check("P0-A5: reading the Thought, library and nudge list made ZERO model requests",
+          fixture()["requests"] == m0 and fixture()["nudges"] == n0, f"{m0}->{fixture()['requests']}")
+    check("P0: the Engine's Thought file is byte-identical after the reads",
+          bool(tsha) and hashlib.sha256(open(tfiles[0], "rb").read()).hexdigest() == tsha, tfiles[0] if tfiles else "no file")
+
     # ---- C: admission + crash recovery
     code, d2 = draft(tid, "Think slow about the project once more, please.", "s2-key-0002")
     code3, d3 = draft(tid, "A second nudge that has to wait its turn here.", "s2-key-0003")
@@ -427,6 +462,9 @@ def run():
     check("E: (after unlock) the LOCKED attempt submitted nothing", not view(d4["nudge_id"]).get("run") and not run_dir(d4["nudge_id"]), "")
     code, r = idn_post("/v1/grants/skill", {"skill": "cognition.nudge-process", "revoke": True})
     check("E: owner revokes cognition.nudge-process", code == 200, str(code))
+    lst = nudges(tid)
+    check("P0-A3: after revoke the list says NOT_READY / grant NOT_ENABLED (display only)",
+          (lst.get("readiness") or {}).get("process_grant") == "NOT_ENABLED" and lst.get("processing", {}).get("state") == "NOT_READY", json.dumps(lst.get("readiness")))
     code, r = process(d4)
     check("E: after revoke -> 403, nothing submitted", code == 403 and not view(d4["nudge_id"]).get("run"), f"{code} {json.dumps(r)[:160]}")
     code, r = core_post(f"/api/nudges/{d2['nudge_id']}/stop", {})
