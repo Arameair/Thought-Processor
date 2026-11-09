@@ -567,8 +567,8 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         }
     })
     // #96: manual nudge workbench. GET lists this Identity entity's drafts (read authorization);
-    // POST saves ONE draft (owner-granted cognition.nudge.draft, local write, zero model calls). There is no
-    // process endpoint: processing stays BLOCKED until a reviewed Identity grant and route exist.
+    // POST saves ONE draft (owner-granted cognition.nudge.draft, local write, zero model calls). Processing
+    // is a separate owner action below (Stage 2: bound single-use cognition.nudge.process decision).
     mux.HandleFunc("GET /api/nudges",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
         list,err:=core.NudgeHistory(r.URL.Query().Get("thought_id"))
