@@ -474,7 +474,7 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 		}
 		return NudgeView{}, fmt.Errorf("%w: %v", ErrNudgeWrite, err)
 	}
-	c.event("sync", fmt.Sprintf("Saved manual nudge draft %s for %s (not processed: no processing grant exists).", n.NudgeID, n.RecipientID))
+	c.event("sync", fmt.Sprintf("Saved manual nudge draft %s for %s (not processed: processing needs a separate owner action).", n.NudgeID, n.RecipientID))
 	return c.nudgeView(n), nil
 }
 

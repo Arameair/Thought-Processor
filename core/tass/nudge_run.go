@@ -301,7 +301,6 @@ func (c *Core) runView(id string) *RunView {
 	return c.runView(id)
 }
 
-
 // recordOutcome writes Core's outcome receipt for a terminal Engine run (verifying COMPLETED).
 func (c *Core) recordOutcome(id, eid string, run engine.NudgeRun) {
 	o := coreOutcome{Schema: nudgeRunSchemaCore, Run: run, At: c.now().UTC()}

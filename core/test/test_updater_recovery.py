@@ -34,11 +34,16 @@ def free_port():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
 
 
+FENCE = "core/restore-fence.json"
+
+
 def tree(path):
-    """{relative file: sha256} for every file under path (the owner's data, byte for byte)."""
+    """{relative file: sha256} for every file under path (the owner's data, byte for byte).
+    Stage 2: a restore ADDS core/restore-fence.json (marks pre-restore nudge drafts); it is not owner
+    data and is checked on its own in test_15/16, so it is left out here."""
     out = {}
     for p in sorted(Path(path).rglob("*")):
-        if p.is_file():
+        if p.is_file() and str(p.relative_to(path)) != FENCE:
             out[str(p.relative_to(path))] = hashlib.sha256(p.read_bytes()).hexdigest()
     return out
 
@@ -388,6 +393,46 @@ class UpdaterRecovery(unittest.TestCase):
         rc, out = self.h("backup", ok=False, TEST_TAR_TRUNCATE="1")
         self.assertIn("Backup FAILED", out)
         self.assertEqual(self.running(), self.v[0])
+
+    # ---------------------------------------------------------------- Stage 2: restore fence (§4.6)
+    def test_15_restore_writes_a_fence_over_the_restored_nudge_journal(self):
+        j = self.data / "core" / "nudges.jsonl"
+        j.write_text('{"id":"n1"}\n{"id":"n2"}\n')
+        restored = j.read_bytes()
+        self.h("update", self.v[1], "--yes", ok=True)
+        with open(j, "a") as f:
+            f.write('{"id":"n3-after-update"}\n')
+        rc, out = self.h("restore-previous", "--yes", ok=True)
+        self.assertIn("can't be processed", out)
+        fence = json.loads((self.data / FENCE).read_text())
+        self.assertEqual(fence["schema"], "tass.restore-fence/2")
+        self.assertEqual(fence["journal_bytes"], len(restored))
+        self.assertEqual(fence["journal_sha256"], hashlib.sha256(restored).hexdigest())
+        self.assertTrue(fence["backup"].endswith(".tgz"))
+        self.assertEqual(oct((self.data / FENCE).stat().st_mode & 0o777), "0o600")
+        self.assertEqual(j.read_bytes(), restored)
+        self.assertEqual(list((self.app / "deploy").glob("restore-stage.*")), [], "staging folder left behind")
+        self.assertEqual(list((self.app / "deploy").glob("failed/*/data/core/restore-fence.json")), [])
+        self.no_op_marker()
+
+    def test_16_power_cut_after_staging_leaves_the_live_data_untouched(self):
+        self.h("update", self.v[1], "--yes", ok=True)
+        with open(self.data / "core" / "memory.jsonl", "a") as f:
+            f.write('{"note":"post-update"}\n')
+        before = {**tree(self.data)}
+        self.assertFalse((self.data / FENCE).exists())
+        # sync of the staged folder (R3 done, before R4/R5) is where the power goes out
+        self.exe("sync", r"""
+            #!/usr/bin/env bash
+            for a in "$@"; do case "$a" in */restore-stage.*/*) ;; */restore-stage.*) { echo "HARNESS: power cut after staging" >&2; kill -9 $PPID; exit 1; } ;; esac; done
+            exec /usr/bin/sync "$@"
+        """)
+        rc, out = self.h("restore-previous", "--yes", ok=False)
+        self.assertEqual(rc, -9, out)   # killed at the sync of the staged folder (its stderr is discarded)
+        self.assertEqual(tree(self.data), before)
+        self.assertFalse((self.data / FENCE).exists(), "the live data must not carry a fence before it is replaced")
+        staged = list((self.app / "deploy").glob("restore-stage.*/data/core/restore-fence.json"))
+        self.assertEqual(len(staged), 1, "the staged copy was fenced before anything live moved")
 
 
 if __name__ == "__main__":
