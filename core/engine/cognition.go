@@ -57,10 +57,17 @@ type ThoughtStep struct{
     TraceID string `json:"trace_id"`
     RequestID string `json:"worker_request_id"`
     NudgeID string `json:"source_nudge_id,omitempty"` // Stage 2
+    By string `json:"by,omitempty"` // P0 (#106): who developed it (engine / owner-nudge / ...)
 }
-// ThoughtNote: only the fields Core needs to verify a nudge (never the note text).
+// ThoughtNote: the Engine's saved Note. Stage 2 used only the IDs (nudge verification). P0 (#106,
+// owner decision D1) also decodes the text so Core can show it to the unlocked, linked owner in the
+// single-Thought detail ONLY (never in lists, exports, logs or GitHub sync; see tass/cognition_notes.go).
 type ThoughtNote struct{
+    At time.Time `json:"at"`
+    Text string `json:"text"`
+    By string `json:"by"`
     RequestID string `json:"worker_request_id"`
+    SuggestedState string `json:"suggested_state"`
     NudgeID string `json:"source_nudge_id,omitempty"`
 }
 type Thought struct{

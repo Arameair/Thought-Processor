@@ -9,7 +9,8 @@ binary, the TEST FIXTURE model (NOT Nemotron), no GitHub repository (local only)
   -> owner enables "cognition.nudge-draft" on Identity (passphrase) -> draft saved (201)
   -> same request = same draft (200 replayed) -> restart Core -> same draft in history
   -> owner revokes the grant -> the same request is 403; history still readable
-  -> ZERO model requests and zero new Engine jobs/cycles from any nudge call; processing BLOCKED
+  -> ZERO model requests and zero new Engine jobs/cycles from any nudge call; a card-position draft is
+     NOT_FOR_PROCESSING (P0 #106: derived state, no stale BLOCKED)
 
     APP_HOME=/tmp/e2e/nudge BIN=/tmp/e2e/bin SEED=/tmp/e2e/seed CORE_BIN=tass-core-int \
     python3 core/test/nudge_native.py
@@ -116,8 +117,8 @@ def run():
     check("owner enables cognition.nudge-draft with the passphrase", code == 200, f"{code} {json.dumps(r)[:120]}")
 
     code, d = core_post("/api/nudges", body)
-    check("draft saved 201, DRAFT, processing BLOCKED, model_calls 0",
-          code == 201 and d.get("status") == "DRAFT" and (d.get("processing") or {}).get("state") == "BLOCKED" and d.get("model_calls") == 0,
+    check("draft saved 201, DRAFT, processing NOT_FOR_PROCESSING (card position; derived, no stale BLOCKED), model_calls 0",
+          code == 201 and d.get("status") == "DRAFT" and (d.get("processing") or {}).get("state") == "NOT_FOR_PROCESSING" and d.get("model_calls") == 0,
           f"{code} {json.dumps(d)[:200]}")
     nid = d.get("nudge_id")
     code, d2 = core_post("/api/nudges", body)

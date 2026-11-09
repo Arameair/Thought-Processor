@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -78,10 +79,102 @@ type NudgeDraft struct {
 	IdempotencyKey  string `json:"idempotency_key"`
 }
 
-// NudgeProcessing is the honest processing state of a nudge.
+// NudgeProcessing is the honest processing state of a nudge (P0 #106: derived from real state).
+// Per nudge: READY | WAITING | NOT_FOR_PROCESSING | EXPIRED | PRE_RESTORE | SEE_RUN.
+// List level: READY | NOT_READY. Stored drafts carry DRAFT_SAVED (never displayed: views derive it).
 type NudgeProcessing struct {
-	State  string `json:"state"` // BLOCKED until a reviewed processing grant and route exist
+	State  string `json:"state"`
 	Reason string `json:"reason"`
+}
+
+// NudgeReadiness is DISPLAY ONLY (owner decision D2): what Core can see right now. It authorizes
+// nothing; processing is still decided at admission (C1/C2) and by the Engine (P1/P2).
+type NudgeReadiness struct {
+	Identity     string `json:"identity"`      // UNLOCKED | LOCKED | UNKNOWN
+	ProcessGrant string `json:"process_grant"` // ENABLED | NOT_ENABLED | UNKNOWN (from Identity's public grant list)
+	Engine       string `json:"engine"`        // REACHABLE | UNREACHABLE
+	Locked       string `json:"locked,omitempty"`
+	ActiveRun    string `json:"active_run,omitempty"`
+}
+
+const processGrantName = "cognition.nudge.process"
+
+// nudgeReadiness reads Identity's public state (no decision is minted) and Core's own lock/run state.
+func (c *Core) nudgeReadiness() (NudgeReadiness, NudgeProcessing) {
+	r := NudgeReadiness{Identity: "UNKNOWN", ProcessGrant: "UNKNOWN", Engine: "REACHABLE"}
+	if c.cfg.IdentitySvc != nil {
+		st := c.cfg.IdentitySvc.State()
+		switch st.State {
+		case "UNLOCKED", "LOCKED":
+			r.Identity = st.State
+		}
+		if st.Entity != nil && st.State == "UNLOCKED" {
+			r.ProcessGrant = "NOT_ENABLED"
+			for _, g := range st.Entity.Grants {
+				if g == processGrantName {
+					r.ProcessGrant = "ENABLED"
+				}
+			}
+		}
+	}
+	if _, err := c.engine.CognitionStatus(); err != nil {
+		r.Engine = "UNREACHABLE"
+	}
+	r.Locked = c.processingLock()
+	r.ActiveRun = c.activeRunLocal()
+	sum := NudgeProcessing{State: "READY", Reason: "Ready: a saved draft addressed to TASS can be processed once, with your confirmation. Saving a draft never calls the model."}
+	switch {
+	case r.Identity != "UNLOCKED":
+		sum = NudgeProcessing{"NOT_READY", "Not ready: Identity is " + strings.ToLower(r.Identity) + ". Unlock TASS on Identity's page."}
+	case r.ProcessGrant != "ENABLED":
+		sum = NudgeProcessing{"NOT_READY", "Not ready: the owner grant cognition.nudge-process is not enabled on Identity's page. Saving drafts still works."}
+	case r.Engine != "REACHABLE":
+		sum = NudgeProcessing{"NOT_READY", "Not ready: the Thought Engine can't be reached right now."}
+	case r.Locked != "":
+		sum = NudgeProcessing{"NOT_READY", "Not ready: processing is locked (" + r.Locked + ")."}
+	case r.ActiveRun != "":
+		sum = NudgeProcessing{"NOT_READY", "Busy: nudge " + r.ActiveRun + " is being processed. Wait for it to finish or stop it."}
+	}
+	return r, sum
+}
+
+// activeRunLocal: display only. A run is shown as active when Core has its submission receipt but no
+// outcome or stop receipt. It reads Core's files only and never asks the Engine, so showing readiness
+// adds no Engine reads while a run is in flight (admission still uses activeRun).
+func (c *Core) activeRunLocal() string {
+	ents, _ := os.ReadDir(filepath.Join(c.cfg.DataDir, nudgeRunDirCore))
+	for _, d := range ents {
+		id := d.Name()
+		if !nudgeIDOK(id) {
+			continue
+		}
+		sub, _, _ := coreReadOnce(c.runPath(id, "submitted.json"), &submittedRec{})
+		out, _, _ := coreReadOnce(c.runPath(id, "outcome.json"), &coreOutcome{})
+		vd, _, _ := coreReadOnce(c.runPath(id, "void.json"), &coreVoid{})
+		if sub && !out && !vd {
+			return id
+		}
+	}
+	return ""
+}
+
+// nudgeProcessingFor derives one nudge's state. Only READY offers "Process once…"; admission still decides.
+func nudgeProcessingFor(v NudgeView, sum NudgeProcessing) NudgeProcessing {
+	switch {
+	case v.Run != nil:
+		return NudgeProcessing{"SEE_RUN", "Submitted once; see the run receipt."}
+	case v.PreRestore:
+		return NudgeProcessing{"PRE_RESTORE", "This draft existed before a restore and may already have been processed; it can't be processed again. Use Copy as new."}
+	case v.Status == "EXPIRED":
+		return NudgeProcessing{"EXPIRED", "This draft expired and can't be processed. Use Copy as new."}
+	case v.RecipientID != "self":
+		return NudgeProcessing{"NOT_FOR_PROCESSING", "Only drafts addressed to TASS himself can be processed at this stage; this one stays a saved draft."}
+	case v.Status != "DRAFT":
+		return NudgeProcessing{"NOT_FOR_PROCESSING", "Not a processable draft (" + v.Status + ")."}
+	case sum.State != "READY":
+		return NudgeProcessing{"WAITING", sum.Reason}
+	}
+	return NudgeProcessing{"READY", "Process once: one request to the local model; if it answers, TASS adds one Note to this Thought. It needs your confirmation."}
 }
 
 // Nudge is one durable record. It is never rewritten; later state changes would be new events.
@@ -127,14 +220,15 @@ type NudgeList struct {
 	InvalidLines  int             `json:"invalid_lines"`
 	Positions     []string        `json:"positions"`
 	Reasons       []string        `json:"reasons"`
-	Processing    NudgeProcessing `json:"processing"`
+	Processing    NudgeProcessing `json:"processing"`                  // P0: derived summary (READY | NOT_READY), display only
+	Readiness     NudgeReadiness  `json:"readiness"`                   // P0 (D2): display only
 	Locked        string          `json:"processing_locked,omitempty"` // Stage 2: read-only RECOVERY_REQUIRED for all processing
 	Note          string          `json:"note"`
 }
 
-func nudgeBlocked() NudgeProcessing {
-	return NudgeProcessing{State: "BLOCKED", Reason: "No Identity action for nudge processing exists yet. Processing needs a separate, " +
-		"owner-reviewed Identity policy change and a verified local route (Thought-Processor #96). Nothing was queued."}
+// draftSaved is what a new draft record stores (it is never shown: views derive the live state).
+func draftSaved() NudgeProcessing {
+	return NudgeProcessing{State: "DRAFT_SAVED", Reason: "Saved only. Processing is a separate action that needs the owner's confirmation."}
 }
 
 func nudgeOneOf(s string, allowed []string) bool {
@@ -382,11 +476,8 @@ func (c *Core) nudgeView(n Nudge) NudgeView {
 	if v.Status == "DRAFT" && !v.ExpiresAt.IsZero() && c.now().After(v.ExpiresAt) {
 		v.Status = "EXPIRED"
 	}
-	v.Processing = nudgeBlocked()
-	if n.RecipientID == "self" {
-		v.Processing = NudgeProcessing{State: "AVAILABLE", Reason: "You can process this nudge once: it makes one model request that develops this Thought by one note. " +
-			"It needs the owner grant cognition.nudge-process and your confirmation each time."}
-	}
+	_, sum := c.nudgeReadiness()
+	v.Processing = nudgeProcessingFor(v, sum)
 	return v
 }
 
@@ -435,7 +526,7 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 		}
 	}
 	// The source must be a real persistent Thought of THIS linked Engine entity.
-	th, err := c.CognitionThought(d.SourceThoughtID)
+	th, err := c.cognitionThought(d.SourceThoughtID, false) // holds nudgeMu: no developments (no Note text needed)
 	if err != nil {
 		return NudgeView{}, err
 	}
@@ -466,7 +557,7 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 		SenderIdentityID: scope.identityID, RecipientKind: recipientKind, RecipientID: d.RecipientID,
 		ReasonCode: d.ReasonCode, RequestedAction: d.RequestedAction, Priority: d.Priority,
 		CreatedAt: now, ExpiresAt: now.Add(expiry), IdempotencyKey: d.IdempotencyKey, BodyDigest: digest,
-		Status: "DRAFT", DraftDecisionID: dec.DecisionID, Processing: nudgeBlocked(),
+		Status: "DRAFT", DraftDecisionID: dec.DecisionID, Processing: draftSaved(),
 	}
 	if err := c.appendNudge(n); err != nil {
 		if errors.Is(err, ErrNudgeInvalid) {
@@ -494,9 +585,10 @@ func (c *Core) NudgeHistory(thoughtID string) (NudgeList, error) {
 		return NudgeList{}, ErrCognitionUnavailable
 	}
 	out := NudgeList{OwnerEntityID: scope.identityID, Nudges: []NudgeView{}, InvalidLines: invalid,
-		Positions: NudgePositions, Reasons: NudgeReasons, Processing: nudgeBlocked(),
+		Positions: NudgePositions, Reasons: NudgeReasons,
 		Note: "Manual nudge drafts are local to this computer and never synced to GitHub. Saving a draft makes no model call."}
-	out.Locked = c.processingLock()
+	out.Readiness, out.Processing = c.nudgeReadiness()
+	out.Locked = out.Readiness.Locked
 	lines, raw, _ := c.readNudgeLines()
 	boundary, _ := c.nudgeFence(lines, raw)
 	pre := preRestore(lines, boundary)
@@ -509,12 +601,13 @@ func (c *Core) NudgeHistory(thoughtID string) (NudgeList, error) {
 		if thoughtID != "" && n.SourceThoughtID != thoughtID {
 			continue
 		}
-		nv := c.nudgeView(n)
+		nv := NudgeView{Nudge: n}
+		if nv.Status == "DRAFT" && !nv.ExpiresAt.IsZero() && c.now().After(nv.ExpiresAt) {
+			nv.Status = "EXPIRED"
+		}
 		nv.PreRestore = pre[n.NudgeID]
 		nv.Run = c.runView(n.NudgeID)
-		if nv.PreRestore && nv.Run == nil {
-			nv.Processing = NudgeProcessing{State: "PRE_RESTORE", Reason: "This draft existed before a restore and may already have been processed; it can't be processed again. Use Copy as new."}
-		}
+		nv.Processing = nudgeProcessingFor(nv, out.Processing)
 		out.Nudges = append(out.Nudges, nv)
 		if len(out.Nudges) >= nudgeListMax {
 			break

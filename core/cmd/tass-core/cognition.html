@@ -16,6 +16,18 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .pulse{margin:0 4% 10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#0f1726;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px}.pulse b{color:var(--fg)}.pulse .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.pulse .ticks{flex-basis:100%;color:var(--muted);font:12px ui-monospace,monospace}
 .linkbox{margin:0 4% 12px;padding:12px 14px;border:1px solid #5a4a2e;border-radius:12px;background:#1d1a12;font-size:13px}.linkbox.ok{border-color:#2f5d4f;background:#0f1d1a}.linkbox button{margin:4px 6px 0 0;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:#1b2738;color:var(--fg)}
 .sheet #thoughtDetail textarea{background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:9px}
+/* P0 (#106): the sheet is the reading surface; half-window and narrow screens get the full width. */
+.sheet{width:min(640px,100%)}
+@media(max-width:1100px){.sheet{width:100%;border-left:0}.hero{min-height:0;padding:22px 4% 16px}.hero h1{font-size:30px}}
+.dev{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;background:#0f1826}
+.dev.focus{border-color:var(--mint);box-shadow:0 0 0 2px #76d3bd55}
+.dev .note{font-size:16px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 8px;color:var(--fg)}
+.dev .note.missing{color:var(--amber);font-size:14px}
+.dev .meta{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.dev .meaning{font-size:12px;color:var(--muted);margin-top:6px}
+.sheet details{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}.sheet summary{cursor:pointer;color:var(--muted)}
+.readiness{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}.readiness.ready{border-color:#317261}
+.nudgebox.focus{border-color:var(--mint)!important;box-shadow:0 0 0 2px #76d3bd55}
 </style>
 </head>
 <body>
@@ -26,18 +38,19 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 <div id="pulse" class="pulse" aria-live="polite"><span class="k">20-second pulse</span> <span>reading…</span></div>
 <div id="linkbox" class="linkbox" hidden></div><div id="summary" class="summary"></div><main id="shelves"></main>
 <div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
-<button id="expandEngine">Inspect recorded details</button>
+<button id="expandEngine">What TASS has written</button>
 <button id="logs">View Logs</button>
 <button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
 <button id="copy">Copy Evidence</button>
 <button id="downloadMD">Download Sanitized Markdown</button><button id="downloadJSON">Download Sanitized JSON</button>
-<button id="tryDev">Try adjustment in Development</button>
+<button id="tryDev">Open Development (general workspace, not this run)</button>
 <button id="nudge" class="hidden">Manual nudge (draft)</button><button id="nudgeHistory" class="hidden">Nudge history</button>
 </div><div id="toast" class="toast" role="status"></div><p class="foot">Evidence shown here comes from the selected local API or explicitly labeled demo fixtures. A model statement is not an execution receipt.</p></aside></div>
 <script>
 "use strict";
-// This page renders Go-projected records. Its only POSTs are owner actions: the Engine link and
-// saving a manual nudge DRAFT (#96). Nothing here processes a nudge, runs a cell or approves a skill.
+// This page renders Go-projected records. Its only POSTs are owner actions: the Engine link, saving a
+// manual nudge DRAFT (#96), and Stage 2's confirmed "Process once" / Stop for ONE saved draft. Reading
+// a Thought (P0 #106: what TASS wrote) is GET only. Nothing here runs a cell or approves a skill.
 const TOKEN="__PAGE_TOKEN__";
 const LIVE=location.pathname==="/cognition" && /^https?:$/.test(location.protocol);
 const $=id=>document.getElementById(id);
@@ -97,8 +110,10 @@ function draw(){
 function field(container,name,value){
   const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
 }
-function select(x){
+function select(x,opts={}){
   stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  // P0 navigation: a click adds a browser history entry; Back/Forward (popstate) re-renders without adding one.
+  if(!opts.fromHistory)navTo(x.kind==="thought"?{thought:x.source_id}:{card:x.id},"push");
   $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
   $("detailTitle").textContent=val(x.title);
   $("detailIntro").textContent=val(x.summary);
@@ -114,6 +129,13 @@ function select(x){
   setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
   setVisible("tryDev",x.kind==="thought"||cycle||x.kind==="junction");
   setVisible("nudge",x.kind==="thought"&&LIVE);setVisible("nudgeHistory",x.kind==="thought"&&LIVE);
+  // P0: for a Thought, what TASS wrote comes first; the card's record fields move into "Recorded details".
+  fields.classList.toggle("hidden",x.kind==="thought"&&LIVE);$("detailIntro").classList.toggle("hidden",x.kind==="thought"&&LIVE);
+  if(x.kind==="thought"&&LIVE){
+    if(opts.view==="nudges")nudgeHistory(x.source_id);
+    else if(opts.view==="draft")nudgeForm();
+    else showThought(opts.dev||"");
+  }
   if(x.kind==="junction"&&(x.related_cycle_ids||[]).length){
     const area=$("thoughtDetail");area.classList.add("open");
     for(const id of x.related_cycle_ids){const b=mk("button","","Open recorded cycle "+id);b.type="button";
@@ -205,23 +227,96 @@ async function downloadEvidence(format){
     setTimeout(()=>URL.revokeObjectURL(obj),1000);message("Sanitized report prepared. Nothing published.");
   }catch(e){message("Download failed: "+e.message,true);}
 }
-async function showThought(){
+// ---- P0 (#106): "Cognition shows what was produced". What TASS wrote comes first; IDs and
+// history are below, collapsed. All text is set with textContent (mk/field): nothing is parsed as HTML.
+const PERSIST={NOTE_AND_STEP_CORRELATED:"Saved and correlated",NOTE_ONLY:"Note saved, no matching step",
+  STEP_ONLY:"Step recorded, Note not stored",IDS_DISAGREE:"Recorded IDs disagree"};
+const RECEIPT={COMPLETED_VERIFIED:"supervised nudge · Core verified the same IDs",COMPLETED_NOT_VERIFIED:"supervised nudge · NOT verified by Core",
+  NO_CORE_RECEIPT:"nudge ID recorded · no Core receipt",NOT_IN_THIS_OWNERS_JOURNAL:"nudge ID recorded · not in this owner's nudge journal"};
+// ---- P0 navigation (#106/#108): every Cognition view is a URL hash and a real browser history entry.
+//   (none)                     the shelves
+//   thought=<id>               a Thought: "What TASS has written"
+//   thought=<id>&dev=<req>     the same, focused on one development (receipt → "Read what TASS wrote")
+//   thought=<id>&view=nudges   the Thought's nudge history;  view=draft: the manual nudge form
+//   card=<card id>             any other card (cycle, outcome, lesson, junction …)
+// A hash only SELECTS a card this authorized library already contains; the server still authorizes
+// every read. Navigation is GET-only: it never posts, processes a nudge or calls a model.
+function navHash(st){const h=new URLSearchParams();
+  if(st.thought){h.set("thought",st.thought);if(st.dev)h.set("dev",st.dev);else if(st.view)h.set("view",st.view);}
+  else if(st.card)h.set("card",st.card);
+  const q=h.toString();return q?"#"+q:"";}
+function navTo(st,mode){
+  if(!LIVE)return;
+  const hash=navHash(st);const url=location.pathname+location.search+hash;
+  if(mode==="push"&&hash!==location.hash)history.pushState({cognition:true},"",url);
+  else history.replaceState({cognition:true},"",url);
+}
+function hideSheet(){stop();clearTimeout(S.nudgePoll);$("overlay").classList.remove("open");}
+// route(): render whatever the current URL says (initial load, refresh, Back, Forward).
+function route(){
+  if(!LIVE)return;
+  const h=new URLSearchParams(location.hash.slice(1));
+  const tid=h.get("thought"),cid=h.get("card");
+  if(!tid&&!cid){hideSheet();return;}
+  const card=tid?S.cards.find(v=>v.kind==="thought"&&v.source_id===tid):S.cards.find(v=>v.id===cid);
+  if(!card){
+    hideSheet();navTo({},"replace");
+    message((tid?"That Thought":"That record")+" is not in this identity's authorized library (or is no longer recorded). Showing the shelves.",true);
+    return;
+  }
+  const view=h.get("view");
+  select(card,{fromHistory:true,dev:h.get("dev")||"",view:view==="nudges"||view==="draft"?view:""});
+}
+window.addEventListener("popstate",route);
+function stepLabel(h){
+  const ids=[];
+  if(h.event_id)ids.push("event "+h.event_id);if(h.trace_id)ids.push("trace "+h.trace_id);else ids.push("trace NOT RECORDED");
+  if(h.worker_request_id)ids.push("request "+h.worker_request_id);if(h.source_nudge_id)ids.push("nudge "+h.source_nudge_id);
+  if(h.by)ids.push("by "+h.by);return ids.join(" · ");
+}
+function devCard(d){
+  const box=mk("div","dev");box.id="dev-"+(d.request_id||"none");box.tabIndex=-1;
+  box.append(mk("div","eyebrow",stamp(d.at)+(d.note?.by?" · "+d.note.by:"")));
+  if(d.note)box.append(mk("div","note",d.note.text));
+  else box.append(mk("div","note missing","The Note for this step is no longer stored (or was never saved). Nothing is shown in its place."));
+  const meta=[PERSIST[d.persistence]||d.persistence,"request "+(d.request_id||"NOT RECORDED")];
+  if(d.source_nudge_id)meta.push("nudge "+d.source_nudge_id+(d.nudge_receipt?" ("+(RECEIPT[d.nudge_receipt]||("Core receipt: "+d.nudge_receipt))+")":""));
+  if(d.note?.suggested_state)meta.push("suggested state: "+d.note.suggested_state+" — not applied");
+  box.append(mk("div","meta",meta.join(" · ")),mk("div","meaning",d.meaning));
+  return box;
+}
+async function showThought(focusRequest){
   const x=S.selected;if(!x)return;
   if(x.kind!=="thought"){await loadTimeline(true);return;}
   try{
     const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
+    if(S.selected!==x)return;
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-    field(area,"Canonical question",d.question);field(area,"State",d.state);
-    field(area,"Historical steps",d.history?.length??0);
-    for(const h of d.history||[])field(area,stamp(h.at)+" · "+h.kind, h.event_id||h.trace_id||"NOT RECORDED");
-    field(area,"Trace IDs (verified only)",(d.traces||[]).filter(t=>t.verified).map(t=>t.trace_id).join(", ")||"NOT RECORDED");
-    field(area,"Related recorded cycles",(d.related_cycle_ids||[]).join(", ")||"NOT RECORDED");
+    area.append(mk("h3","","What TASS has written"));
+    field(area,"The Thought's question",d.question);
+    const devs=d.developments||[];
+    if(!devs.length)area.append(mk("div","empty","No Notes are recorded for this Thought yet."));
+    for(const dv of devs)area.append(devCard(dv));
+    if(d.developments_truncated)area.append(mk("div","meaning","Showing the newest "+devs.length+" of "+d.developments_total+" developments."));
+    const adv=mk("details","");adv.append(mk("summary","","Recorded details (state, history, IDs)"));
+    field(adv,"Source ID",x.source_id);field(adv,"Verification",x.verification);field(adv,"Source",x.source);
+    field(adv,"State",d.state);
+    field(adv,"Historical steps",d.history_total>(d.history||[]).length?"newest "+(d.history||[]).length+" of "+d.history_total+" (oldest not shown)":String(d.history_total??(d.history||[]).length));
+    for(const h of [...(d.history||[])].reverse())field(adv,stamp(h.at)+" · "+h.kind,stepLabel(h));
+    field(adv,"Trace IDs (verified only)",(d.traces||[]).filter(t=>t.verified).map(t=>t.trace_id).join(", ")||"NOT RECORDED");
+    field(adv,"Related recorded cycles",(d.related_cycle_ids||[]).join(", ")||"NOT RECORDED");
     for(const id of d.related_cycle_ids||[]){
-      const btn=mk("button","","Open cycle "+id);
+      const btn=mk("button","","Open cycle "+id);btn.type="button";
       btn.onclick=()=>select(S.cards.find(v=>v.kind==="cycle"&&v.source_id===id)||{
         kind:"cycle",id:"cycle:"+id,source_id:id,title:"Cycle "+id,summary:"Linked recorded cycle",
         verification:"VERIFIED-LINK",source:"Thought Engine: cycle"});
-      area.append(btn);
+      adv.append(btn);
+    }
+    area.append(adv);
+    if(focusRequest){
+      const t=document.getElementById("dev-"+focusRequest);
+      if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();navTo({thought:x.source_id,dev:focusRequest},"replace");}
+      else message("The Note for request "+focusRequest+" is not among the recorded developments of this Thought.",true);
     }
   }catch(e){message("Thought detail "+e.message,true);}
 }
@@ -257,6 +352,7 @@ async function refresh(){
   }
   draw();
   loadPulse();
+  route();
 }
 // ---- #82 P1: the real 20-second pulse (GET only; never starts, steps or pauses it) ----
 async function loadPulse(){
@@ -299,7 +395,8 @@ async function ownerPost(path,body){
 }
 
 // ---- #96: manual nudge workbench. Save Draft = one local owner write, zero model calls. ----
-// Process is BLOCKED: no Identity action for nudge processing exists yet.
+// Processing (Stage 2) is a separate, confirmed action on a SAVED draft, offered only when Core's
+// derived state says READY; admission (Identity bound decision) still decides.
 const NUDGE_RECIPIENTS=[["self","TASS (this entity)"],["position-1","Card position 1"],["position-2","Card position 2"],
   ["position-3","Card position 3"],["position-4","Card position 4"],["position-5","Card position 5"]];
 const NUDGE_REASONS=[["owner_request","Owner request"],["new_evidence","New evidence"],["follow_up","Follow up"],["question","Question"],["correction","Correction"]];
@@ -324,8 +421,7 @@ function nudgeForm(){
   exp.style.cssText="width:100%;margin:4px 0 10px;background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:7px";area.append(exp);
   const key=nudgeKey(); // one key per form: a double click or retry can never create two drafts
   const save=mk("button","","Save draft (local only, no model call)");save.type="button";
-  const proc=mk("button","","Process — BLOCKED: no Identity processing grant exists yet");proc.type="button";proc.disabled=true;
-  proc.title="Processing needs a separate owner-reviewed Identity policy change (Thought-Processor #96).";
+  const how=mk("div","meaning","Saving makes no model call. To process a saved draft addressed to TASS, use “Process once…” on it below; it asks you to confirm.");
   save.onclick=async()=>{
     save.disabled=true;
     try{
@@ -334,36 +430,43 @@ function nudgeForm(){
           priority:pri.value,expires_in_hours:Number(exp.value)||24,idempotency_key:key})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
-      message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+". Not processed.");
-      await nudgeHistory(x.source_id);
+      message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+" (highlighted). Not processed.");
+      navTo({thought:x.source_id,view:"nudges"},"replace"); // the saved form becomes the history view (no extra Back step)
+      await nudgeHistory(x.source_id,d.nudge_id);
     }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
   };
-  area.append(save,proc);
+  area.append(save,how);
 }
-async function nudgeHistory(thoughtID){
+async function nudgeHistory(thoughtID,focusNudge){
   if(!thoughtID)return;
   try{
     const d=await get("/api/nudges?thought_id="+encodeURIComponent(thoughtID));
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
     area.append(mk("h3","","Nudge history for "+thoughtID));
-    field(area,"Processing",val(d.processing?.state)+" — "+val(d.processing?.reason));
+    const rd=d.readiness||{};
+    const ready=mk("div","readiness"+(d.processing?.state==="READY"?" ready":""));
+    ready.append(mk("b","",d.processing?.reason||"Processing state NOT RECORDED"),
+      mk("div","meta","Identity: "+val(rd.identity)+" · processing grant: "+val(rd.process_grant)+" · Engine: "+val(rd.engine)+
+        (rd.active_run?" · active run: "+rd.active_run:"")+" — shown for your information; Identity still decides each run."));
+    area.append(ready);
     if(d.invalid_lines)field(area,"Warning",d.invalid_lines+" damaged journal line(s) were kept, not shown");
     if(d.processing_locked){const w=mk("div","detail","Processing is locked: "+d.processing_locked+". Restore a consistent backup with ./tass.sh; drafts stay readable.");
       w.style.cssText="border:1px solid #c55;border-radius:10px;padding:8px 10px;margin:8px 0";area.append(w);}
     if(!(d.nudges||[]).length){area.append(mk("div","empty","No nudges recorded for this Thought."));}
     for(const n of d.nudges||[]){
-      const box=mk("div","detail");box.style.cssText="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0";
+      const box=mk("div","detail nudgebox");box.id="nudge-"+n.nudge_id;box.tabIndex=-1;box.style.cssText="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0";
       box.append(mk("b","",n.status+" · "+n.nudge_id));
       for(const [k,v] of [["To",n.recipient_id+" ("+n.recipient_kind+")"],["Reason",n.reason_code],["Requested attention",n.requested_action],
         ["Priority",n.priority],["Created",stamp(n.created_at)],["Expires",stamp(n.expires_at)],
         ["Source revision",n.source_revision],["Source evidence",(n.source_evidence_refs||[]).join(", ")],
         ["Draft Identity decision",n.draft_identity_decision_id],
-        ["Processing",n.run?"":val(n.processing?.state)+(n.pre_restore?" (existed before a restore)":"")]])if(v)field(box,k,v);
+        ["Processing",n.run?"":val(n.processing?.state)+" — "+val(n.processing?.reason)]])if(v)field(box,k,v);
       if(n.run)runFields(box,n.run);
       nudgeActions(box,n,d,thoughtID);
       area.append(box);
     }
     field(area,"Note",d.note);
+    if(focusNudge){const t=document.getElementById("nudge-"+focusNudge);if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();}}
     // While a run is open, refresh its receipt (reads only; nothing is ever re-sent).
     if((d.nudges||[]).some(n=>n.run&&(n.run.state==="SUBMITTED"||n.run.state==="RUNNING"))){
       clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if($("thoughtDetail").textContent.includes("Nudge history for "+thoughtID))nudgeHistory(thoughtID);},3000);
@@ -388,7 +491,14 @@ async function nudgePost(path,body){
 }
 function nudgeActions(box,n,d,thoughtID){
   const row=mk("div","");row.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px";
-  const canProcess=!n.run&&n.status==="DRAFT"&&n.recipient_id==="self"&&!n.pre_restore&&!d.processing_locked;
+  // P0: offered only when Core's derived state is READY (grant/lock/Engine/run/draft all checked);
+  // the confirmation, Identity's bound decision and the Engine's P1/P2 checks still decide.
+  const canProcess=!n.run&&n.processing?.state==="READY"&&n.status==="DRAFT"&&n.recipient_id==="self"&&!n.pre_restore&&!d.processing_locked;
+  if(n.run&&n.run.state==="COMPLETED"&&n.run.request_id){
+    const rd=mk("button","","Read what TASS wrote");rd.type="button";
+    rd.onclick=()=>{navTo({thought:thoughtID,dev:n.run.request_id},"push");showThought(n.run.request_id);};
+    row.append(rd);
+  }
   if(canProcess){
     const b=mk("button","","Process once…");b.type="button";
     b.onclick=()=>{
@@ -421,7 +531,7 @@ function nudgeActions(box,n,d,thoughtID){
         if(r.run?.state!=="NOT_DELIVERED"){message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.run?.state]||r.run?.state)+"). Wait for it to finish.",true);await nudgeHistory(thoughtID);return;}
         const c=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
           requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Stopped, and copied as new draft "+c.nudge_id+". It needs its own confirmation to run.");await nudgeHistory(thoughtID);}
+        message("Stopped, and copied as new draft "+c.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,c.nudge_id);}
       catch(e){message("Not done: "+e.message,true);sc.disabled=false;}};
     row.append(sc);
   }
@@ -433,7 +543,7 @@ function nudgeActions(box,n,d,thoughtID){
       cp.disabled=true;
       try{const r=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
           requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Copied as new draft "+r.nudge_id+". It needs its own confirmation to run.");await nudgeHistory(thoughtID);}
+        message("Copied as new draft "+r.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,r.nudge_id);}
       catch(e){message("Not copied: "+e.message,true);cp.disabled=false;}};
     row.append(cp);
   }
@@ -446,11 +556,11 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
   S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(b===c)));draw();
 });
 $("refresh").onclick=refresh;
-$("close").onclick=()=>{stop();$("overlay").classList.remove("open");};
+$("close").onclick=()=>{hideSheet();navTo({},"push");};
 $("overlay").onclick=e=>{if(e.target===$("overlay"))$("close").click();};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click();
   else if(e.key==="ArrowRight"&&$("overlay").classList.contains("open")&&cycleID())advance();});
-$("expandEngine").onclick=showThought;
+$("expandEngine").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id},"push");showThought();};
 $("logs").onclick=()=>loadTimeline(true);
 $("step").onclick=async()=>{stop();await advance();};
 $("play").onclick=async()=>{stop();if(!(await advance()))return;setVisible("pause",true);
@@ -460,8 +570,8 @@ $("copy").onclick=copyEvidence;
 $("downloadMD").onclick=()=>downloadEvidence("md");
 $("downloadJSON").onclick=()=>downloadEvidence("json");
 $("tryDev").onclick=devProposal;
-$("nudge").onclick=nudgeForm;
-$("nudgeHistory").onclick=()=>nudgeHistory(S.selected&&S.selected.source_id);
+$("nudge").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id,view:"draft"},"push");nudgeForm();};
+$("nudgeHistory").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id,view:"nudges"},"push");nudgeHistory(S.selected&&S.selected.source_id);};
 refresh();
 </script>
 </body>

@@ -214,8 +214,8 @@ func TestNudgeHTTPRoutes(t *testing.T) {
 	if code != http.StatusCreated || out["status"] != "DRAFT" || out["model_calls"] != float64(0) {
 		t.Fatalf("save: %d %v", code, out)
 	}
-	if p, _ := out["processing"].(map[string]any); p["state"] != "BLOCKED" {
-		t.Fatalf("processing must be BLOCKED: %v", out["processing"])
+	if p, _ := out["processing"].(map[string]any); p["state"] != "NOT_FOR_PROCESSING" {
+		t.Fatalf("a card-position draft must be NOT_FOR_PROCESSING (P0: derived, never a stale BLOCKED): %v", out["processing"])
 	}
 	id := out["nudge_id"]
 	digest, _ := out["body_digest"].(string)

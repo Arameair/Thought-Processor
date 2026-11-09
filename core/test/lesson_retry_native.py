@@ -26,7 +26,35 @@ def key():
     return os.urandom(32).hex()
 
 
+# These older harnesses use the installed stack's FIXED ports (Core 8795, Identity 8796, Engine 7798,
+# model 8081). On a machine where TASS is running (owner host, #100/#106) they would talk to the live
+# services. So they refuse to start when any of those ports, or the owner's other Core port 8797, already
+# has a listener. The isolated Stage 2 harness (nudge_process_native.py) uses its own ports and sets
+# TASS_TEST_ISOLATED_PORTS=1.
+LIVE_PORTS = (8795, 8796, 8797, 7798, 8081, 18083)
+
+
+def refuse_if_live_ports():
+    if os.environ.get("TASS_TEST_ISOLATED_PORTS") == "1":
+        return
+    import socket
+    busy = []
+    for p in LIVE_PORTS:
+        s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", p))
+        except OSError:
+            busy.append(p)
+        finally:
+            s.close()
+    if busy:
+        sys.exit(f"ABORT: port(s) {busy} already have a listener (a running TASS?). This fixed-port harness would reach it. "
+                 "Stop it, or use core/test/nudge_process_native.py (isolated ports). Nothing was started.")
+
+
 def prepare():
+    refuse_if_live_ports()
     for d in ("data/identity", "data/core", "data/engine", "secrets", "logs"):
         os.makedirs(f"{APP}/{d}", exist_ok=True)
     ek, ck = key(), key()
