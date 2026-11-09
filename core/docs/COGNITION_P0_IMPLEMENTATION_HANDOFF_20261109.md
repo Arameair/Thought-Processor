@@ -94,3 +94,57 @@ These are not part of P0:
 - grant changes;
 - autonomy;
 - real model calls.
+
+---
+
+## 6. Navigation repair (after Codex's PASS on `b79346b`): the delta for Codex's final review
+
+**Authorization:** "P0 Final Navigation Repair Before Deployment" (owner, 2026-11-09). This is the only change; Stage 1, P1 and P2 are untouched.
+
+**Root cause, at `b79346b`.** Cognition's only history call was `history.replaceState`, in `setHash()`, and there was no `popstate` handler. Opening a Thought, the nudge history or a Note therefore created **no** browser history entry. A refresh worked, because `openFromHash()` read the hash on load, but Back went to whatever page came before Cognition. The nudge-history view wasn't in the URL at all.
+
+**The change.** One file, `core/cmd/tass-core/cognition.html`, +51 −20 lines.
+- **The URL describes every view.** It is empty (the shelves), `thought=<id>`, `thought=<id>&dev=<request id>`, `thought=<id>&view=nudges|draft`, or `card=<card id>` (a cycle, outcome or other card).
+- **`navTo(state, "push"|"replace")`.** A user action **pushes** an entry: opening a card, "What TASS has written", "Nudge history", "Manual nudge (draft)", "Read what TASS wrote", and Close. Follow-on updates **replace** the entry: focusing the same Note, or a saved draft becoming the history view.
+- **`route()` renders whatever the URL says.** It runs on page load, refresh and every Back/Forward (`popstate`). It only **selects** a card that is already in the authorized library response.
+  - Unknown or hostile references show the shelves with "not in this identity's authorized library", and the URL is cleaned.
+  - A Thought whose detail read is refused shows the existing honest error (for example "Thought detail HTTP 503"), with nothing invented.
+- **Unchanged:** the APIs, projections, Note authorization, nudge processing, the shelf design, and the Note rendering (`textContent` only). No new `innerHTML`, `eval` or POST was added; I checked the diff.
+
+**New regression test:** `core/test/browser/cognition_nav.py`, run at 1280×1000, 960×1000 and 390×844.
+
+| Check | What it verifies |
+| --- | --- |
+| N1 | Shelf → Thought → Back leaves you on `/cognition` with the sheet closed → Forward shows the same Thought and Note |
+| N2 | Refresh with a Thought selected reopens it |
+| N3 | Completed receipt → "Read what TASS wrote" → Back to the nudge history → Back to the Thought → Back to the shelf → only then does Back leave Cognition → Forward ×4 returns to the same focused Note |
+| N4 | Close → shelf; Back reopens what was closed |
+| N5 | Direct links: `#thought=`, `&dev=`, `&view=nudges`, `#card=cycle:` |
+| N6 | Unknown Thought, unknown card, path-traversal and HTML-shaped values: shelves, no script runs. A Thought whose detail returns 503 shows an honest error, nothing invented |
+| N7 | Cycle card → Back → shelf |
+| N8 | **Zero** non-GET requests across all navigation (no POST, no `/process`, no `/stop`) |
+
+**Red/green:**
+- The same test against `b79346b`'s `cognition.html` **fails at N1**: Back navigated out of Cognition to the previous page.
+- On the repair, it passes 3/3.
+
+### Results for the new commit (reported separately from Codex's historical evidence)
+Codex's earlier evidence for `b79346b` + Engine `40d4e91`: 16/16 native runs and 1,168/1,168 checks. That is **historical** and does not test this commit.
+
+| Check (new commit; Engine #20 `40d4e91`, Identity `cfc4079`, fixture model, no Docker) | Result |
+| --- | --- |
+| Core `go vet`, `go test ./...`, `go test -race ./...` | **PASS** |
+| `cognition_nav.py` (N1–N8) at 1280 / 960 / 390 | **PASS 3/3** (and FAIL on `b79346b`, as expected) |
+| `cognition_p0.py`, `cognition_go.py`, `cognition_nudge.py`, `cognition_process.py` | **PASS 3/3, 2/2, 1/1, 1/1** |
+| Isolated native harness (73 checks) with the new Core binary, ports 39700–39704 | **PASS 73/73 in 8 of 8 runs**; isolation sentinel PASS in all 8 |
+| `test_updater_recovery.py` | **PASS 16/16** |
+| `test_launcher_regression.py` | **PASS 6/6** |
+| Docker, the installed owner stack, real Nemotron, the owner's half-screen walkthrough | **NOT RUN** |
+| Codex delta review of this commit | **NOT RUN** (requested) |
+
+**Remaining defects:** none known in P0's scope. `skill_native`'s pre-existing seed-count check is unchanged and unrelated.
+
+**Known behaviour, by design:**
+- Close adds a history entry, so Back after Close reopens what was closed.
+- Back leaves Cognition only after you have stepped back past the shelf, which is normal browser behaviour.
+- History entries made before a refresh survive the refresh (the browser keeps them).

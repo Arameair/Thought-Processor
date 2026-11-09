@@ -110,8 +110,10 @@ function draw(){
 function field(container,name,value){
   const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
 }
-function select(x){
+function select(x,opts={}){
   stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  // P0 navigation: a click adds a browser history entry; Back/Forward (popstate) re-renders without adding one.
+  if(!opts.fromHistory)navTo(x.kind==="thought"?{thought:x.source_id}:{card:x.id},"push");
   $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
   $("detailTitle").textContent=val(x.title);
   $("detailIntro").textContent=val(x.summary);
@@ -129,7 +131,11 @@ function select(x){
   setVisible("nudge",x.kind==="thought"&&LIVE);setVisible("nudgeHistory",x.kind==="thought"&&LIVE);
   // P0: for a Thought, what TASS wrote comes first; the card's record fields move into "Recorded details".
   fields.classList.toggle("hidden",x.kind==="thought"&&LIVE);$("detailIntro").classList.toggle("hidden",x.kind==="thought"&&LIVE);
-  if(x.kind==="thought"&&LIVE){const f=S.pendingDev||"";S.pendingDev="";setHash(x.source_id,f);showThought(f);}
+  if(x.kind==="thought"&&LIVE){
+    if(opts.view==="nudges")nudgeHistory(x.source_id);
+    else if(opts.view==="draft")nudgeForm();
+    else showThought(opts.dev||"");
+  }
   if(x.kind==="junction"&&(x.related_cycle_ids||[]).length){
     const area=$("thoughtDetail");area.classList.add("open");
     for(const id of x.related_cycle_ids){const b=mk("button","","Open recorded cycle "+id);b.type="button";
@@ -227,8 +233,41 @@ const PERSIST={NOTE_AND_STEP_CORRELATED:"Saved and correlated",NOTE_ONLY:"Note s
   STEP_ONLY:"Step recorded, Note not stored",IDS_DISAGREE:"Recorded IDs disagree"};
 const RECEIPT={COMPLETED_VERIFIED:"supervised nudge · Core verified the same IDs",COMPLETED_NOT_VERIFIED:"supervised nudge · NOT verified by Core",
   NO_CORE_RECEIPT:"nudge ID recorded · no Core receipt",NOT_IN_THIS_OWNERS_JOURNAL:"nudge ID recorded · not in this owner's nudge journal"};
-function setHash(tid,req){if(!LIVE)return;const h=new URLSearchParams();if(tid)h.set("thought",tid);if(req)h.set("dev",req);
-  history.replaceState(null,"",location.pathname+location.search+(tid?"#"+h.toString():""));}
+// ---- P0 navigation (#106/#108): every Cognition view is a URL hash and a real browser history entry.
+//   (none)                     the shelves
+//   thought=<id>               a Thought: "What TASS has written"
+//   thought=<id>&dev=<req>     the same, focused on one development (receipt → "Read what TASS wrote")
+//   thought=<id>&view=nudges   the Thought's nudge history;  view=draft: the manual nudge form
+//   card=<card id>             any other card (cycle, outcome, lesson, junction …)
+// A hash only SELECTS a card this authorized library already contains; the server still authorizes
+// every read. Navigation is GET-only: it never posts, processes a nudge or calls a model.
+function navHash(st){const h=new URLSearchParams();
+  if(st.thought){h.set("thought",st.thought);if(st.dev)h.set("dev",st.dev);else if(st.view)h.set("view",st.view);}
+  else if(st.card)h.set("card",st.card);
+  const q=h.toString();return q?"#"+q:"";}
+function navTo(st,mode){
+  if(!LIVE)return;
+  const hash=navHash(st);const url=location.pathname+location.search+hash;
+  if(mode==="push"&&hash!==location.hash)history.pushState({cognition:true},"",url);
+  else history.replaceState({cognition:true},"",url);
+}
+function hideSheet(){stop();clearTimeout(S.nudgePoll);$("overlay").classList.remove("open");}
+// route(): render whatever the current URL says (initial load, refresh, Back, Forward).
+function route(){
+  if(!LIVE)return;
+  const h=new URLSearchParams(location.hash.slice(1));
+  const tid=h.get("thought"),cid=h.get("card");
+  if(!tid&&!cid){hideSheet();return;}
+  const card=tid?S.cards.find(v=>v.kind==="thought"&&v.source_id===tid):S.cards.find(v=>v.id===cid);
+  if(!card){
+    hideSheet();navTo({},"replace");
+    message((tid?"That Thought":"That record")+" is not in this identity's authorized library (or is no longer recorded). Showing the shelves.",true);
+    return;
+  }
+  const view=h.get("view");
+  select(card,{fromHistory:true,dev:h.get("dev")||"",view:view==="nudges"||view==="draft"?view:""});
+}
+window.addEventListener("popstate",route);
 function stepLabel(h){
   const ids=[];
   if(h.event_id)ids.push("event "+h.event_id);if(h.trace_id)ids.push("trace "+h.trace_id);else ids.push("trace NOT RECORDED");
@@ -276,7 +315,7 @@ async function showThought(focusRequest){
     area.append(adv);
     if(focusRequest){
       const t=document.getElementById("dev-"+focusRequest);
-      if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();setHash(x.source_id,focusRequest);}
+      if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();navTo({thought:x.source_id,dev:focusRequest},"replace");}
       else message("The Note for request "+focusRequest+" is not among the recorded developments of this Thought.",true);
     }
   }catch(e){message("Thought detail "+e.message,true);}
@@ -313,16 +352,7 @@ async function refresh(){
   }
   draw();
   loadPulse();
-  openFromHash();
-}
-// P0: /cognition#thought=<id>&dev=<request id> reopens the same Thought and Note after a refresh.
-// It only selects a card this authorized library already contains; the server still authorizes the read.
-function openFromHash(){
-  if(!LIVE||!location.hash)return;
-  const h=new URLSearchParams(location.hash.slice(1));const tid=h.get("thought");if(!tid)return;
-  const card=S.cards.find(v=>v.kind==="thought"&&v.source_id===tid);
-  if(!card){message("That Thought is not in this identity's library.",true);return;}
-  S.pendingDev=h.get("dev")||"";select(card);
+  route();
 }
 // ---- #82 P1: the real 20-second pulse (GET only; never starts, steps or pauses it) ----
 async function loadPulse(){
@@ -401,6 +431,7 @@ function nudgeForm(){
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
       message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+" (highlighted). Not processed.");
+      navTo({thought:x.source_id,view:"nudges"},"replace"); // the saved form becomes the history view (no extra Back step)
       await nudgeHistory(x.source_id,d.nudge_id);
     }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
   };
@@ -465,7 +496,7 @@ function nudgeActions(box,n,d,thoughtID){
   const canProcess=!n.run&&n.processing?.state==="READY"&&n.status==="DRAFT"&&n.recipient_id==="self"&&!n.pre_restore&&!d.processing_locked;
   if(n.run&&n.run.state==="COMPLETED"&&n.run.request_id){
     const rd=mk("button","","Read what TASS wrote");rd.type="button";
-    rd.onclick=()=>showThought(n.run.request_id);
+    rd.onclick=()=>{navTo({thought:thoughtID,dev:n.run.request_id},"push");showThought(n.run.request_id);};
     row.append(rd);
   }
   if(canProcess){
@@ -525,11 +556,11 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
   S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(b===c)));draw();
 });
 $("refresh").onclick=refresh;
-$("close").onclick=()=>{stop();$("overlay").classList.remove("open");setHash("","");};
+$("close").onclick=()=>{hideSheet();navTo({},"push");};
 $("overlay").onclick=e=>{if(e.target===$("overlay"))$("close").click();};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click();
   else if(e.key==="ArrowRight"&&$("overlay").classList.contains("open")&&cycleID())advance();});
-$("expandEngine").onclick=()=>showThought();
+$("expandEngine").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id},"push");showThought();};
 $("logs").onclick=()=>loadTimeline(true);
 $("step").onclick=async()=>{stop();await advance();};
 $("play").onclick=async()=>{stop();if(!(await advance()))return;setVisible("pause",true);
@@ -539,8 +570,8 @@ $("copy").onclick=copyEvidence;
 $("downloadMD").onclick=()=>downloadEvidence("md");
 $("downloadJSON").onclick=()=>downloadEvidence("json");
 $("tryDev").onclick=devProposal;
-$("nudge").onclick=nudgeForm;
-$("nudgeHistory").onclick=()=>nudgeHistory(S.selected&&S.selected.source_id);
+$("nudge").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id,view:"draft"},"push");nudgeForm();};
+$("nudgeHistory").onclick=()=>{if(S.selected?.kind==="thought")navTo({thought:S.selected.source_id,view:"nudges"},"push");nudgeHistory(S.selected&&S.selected.source_id);};
 refresh();
 </script>
 </body>
