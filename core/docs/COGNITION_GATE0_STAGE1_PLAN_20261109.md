@@ -327,12 +327,12 @@ Each slice gets its own draft PR, Codex audit and owner decision. Stage 2 wordin
 
 **Exact changes** (anchors at `4b5fea6`):
 
-1. **`core/engine/cognition.go:73-85`** (`type Thought`): add `LastDeveloped *time.Time \`json:"last_developed_at,omitempty"\``. It is decoded, and used only to cross-check `latest_output.at`; it is never shown on its own.
+1. **`core/engine/cognition.go:73-85`** (`type Thought`): add `` LastDeveloped *time.Time `json:"last_developed_at,omitempty"` ``. It is decoded, and used only to cross-check `latest_output.at`; it is never shown on its own.
 2. **`core/tass/cognition.go:28-41`** (`type CognitionCard`): add
-   - `Lifecycle string \`json:"lifecycle,omitempty"\``
-   - `NotesCount *int \`json:"notes_count,omitempty"\``
-   - `LatestOutput *CognitionOutput \`json:"latest_output,omitempty"\``
-   - `RunActivity *CognitionRunActivity \`json:"run_activity,omitempty"\``
+   - `` Lifecycle string `json:"lifecycle,omitempty"` ``
+   - `` NotesCount *int `json:"notes_count,omitempty"` ``
+   - `` LatestOutput *CognitionOutput `json:"latest_output,omitempty"` ``
+   - `` RunActivity *CognitionRunActivity `json:"run_activity,omitempty"` ``
 
    These are set **only** for `kind=thought`.
 3. **`core/tass/cognition.go:202-212`** (thought card construction in `CognitionLibrary`): fill the new fields from `thoughtPreview(th)` and the per-Thought map from `runActivityByThought(scope)`. That map is built **once**, before the loop.
