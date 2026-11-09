@@ -28,6 +28,8 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .sheet details{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}.sheet summary{cursor:pointer;color:var(--muted)}
 .readiness{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}.readiness.ready{border-color:#317261}
 .nudgebox.focus{border-color:var(--mint)!important;box-shadow:0 0 0 2px #76d3bd55}
+/* WP0-E: the saved Notes are the first thing on screen and read as the main content, not a footnote. */
+#savedNotes{color:var(--fg);font-size:19px;margin:0 0 4px}#savedNotes:focus{outline:2px solid #76d3bd88;outline-offset:4px}
 </style>
 </head>
 <body>
@@ -38,7 +40,7 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 <div id="pulse" class="pulse" aria-live="polite"><span class="k">20-second pulse</span> <span>reading…</span></div>
 <div id="linkbox" class="linkbox" hidden></div><div id="summary" class="summary"></div><main id="shelves"></main>
 <div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
-<button id="expandEngine">What TASS has written</button>
+<button id="expandEngine">Inspect recorded details</button>
 <button id="logs">View Logs</button>
 <button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
 <button id="copy">Copy Evidence</button>
@@ -80,6 +82,12 @@ async function get(path,format="json"){
 }
 function message(x,bad=false){$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
 function setVisible(id,on){$(id).classList.toggle("hidden",!on);}
+// WP0-E (#106): every sheet action must produce a visible result. reveal() scrolls the new view's
+// heading into view and moves keyboard focus to it, so the owner sees what the click changed.
+function reveal(el){if(!el)return;el.tabIndex=-1;el.scrollIntoView({block:"nearest"});el.focus({preventScroll:true});}
+// The bottom "saved Notes" action exists only where it changes something: it is hidden while the
+// saved Notes are already on screen and becomes "Back to saved Notes" in the nudge views.
+function thoughtView(v){S.view=v;if(S.selected?.kind==="thought"&&LIVE)setVisible("expandEngine",v!=="notes");}
 function stop(){if(S.timer!==null){clearInterval(S.timer);S.timer=null;}setVisible("pause",false);}
 function draw(){
   const host=$("shelves");host.replaceChildren();
@@ -124,7 +132,8 @@ function select(x,opts={}){
   $("thoughtDetail").replaceChildren();$("thoughtDetail").classList.remove("open");
   message("");
   const cycle=x.kind==="cycle"||x.kind==="outcome";
-  setVisible("expandEngine",cycle||x.kind==="thought");
+  S.view="";$("expandEngine").textContent=x.kind==="thought"&&LIVE?"Back to saved Notes":"Inspect recorded details";
+  setVisible("expandEngine",cycle||(x.kind==="thought"&&!LIVE));
   setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
   setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
   setVisible("tryDev",x.kind==="thought"||cycle||x.kind==="junction");
@@ -188,7 +197,7 @@ async function loadTimeline(showAll=false){
         row.type="button";row.onclick=()=>{S.cursor=t.steps.indexOf(e);showStep();};
         list.append(row);
       }
-      $("thoughtDetail").append(mk("h3","","View logs — recorded journal sequence"),list);
+      const head=mk("h3","","View logs — recorded journal sequence");$("thoughtDetail").append(head,list);reveal(head);
     }
   }catch(e){message("Journal "+e.message,true);}
 }
@@ -292,9 +301,10 @@ async function showThought(focusRequest){
     const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
     if(S.selected!==x)return;
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-    area.append(mk("h3","","What TASS has written"));
-    field(area,"The Thought's question",d.question);
     const devs=d.developments||[];
+    const head=mk("h3","","Saved Notes — what TASS has written");head.id="savedNotes";area.append(head);
+    area.append(mk("div","meta",devs.length?(d.developments_total||devs.length)+" saved "+((d.developments_total||devs.length)===1?"development":"developments")+", newest first":"No saved Notes yet"));
+    field(area,"The Thought's question",d.question);
     if(!devs.length)area.append(mk("div","empty","No Notes are recorded for this Thought yet."));
     for(const dv of devs)area.append(devCard(dv));
     if(d.developments_truncated)area.append(mk("div","meaning","Showing the newest "+devs.length+" of "+d.developments_total+" developments."));
@@ -313,6 +323,8 @@ async function showThought(focusRequest){
       adv.append(btn);
     }
     area.append(adv);
+    thoughtView("notes");
+    if(!focusRequest)reveal(head);
     if(focusRequest){
       const t=document.getElementById("dev-"+focusRequest);
       if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();navTo({thought:x.source_id,dev:focusRequest},"replace");}
@@ -406,7 +418,7 @@ function selectBox(options){const s=mk("select","");for(const [v,t] of options){
 function nudgeForm(){
   const x=S.selected;if(!x||x.kind!=="thought")return;
   const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-  area.append(mk("h3","","Manual nudge — draft"));
+  const head=mk("h3","","Manual nudge — draft");area.append(head);
   field(area,"Source persistent Thought",x.source_id);
   field(area,"Sender","The unlocked Identity entity (set by Core, not typed)");
   field(area,"Permission","Saving needs the owner grant cognition.nudge-draft (enable it on Identity's page with your passphrase; revoke any time)");
@@ -436,13 +448,15 @@ function nudgeForm(){
     }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
   };
   area.append(save,how);
+  thoughtView("draft");reveal(head);
 }
 async function nudgeHistory(thoughtID,focusNudge){
   if(!thoughtID)return;
   try{
     const d=await get("/api/nudges?thought_id="+encodeURIComponent(thoughtID));
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-    area.append(mk("h3","","Nudge history for "+thoughtID));
+    const head=mk("h3","","Nudge history for "+thoughtID);area.append(head);
+    thoughtView("nudges");
     const rd=d.readiness||{};
     const ready=mk("div","readiness"+(d.processing?.state==="READY"?" ready":""));
     ready.append(mk("b","",d.processing?.reason||"Processing state NOT RECORDED"),
@@ -466,7 +480,8 @@ async function nudgeHistory(thoughtID,focusNudge){
       area.append(box);
     }
     field(area,"Note",d.note);
-    if(focusNudge){const t=document.getElementById("nudge-"+focusNudge);if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();}}
+    const ft=focusNudge&&document.getElementById("nudge-"+focusNudge);
+    if(ft){ft.classList.add("focus");ft.scrollIntoView({block:"center"});ft.focus();}else reveal(head);
     // While a run is open, refresh its receipt (reads only; nothing is ever re-sent).
     if((d.nudges||[]).some(n=>n.run&&(n.run.state==="SUBMITTED"||n.run.state==="RUNNING"))){
       clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if($("thoughtDetail").textContent.includes("Nudge history for "+thoughtID))nudgeHistory(thoughtID);},3000);

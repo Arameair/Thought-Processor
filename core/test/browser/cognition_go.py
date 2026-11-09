@@ -74,7 +74,8 @@ with sync_playwright() as p:
         pg.get_by_role("button",name="Thoughts",exact=True).click()
         assert pg.locator(".tile").count()==1
         pg.get_by_role("button",name="Inspect Real persistent Thought").click()
-        pg.get_by_role("button",name="What TASS has written").click()
+        # WP0-E: a Thought opens on its saved Notes; the redundant button is gone.
+        assert pg.get_by_role("button",name="What TASS has written").count()==0
         pg.wait_for_function("document.querySelector('#thoughtDetail').textContent.includes(\"The Thought's question\")")
         pg.locator("summary",has_text="Recorded details").click()
         pg.get_by_role("button",name="Open cycle tp_1").click()

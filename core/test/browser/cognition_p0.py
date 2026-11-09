@@ -107,7 +107,7 @@ with sync_playwright() as p:
             note = pg.locator("#dev-mr_0001 .note")
             assert note.inner_text() == XSS, note.inner_text()
             text = area.inner_text()
-            for want in ["What TASS has written", "What is the fixture notebook skill's purpose?", "request mr_0001", "nudge " + NID,
+            for want in ["Saved Notes — what TASS has written", "2 saved developments, newest first", "What is the fixture notebook skill's purpose?", "request mr_0001", "nudge " + NID,
                          "suggested state: resolve — not applied", "not that it answers", "Note is no longer stored"]:
                 assert want in text, (want, text)
             # A7: literal text, nothing executed, no element created from it.

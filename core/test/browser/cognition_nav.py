@@ -150,7 +150,7 @@ with sync_playwright() as p:
                 assert pg.evaluate("window.__x") is None
             pg.goto(ORIGIN + "/"); pg.goto(ORIGIN + "/cognition#thought=thought_2")
             pg.wait_for_function("document.getElementById('toast').textContent.includes('Thought detail HTTP 503')")
-            assert "What TASS has written" not in pg.locator("#thoughtDetail").inner_text(), "N6 unavailable detail: nothing invented"
+            assert "Saved Notes" not in pg.locator("#thoughtDetail").inner_text(), "N6 unavailable detail: nothing invented"
             # N7 cycle card
             pg.goto(ORIGIN + "/"); pg.goto(ORIGIN + "/cognition"); pg.wait_for_selector(".tile")
             pg.get_by_role("button", name="Inspect Cycle tp_1").click(); wait_url(pg, "card=cycle")
