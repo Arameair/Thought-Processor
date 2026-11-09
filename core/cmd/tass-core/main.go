@@ -151,6 +151,16 @@ func main() {
 		return
 	}
 
+	// Stage 2 (D16): one Core per data folder, held for the process lifetime.
+	dataLock, err := tass.AcquireDataLock(cfg.DataDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if dataLock != nil {
+			dataLock.Close()
+		}
+	}()
 	listen := env("TASS_LISTEN", "127.0.0.1:8795")
 	ln, err := net.Listen("tcp", listen)
 	if err != nil {
@@ -179,6 +189,7 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; close(stop) }()
 	core.Run(stop)
+	core.StopNudgeDispatch() // in-flight sends are cancelled; the Engine finishes; Core reconciles by reading
 	srv.Close()
 	log.Printf("stopped; tass.md and state are on disk in %s", cfg.DataDir)
 }
@@ -589,6 +600,37 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusServiceUnavailable,map[string]string{"error":"source Thought NOT RECORDED or Engine unavailable; nothing saved"})
         }
     })
+    // Stage 2: process ONE confirmed nudge to TASS himself, or stop it (design rev 4).
+    nudgeAction:=func(w http.ResponseWriter,r *http.Request,process bool){
+        var body struct{ BodyDigest string `json:"body_digest"` }
+        if !pagePost(w,r,&body){return}
+        w.Header().Set("Cache-Control","no-store")
+        id:=r.PathValue("id")
+        var v *tass.RunView
+        var accepted bool
+        var err error
+        if process { v,accepted,err=core.ProcessNudge(id,body.BodyDigest) } else { v,err=core.StopNudge(id) }
+        switch {
+        case err==nil && accepted:
+            reply(w,http.StatusAccepted,map[string]any{"run":v,"note":"accepted locally; delivery to the Engine not confirmed yet"})
+        case err==nil:
+            reply(w,http.StatusOK,map[string]any{"run":v})
+        case errors.Is(err,tass.ErrProcessNotGranted),errors.Is(err,tass.ErrCognitionDenied):
+            reply(w,http.StatusForbidden,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrProcessLocked):
+            reply(w,http.StatusLocked,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrNudgeConflict),errors.Is(err,tass.ErrProcessBusy):
+            reply(w,http.StatusConflict,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrNudgeInvalid),errors.Is(err,tass.ErrProcessRefused):
+            reply(w,http.StatusBadRequest,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrNudgeWrite):
+            reply(w,http.StatusInternalServerError,map[string]string{"error":err.Error()})
+        default:
+            reply(w,http.StatusServiceUnavailable,map[string]any{"error":err.Error(),"run":v})
+        }
+    }
+    mux.HandleFunc("POST /api/nudges/{id}/process",func(w http.ResponseWriter,r *http.Request){nudgeAction(w,r,true)})
+    mux.HandleFunc("POST /api/nudges/{id}/stop",func(w http.ResponseWriter,r *http.Request){nudgeAction(w,r,false)})
     // #82 P2/P3: junction receipts, alternative cells and comparisons for Development.
     mux.HandleFunc("GET /api/junctions",func(w http.ResponseWriter,r *http.Request){
         if !authed(r){http.Error(w,"missing or wrong key",http.StatusUnauthorized);return}

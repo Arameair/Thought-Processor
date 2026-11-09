@@ -21,7 +21,7 @@ package tass
 //   - change the source Thought, tass.md, skills, lessons, memory or any permission.
 
 import (
-	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -115,7 +115,9 @@ type Nudge struct {
 // NudgeView is what the page gets: the stored record plus the state as of now.
 type NudgeView struct {
 	Nudge
-	Replayed bool `json:"replayed,omitempty"`
+	Replayed   bool     `json:"replayed,omitempty"`
+	PreRestore bool     `json:"pre_restore,omitempty"` // Stage 2: existed before a tass.sh restore: copy only
+	Run        *RunView `json:"run,omitempty"`         // Stage 2: processing receipt, if submitted
 }
 
 // NudgeList is the owner-scoped history.
@@ -126,6 +128,7 @@ type NudgeList struct {
 	Positions     []string        `json:"positions"`
 	Reasons       []string        `json:"reasons"`
 	Processing    NudgeProcessing `json:"processing"`
+	Locked        string          `json:"processing_locked,omitempty"` // Stage 2: read-only RECOVERY_REQUIRED for all processing
 	Note          string          `json:"note"`
 }
 
@@ -203,33 +206,128 @@ func (d NudgeDraft) digest() string {
 	return hex.EncodeToString(s[:])
 }
 
+// nudgeLine is one physical line of the journal with its starting byte offset.
+type nudgeLine struct {
+	Offset int64
+	Valid  bool
+	N      Nudge
+}
+
+// readNudgeLines splits the journal into lines at '\n', keeping each line's starting byte offset
+// (Stage 2 restore fence, R3-04). A final line without '\n' is a line too. A line longer than 64 KiB
+// or that isn't a valid draft record is kept as invalid (never repaired or overwritten).
+func (c *Core) readNudgeLines() ([]nudgeLine, []byte, error) {
+	raw, err := os.ReadFile(c.file(nudgeFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	var out []nudgeLine
+	off := int64(0)
+	for len(raw[off:]) > 0 {
+		rest := raw[off:]
+		n := bytes.IndexByte(rest, '\n')
+		line := rest
+		next := off + int64(len(rest))
+		if n >= 0 {
+			line, next = rest[:n], off+int64(n)+1
+		}
+		l := nudgeLine{Offset: off}
+		if len(bytes.TrimSpace(line)) > 0 {
+			var rec Nudge
+			if len(line) <= 64<<10 && json.Unmarshal(line, &rec) == nil && rec.Schema == nudgeSchema && rec.NudgeID != "" && rec.OwnerEntityID != "" {
+				l.Valid, l.N = true, rec
+			}
+			out = append(out, l)
+		}
+		off = next
+	}
+	return out, raw, nil
+}
+
 // readNudges returns every valid record in the journal (all identities); the caller filters.
 // Damaged lines are counted, never repaired or overwritten.
 func (c *Core) readNudges() ([]Nudge, int, error) {
-	f, err := os.Open(c.file(nudgeFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, 0, nil
-	}
+	lines, _, err := c.readNudgeLines()
 	if err != nil {
 		return nil, 0, err
 	}
-	defer f.Close()
 	var out []Nudge
 	invalid := 0
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 64<<10)
-	for sc.Scan() {
-		var n Nudge
-		if err := json.Unmarshal(sc.Bytes(), &n); err != nil || n.Schema != nudgeSchema || n.NudgeID == "" || n.OwnerEntityID == "" {
+	for _, l := range lines {
+		if !l.Valid {
 			invalid++
 			continue
 		}
-		out = append(out, n)
-	}
-	if err := sc.Err(); err != nil {
-		return nil, invalid, err
+		out = append(out, l.N)
 	}
 	return out, invalid, nil
+}
+
+// ---------- restore fence (Stage 2, design rev 4 §4.6) ----------
+
+const restoreFenceFile = "restore-fence.json"
+
+type restoreFence struct {
+	Schema       string `json:"schema"`
+	RestoredAt   string `json:"restored_at"`
+	Backup       string `json:"backup"`
+	JournalBytes int64  `json:"journal_bytes"`
+	JournalSHA   string `json:"journal_sha256"`
+}
+
+// nudgeFence reads the restore fence written by tass.sh restore_data() and checks it against the
+// journal. It returns the boundary L (drafts whose record starts before L are PRE_RESTORE) and a
+// non-empty lock reason if processing must be refused (read-only RECOVERY_REQUIRED).
+func (c *Core) nudgeFence(lines []nudgeLine, raw []byte) (int64, string) {
+	b, err := os.ReadFile(c.file(restoreFenceFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, dupLock(lines)
+	}
+	var f restoreFence
+	if err != nil || json.Unmarshal(b, &f) != nil || f.Schema != "tass.restore-fence/2" || f.JournalBytes < 0 || len(f.JournalSHA) != 64 {
+		return 0, "the restore fence is unreadable"
+	}
+	if int64(len(raw)) < f.JournalBytes {
+		return f.JournalBytes, "the draft journal is shorter than when it was restored"
+	}
+	sum := sha256.Sum256(raw[:f.JournalBytes])
+	if hex.EncodeToString(sum[:]) != f.JournalSHA {
+		return f.JournalBytes, "the restored part of the draft journal changed since the restore"
+	}
+	for _, l := range lines {
+		if l.Offset < f.JournalBytes && !l.Valid {
+			return f.JournalBytes, "the restored draft journal has an invalid record"
+		}
+	}
+	return f.JournalBytes, dupLock(lines)
+}
+
+// dupLock: the same nudge ID twice anywhere is ambiguous: lock.
+func dupLock(lines []nudgeLine) string {
+	seen := map[string]bool{}
+	for _, l := range lines {
+		if l.Valid {
+			if seen[l.N.NudgeID] {
+				return "the draft journal has a duplicate nudge ID"
+			}
+			seen[l.N.NudgeID] = true
+		}
+	}
+	return ""
+}
+
+// preRestore: nudge IDs with a record starting before the fence boundary.
+func preRestore(lines []nudgeLine, boundary int64) map[string]bool {
+	m := map[string]bool{}
+	for _, l := range lines {
+		if l.Valid && l.Offset < boundary {
+			m[l.N.NudgeID] = true
+		}
+	}
+	return m
 }
 
 // nudgeOpenFile is os.OpenFile; tests replace it to inject write failures.
@@ -285,6 +383,10 @@ func (c *Core) nudgeView(n Nudge) NudgeView {
 		v.Status = "EXPIRED"
 	}
 	v.Processing = nudgeBlocked()
+	if n.RecipientID == "self" {
+		v.Processing = NudgeProcessing{State: "AVAILABLE", Reason: "You can process this nudge once: it makes one model request that develops this Thought by one note. " +
+			"It needs the owner grant cognition.nudge-process and your confirmation each time."}
+	}
 	return v
 }
 
@@ -394,6 +496,10 @@ func (c *Core) NudgeHistory(thoughtID string) (NudgeList, error) {
 	out := NudgeList{OwnerEntityID: scope.identityID, Nudges: []NudgeView{}, InvalidLines: invalid,
 		Positions: NudgePositions, Reasons: NudgeReasons, Processing: nudgeBlocked(),
 		Note: "Manual nudge drafts are local to this computer and never synced to GitHub. Saving a draft makes no model call."}
+	out.Locked = c.processingLock()
+	lines, raw, _ := c.readNudgeLines()
+	boundary, _ := c.nudgeFence(lines, raw)
+	pre := preRestore(lines, boundary)
 	for i := len(all) - 1; i >= 0; i-- {
 		n := all[i]
 		// Owner AND linked Engine entity must match: a relinked Identity does not inherit old drafts.
@@ -403,7 +509,13 @@ func (c *Core) NudgeHistory(thoughtID string) (NudgeList, error) {
 		if thoughtID != "" && n.SourceThoughtID != thoughtID {
 			continue
 		}
-		out.Nudges = append(out.Nudges, c.nudgeView(n))
+		nv := c.nudgeView(n)
+		nv.PreRestore = pre[n.NudgeID]
+		nv.Run = c.runView(n.NudgeID)
+		if nv.PreRestore && nv.Run == nil {
+			nv.Processing = NudgeProcessing{State: "PRE_RESTORE", Reason: "This draft existed before a restore and may already have been processed; it can't be processed again. Use Copy as new."}
+		}
+		out.Nudges = append(out.Nudges, nv)
 		if len(out.Nudges) >= nudgeListMax {
 			break
 		}

@@ -218,6 +218,7 @@ func TestNudgeHTTPRoutes(t *testing.T) {
 		t.Fatalf("processing must be BLOCKED: %v", out["processing"])
 	}
 	id := out["nudge_id"]
+	digest, _ := out["body_digest"].(string)
 	code, out = do(h, post(goodBody))
 	if code != http.StatusOK || out["replayed"] != true || out["nudge_id"] != id {
 		t.Fatalf("replay: %d %v", code, out)
@@ -267,11 +268,21 @@ func TestNudgeHTTPRoutes(t *testing.T) {
 	if err := os.Rename(journal+".moved", journal); err != nil {
 		t.Fatal(err)
 	}
-	// There is no processing route.
-	for _, path := range []string{"/api/nudges/" + fmt.Sprint(id) + "/process", "/api/nudges/process"} {
-		if code, _ := do(h, hreq{method: "POST", path: path, token: "page-token", origin: "http://127.0.0.1:8795", ctype: "application/json", body: "{}"}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
-			t.Fatalf("%s must not exist, got %d", path, code)
-		}
+	// Stage 2: the process route exists, but a nudge to a card position is draft-only, a stale page
+	// digest is refused, and none of it reaches the Engine.
+	pp := func(body string) int {
+		code, _ := do(h, hreq{method: "POST", path: "/api/nudges/" + fmt.Sprint(id) + "/process", token: "page-token",
+			origin: "http://127.0.0.1:8795", ctype: "application/json", body: body})
+		return code
+	}
+	if code := pp(`{"body_digest":"stale"}`); code != http.StatusConflict {
+		t.Fatalf("stale digest: want 409, got %d", code)
+	}
+	if code := pp(fmt.Sprintf(`{"body_digest":%q}`, digest)); code != http.StatusBadRequest {
+		t.Fatalf("card-position nudge: want 400, got %d", code)
+	}
+	if code, _ := do(h, hreq{method: "POST", path: "/api/nudges/" + fmt.Sprint(id) + "/process", body: "{}", ctype: "application/json"}); code != http.StatusUnauthorized {
+		t.Fatalf("process without the page token: want 401, got %d", code)
 	}
 	eng.mu.Lock()
 	defer eng.mu.Unlock()

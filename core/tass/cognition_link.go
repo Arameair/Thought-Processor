@@ -87,6 +87,9 @@ func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
 	if c.cfg.IdentitySvc == nil || !engine.CognitionID.MatchString(engineID) {
 		return CognitionLink{}, ErrCognitionLink
 	}
+	if c.NudgeActive() { // Stage 2 (A-11): never relink under a submitted or running nudge
+		return CognitionLink{}, fmt.Errorf("%w: a nudge is being processed; wait for it or stop it first", ErrCognitionLink)
+	}
 	st := c.cfg.IdentitySvc.State()
 	if st.State != "UNLOCKED" || st.Entity == nil || st.Entity.EntityID == "" {
 		return CognitionLink{}, fmt.Errorf("%w: unlock Identity first", ErrCognitionLink)
@@ -135,6 +138,9 @@ func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
 
 // UnlinkCognition removes the current Identity entity's link (owner action).
 func (c *Core) UnlinkCognition() error {
+	if c.NudgeActive() {
+		return fmt.Errorf("%w: a nudge is being processed; wait for it or stop it first", ErrCognitionLink)
+	}
 	if c.cfg.IdentitySvc == nil {
 		return ErrCognitionLink
 	}
