@@ -1,47 +1,45 @@
-# Thought Processor
+# Thought Processor — local-first companion workspace
 
-**A local-first coordination workspace for identities, independent features, permissions, and observable operations.**
+Thought Processor is the human-facing workspace for an experimental AI companion. It makes actions, permissions, recorded thoughts, and evidence inspectable, so the owner can **teach, supervise, and evaluate** the system instead of trusting model output alone.
 
-Thought Processor is the application people and administrators use to understand and manage a modular system. It **coordinates** work and presents the next meaningful action; it does not itself grant privileges or perform the AI reasoning. [Identity](https://github.com/Arameair/identity) is the authority for durable identities and permissions. Optional features, including [Thought Engine](https://github.com/Arameair/Thought-engine), own their execution and data.
+> **Project status — November 9, 2026:** Active experimental development, **not a public release**. Public `main` is a documentation/portfolio entry point, **not** the runnable TASS installation. Go-based integration lives on development branches and draft pull requests. Owner-host acceptance, security hardening and reproducible public installation remain incomplete.
 
-> **Status · October 27, 2026:** An **owner-promoted runnable P0 Alpha** exists. A more advanced **P1 feature/identity foundation is an unpromoted experiment**, not a production release. Claude reports successful deterministic-fixture integration tests, but the owner has **not yet performed the P1 hands-on acceptance test**. Public `main` is a documentation/portfolio entry point, while `stable` remains an earlier documentation-only snapshot.
+## What is real, and what is not yet proven
 
-## What problem does it solve?
+| Capability | Evidence and limitation |
+| --- | --- |
+| Local conversation | Real Nemotron chat has been exercised on the owner's development machine; this is not an independently reproducible public release. |
+| Cognition | Engine-backed Thought and cycle history can be inspected. Read-only playback **does not execute thinking**. |
+| Manual nudge drafts | Local persistence, authorization checks and zero-model-call behavior have independent test evidence ([workbench audit #99](https://github.com/Arameair/Thought-Processor/pull/99)). Drafting alone is not processing. |
+| Nudge processing | A narrowly supervised design passed review; **implementation is incomplete and runtime acceptance is NOT RUN** ([Stage 2 tracker #100](https://github.com/Arameair/Thought-Processor/issues/100)). |
+| Skill execution and Brain Builder | Experimental; changing a visual graph is not yet verified to change real authorized execution ([acceptance #89](https://github.com/Arameair/Thought-Processor/issues/89)). |
+| Upgrade and release | Safe owner-host backup/restore and release verification remain open ([#79](https://github.com/Arameair/Thought-Processor/issues/79)). |
 
-Independent services often have separate identities, connection states, permission rules and logs. Without a common interface, a user cannot easily tell what is installed, whether services are genuinely authenticated, who may access what, or why an action failed. Thought Processor makes those boundaries understandable **without becoming a monolith or a second security authority**.
+**Next milestone:** Inspect one persistent Thought → write a nudge to TASS → explicitly authorize one model-assisted development → compare the real before/after Thought and correlated receipt. A fixture-model integration pass and a separately approved real-model usefulness demonstration are **different milestones**. See [#100](https://github.com/Arameair/Thought-Processor/issues/100).
 
-| Component | Responsibility | Boundary |
-| --- | --- | --- |
-| **Thought Processor** | Human-facing onboarding, feature library, identity selection, connection/approval workflows, status and safe diagnostics. | Coordinates approved operations, **does not mint grants** or store every feature's data. |
-| **[Identity](https://github.com/Arameair/identity)** | Canonical Admin, entity and installed-feature identities; authorization decisions and grant records. | Separate process; a detected service is not automatically trusted. |
-| **[Thought Engine](https://github.com/Arameair/Thought-engine)** | General reasoning, observations, thoughts and per-identity cognitive history. | Must use Identity's canonical IDs and enforce grants; Engine-local switches cannot grant access. |
-| **[Fast AI Worker](https://github.com/Arameair/fast-ai-worker)** | Intended replaceable processing utility behind Thought Engine. | Has its own installed identity and must validate authorized requests; real integration is pending. |
-| **Other independent features** | Specialized functionality, logs and feature-owned data. | Can have their own workers; installation confers **zero** source/cross-feature grants. |
+## Current engineering references
 
-### How access is meant to work
+- [Pinned Go integration and status index](https://github.com/Arameair/Thought-Processor/blob/af59e7d9213170669eddd4f269ba1f1b50c427e9/core/docs/CURRENT_GO_STACK_20261106.md) — exact source revisions, component responsibilities, tested/untested boundaries and historical/prototype distinction.
+- [Earlier integration candidate PR #88](https://github.com/Arameair/Thought-Processor/pull/88) — reported isolated and fixture-model evidence for its pinned version; **not** the complete November 8 nudge-processing implementation.
+- [Owner acceptance #89](https://github.com/Arameair/Thought-Processor/issues/89) — proposed authorized execution and measured graph A/B; [recovery #79](https://github.com/Arameair/Thought-Processor/issues/79) remains a separate release gate.
+- [Portability review #90](https://github.com/Arameair/Thought-Processor/issues/90) and [C1–C10 conflict cleanup PR #91](https://github.com/Arameair/Thought-Processor/pull/91) — open issues, not completed fixes.
+- [Cognition #82](https://github.com/Arameair/Thought-Processor/issues/82) and [Identity authority](https://github.com/Arameair/identity). Other companion repositories may be private and not accessible to public visitors.
 
-**Discovered ≠ paired ≠ installed ≠ authorized ≠ running.** Processor can help create a disconnected identity with no grants, and that identity can recommend features. Recommendations are **not** permission to install or use them. Reusable grants support autonomous operations for specifically authorized identities and capabilities; Identity and the receiving feature enforce the decision. In the selected v1 policy, protected work fails closed if Identity cannot validate authorization.
+## Component boundaries
 
-## Current software and evidence
+| Area | Responsibility |
+| --- | --- |
+| **Identity** | Canonical identity, authorization, ownership and revocation, independently enforced at each service |
+| **Thought Engine** | Local model-backed thought cycles, persistent Thoughts/Traces, predictions, actual outcome journal and work pulse |
+| **Thought Processor / TASS Core** | One owner/admin interface, supervised learning, approved skills, safe update and orchestration |
+| **Development** | Reviewed ideas/experiments and comparison of prospective capabilities; current integrated /dev is in Core |
+| **Cognition** | Engine-backed, read-only thought library, timeline and sanitized evidence (part of Core, not another service) |
+| **TASS** | Entity-specific descriptive mind and approved lessons; not a second security authority |
 
-| Lane | What exists | What still requires proof |
-| --- | --- | --- |
-| [`alpha` — P0](https://github.com/Arameair/Thought-Processor/tree/alpha) | **Runnable owner-promoted Go baseline** at [`ae9e96b`](https://github.com/Arameair/Thought-Processor/commit/ae9e96bb6004f64fe11edf40ff32dc1bd6ade47e), paired with Identity P0. | Not the final full-featured end-user product or a secure published release. |
-| [P1 cleanup experiment](https://github.com/Arameair/Thought-Processor/tree/experiment/p1-cleanup-claude-20261026) | Identity-first P1 UI, Admin/installation/permission workflow and a **pinned deterministic Python test feature**. [Claude's cleanup report](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/P1_CLEANUP_REPORT_20261026.md) records **81/81 integration** and **15/15 adversarial** checks. | **Owner P1 trial still pending**; only the trusted fixture was installed, **not** Fast AI Worker or Thought Engine. |
-| [Earlier Engine connection prototype](https://github.com/Arameair/Thought-Processor/tree/alpha-candidate-20261026) | Engine attach/observation round trip tested with an explicitly labeled **TEST FIXTURE worker**. | Engine's attach key and legacy permissions are **not** Identity grants. |
-| `main` (this page) | Public documentation, engineering case study, traceable test evidence and attribution. | No runnable source in this branch. |
-| [`stable`](https://github.com/Arameair/Thought-Processor/tree/stable) | Historical documentation baseline. | No accepted runnable Stable snapshot. |
+## Historical experiments and honest limits
 
-**Known limits:** No hostile-code OS isolation, no production-ready Admin recovery, no verified real publisher provenance, and no real Engine/Worker integration against Identity's receiving-service grants. A test fixture is not real AI. See the [status ledger](docs/STATUS.md) and [security/integration boundaries](docs/ARCHITECTURE.md).
+The October 2026 P0/P1 Identity pairing, Python fixture integrations, independent Thought Controller, Chat-Jimmy, standalone Workers and older launchers were legitimate experiments for their specific branches, but **must not be presented as current one-app instructions**. Their original source, test results and audit history remain in Git. No previous approval/CI result is automatically applicable to this newer pinned trio.
 
-## How to inspect and test
+The Go candidates are **local-first and currently Docker/WSL-oriented**, with configurable installation roots, host ports, model and GitHub settings. Full cross-identity isolation, authenticated mobile access and reproducible upgrades still require proof. A browser token on localhost is not sufficient authorization for a phone or Internet-facing API.
 
-- **Understand the architecture:** [Architecture](docs/ARCHITECTURE.md) · [Owner decisions](docs/DECISIONS.md) · [Current status](docs/STATUS.md).
-- **Try the P1 experiment:** [P1 START HERE](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/START_HERE.md) uses **matching Identity and Processor branches**, disposable profiles, real local processes and a clearly labeled deterministic fixture. No Project Controller is required.
-- **See the engineering journey:** [Case study](docs/PROJECT_JOURNEY.md) · [Design history](docs/DESIGN_READINESS_2026-10-26.md) · [Current discussion](https://github.com/Arameair/Thought-Processor/issues/20).
-
-## Teamwork, credit and release policy
-
-Project direction and owner approval: [Arameair](https://github.com/Arameair). This is human-directed, AI-assisted engineering. Claude's experimental implementation, Grok's independent QA and other contributors' work are linked to their actual reports and commits; AI assistance does not imply that any AI vendor endorses this project. [Credits and external technology provenance](docs/CREDITS.md) · [AI collaboration policy](docs/AI_COLLABORATION.md).
-
-`alpha` is owner-controlled. All functional changes require an experimental branch, reproducible tests and an explicit owner **KEEP / REVISE / REJECT / promote** decision. No automated promotion to `alpha`, `stable`, or `main`; documentation-only improvements to `main` do not approve code or release binaries. [Workflow](docs/WORKFLOW.md).
+**Release policy:** Source-built experiments and documentation-only changes do not merge, install, enable autonomy, approve lessons or enlarge grants without a separate owner decision.
