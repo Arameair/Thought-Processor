@@ -77,7 +77,7 @@ function nav(){
 }
 async function get(path,format="json"){
   const r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN}});
-  if(!r.ok)throw new Error("HTTP "+r.status+"; "+(r.status===403?"Identity denied":r.status===401?"missing key":"evidence unavailable"));
+  if(!r.ok){const e=new Error("HTTP "+r.status+"; "+(r.status===403?"Identity denied":r.status===401?"missing key":"evidence unavailable"));e.status=r.status;throw e;}
   return format==="json"?r.json():r.text();
 }
 function message(x,bad=false){$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
@@ -88,7 +88,7 @@ function reveal(el){if(!el)return;el.tabIndex=-1;el.scrollIntoView({block:"neare
 // The bottom "saved Notes" action exists only where it changes something: it is hidden while the
 // saved Notes are already on screen and becomes "Back to saved Notes" in the nudge views.
 // WP0-E async ordering (Codex audit #110): every change of navigation INTENT (open a card, switch
-// view, Back/Forward, Close, refresh) takes a new view generation. An async read records the
+// view, Back/Forward, Close) takes a new view generation. An async read records the
 // generation it started under and, when it settles, may touch the DOM, focus, toast, URL, view state
 // or poll timer ONLY if that generation is still current. So a slow or failed response can never
 // overwrite a newer view. This is presentation only: every read is still authorized by Core/Identity.
@@ -271,6 +271,10 @@ function navTo(st,mode){
   else history.replaceState({cognition:true},"",url);
 }
 function hideSheet(){newView();stop();$("overlay").classList.remove("open");}
+// Remove a closed sheet's content from the page, so no private Note text stays behind in the DOM
+// once the library read was refused or the record is gone.
+function purgeSheet(){for(const id of ["thoughtDetail","fields"])$(id).replaceChildren();
+  for(const id of ["detailKind","detailTitle","detailIntro"])$(id).textContent="";}
 // route(): render whatever the current URL says (initial load, refresh, Back, Forward).
 function route(){
   if(!LIVE)return;
@@ -279,7 +283,13 @@ function route(){
   if(!tid&&!cid){hideSheet();return;}
   const card=tid?S.cards.find(v=>v.kind==="thought"&&v.source_id===tid):S.cards.find(v=>v.id===cid);
   if(!card){
-    hideSheet();navTo({},"replace");
+    hideSheet();purgeSheet();
+    // Repair 2: "not in the cards I hold" means "absent" ONLY against a newly authorized library.
+    // While a library read is pending, or after one was refused, the destination is unknown, not
+    // missing: keep the URL (the newest navigation intent) and say so. The settling read routes it.
+    if(S.libLoading){message("Waiting for the authorized library before opening this link…");return;}
+    if(!S.lib){message("This link can't be opened: Cognition data is not available. Nothing is shown. Use Refresh to try again.",true);return;}
+    navTo({},"replace");
     message((tid?"That Thought":"That record")+" is not in this identity's authorized library (or is no longer recorded). Showing the shelves.",true);
     return;
   }
@@ -350,26 +360,51 @@ function devProposal(){
   const q=new URLSearchParams({cognition_ref:ref,brain_revision:String(S.lib.brain_revision)});
   location.href="/dev?"+q.toString();
 }
+// Repair 2 (Codex re-audit #110): Refresh is a library READ, not a navigation intent.
+//  - It keeps the last successfully authorized library while Core answers, so Back/Forward during a
+//    pending Refresh still finds the card (route() never mistakes "loading" for "absent").
+//  - Library freshness has its own generation (S.libGen), separate from the view generation: only the
+//    newest Refresh may replace the library; an older answer is ignored. A navigation never causes
+//    a Refresh answer to be ignored, so a denial can't be masked by Back/Forward.
+//  - Fail closed: if the newest Refresh is refused or fails, the cards, the link box and the open
+//    sheet (with its Note text) are removed. A superseded Refresh that reports a denial while the
+//    newest is still pending also removes them until the newest answers.
+//  - When the newest answer is accepted, route() re-renders whatever the URL says NOW (each detail
+//    read is authorized again by Core). The URL is rewritten only if its card is truly gone.
+S.libGen=0;S.libLoading=false;
+function dropLibrary(){S.cards=[];S.lib=null;S.selected=null;$("linkbox").hidden=true;$("linkbox").replaceChildren();}
 async function refresh(){
-  newView();stop();S.cards=[];S.lib=null;S.selected=null;
   if(!LIVE){
+    newView();stop();S.cards=[];S.lib=null;S.selected=null;
     $("mode").textContent="PREVIEW ONLY";
     $("banner").className="notice";
     $("banner").textContent="Visual shell preview. No fabricated records are shown. Run this page inside the authenticated Core to view real recorded cognition.";
     draw();return;
   }
-  $("banner").textContent="Reading authorized Go projections…";
+  const f=++S.libGen;S.libLoading=true;
+  $("banner").className="notice";
+  $("banner").textContent=S.lib?"Refreshing… The cards shown are the last authorized library until Core answers.":"Reading authorized Go projections…";
   try{
-    S.lib=await get("/api/cognition/library");
-    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.junctions||[]),...(S.lib.library||[])];
-    drawLink(S.lib.link||{});
+    const lib=await get("/api/cognition/library");
+    if(f!==S.libGen)return; // a newer Refresh owns the library
+    S.libLoading=false;S.lib=lib;S.selected=null;
+    S.cards=[...(lib.thoughts||[]),...(lib.cycles||[]),...(lib.outcomes||[]),...(lib.junctions||[]),...(lib.library||[])];
+    drawLink(lib.link||{});
     $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
     $("banner").className="notice ok";
-    $("banner").textContent="Engine provenance: "+val(S.lib.engine_commit)+
-      ". Identity scope: "+val(S.lib.identity_name)+". "+val(S.lib.note)+
+    $("banner").textContent="Engine provenance: "+val(lib.engine_commit)+
+      ". Identity scope: "+val(lib.identity_name)+". "+val(lib.note)+
       " Nothing plays live or executes work.";
   }catch(e){
-    S.cards=[];$("mode").textContent="EVIDENCE UNAVAILABLE";$("mode").className="chip fail";
+    if(f!==S.libGen){
+      if((e.status===403||e.status===401)&&S.libLoading&&S.lib){
+        dropLibrary();$("mode").textContent="CHECKING";$("mode").className="chip";
+        $("banner").className="notice error";$("banner").textContent="A library read was refused ("+e.message+"). Nothing is shown until the newest read answers.";
+        draw();route();
+      }
+      return;
+    }
+    S.libLoading=false;dropLibrary();$("mode").textContent="EVIDENCE UNAVAILABLE";$("mode").className="chip fail";
     $("banner").className="notice error";$("banner").textContent="Cognition data not available: "+e.message+
       ". No demo records substituted. Identity must authorize the read and Engine must support its API.";
   }

@@ -141,3 +141,53 @@
 1. The generation token is page-local. A second browser tab is independent, as before.
 2. Cycle playback (`advance()`) is a timer, and `select()` already stops it.
 3. The confirmation toast for a POST is suppressed if the owner navigates away mid-request (described above).
+
+---
+
+## Repair 2 (2026-11-10): pending Refresh vs. a newer Back intent
+
+**Finding (Codex re-audit of `479367b`, NEEDS REPAIR):** [PR #110 comment](https://github.com/Arameair/Thought-Processor/pull/110#issuecomment-6767623195); instructions in [#106](https://github.com/Arameair/Thought-Processor/issues/106#issuecomment-6767679891).
+`refresh()` emptied `S.cards`, `S.lib` and `S.selected` *before* awaiting the library GET. A Back pressed during that wait reached `route()`, which found no card, treated a valid destination as missing and replaced the URL with the shelf. The newest intent was lost for good.
+
+**Change (`cmd/tass-core/cognition.html` and `test/browser/cognition_async.py` only).** No server, API, authorization, pin, Engine or Identity change.
+
+1. **Refresh is a library read, not a navigation intent.** It no longer takes a view generation and no longer empties the library before Core answers. The last successfully authorized library stays in place while the read is pending, so `route()` still finds the card. The banner says so: *"Refreshing… The cards shown are the last authorized library until Core answers."*
+2. **Library freshness has its own generation (`S.libGen`), separate from the view generation.** Only the newest Refresh may replace the library; an older answer is ignored. Because a navigation does not change `S.libGen`, Back/Forward can never cause a Refresh answer (including a denial) to be ignored.
+3. **`route()` distinguishes three cases when the URL's card is not among the cards held:**
+   - a library read is pending → *unknown, not absent*: the sheet closes, the URL is kept, the toast says it is waiting, and the settling read routes it;
+   - the library is unavailable (last read refused or failed) → the URL is kept, nothing is shown, and the toast says the data is not available;
+   - a newly authorized library really lacks the card → only then the existing "not in this identity's authorized library" message and `replaceState` to the shelf (no added history entry).
+4. **Fail closed.** If the newest Refresh is refused (403/401) or fails, the cards, the link box and the open sheet are removed, the sheet's content (Note text, history, title) is purged from the page, the chip shows EVIDENCE UNAVAILABLE and the banner states the reason. A superseded Refresh that reports a denial while the newest read is still pending also removes everything until the newest answers. A superseded 200 can never restore cards after a newer denial.
+5. **On an accepted answer** `route()` renders whatever the URL says *now*; every Thought/history read is still authorized again by Core. Refresh adds no history entry.
+
+**Behaviour changes to note.** A failed Refresh now keeps the current URL instead of replacing it with the shelf, so a later authorized Refresh reopens the same view. While a Refresh is pending the open view stays on screen (before, it stayed on screen but its state was already emptied).
+
+**New deterministic checks in `cognition_async.py`** (held library GET, 21 checks per width, 1280/960/390):
+
+| Check | Scenario |
+| --- | --- |
+| F1 | Codex's exact case: Notes → nudge history → Close → held Refresh → Back → release. URL, open sheet, heading and focus compared before and after; history length unchanged; Forward still reaches the shelf |
+| F2 | Held Refresh → Back → Forward → release |
+| F3 | Two consecutive Refresh clicks with different answers, released oldest-first and newest-first |
+| F4 | Held Refresh **denied (403)** after Back: fail closed, Back URL kept, later authorized Refresh opens it |
+| F5 / F6 | Refresh denied (403) / failed (503) while Notes are open: fail closed, Note text removed; retry recovers |
+| F7 | Card really missing from a newly authorized library: honest unavailable route, no added entry |
+| F8 | Superseded denied Refresh while the newest is pending is not masked |
+| F9 | Superseded 200 after the newest denial can't restore cards |
+| F10 | Held Refresh, then another Thought: cross-Thought private Note isolation |
+| F11 | Link followed while the first library read is pending: kept, then opened |
+| F12 | Held Refresh, then Close |
+
+**Red/green (3 runs each, identical failures every run):**
+
+| Page | Result |
+| --- | --- |
+| `479367b` | **FAIL, 48/96**: all 33 earlier checks pass; F1–F9 and F11 fail at every width (F1 exactly as Codex reported: `hash ""`, sheet closed, before and after release) |
+| Repair 2 head | **PASS, 96/96** |
+
+F10 and F12 pass on both: they are guards, not reproductions. Full results for the exact Repair 2 commit are in PR #110.
+
+**Residual notes for Codex:**
+1. An accepted Refresh re-renders the current route, so an unsaved manual-nudge form is reset by Refresh, as it was before.
+2. Any failed library read (not only 403) fails closed; a transient 503 therefore empties the page until the next Refresh.
+3. Codex's own 15-check owner-action fixture is not in this repository and was not run here.
