@@ -45,8 +45,8 @@ func pulseEnum(s string, allowed ...string) string {
 }
 
 // CognitionPulse: same Identity checks as every Cognition read, then a GET of /api/pulse.
-func (c *Core) CognitionPulse() (CognitionPulse, error) {
-	scope, err := c.cognitionAccess()
+func (c *Core) CognitionPulse(rq ...*CognitionReq) (CognitionPulse, error) {
+	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return CognitionPulse{}, err
 	}

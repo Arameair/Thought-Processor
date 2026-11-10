@@ -83,7 +83,7 @@ var ErrCognitionLink = errors.New("Cognition link refused")
 
 // LinkCognition is an explicit owner action (local page token): link the current, unlocked
 // Identity entity to one Engine entity. One Engine entity can belong to only one Identity entity.
-func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
+func (c *Core) LinkCognition(engineID string, rq ...*CognitionReq) (CognitionLink, error) {
 	if c.cfg.IdentitySvc == nil || !engine.CognitionID.MatchString(engineID) {
 		return CognitionLink{}, ErrCognitionLink
 	}
@@ -93,6 +93,9 @@ func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
 	st := c.cfg.IdentitySvc.State()
 	if st.State != "UNLOCKED" || st.Entity == nil || st.Entity.EntityID == "" {
 		return CognitionLink{}, fmt.Errorf("%w: unlock Identity first", ErrCognitionLink)
+	}
+	if r := cognitionReqOf(rq); r != nil && r.Want != nil && r.Want.Identity != st.Entity.EntityID {
+		return CognitionLink{}, ErrCognitionScopeMismatch // before any Identity decision is asked for
 	}
 	d := c.cfg.IdentitySvc.Authorize("thought.process", "thought-processor:cognition.link "+engineID)
 	if !d.Allow || d.DecisionID == "" || d.EntityID != st.Entity.EntityID {
@@ -115,6 +118,9 @@ func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
 	c.cogMu.Lock()
 	defer c.cogMu.Unlock()
 	l := c.loadCognitionLinks()
+	if err := currentLinkPrecondition(rq, st.Entity.EntityID, l); err != nil {
+		return CognitionLink{}, err // the owner acted on a link state that is no longer current; nothing written
+	}
 	for _, x := range l.Links {
 		if x.EngineEntityID == engineID && x.IdentityEntityID != st.Entity.EntityID {
 			return CognitionLink{}, fmt.Errorf("%w: that Engine entity is linked to another Identity entity", ErrCognitionLink)
@@ -137,7 +143,7 @@ func (c *Core) LinkCognition(engineID string) (CognitionLink, error) {
 }
 
 // UnlinkCognition removes the current Identity entity's link (owner action).
-func (c *Core) UnlinkCognition() error {
+func (c *Core) UnlinkCognition(rq ...*CognitionReq) error {
 	if c.NudgeActive() {
 		return fmt.Errorf("%w: a nudge is being processed; wait for it or stop it first", ErrCognitionLink)
 	}
@@ -151,6 +157,9 @@ func (c *Core) UnlinkCognition() error {
 	c.cogMu.Lock()
 	defer c.cogMu.Unlock()
 	l := c.loadCognitionLinks()
+	if err := currentLinkPrecondition(rq, st.Entity.EntityID, l); err != nil {
+		return err // nothing written
+	}
 	kept := l.Links[:0:0]
 	for _, x := range l.Links {
 		if x.IdentityEntityID != st.Entity.EntityID {

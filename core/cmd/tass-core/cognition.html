@@ -28,6 +28,8 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .sheet details{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}.sheet summary{cursor:pointer;color:var(--muted)}
 .readiness{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}.readiness.ready{border-color:#317261}
 .nudgebox.focus{border-color:var(--mint)!important;box-shadow:0 0 0 2px #76d3bd55}
+/* WP0-E: the saved Notes are the first thing on screen and read as the main content, not a footnote. */
+#savedNotes{color:var(--fg);font-size:19px;margin:0 0 4px}#savedNotes:focus{outline:2px solid #76d3bd88;outline-offset:4px}
 </style>
 </head>
 <body>
@@ -35,10 +37,11 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 <section class="hero"><div class="eyebrow">Cognition / The thought library</div><h1>Inside TASS's mind.</h1><p>Browse persistent Thoughts, separate recorded cycles, lessons, learning cells, and skill receipts. Select a card to see the evidence. Nothing on this page executes a cell or approves a skill.</p></section>
 <div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="junction" aria-pressed="false">Junctions</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
 <div id="banner" class="notice" role="status">Loading…</div>
+<div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
 <div id="pulse" class="pulse" aria-live="polite"><span class="k">20-second pulse</span> <span>reading…</span></div>
 <div id="linkbox" class="linkbox" hidden></div><div id="summary" class="summary"></div><main id="shelves"></main>
 <div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
-<button id="expandEngine">What TASS has written</button>
+<button id="expandEngine">Inspect recorded details</button>
 <button id="logs">View Logs</button>
 <button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
 <button id="copy">Copy Evidence</button>
@@ -73,13 +76,92 @@ function nav(){
    [["TASS",""],["Identity",""],["Development",""],["Cognition",""]];
   for(const [title,href] of links){const e=mk(href?"a":"span",title==="Cognition"?"active":"",title);if(href)e.href=href;$("navigation").append(e);}
 }
-async function get(path,format="json"){
-  const r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN}});
-  if(!r.ok)throw new Error("HTTP "+r.status+"; "+(r.status===403?"Identity denied":r.status===401?"missing key":"evidence unavailable"));
-  return format==="json"?r.json():r.text();
+// ---- P0 Cognition lifecycle contract (#106, v2). The page holds NO authority: Core and Identity
+// authorize every request and ATTEST the scope they authorized it under (Identity entity, Engine
+// entity, owner link). The page only decides whether a settled response may still CHANGE anything.
+// Each lifetime has one owner:
+//   S.authEpoch   the committed authorized context (S.scope). Changes when the attested scope changes,
+//                 on a denial, a scope mismatch, a failed newest library read, or a resume.
+//   S.libGen      library request order: only the newest library read commits (Repair 2).
+//   S.snapshot    accepted library snapshots, including same-scope ones.
+//   S.gen         navigation intent: open, switch view, Back/Forward, Close (Repair 1).
+//   S.seq[key]    newest-wins order inside one resource (pulse, nudge history).
+// A request takes a TICKET when it starts. After ANY await, nothing is written (DOM, state, URL, focus,
+// timer, toast, clipboard, download) unless live(ticket) still holds. read() and post() are the only
+// two network paths, so no call site can skip the rule.
+S.authEpoch=0;S.scope=null;S.snapshot=0;S.seq={};S.ctxState="LOADING";S.gen=0;S.navHash=undefined;
+function ticket(kind,key){ // kind: "context" (pulse, timeline cache, link actions) | "view" (everything shown in the sheet)
+  const t={kind,epoch:S.authEpoch,scope:S.scope};
+  if(kind==="view")t.gen=S.gen;
+  if(key){t.key=key;t.seq=S.seq[key]=(S.seq[key]||0)+1;}
+  return t;
 }
-function message(x,bad=false){$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
+function live(t){return t.epoch===S.authEpoch&&(t.gen===undefined||t.gen===S.gen)&&(t.key===undefined||S.seq[t.key]===t.seq);}
+function sameScope(a,b){return !!a&&!!b&&a.identity===b.identity&&a.engine===b.engine&&a.link===b.link;}
+function attested(r){const s={identity:r.headers.get("X-Cognition-Identity")||"",engine:r.headers.get("X-Cognition-Engine")||"",
+  link:r.headers.get("X-Cognition-Link")||""};return s.identity&&s.engine&&s.link?s:null;}
+function expectScope(scope){return scope?{"X-Cognition-Expect-Identity":scope.identity,"X-Cognition-Expect-Engine":scope.engine,
+  "X-Cognition-Expect-Link":scope.link}:{};}
+function httpError(status){return status?"HTTP "+status+"; "+(status===403?"Identity denied":status===401?"missing key":
+  status===412?"the Identity entity or Engine link changed":"evidence unavailable"):"network error; evidence unavailable";}
+// read(): every Cognition GET. The library (kind "library") is the bootstrap: it sends no expectation
+// and its caller applies the library rules. Every other read follows contract v2 §4, in this order:
+//   1 an older authEpoch: drop entirely (even an old denial can't erase a newer context)
+//   2 a current-epoch 401/403: the WHOLE context is invalid, even if the view or resource moved on
+//   3 412, or an attested scope that is not the committed one: invalidate, read the library again
+//   4 only then the full ticket (view generation, resource order) before any effect
+// It returns {ok,data} or {ok:false,error} when the caller may present the result, otherwise null.
+async function read(path,t,format="json"){
+  const lib=t.kind==="library";
+  if(!lib&&!t.scope)return null;
+  let r;
+  try{r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN,...(lib?{}:expectScope(t.scope))}});}
+  catch{return lib?{ok:false,status:0,error:httpError(0)}:(live(t)?{ok:false,status:0,error:httpError(0)}:null);}
+  if(lib){
+    let data=null;if(r.ok){try{data=await r.json();}catch{return {ok:false,status:0,error:"unreadable library"};}}
+    return {ok:r.ok,status:r.status,data,scope:attested(r),error:httpError(r.status)};
+  }
+  if(t.epoch!==S.authEpoch)return null;                                   // 1
+  if(r.status===401||r.status===403){lose("denied",r.status);return null;} // 2
+  if(r.status===412||(r.ok&&!sameScope(attested(r),t.scope))){lose("mismatch");return null;} // 3
+  let data;
+  if(r.ok){try{data=format==="json"?await r.json():format==="blob"?await r.blob():await r.text();}catch{data=undefined;}}
+  if(!live(t))return null;                                                 // 4
+  return r.ok&&data!==undefined?{ok:true,data}:{ok:false,status:r.status,error:httpError(r.ok?0:r.status)};
+}
+// post(): every owner write. It is never retried and never cancelled by navigation. It carries the scope
+// the owner acted under as a narrowing precondition (Core refuses a mismatch with 412 and writes
+// nothing). A 403 here is a write refusal (for example a missing grant), not a context denial.
+// The caller may PRESENT the result only when .live is true; the durable receipt shows it otherwise.
+async function post(path,body,t){
+  let r,d={};
+  try{r=await fetch(path,{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json",...expectScope(t.scope)},
+    body:JSON.stringify(body||{})});d=await r.json().catch(()=>({}));}
+  catch{return {ok:false,status:0,data:{error:"network error: the result is not known; check the history before trying again"},live:live(t)};}
+  if(r.status===412){if(t.epoch===S.authEpoch)lose("mismatch");return {ok:false,status:412,data:d,live:false};}
+  return {ok:r.ok,status:r.status,data:d,live:live(t)};
+}
+// Feedback has three owners: the banner (context state), the shelf notice (route and link-action
+// feedback, fixed wording, no record text) and the toast (the OPEN sheet only; inert while closed).
+function message(x,bad=false){if(!$("overlay").classList.contains("open"))return;$("toast").textContent=x;$("toast").style.color=bad?"var(--rose)":"var(--mint)";}
+function notice(x,bad=false){const n=$("notice");n.textContent=x;n.classList.toggle("hidden",!x);n.classList.toggle("error",!!bad);
+  if(x)n.scrollIntoView({block:"nearest"});}
 function setVisible(id,on){$(id).classList.toggle("hidden",!on);}
+// WP0-E (#106): every sheet action must produce a visible result. reveal() scrolls the new view's
+// heading into view and moves keyboard focus to it, so the owner sees what the click changed.
+function reveal(el){if(!el)return;el.tabIndex=-1;el.scrollIntoView({block:"nearest"});el.focus({preventScroll:true});}
+// The bottom "saved Notes" action exists only where it changes something: it is hidden while the
+// saved Notes are already on screen and becomes "Back to saved Notes" in the nudge views.
+// WP0-E async ordering (Codex audit #110): every change of navigation INTENT (open a card, switch
+// view, Back/Forward, Close) takes a new view generation. An async read records the
+// generation it started under and, when it settles, may touch the DOM, focus, toast, URL, view state
+// or poll timer ONLY if that generation is still current. So a slow or failed response can never
+// overwrite a newer view. This is presentation only: every read is still authorized by Core/Identity.
+S.gen=0;
+function newView(){S.gen++;clearTimeout(S.nudgePoll);S.nudgePoll=null;return S.gen;}
+// Kept from Repair 1 for the view functions below: a navigation-only check.
+function stale(g){return g!==S.gen;}
+function thoughtView(v){S.view=v;if(S.selected?.kind==="thought"&&LIVE)setVisible("expandEngine",v!=="notes");}
 function stop(){if(S.timer!==null){clearInterval(S.timer);S.timer=null;}setVisible("pause",false);}
 function draw(){
   const host=$("shelves");host.replaceChildren();
@@ -111,7 +193,7 @@ function field(container,name,value){
   const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
 }
 function select(x,opts={}){
-  stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  newView();stop();S.selected=x;S.timeline=null;S.timelineReq=null;S.cursor=-1;notice("");
   // P0 navigation: a click adds a browser history entry; Back/Forward (popstate) re-renders without adding one.
   if(!opts.fromHistory)navTo(x.kind==="thought"?{thought:x.source_id}:{card:x.id},"push");
   $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
@@ -124,7 +206,8 @@ function select(x,opts={}){
   $("thoughtDetail").replaceChildren();$("thoughtDetail").classList.remove("open");
   message("");
   const cycle=x.kind==="cycle"||x.kind==="outcome";
-  setVisible("expandEngine",cycle||x.kind==="thought");
+  S.view="";$("expandEngine").textContent=x.kind==="thought"&&LIVE?"Back to saved Notes":"Inspect recorded details";
+  setVisible("expandEngine",cycle||(x.kind==="thought"&&!LIVE));
   setVisible("play",cycle);setVisible("step",cycle);setVisible("pause",false);setVisible("logs",cycle);
   setVisible("copy",true);setVisible("downloadMD",cycle);setVisible("downloadJSON",cycle);
   setVisible("tryDev",x.kind==="thought"||cycle||x.kind==="junction");
@@ -144,11 +227,23 @@ function select(x,opts={}){
   $("overlay").classList.add("open");$("close").focus();
 }
 function cycleID(){return S.selected&&(S.selected.kind==="cycle"||S.selected.kind==="outcome")?S.selected.source_id:"";}
-async function timeline(){
-  if(!cycleID())return;
-  if(S.timeline)return S.timeline;
-  const data=await get("/api/cognition/cycles/"+encodeURIComponent(cycleID())+"/timeline");
-  S.timeline=data;S.cursor=-1;return data;
+// One timeline read per card at a time: Step, Play, View Logs and ArrowRight share it, so overlapping
+// clicks can't race each other. It belongs to the card and the context; each caller still checks its
+// own view generation before drawing. A late answer for a card the owner left is not cached.
+function timeline(){
+  const x=S.selected;
+  if(!cycleID())return Promise.resolve(null);
+  if(S.timeline)return Promise.resolve(S.timeline);
+  if(S.timelineReq&&S.timelineReq.card===x&&S.timelineReq.epoch===S.authEpoch)return S.timelineReq.p;
+  const t=ticket("context");
+  const p=read("/api/cognition/cycles/"+encodeURIComponent(cycleID())+"/timeline",t).then(r=>{
+    if(S.timelineReq&&S.timelineReq.p===p)S.timelineReq=null;
+    if(!r||S.selected!==x||!live(t))return null;
+    if(!r.ok)throw new Error(r.error);
+    S.timeline=r.data;S.cursor=-1;return r.data;
+  });
+  S.timelineReq={card:x,epoch:S.authEpoch,p};
+  return p;
 }
 function showStep(){
   const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
@@ -176,9 +271,11 @@ function showStep(){
   }
 }
 async function loadTimeline(showAll=false){
+  const g=newView();
   try{
     stop();
     const t=await timeline();
+    if(stale(g)||!t)return;
     S.cursor=showAll?(t.steps||[]).length-1:-1;
     showStep();
     if(showAll&&t.steps?.length){
@@ -188,44 +285,54 @@ async function loadTimeline(showAll=false){
         row.type="button";row.onclick=()=>{S.cursor=t.steps.indexOf(e);showStep();};
         list.append(row);
       }
-      $("thoughtDetail").append(mk("h3","","View logs — recorded journal sequence"),list);
+      const head=mk("h3","","View logs — recorded journal sequence");$("thoughtDetail").append(head,list);reveal(head);
     }
-  }catch(e){message("Journal "+e.message,true);}
+  }catch(e){if(!stale(g))message("Journal "+e.message,true);}
 }
 async function advance(){
+  const g=S.gen; // Step/Play is not a navigation intent, but a late timeline must not draw into a newer view
   try{
     const t=await timeline();
+    if(stale(g)||!t)return false;
     if(!t.steps||!t.steps.length){stop();showStep();return false;}
     if(S.cursor+1>=t.steps.length){stop();return false;}
     S.cursor++;showStep();return true;
-  }catch(e){stop();message("Playback "+e.message,true);return false;}
+  }catch(e){if(stale(g))return false;stop();message("Playback "+e.message,true);return false;}
 }
 function copyFallback(text){
   const area=mk("textarea","","");area.value=text;area.rows=9;area.style.width="100%";
   $("thoughtDetail").replaceChildren(area);$("thoughtDetail").classList.add("open");area.select();
   message("Clipboard unavailable. Select and copy the sanitized text shown.",true);
 }
+// Copy and Download deliver only while their view is current (D3). A late export is discarded. A
+// clipboard write that already finished can't be taken back, so nothing is shown about it either.
 async function copyEvidence(){
-  if(!S.selected)return;
-  try{
-    const id=cycleID();
-    const output=id?await get("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format=md","text"):
-      "# Cognition reference only\nKind: "+S.selected.kind+"\nID: "+S.selected.source_id+
-      "\nSource: "+S.selected.source+"\nVerification: "+S.selected.verification+"\nNo execution evidence implied.\n";
-    try{await navigator.clipboard.writeText(output);message("Sanitized evidence copied.");}
-    catch{copyFallback(output);}
-  }catch(e){message("Copy refused: "+e.message,true);}
+  const x=S.selected;if(!x)return;
+  const t=ticket("view"),id=cycleID();
+  let output;
+  if(id){
+    const r=await read("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format=md",t,"text");
+    if(!r)return;
+    if(!r.ok){message("Copy refused: "+r.error,true);return;}
+    output=r.data;
+  }else output="# Cognition reference only\nKind: "+x.kind+"\nID: "+x.source_id+
+      "\nSource: "+x.source+"\nVerification: "+x.verification+"\nNo execution evidence implied.\n";
+  if(!live(t))return;
+  let copied=true;
+  try{await navigator.clipboard.writeText(output);}catch{copied=false;}
+  if(!live(t))return;
+  if(copied)message("Sanitized evidence copied.");else copyFallback(output);
 }
 async function downloadEvidence(format){
   const id=cycleID();if(!id)return;
-  try{
-    const res=await fetch("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format="+format,{
-      method:"GET",headers:{"X-TASS-Token":TOKEN},cache:"no-store"});
-    if(!res.ok)throw new Error("HTTP "+res.status);
-    const blob=await res.blob();const link=document.createElement("a");const obj=URL.createObjectURL(blob);
-    link.href=obj;link.download="cognition-"+id+"."+format;document.body.append(link);link.click();link.remove();
-    setTimeout(()=>URL.revokeObjectURL(obj),1000);message("Sanitized report prepared. Nothing published.");
-  }catch(e){message("Download failed: "+e.message,true);}
+  const t=ticket("view");
+  const r=await read("/api/cognition/cycles/"+encodeURIComponent(id)+"/export?format="+format,t,"blob");
+  if(!r)return;
+  if(!r.ok){message("Download failed: "+r.error,true);return;}
+  const link=document.createElement("a");const obj=URL.createObjectURL(r.data);
+  link.href=obj;link.download="cognition-"+id+"."+format;document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(obj),1000); // cleanup only: changes nothing on screen
+  message("Sanitized report prepared. Nothing published.");
 }
 // ---- P0 (#106): "Cognition shows what was produced". What TASS wrote comes first; IDs and
 // history are below, collapsed. All text is set with textContent (mk/field): nothing is parsed as HTML.
@@ -250,24 +357,46 @@ function navTo(st,mode){
   const hash=navHash(st);const url=location.pathname+location.search+hash;
   if(mode==="push"&&hash!==location.hash)history.pushState({cognition:true},"",url);
   else history.replaceState({cognition:true},"",url);
+  S.navHash=location.hash;
 }
-function hideSheet(){stop();clearTimeout(S.nudgePoll);$("overlay").classList.remove("open");}
+// Repair 3 (Codex re-audit #110): a hidden sheet holds nothing. purgeSheet() removes every piece of
+// record content the detail panel can carry — Note text, question, history, title, kind, summary,
+// fields, toast — and the cached detail state (selection, cycle timeline). It runs
+//   - whenever the sheet closes (Close, Back/Forward to the shelf, an unavailable route), and
+//   - on every authoritative library transition (accepted, refused, failed, superseded denial),
+// BEFORE route() decides what the URL may show. Content comes back only through a new read that
+// Core/Identity authorizes for the current library. The library CARDS are not touched here: they
+// stay until a Refresh settles, which the Refresh/Back repair depends on.
+function purgeSheet(){for(const id of ["thoughtDetail","fields"])$(id).replaceChildren();
+  for(const id of ["detailKind","detailTitle","detailIntro","toast"])$(id).textContent="";
+  S.selected=null;S.timeline=null;S.timelineReq=null;S.cursor=-1;}
+function hideSheet(){newView();stop();$("overlay").classList.remove("open");purgeSheet();notice("");}
 // route(): render whatever the current URL says (initial load, refresh, Back, Forward).
 function route(){
   if(!LIVE)return;
+  S.navHash=location.hash;
   const h=new URLSearchParams(location.hash.slice(1));
   const tid=h.get("thought"),cid=h.get("card");
   if(!tid&&!cid){hideSheet();return;}
   const card=tid?S.cards.find(v=>v.kind==="thought"&&v.source_id===tid):S.cards.find(v=>v.id===cid);
   if(!card){
-    hideSheet();navTo({},"replace");
-    message((tid?"That Thought":"That record")+" is not in this identity's authorized library (or is no longer recorded). Showing the shelves.",true);
+    hideSheet();
+    // Repair 2: "not in the cards I hold" means "absent" ONLY against a newly authorized library.
+    // While a library read is pending, or after one was refused, the destination is unknown, not
+    // missing: keep the URL (the newest navigation intent) and say so. The settling read routes it.
+    // Route feedback goes to the VISIBLE shelf notice, never into the closed sheet.
+    if(S.libLoading){notice("Waiting for the authorized library before opening this link…");return;}
+    if(!S.lib){notice("This link can't be opened: Cognition data is not available. Nothing is shown. Use Refresh to try again.",true);return;}
+    navTo({},"replace");
+    notice((tid?"That Thought":"That record")+" is not in this identity's authorized library (or is no longer recorded). Showing the shelves.",true);
     return;
   }
   const view=h.get("view");
   select(card,{fromHistory:true,dev:h.get("dev")||"",view:view==="nudges"||view==="draft"?view:""});
 }
-window.addEventListener("popstate",route);
+// A manual hash edit fires both hashchange and popstate; one routing pass per navigation.
+function onNav(){if(location.hash!==S.navHash)route();}
+window.addEventListener("popstate",onNav);window.addEventListener("hashchange",onNav);
 function stepLabel(h){
   const ids=[];
   if(h.event_id)ids.push("event "+h.event_id);if(h.trace_id)ids.push("trace "+h.trace_id);else ids.push("trace NOT RECORDED");
@@ -288,13 +417,17 @@ function devCard(d){
 async function showThought(focusRequest){
   const x=S.selected;if(!x)return;
   if(x.kind!=="thought"){await loadTimeline(true);return;}
-  try{
-    const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
-    if(S.selected!==x)return;
+  newView();const t=ticket("view");
+  const r=await read("/api/cognition/thoughts/"+encodeURIComponent(x.source_id),t);
+  if(!r||S.selected!==x)return;
+  if(!r.ok){message("Thought detail "+r.error,true);return;}
+  {
+    const d=r.data;
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-    area.append(mk("h3","","What TASS has written"));
-    field(area,"The Thought's question",d.question);
     const devs=d.developments||[];
+    const head=mk("h3","","Saved Notes — what TASS has written");head.id="savedNotes";area.append(head);
+    area.append(mk("div","meta",devs.length?(d.developments_total||devs.length)+" saved "+((d.developments_total||devs.length)===1?"development":"developments")+", newest first":"No saved Notes yet"));
+    field(area,"The Thought's question",d.question);
     if(!devs.length)area.append(mk("div","empty","No Notes are recorded for this Thought yet."));
     for(const dv of devs)area.append(devCard(dv));
     if(d.developments_truncated)area.append(mk("div","meaning","Showing the newest "+devs.length+" of "+d.developments_total+" developments."));
@@ -313,12 +446,14 @@ async function showThought(focusRequest){
       adv.append(btn);
     }
     area.append(adv);
+    thoughtView("notes");
+    if(!focusRequest)reveal(head);
     if(focusRequest){
       const t=document.getElementById("dev-"+focusRequest);
       if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();navTo({thought:x.source_id,dev:focusRequest},"replace");}
       else message("The Note for request "+focusRequest+" is not among the recorded developments of this Thought.",true);
     }
-  }catch(e){message("Thought detail "+e.message,true);}
+  }
 }
 function devProposal(){
   if(!S.selected||!S.lib)return;
@@ -327,49 +462,109 @@ function devProposal(){
   const q=new URLSearchParams({cognition_ref:ref,brain_revision:String(S.lib.brain_revision)});
   location.href="/dev?"+q.toString();
 }
+// Repair 2 (Codex re-audit #110): Refresh is a library READ, not a navigation intent.
+//  - It keeps the last successfully authorized library while Core answers, so Back/Forward during a
+//    pending Refresh still finds the card (route() never mistakes "loading" for "absent").
+//  - Library freshness has its own generation (S.libGen), separate from the view generation: only the
+//    newest Refresh may replace the library; an older answer is ignored. A navigation never causes
+//    a Refresh answer to be ignored, so a denial can't be masked by Back/Forward.
+//  - A superseded Refresh that reports a denial while the newest is still pending fails closed until
+//    the newest answers; once a newer one has settled, an older denial changes nothing.
+S.libGen=0;S.libLoading=false;
+// transition(): the ONE place the authorized context changes (#106 lifecycle contract). In order:
+// a new authEpoch unless the same scope is simply re-accepted (every older ticket dies); a new view
+// generation, playback and poll stopped, the sheet closed and purged (hideSheet); the shelf notice
+// cleared; the pulse neutral; then the new library or nothing; then route() re-reads whatever the
+// URL asks for through fresh authorized reads. A P0 manual Refresh of the same scope still closes and
+// re-reads the open view (Repair 2/3 behavior); only the epoch is kept.
+function transition(kind,o={}){
+  const keep=kind==="accept"&&S.ctxState==="READY"&&sameScope(o.scope,S.scope);
+  if(!keep)S.authEpoch++;
+  S.snapshot++;
+  hideSheet();
+  if(!keep)$("pulse").replaceChildren(mk("span","k","20-second pulse"),mk("span","","NOT SHOWN: no authorized Cognition context"));
+  if(kind==="accept"){
+    const lib=o.lib;S.scope=o.scope;S.lib=lib;S.ctxState="READY";
+    S.cards=[...(lib.thoughts||[]),...(lib.cycles||[]),...(lib.outcomes||[]),...(lib.junctions||[]),...(lib.library||[])];
+    drawLink(lib.link||{});
+    $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
+    $("banner").className="notice ok";
+    $("banner").textContent="Engine provenance: "+val(lib.engine_commit)+
+      ". Identity scope: "+val(lib.identity_name)+". "+val(lib.note)+
+      " Nothing plays live or executes work.";
+  }else{
+    S.scope=null;S.lib=null;S.cards=[];$("linkbox").hidden=true;$("linkbox").replaceChildren();
+    const checking=kind==="superseded"||kind==="mismatch"||kind==="resume";
+    S.ctxState=checking?"CHECKING":"UNAVAILABLE";
+    $("mode").textContent=checking?"CHECKING":"EVIDENCE UNAVAILABLE";$("mode").className=checking?"chip":"chip fail";
+    $("banner").className="notice error";
+    $("banner").textContent={
+      superseded:"A library read was refused ("+httpError(o.status)+"). Nothing is shown until the newest read answers.",
+      mismatch:"The Identity entity or Engine link changed. Nothing from the previous context is shown. Checking authorization again…",
+      resume:"Checking authorization again after this page was hidden or restored. Nothing is shown until Core answers.",
+      denied:o.status===401?"The Core page key was refused ("+httpError(401)+"). Nothing is shown. Reload the page from Core.":
+        "Identity denied a Cognition read ("+httpError(o.status)+"). Nothing is shown. Unlock Identity, then use Refresh.",
+      failed:"Cognition data not available: "+(o.why||httpError(o.status))+
+        ". No demo records substituted. Identity must authorize the read and Engine must support its API."}[kind];
+  }
+  draw();
+  if(kind==="accept")loadPulse();
+  route();
+}
+// lose(): a current-context read was denied (fail closed; Refresh retries) or answered for another
+// scope (read the library again once; a library answer never triggers another automatic read).
+function lose(why,status){
+  if(why==="mismatch"){revalidate("mismatch");return;}
+  transition("denied",{status});
+}
+function revalidate(kind){S.libLoading=true;transition(kind);refresh();}
 async function refresh(){
-  stop();S.cards=[];S.lib=null;S.selected=null;
   if(!LIVE){
+    newView();stop();S.cards=[];S.lib=null;S.selected=null;
     $("mode").textContent="PREVIEW ONLY";
     $("banner").className="notice";
     $("banner").textContent="Visual shell preview. No fabricated records are shown. Run this page inside the authenticated Core to view real recorded cognition.";
     draw();return;
   }
-  $("banner").textContent="Reading authorized Go projections…";
-  try{
-    S.lib=await get("/api/cognition/library");
-    S.cards=[...(S.lib.thoughts||[]),...(S.lib.cycles||[]),...(S.lib.outcomes||[]),...(S.lib.junctions||[]),...(S.lib.library||[])];
-    drawLink(S.lib.link||{});
-    $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";
-    $("banner").className="notice ok";
-    $("banner").textContent="Engine provenance: "+val(S.lib.engine_commit)+
-      ". Identity scope: "+val(S.lib.identity_name)+". "+val(S.lib.note)+
-      " Nothing plays live or executes work.";
-  }catch(e){
-    S.cards=[];$("mode").textContent="EVIDENCE UNAVAILABLE";$("mode").className="chip fail";
-    $("banner").className="notice error";$("banner").textContent="Cognition data not available: "+e.message+
-      ". No demo records substituted. Identity must authorize the read and Engine must support its API.";
+  const f=++S.libGen;S.libLoading=true;
+  if(S.ctxState==="READY"){$("banner").className="notice";$("banner").textContent="Refreshing… The cards shown are the last authorized library until Core answers.";}
+  else if(S.ctxState==="LOADING"){$("banner").className="notice";$("banner").textContent="Reading authorized Go projections…";}
+  const r=await read("/api/cognition/library",{kind:"library"});
+  if(f!==S.libGen){
+    if((r.status===401||r.status===403)&&S.libLoading&&S.lib)transition("superseded",{status:r.status});
+    return;
   }
-  draw();
-  loadPulse();
-  route();
+  S.libLoading=false;
+  if(!r.ok){transition("failed",{status:r.status,why:r.status?"":r.error});return;}
+  // The library is the bootstrap: its body and Core's attestation must name the same scope.
+  const lib=r.data,sc=r.scope;
+  if(!lib||!sc||lib.identity_entity_id!==sc.identity||(lib.engine_entity_id||"UNLINKED")!==sc.engine||
+     ((lib.link||{}).link?.identity_decision_id||"NONE")!==sc.link){
+    transition("failed",{why:"Core's scope attestation for the library could not be verified"});return;
+  }
+  transition("accept",{lib,scope:sc});
 }
 // ---- #82 P1: the real 20-second pulse (GET only; never starts, steps or pauses it) ----
+// It belongs to the authorized context and has its own newest-wins order (S.seq.pulse). No context, no
+// request. The Engine pulse is Engine-wide; the waiting junctions are this identity's.
 async function loadPulse(){
   if(!LIVE){$("pulse").replaceChildren(mk("span","k","20-second pulse"),mk("span","","NOT CONNECTED (preview)"));return;}
+  if(S.ctxState!=="READY")return;
+  const t=ticket("context","pulse");
+  const r=await read("/api/cognition/pulse",t);
+  if(!r)return;
   const box=$("pulse");
-  try{
-    const p=await get("/api/cognition/pulse");
-    box.replaceChildren();
-    const add=(k,v)=>{const s=mk("span");s.append(mk("span","k",k+" "),mk("b","",val(v)));box.append(s);};
-    add("Engine pulse",p.control);add("every",p.every_s?p.every_s+" s":"NOT RECORDED");add("state",p.state);
-    add("last tick",p.last?p.last.pulse_id+" · "+stamp(p.last.at)+" · "+p.last.trigger+" · "+p.last.state+(p.last.job_id?" · "+p.last.job_id:""):"NOT RECORDED");
-    add("active job",p.active_job||"none");add("queued / running",p.queued+" / "+p.running);
-    add("Core tick",(p.core_tick_every_s||"?")+" s, next "+stamp(p.core_next_tick));
-    const j=p.junctions||{};add("junctions waiting",Object.keys(j).length?Object.entries(j).map(([k,v])=>k+" "+v).join(", "):"none");
-    const t=mk("div","ticks",(p.recent||[]).slice(0,6).map(x=>stamp(x.at)+" "+x.pulse_id+" "+x.trigger+" "+x.state+(x.job_id?" "+x.job_id:"")).join("  ·  ")||"no ticks recorded");
-    box.append(mk("div","ticks",val(p.note)),t);
-  }catch(e){box.replaceChildren(mk("span","k","20-second pulse"),mk("span","","UNAVAILABLE: "+e.message+". Nothing was started."));}
+  if(!r.ok){box.replaceChildren(mk("span","k","20-second pulse"),mk("span","","UNAVAILABLE: "+r.error+". Nothing was started."));return;}
+  const p=r.data;
+  box.replaceChildren();
+  const add=(k,v)=>{const s=mk("span");s.append(mk("span","k",k+" "),mk("b","",val(v)));box.append(s);};
+  add("Engine pulse (whole Engine)",p.control);add("every",p.every_s?p.every_s+" s":"NOT RECORDED");add("state",p.state);
+  add("last tick",p.last?p.last.pulse_id+" · "+stamp(p.last.at)+" · "+p.last.trigger+" · "+p.last.state+(p.last.job_id?" · "+p.last.job_id:""):"NOT RECORDED");
+  add("active job",p.active_job||"none");add("queued / running",p.queued+" / "+p.running);
+  add("Core tick",(p.core_tick_every_s||"?")+" s, next "+stamp(p.core_next_tick));
+  const j=p.junctions||{};add("junctions waiting (this identity)",Object.keys(j).length?Object.entries(j).map(([k,v])=>k+" "+v).join(", "):"none");
+  const tk=mk("div","ticks",(p.recent||[]).slice(0,6).map(x=>stamp(x.at)+" "+x.pulse_id+" "+x.trigger+" "+x.state+(x.job_id?" "+x.job_id:"")).join("  ·  ")||"no ticks recorded");
+  box.append(mk("div","ticks",val(p.note)),tk);
 }
 // ---- #82 P0-A: owner-reviewed Identity ↔ Engine link (an explicit owner action, not playback) ----
 function drawLink(l){
@@ -388,10 +583,13 @@ function drawLink(l){
     if(!(l.candidates||[]).length)box.append(mk("div","","The Engine reports no AI companion entities yet."));
   }
 }
+// Link/Unlink: Core's state wins. A success is reconciled with a fresh library read; a failure is
+// shown on the shelf notice only if the context the owner acted in is still the current one.
 async function ownerPost(path,body){
-  try{const r=await fetch(path,{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("HTTP "+r.status));await refresh();}
-  catch(e){$("banner").className="notice error";$("banner").textContent="Link change refused: "+e.message;}
+  const t=ticket("context");
+  const r=await post(path,body,t);
+  if(r.ok){await refresh();return;}
+  if(r.status!==412&&t.epoch===S.authEpoch)notice("Link change refused: "+(r.data.error||httpError(r.status)),true);
 }
 
 // ---- #96: manual nudge workbench. Save Draft = one local owner write, zero model calls. ----
@@ -406,7 +604,8 @@ function selectBox(options){const s=mk("select","");for(const [v,t] of options){
 function nudgeForm(){
   const x=S.selected;if(!x||x.kind!=="thought")return;
   const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-  area.append(mk("h3","","Manual nudge — draft"));
+  newView();
+  const head=mk("h3","","Manual nudge — draft");area.append(head);
   field(area,"Source persistent Thought",x.source_id);
   field(area,"Sender","The unlocked Identity entity (set by Core, not typed)");
   field(area,"Permission","Saving needs the owner grant cognition.nudge-draft (enable it on Identity's page with your passphrase; revoke any time)");
@@ -424,25 +623,34 @@ function nudgeForm(){
   const how=mk("div","meaning","Saving makes no model call. To process a saved draft addressed to TASS, use “Process once…” on it below; it asks you to confirm.");
   save.onclick=async()=>{
     save.disabled=true;
-    try{
-      const r=await fetch("/api/nudges",{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},
-        body:JSON.stringify({source_thought_id:x.source_id,recipient_id:to.value,reason_code:why.value,requested_action:what.value,
-          priority:pri.value,expires_in_hours:Number(exp.value)||24,idempotency_key:key})});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
-      message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+" (highlighted). Not processed.");
-      navTo({thought:x.source_id,view:"nudges"},"replace"); // the saved form becomes the history view (no extra Back step)
-      await nudgeHistory(x.source_id,d.nudge_id);
-    }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
+    const t=ticket("view");
+    const r=await post("/api/nudges",{source_thought_id:x.source_id,recipient_id:to.value,reason_code:why.value,requested_action:what.value,
+      priority:pri.value,expires_in_hours:Number(exp.value)||24,idempotency_key:key},t);
+    if(!r.live)return; // the owner has moved on; the saved draft (if any) is in the nudge history
+    if(!r.ok){message("Draft not saved: "+(r.data.error||httpError(r.status)),true);save.disabled=false;return;}
+    const d=r.data;
+    message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+" (highlighted). Not processed.");
+    navTo({thought:x.source_id,view:"nudges"},"replace"); // the saved form becomes the history view (no extra Back step)
+    await nudgeHistory(x.source_id,d.nudge_id);
   };
   area.append(save,how);
+  thoughtView("draft");reveal(head);
 }
-async function nudgeHistory(thoughtID,focusNudge){
+// poll=true is the receipt refresh of the SAME view: it keeps the view generation and takes the newest
+// place in the nudge-history order instead, so it never looks like a navigation.
+async function nudgeHistory(thoughtID,focusNudge,poll=false){
   if(!thoughtID)return;
-  try{
-    const d=await get("/api/nudges?thought_id="+encodeURIComponent(thoughtID));
+  if(!poll)newView();
+  const t=ticket("view","nudges");
+  const r=await read("/api/nudges?thought_id="+encodeURIComponent(thoughtID),t);
+  if(!r||S.selected?.source_id!==thoughtID)return;
+  if(!r.ok){message("Nudge history "+r.error,true);return;}
+  {
+    const d=r.data;
+    if(d.owner_entity_id!==undefined&&d.owner_entity_id!==t.scope.identity){lose("mismatch");return;}
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
-    area.append(mk("h3","","Nudge history for "+thoughtID));
+    const head=mk("h3","","Nudge history for "+thoughtID);area.append(head);
+    thoughtView("nudges");
     const rd=d.readiness||{};
     const ready=mk("div","readiness"+(d.processing?.state==="READY"?" ready":""));
     ready.append(mk("b","",d.processing?.reason||"Processing state NOT RECORDED"),
@@ -466,12 +674,13 @@ async function nudgeHistory(thoughtID,focusNudge){
       area.append(box);
     }
     field(area,"Note",d.note);
-    if(focusNudge){const t=document.getElementById("nudge-"+focusNudge);if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();}}
+    const ft=focusNudge&&document.getElementById("nudge-"+focusNudge);
+    if(ft){ft.classList.add("focus");ft.scrollIntoView({block:"center"});ft.focus();}else reveal(head);
     // While a run is open, refresh its receipt (reads only; nothing is ever re-sent).
     if((d.nudges||[]).some(n=>n.run&&(n.run.state==="SUBMITTED"||n.run.state==="RUNNING"))){
-      clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if($("thoughtDetail").textContent.includes("Nudge history for "+thoughtID))nudgeHistory(thoughtID);},3000);
+      clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if(live(t)&&!document.hidden)nudgeHistory(thoughtID,undefined,true);},3000);
     }
-  }catch(e){message("Nudge history "+e.message,true);}
+  }
 }
 // ---- Stage 2: process ONE confirmed nudge to TASS himself, stop it, or copy it. ----
 const RUN_TEXT={SUBMITTED:"Accepted locally; not confirmed by the Engine yet",RUNNING:"The Engine is developing the Thought",
@@ -483,13 +692,10 @@ function runFields(box,r){
     ["Model request",r.request_id],["Developed at",r.step_at?stamp(r.step_at):""],["Verified",r.state==="COMPLETED"?(r.verified?"yes":"NO"):""],
     ["Suggested state (never applied)",r.engine?.suggested_state],["Process decision",r.process_decision_id],["Stop decision",r.stop_decision_id]])if(v)field(box,k,v);
 }
-async function nudgePost(path,body){
-  const r=await fetch(path,{method:"POST",cache:"no-store",headers:{"X-TASS-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
-  return d;
-}
+function failText(r){return r.data.error||httpError(r.status);}
 function nudgeActions(box,n,d,thoughtID){
+  // A process/stop/copy result updates the screen only if the owner is still on this history view
+  // (post().live); otherwise the durable receipt shows the outcome next time the history is opened.
   const row=mk("div","");row.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px";
   // P0: offered only when Core's derived state is READY (grant/lock/Engine/run/draft all checked);
   // the confirmation, Identity's bound decision and the Engine's P1/P2 checks still decide.
@@ -510,9 +716,10 @@ function nudgeActions(box,n,d,thoughtID){
       const ok=mk("button","","Confirm: process once");ok.type="button";
       const no=mk("button","","Cancel");no.type="button";no.onclick=()=>{c.remove();b.disabled=false;};
       ok.onclick=async()=>{ok.disabled=true;no.disabled=true;
-        try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/process",{body_digest:n.body_digest});
-          message(r.note||"Processing: "+(RUN_TEXT[r.run?.state]||r.run?.state));await nudgeHistory(thoughtID);}
-        catch(e){message("Not processed: "+e.message,true);ok.disabled=false;no.disabled=false;}};
+        const r=await post("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/process",{body_digest:n.body_digest},ticket("view"));
+        if(!r.live)return;
+        if(!r.ok){message("Not processed: "+failText(r),true);ok.disabled=false;no.disabled=false;return;}
+        message(r.data.note||"Processing: "+(RUN_TEXT[r.data.run?.state]||r.data.run?.state));await nudgeHistory(thoughtID);};
       c.append(ok,no);box.append(c);
     };
     row.append(b);
@@ -520,19 +727,28 @@ function nudgeActions(box,n,d,thoughtID){
   if(n.run&&n.run.can_stop){
     const s=mk("button","","Stop this nudge");s.type="button";
     s.onclick=async()=>{s.disabled=true;
-      try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
-        message(r.run?.state==="NOT_DELIVERED"?"Stopped: the model will never be asked for this nudge.":"Too late to stop: "+(RUN_TEXT[r.run?.state]||r.run?.state));
-        await nudgeHistory(thoughtID);}catch(e){message("Not stopped: "+e.message,true);s.disabled=false;}};
+      const r=await post("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop",{},ticket("view"));
+      if(!r.live)return;
+      if(!r.ok){message("Not stopped: "+failText(r),true);s.disabled=false;return;}
+      message(r.data.run?.state==="NOT_DELIVERED"?"Stopped: the model will never be asked for this nudge.":"Too late to stop: "+(RUN_TEXT[r.data.run?.state]||r.data.run?.state));
+      await nudgeHistory(thoughtID);};
     row.append(s);
     // D14: copying a submitted nudge stops it first; the copy is made only if the stop succeeded.
     const sc=mk("button","","Stop and copy as new");sc.type="button";
     sc.onclick=async()=>{sc.disabled=true;
-      try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
-        if(r.run?.state!=="NOT_DELIVERED"){message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.run?.state]||r.run?.state)+"). Wait for it to finish.",true);await nudgeHistory(thoughtID);return;}
-        const c=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
-          requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Stopped, and copied as new draft "+c.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,c.nudge_id);}
-      catch(e){message("Not done: "+e.message,true);sc.disabled=false;}};
+      const t=ticket("view");
+      const r=await post("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop",{},t);
+      if(!r.ok){if(r.live){message("Not done: "+failText(r),true);sc.disabled=false;}return;}
+      if(r.data.run?.state!=="NOT_DELIVERED"){if(r.live){message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.data.run?.state]||r.data.run?.state)+"). Wait for it to finish.",true);await nudgeHistory(thoughtID);}return;}
+      // D4: the second write needs the SAME authorized context. A view change alone doesn't cancel it; a
+      // changed or lost context does: the stop receipt is durable and the copy needs renewed intent.
+      if(t.epoch!==S.authEpoch)return;
+      const c=await post("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
+        requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()},t);
+      if(!c.live)return;
+      if(!c.ok){message("Stopped, but not copied: "+failText(c),true);await nudgeHistory(thoughtID);return;}
+      message("Stopped, and copied as new draft "+c.data.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");
+      await nudgeHistory(thoughtID,c.data.nudge_id);};
     row.append(sc);
   }
   if(n.pre_restore||(n.run&&n.run.can_copy)){
@@ -541,15 +757,26 @@ function nudgeActions(box,n,d,thoughtID){
       const risky=n.pre_restore||n.run?.state==="UNCERTAIN"||n.run?.state==="RECOVERY_REQUIRED";
       if(risky&&!cp.dataset.armed){cp.dataset.armed="1";cp.textContent="Copy anyway (the original may already have run; this may repeat it)";return;}
       cp.disabled=true;
-      try{const r=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
-          requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Copied as new draft "+r.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,r.nudge_id);}
-      catch(e){message("Not copied: "+e.message,true);cp.disabled=false;}};
+      const r=await post("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
+        requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()},ticket("view"));
+      if(!r.live)return;
+      if(!r.ok){message("Not copied: "+failText(r),true);cp.disabled=false;return;}
+      message("Copied as new draft "+r.data.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");
+      await nudgeHistory(thoughtID,r.data.nudge_id);};
     row.append(cp);
   }
   if(row.children.length)box.append(row);
 }
-setInterval(()=>{if(LIVE&&!document.hidden)loadPulse();},10000);
+setInterval(()=>{if(LIVE&&!document.hidden&&S.ctxState==="READY")loadPulse();},10000);
+// Resume (contract v2 §6): while hidden, playback and the receipt poll stop. A page that comes back,
+// or is restored from the back/forward cache, may show a context that changed elsewhere: nothing
+// private is presented as current until Core answers a fresh library read. The URL (intent) stays.
+document.addEventListener("visibilitychange",()=>{
+  if(!LIVE)return;
+  if(document.hidden){stop();clearTimeout(S.nudgePoll);S.nudgePoll=null;S.wasHidden=true;return;}
+  if(S.wasHidden){S.wasHidden=false;revalidate("resume");}
+});
+window.addEventListener("pageshow",e=>{if(LIVE&&e.persisted)revalidate("resume");});
 nav();
 $("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{

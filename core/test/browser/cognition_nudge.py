@@ -7,6 +7,7 @@ highlighted, and the only POST the page makes is /api/nudges."""
 import json, sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 HTML=(Path(__file__).resolve().parents[2]/"cmd/tass-core/cognition.html").read_text()
@@ -24,6 +25,7 @@ NFP={"state":"NOT_FOR_PROCESSING","reason":"Only drafts addressed to TASS himsel
 SUMMARY={"state":"NOT_READY","reason":"Not ready: the owner grant cognition.nudge-process is not enabled on Identity's page. Saving drafts still works."}
 saved=[]; posts=[]
 def route(req):
+    req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     r=req.request; url=r.url
     if url==ORIGIN+"/cognition":
         req.fulfill(status=200,content_type="text/html",body=HTML.replace("__PAGE_TOKEN__","fixture-token"));return

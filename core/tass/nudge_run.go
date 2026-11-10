@@ -328,11 +328,11 @@ func (c *Core) activeRun(except string) string {
 func (c *Core) NudgeActive() bool { return c.activeRun("") != "" }
 
 // processScope: C1 for one nudge. Returns the draft, the scope and whether it is pre-restore.
-func (c *Core) nudgeForAction(id string) (Nudge, cognitionScope, error) {
+func (c *Core) nudgeForAction(id string, rq ...*CognitionReq) (Nudge, cognitionScope, error) {
 	if !nudgeIDOK(id) {
 		return Nudge{}, cognitionScope{}, fmt.Errorf("%w: invalid nudge ID", ErrNudgeInvalid)
 	}
-	scope, err := c.cognitionAccess()
+	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return Nudge{}, scope, err
 	}
@@ -384,12 +384,12 @@ func (c *Core) isPreRestore(id string) bool {
 }
 
 // ProcessNudge is the owner's "Process once". created=true means 202 (accepted locally).
-func (c *Core) ProcessNudge(id, bodyDigest string) (*RunView, bool, error) {
+func (c *Core) ProcessNudge(id, bodyDigest string, rq ...*CognitionReq) (*RunView, bool, error) {
 	st := c.nrs()
 	st.admitMu.Lock()
 	defer st.admitMu.Unlock()
 	// C1
-	n, scope, err := c.nudgeForAction(id)
+	n, scope, err := c.nudgeForAction(id, rq...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -479,11 +479,11 @@ func (c *Core) dispatchNudge(ctx context.Context, sub submittedRec, attention st
 }
 
 // StopNudge is the owner's "Stop this nudge": a bound cognition.nudge.stop decision → Engine void.
-func (c *Core) StopNudge(id string) (*RunView, error) {
+func (c *Core) StopNudge(id string, rq ...*CognitionReq) (*RunView, error) {
 	st := c.nrs()
 	st.admitMu.Lock()
 	defer st.admitMu.Unlock()
-	n, scope, err := c.nudgeForAction(id)
+	n, scope, err := c.nudgeForAction(id, rq...)
 	if err != nil {
 		return nil, err
 	}

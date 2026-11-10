@@ -14,6 +14,7 @@ A11 half-window (960x1000) and phone (390x844): question + newest Note visible w
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML = (Path(__file__).resolve().parents[2] / "cmd/tass-core/cognition.html").read_text()
 ORIGIN = "http://127.0.0.1:8795"
@@ -59,6 +60,7 @@ def nudges():
 
 
 def route(req):
+    req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     r = req.request
     url = r.url
     if url.split("#")[0] == ORIGIN + "/cognition":
@@ -107,7 +109,7 @@ with sync_playwright() as p:
             note = pg.locator("#dev-mr_0001 .note")
             assert note.inner_text() == XSS, note.inner_text()
             text = area.inner_text()
-            for want in ["What TASS has written", "What is the fixture notebook skill's purpose?", "request mr_0001", "nudge " + NID,
+            for want in ["Saved Notes — what TASS has written", "2 saved developments, newest first", "What is the fixture notebook skill's purpose?", "request mr_0001", "nudge " + NID,
                          "suggested state: resolve — not applied", "not that it answers", "Note is no longer stored"]:
                 assert want in text, (want, text)
             # A7: literal text, nothing executed, no element created from it.

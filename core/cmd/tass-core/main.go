@@ -297,39 +297,91 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         if !authed(r) {http.Error(w,"Cognition token required",http.StatusUnauthorized);return false}
         return true
     }
+    // #106 lifecycle contract v2 §2: a scope refusal is 412 with a distinct code, never a generic 409,
+    // never a record payload and never an attestation header.
+    scopeJSON := func(w http.ResponseWriter,status int,v map[string]string) {
+        w.Header().Set("Cache-Control","no-store")
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        w.WriteHeader(status)
+        json.NewEncoder(w).Encode(v)
+    }
+    scopeFail := func(w http.ResponseWriter,code string) {
+        scopeJSON(w,http.StatusPreconditionFailed,map[string]string{"code":code,
+            "error":"The Identity entity or Engine link this page shows is not the current one. Nothing was read or written; reload the library."})
+    }
+    scopeErr := func(w http.ResponseWriter,err error) bool {
+        switch {
+        case errors.Is(err,tass.ErrCognitionScopeMismatch): scopeFail(w,"SCOPE_MISMATCH")
+        case errors.Is(err,tass.ErrCognitionScopeChanged): scopeFail(w,"SCOPE_CHANGED")
+        default: return false
+        }
+        return true
+    }
     cognitionErr := func(w http.ResponseWriter,err error) {
+        if scopeErr(w,err) {return}
         if errors.Is(err,tass.ErrCognitionDenied) {
             http.Error(w,"Identity denied Cognition read",http.StatusForbidden)
         } else {
             http.Error(w,"Cognition evidence NOT RECORDED or temporarily unavailable",http.StatusServiceUnavailable)
         }
     }
+    // cognitionExpect reads the page's expected scope: a NARROWING precondition, never a grant.
+    // No expectation (a non-browser caller) keeps the previous behavior; a malformed one is refused.
+    cognitionExpect := func(w http.ResponseWriter,r *http.Request)(*tass.CognitionReq,bool){
+        rq:=&tass.CognitionReq{}
+        id,eng,link:=r.Header.Get("X-Cognition-Expect-Identity"),r.Header.Get("X-Cognition-Expect-Engine"),r.Header.Get("X-Cognition-Expect-Link")
+        if id==""&&eng==""&&link=="" {return rq,true}
+        want:=tass.CognitionScope{Identity:id,Engine:eng,Link:link}
+        if !tass.ValidCognitionScope(want) {
+            scopeJSON(w,http.StatusBadRequest,map[string]string{"code":"SCOPE_INVALID","error":"malformed expected Cognition scope"})
+            return nil,false
+        }
+        rq.Want=&want
+        return rq,true
+    }
+    // attest: the response-boundary check, then the scope headers. Runs before any payload byte.
+    attest := func(w http.ResponseWriter,rq *tass.CognitionReq) bool {
+        if err:=core.CognitionRevalidate(rq.Got);err!=nil {cognitionErr(w,err);return false}
+        h:=w.Header()
+        h.Set("X-Cognition-Identity",rq.Got.Identity)
+        h.Set("X-Cognition-Engine",rq.Got.Engine)
+        h.Set("X-Cognition-Link",rq.Got.Link)
+        return true
+    }
     mux.HandleFunc("GET /api/cognition/library",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
-        library,err:=core.CognitionLibrary()
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        library,err:=core.CognitionLibrary(rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(library)
     })
     // #82 P1: the real pulse and Core tick, read-only (one GET to the Engine; never a control call).
     mux.HandleFunc("GET /api/cognition/pulse",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
-        p,err:=core.CognitionPulse()
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        p,err:=core.CognitionPulse(rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(p)
     })
     mux.HandleFunc("GET /api/cognition/thoughts/{id}",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
-        view,err:=core.CognitionThought(r.PathValue("id"))
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        view,err:=core.CognitionThought(r.PathValue("id"),rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(view)
     })
     mux.HandleFunc("GET /api/cognition/cycles/{id}/timeline",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
-        view,err:=core.CognitionTimeline(r.PathValue("id"))
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        view,err:=core.CognitionTimeline(r.PathValue("id"),rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(view)
     })
@@ -343,8 +395,10 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         if !engine.CognitionID.MatchString(id){
             http.Error(w,"invalid cycle ID",http.StatusBadRequest);return
         }
-        raw,media,err:=core.CognitionExport(id,format,version)
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        raw,media,err:=core.CognitionExport(id,format,version,rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return} // headers only: the sanitized downloadable body is unchanged
         suffix:=".md"
         if format=="json"{suffix=".json"}
         w.Header().Set("Content-Type",media+"; charset=utf-8")
@@ -554,13 +608,17 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         var body struct{ EngineEntityID string `json:"engine_entity_id"` }
         if !pagePost(w,r,&body){return}
         w.Header().Set("Cache-Control","no-store")
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
         switch r.PathValue("action") {
         case "link":
-            l,err:=core.LinkCognition(body.EngineEntityID)
+            l,err:=core.LinkCognition(body.EngineEntityID,rq)
+            if scopeErr(w,err){return}
             if err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
             reply(w,http.StatusOK,l)
         case "unlink":
-            if err:=core.UnlinkCognition();err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
+            err:=core.UnlinkCognition(rq)
+            if scopeErr(w,err){return}
+            if err!=nil{reply(w,http.StatusConflict,map[string]string{"error":err.Error()});return}
             reply(w,http.StatusOK,map[string]string{"ok":"unlinked"})
         default:
             reply(w,http.StatusNotFound,map[string]string{"error":"link or unlink"})
@@ -571,8 +629,10 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
     // is a separate owner action below (Stage 2: bound single-use cognition.nudge.process decision).
     mux.HandleFunc("GET /api/nudges",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
-        list,err:=core.NudgeHistory(r.URL.Query().Get("thought_id"))
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        list,err:=core.NudgeHistory(r.URL.Query().Get("thought_id"),rq)
         if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(list)
     })
@@ -580,7 +640,9 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         var body tass.NudgeDraft
         if !pagePost(w,r,&body){return}
         w.Header().Set("Cache-Control","no-store")
-        v,err:=core.SaveNudgeDraft(body)
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        v,err:=core.SaveNudgeDraft(body,rq)
+        if scopeErr(w,err){return}
         switch {
         case err==nil && v.Replayed:
             reply(w,http.StatusOK,v)
@@ -605,11 +667,13 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         var body struct{ BodyDigest string `json:"body_digest"` }
         if !pagePost(w,r,&body){return}
         w.Header().Set("Cache-Control","no-store")
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
         id:=r.PathValue("id")
         var v *tass.RunView
         var accepted bool
         var err error
-        if process { v,accepted,err=core.ProcessNudge(id,body.BodyDigest) } else { v,err=core.StopNudge(id) }
+        if process { v,accepted,err=core.ProcessNudge(id,body.BodyDigest,rq) } else { v,err=core.StopNudge(id,rq) }
+        if scopeErr(w,err){return}
         switch {
         case err==nil && accepted:
             reply(w,http.StatusAccepted,map[string]any{"run":v,"note":"accepted locally; delivery to the Engine not confirmed yet"})
