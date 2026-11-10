@@ -164,7 +164,9 @@ function cycleID(){return S.selected&&(S.selected.kind==="cycle"||S.selected.kin
 async function timeline(){
   if(!cycleID())return;
   if(S.timeline)return S.timeline;
+  const x=S.selected;
   const data=await get("/api/cognition/cycles/"+encodeURIComponent(cycleID())+"/timeline");
+  if(S.selected!==x)return data; // the owner left this card: don't cache its timeline
   S.timeline=data;S.cursor=-1;return data;
 }
 function showStep(){
@@ -212,12 +214,14 @@ async function loadTimeline(showAll=false){
   }catch(e){if(!stale(g))message("Journal "+e.message,true);}
 }
 async function advance(){
+  const g=S.gen; // Step/Play is not a navigation intent, but a late timeline must not draw into a newer view
   try{
     const t=await timeline();
+    if(stale(g))return false;
     if(!t.steps||!t.steps.length){stop();showStep();return false;}
     if(S.cursor+1>=t.steps.length){stop();return false;}
     S.cursor++;showStep();return true;
-  }catch(e){stop();message("Playback "+e.message,true);return false;}
+  }catch(e){if(stale(g))return false;stop();message("Playback "+e.message,true);return false;}
 }
 function copyFallback(text){
   const area=mk("textarea","","");area.value=text;area.rows=9;area.style.width="100%";
@@ -270,11 +274,18 @@ function navTo(st,mode){
   if(mode==="push"&&hash!==location.hash)history.pushState({cognition:true},"",url);
   else history.replaceState({cognition:true},"",url);
 }
-function hideSheet(){newView();stop();$("overlay").classList.remove("open");}
-// Remove a closed sheet's content from the page, so no private Note text stays behind in the DOM
-// once the library read was refused or the record is gone.
+// Repair 3 (Codex re-audit #110): a hidden sheet holds nothing. purgeSheet() removes every piece of
+// record content the detail panel can carry — Note text, question, history, title, kind, summary,
+// fields, toast — and the cached detail state (selection, cycle timeline). It runs
+//   - whenever the sheet closes (Close, Back/Forward to the shelf, an unavailable route), and
+//   - on every authoritative library transition (accepted, refused, failed, superseded denial),
+// BEFORE route() decides what the URL may show. Content comes back only through a new read that
+// Core/Identity authorizes for the current library. The library CARDS are not touched here: they
+// stay until a Refresh settles, which the Refresh/Back repair depends on.
 function purgeSheet(){for(const id of ["thoughtDetail","fields"])$(id).replaceChildren();
-  for(const id of ["detailKind","detailTitle","detailIntro"])$(id).textContent="";}
+  for(const id of ["detailKind","detailTitle","detailIntro","toast"])$(id).textContent="";
+  S.selected=null;S.timeline=null;S.cursor=-1;}
+function hideSheet(){newView();stop();$("overlay").classList.remove("open");purgeSheet();}
 // route(): render whatever the current URL says (initial load, refresh, Back, Forward).
 function route(){
   if(!LIVE)return;
@@ -283,7 +294,7 @@ function route(){
   if(!tid&&!cid){hideSheet();return;}
   const card=tid?S.cards.find(v=>v.kind==="thought"&&v.source_id===tid):S.cards.find(v=>v.id===cid);
   if(!card){
-    hideSheet();purgeSheet();
+    hideSheet();
     // Repair 2: "not in the cards I hold" means "absent" ONLY against a newly authorized library.
     // While a library read is pending, or after one was refused, the destination is unknown, not
     // missing: keep the URL (the newest navigation intent) and say so. The settling read routes it.
@@ -366,13 +377,13 @@ function devProposal(){
 //  - Library freshness has its own generation (S.libGen), separate from the view generation: only the
 //    newest Refresh may replace the library; an older answer is ignored. A navigation never causes
 //    a Refresh answer to be ignored, so a denial can't be masked by Back/Forward.
-//  - Fail closed: if the newest Refresh is refused or fails, the cards, the link box and the open
-//    sheet (with its Note text) are removed. A superseded Refresh that reports a denial while the
+//  - Fail closed: if the newest Refresh is refused or fails, the cards, the link box and the sheet's
+//    content (open or already closed) are removed. A superseded Refresh that reports a denial while the
 //    newest is still pending also removes them until the newest answers.
 //  - When the newest answer is accepted, route() re-renders whatever the URL says NOW (each detail
 //    read is authorized again by Core). The URL is rewritten only if its card is truly gone.
 S.libGen=0;S.libLoading=false;
-function dropLibrary(){S.cards=[];S.lib=null;S.selected=null;$("linkbox").hidden=true;$("linkbox").replaceChildren();}
+function dropLibrary(){S.cards=[];S.lib=null;purgeSheet();$("linkbox").hidden=true;$("linkbox").replaceChildren();}
 async function refresh(){
   if(!LIVE){
     newView();stop();S.cards=[];S.lib=null;S.selected=null;
@@ -387,7 +398,7 @@ async function refresh(){
   try{
     const lib=await get("/api/cognition/library");
     if(f!==S.libGen)return; // a newer Refresh owns the library
-    S.libLoading=false;S.lib=lib;S.selected=null;
+    S.libLoading=false;S.lib=lib;purgeSheet(); // nothing rendered from the previous library survives; route() re-reads
     S.cards=[...(lib.thoughts||[]),...(lib.cycles||[]),...(lib.outcomes||[]),...(lib.junctions||[]),...(lib.library||[])];
     drawLink(lib.link||{});
     $("mode").textContent="LIVE / READ ONLY";$("mode").className="chip good";

@@ -191,3 +191,47 @@ F10 and F12 pass on both: they are guards, not reproductions. Full results for t
 1. An accepted Refresh re-renders the current route, so an unsaved manual-nudge form is reset by Refresh, as it was before.
 2. Any failed library read (not only 403) fails closed; a transient 503 therefore empties the page until the next Refresh.
 3. Codex's own 15-check owner-action fixture is not in this repository and was not run here.
+
+---
+
+## Repair 3 (2026-11-10): a hidden detail panel holds no private content
+
+**Finding (Codex re-audit of `0377368`, NEEDS REPAIR):** [PR #110 comment](https://github.com/Arameair/Thought-Processor/pull/110#issuecomment-6768626408); proposal in [#106](https://github.com/Arameair/Thought-Processor/issues/106#issuecomment-6768682021).
+`purgeSheet()` ran only when the URL named a missing card. Closing to the shelf only hid the sheet, and `dropLibrary()` did not touch it. So after Close, the Note text, question, title, summary and fields stayed in the hidden DOM through a refused, failed, replaced or identity-changed library read.
+
+**Change (`cmd/tass-core/cognition.html`, new `test/browser/cognition_privacy.py`).** No server, API, authorization, pin, Engine or Identity change. `S.libGen` and `S.gen` stay separate and the Refresh/Back behaviour is unchanged.
+
+1. **One purge, used everywhere.** `purgeSheet()` empties `#thoughtDetail`, `#fields`, `#detailKind`, `#detailTitle`, `#detailIntro` and `#toast`, and clears the cached detail state (`S.selected`, `S.timeline`, `S.cursor`).
+2. **It runs whenever the sheet closes**: `hideSheet()` now purges (Close, Escape, backdrop, Back/Forward to the shelf, unavailable route).
+3. **It runs on every authoritative library transition**, before `route()` decides what the URL may show: accepted library (same owner, changed owner, card removed), refused, failed, and a superseded denial. Content returns only through a new read that Core/Identity authorizes.
+4. **Library cards are not purged while a Refresh is pending.** They are replaced only when a Refresh settles, which the Repair 2 Refresh/Back fix depends on.
+5. **Late cycle timeline.** `timeline()` no longer caches a timeline for a card the owner has left, and Step/Play (`advance()`) no longer draws a late timeline into a newer or closed view.
+
+**New deterministic test `cognition_privacy.py`** (20 checks per width, 1280/960/390). It inspects each content element, the whole closed `.sheet` (text and markup), the whole document where the record is no longer authorized, and the cached state, using unique private markers.
+
+| Check | Scenario |
+| --- | --- |
+| P1 | Close empties the sheet at once |
+| P2 / P3 | Closed Note, then Refresh refused (403) / unavailable (503) |
+| P4 | Closed Note, then an authorized library without the card |
+| P5 | Closed Note, then the library changes from Owner A to Owner B |
+| P6a / P6b | Superseded 403 while a newer GET is held; the newer GET then succeeds without the card |
+| P7a–c | 403 / 503 / identity change while the Note is still open: purged when the read settles |
+| P8a–c | Navigation with the card still valid: held Refresh + Back, Forward to an empty shelf sheet, Close + Back re-reads the Note |
+| P9 | A different Thought: nothing of A in the open or closed B view |
+| P10a–d | Delayed Thought detail, delayed detail after a refused Refresh, delayed nudge history, delayed cycle timeline |
+| P11 | Zero non-GET requests, no page errors |
+
+**Red/green (3 runs each, identical failures every run):**
+
+| Page | Result |
+| --- | --- |
+| `0377368` | **FAIL, 24/60**. Codex's six cases (P2, P3, P4, P5, P6a, P6b) fail at every width, as do P1, P8b, P9, P10a, P10c and P10d |
+| Repair 3 head | **PASS, 60/60** |
+
+P7a–c, P8a, P8c, P10b and P11 pass on both revisions; they guard behaviour that was already correct. Full results for the exact Repair 3 commit are in PR #110.
+
+**Residual notes for Codex:**
+1. The toast is inside the sheet, so a message written while the sheet is closed (missing record, unavailable library) is not visible to the owner. That predates this work (`42d4d7d`); the banner carries the unavailable state. Those messages contain no record content.
+2. The shelf cards of the current authorized library stay on the page, including while a Refresh is pending. They are removed or replaced when the read settles.
+3. The pulse strip is a separate read and is not purged by a superseded denial; it holds job and pulse IDs, not Note content.
