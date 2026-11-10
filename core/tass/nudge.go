@@ -483,12 +483,12 @@ func (c *Core) nudgeView(n Nudge) NudgeView {
 
 // SaveNudgeDraft validates, checks the source Thought, asks Identity, then appends one record.
 // It makes zero model calls: the Engine is only read (GET) through CognitionThought.
-func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
+func (c *Core) SaveNudgeDraft(d NudgeDraft, rq ...*CognitionReq) (NudgeView, error) {
 	recipientKind, expiry, err := d.normalize()
 	if err != nil {
 		return NudgeView{}, err
 	}
-	scope, err := c.cognitionAccess()
+	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return NudgeView{}, err
 	}
@@ -570,11 +570,11 @@ func (c *Core) SaveNudgeDraft(d NudgeDraft) (NudgeView, error) {
 }
 
 // NudgeHistory lists this Identity entity's nudges (newest first), optionally for one source Thought.
-func (c *Core) NudgeHistory(thoughtID string) (NudgeList, error) {
+func (c *Core) NudgeHistory(thoughtID string, rq ...*CognitionReq) (NudgeList, error) {
 	if thoughtID != "" && !engine.CognitionID.MatchString(thoughtID) {
 		return NudgeList{}, ErrCognitionUnavailable
 	}
-	scope, err := c.cognitionAccess()
+	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return NudgeList{}, err
 	}

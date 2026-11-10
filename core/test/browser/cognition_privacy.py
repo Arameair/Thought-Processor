@@ -34,6 +34,7 @@ import json
 import sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped, scope_of
 
 HTML_PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "cmd/tass-core/cognition.html"
 HTML = HTML_PATH.read_text()
@@ -120,6 +121,7 @@ class Server:
         return 404, "{}"
 
     def route(self, req):
+        req = scoped(req, scope_of(self.lib))  # Core attests the scope it authorized (#106 lifecycle contract)
         r = req.request
         path = r.url.replace(ORIGIN, "").split("#")[0]
         if r.method != "GET":

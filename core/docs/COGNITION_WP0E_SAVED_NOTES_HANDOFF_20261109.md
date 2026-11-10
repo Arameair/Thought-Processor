@@ -235,3 +235,57 @@ P7a–c, P8a, P8c, P10b and P11 pass on both revisions; they guard behaviour tha
 1. The toast is inside the sheet, so a message written while the sheet is closed (missing record, unavailable library) is not visible to the owner. That predates this work (`42d4d7d`); the banner carries the unavailable state. Those messages contain no record content.
 2. The shelf cards of the current authorized library stay on the page, including while a Refresh is pending. They are removed or replaced when the read settles.
 3. The pulse strip is a separate read and is not purged by a superseded denial; it holds job and pulse IDs, not Note content.
+
+---
+
+## Lifecycle contract implementation (2026-11-10)
+
+Implements the [reviewed lifecycle contract v2](https://github.com/Arameair/Thought-Processor/issues/106#issuecomment-6770249528) on top of `e6d407b`. Engine `40d4e91` and Identity `cfc4079` are unchanged. This replaces per-function repairs with one rule set.
+
+### Core (Go)
+
+| Change | Where |
+| --- | --- |
+| Every 2xx Cognition GET (library, pulse, Thought, nudge history, timeline, export) carries `X-Cognition-Identity`, `X-Cognition-Engine` (`UNLINKED` if none) and `X-Cognition-Link` (the owner link's Identity decision ID, or `NONE`) | `tass/cognition_scope.go`, `cmd/tass-core/main.go` |
+| A request may send `X-Cognition-Expect-*`. It only narrows: Core runs every normal Identity check, and a mismatch is refused with **412 `SCOPE_MISMATCH`** before any record is read or any write starts. Requests without it behave as before | `cognitionAccess()`, nudge save/process/stop, link/unlink |
+| Response boundary: after the Engine read, Core rechecks Identity state and the link file. A change is answered **412 `SCOPE_CHANGED`** (or 403 if locked) with no payload and no attestation | `CognitionRevalidate()` |
+| A malformed expectation is refused with 400 `SCOPE_INVALID` | `main.go` |
+
+Identity decisions per read stay at 2. The boundary check adds one read-only Identity state request per read (measured: 2–3 state requests per read in total); Identity `cfc4079` writes no audit record for it.
+
+### Page (`cognition.html`)
+
+| Rule | Mechanism |
+| --- | --- |
+| One owner per lifetime | `S.authEpoch` (authorized context), `S.libGen` (library order), `S.snapshot`, `S.gen` (navigation), `S.seq[key]` (pulse, nudge history order) |
+| One network path each way | `read()` for every GET, `post()` for every owner write; two `fetch(` call sites in total |
+| Validation order for non-library reads | older epoch → drop; current-epoch 401/403 → fail the whole context closed; 412 or wrong attested scope → invalidate and read the library once; then the full ticket |
+| One transition | `transition()` is the only place the context changes: new epoch, sheet closed and purged, notice cleared, pulse neutral, library replaced or dropped, then `route()` |
+| Pulse | context ticket + newest-wins order; neutral on every transition; no polling without a context |
+| Copy / Download | delivered only while their view is current; a late result is discarded |
+| Owner writes | never cancelled or retried by navigation; carry the scope the owner acted under; a POST 403 is write feedback only; Stop→Copy sends the copy only in the same context |
+| Feedback | banner = context state; new shelf notice = route and link feedback; toast only while the sheet is open |
+| Resume | hidden→visible or back/forward-cache restore: timers stop, sheet and shelf are hidden, URL kept, library read again |
+| Timeline | one shared read per card for Step, Play and View Logs |
+
+### Tests
+
+| Suite | `e6d407b` | Implementation |
+| --- | --- | --- |
+| New `cognition_scope_test.go` (Go, HTTP level, held Engine read) | 5 of 6 FAIL (the sixth is a guard on Identity decision count) | 6 of 6 PASS |
+| New `cognition_lifecycle.py` (140 checks × 3 widths + 1 structural) | **306/421** | **421/421** |
+| `cognition_async.py` (now 99: R6 changed, R6b added, F4/F7/F11 read the shelf notice) | 87/99 | 99/99 |
+| `cognition_nav.py` (N6 reads the visible shelf notice) | FAIL | 3/3 |
+| `cognition_affordance.py` (E5: a current 403 fails the page closed) | FAIL | 3/3 |
+| `cognition_privacy.py`, `cognition_p0`, `cognition_go`, `cognition_nudge`, `cognition_process` (fixtures send Core's scope headers; no assertion changed) | PASS | PASS |
+
+Assertions changed in existing suites, all required by the contract: `cognition_nav.py` N6, `cognition_affordance.py` E5, `cognition_async.py` R6, F4, F7, F11. R6's original intent (a late non-denial error must not disturb the current view) is kept as new check R6b.
+
+### Limitations
+
+1. `main.go` writes the attestation headers after the boundary check and before the body; a change in the microseconds between that check and the browser receiving the bytes is not detectable by any design. The page's own attestation check and the next read cover it.
+2. A superseded library read that returns 412 is ignored; the newest read decides.
+3. An already-completed clipboard write cannot be taken back; the page shows nothing about it.
+4. A second browser tab is independent. Resume hides the shelf until Core answers; the owner has not been asked whether a "revalidating" shelf would be preferable.
+5. The pulse strip labels the Engine pulse as Engine-wide and the waiting junctions as this identity's; the Engine pulse fields themselves are not identity-scoped data.
+6. Not run: Docker, the installed owner stack, owner data, real Nemotron, an owner walkthrough, and Codex's private fixtures.

@@ -19,6 +19,7 @@ Checked at 1280x1000, 960x1000 and 390x844:
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML = (Path(__file__).resolve().parents[2] / "cmd/tass-core/cognition.html").read_text()
 ORIGIN = "http://127.0.0.1:8795"
@@ -57,6 +58,7 @@ writes = []
 
 
 def route(req):
+    req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     r = req.request
     url = r.url
     path = url.replace(ORIGIN, "").split("#")[0]
@@ -145,7 +147,10 @@ with sync_playwright() as p:
             for frag in ["#thought=nope", "#card=cycle%3Azzz", "#thought=..%2F..%2Fsecrets&dev=%3Cimg%20src%3Dx%20onerror%3Dwindow.__x%3D1%3E",
                          "#thought=%3Cscript%3Ewindow.__x%3D1%3C%2Fscript%3E"]:
                 pg.goto(ORIGIN + "/"); pg.goto(ORIGIN + "/cognition" + frag); pg.wait_for_selector(".tile")  # a fresh load of the link
-                pg.wait_for_function("document.getElementById('toast').textContent.includes('not in this identity')")
+                # #106 lifecycle contract: route feedback is a VISIBLE shelf notice, never text in the closed sheet.
+                pg.wait_for_function("(document.getElementById('notice')||{textContent:''}).textContent.includes('not in this identity')")
+                assert pg.evaluate("(()=>{const n=document.getElementById('notice');if(!n)return false;const r=n.getBoundingClientRect(),s=getComputedStyle(n);return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0})()"), ("N6 notice visible", frag)
+                assert pg.evaluate("document.getElementById('toast').textContent") == "", ("N6 nothing written into the closed sheet", frag)
                 assert not sheet_open(pg) and pg.url == ORIGIN + "/cognition", (frag, pg.url)
                 assert pg.evaluate("window.__x") is None
             pg.goto(ORIGIN + "/"); pg.goto(ORIGIN + "/cognition#thought=thought_2")

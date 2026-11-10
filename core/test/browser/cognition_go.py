@@ -4,6 +4,7 @@ Does not start Core, change settings, or execute any operation."""
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML=(Path(__file__).resolve().parents[2]/"cmd/tass-core/cognition.html").read_text()
 ORIGIN="http://127.0.0.1:8795"
@@ -40,6 +41,7 @@ TIMELINE={"cycle_id":"tp_1","thought_id":"thought_1","link_status":"VERIFIED-LIN
  "missing":["spark","evaluation"],"truncated":False,"partial":False}
 REPORT="# Cognition — sanitized recorded cycle\nCycle: tp_1\nOutcome: NO_ACTION\nNo execution evidence.\n"
 def fake_route(req,fail=False):
+    req=scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     url=req.request.url
     if req.request.method!="GET":
         req.fulfill(status=405,body="NO ACTION");return

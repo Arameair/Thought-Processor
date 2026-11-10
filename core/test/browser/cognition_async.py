@@ -11,7 +11,9 @@ the visible view, URL, focus and toast must still describe the NEWEST intent.
   R3 rapid history -> Back -> Forward with all three reads held, released newest-first and oldest-last
   R4 cross-Thought: delayed Thought A, Close, open Thought B -> B stays; A's private Note never appears
   R5 delayed Thought detail, then Close -> the sheet stays closed, no toast
-  R6 delayed ERROR (403) for an abandoned view -> no error toast over the current view
+  R6 delayed DENIAL (403) for an abandoned view of the CURRENT context -> the page fails closed
+     (#106 lifecycle contract D2 / v2 §4 step 2: navigation can't mask a current-context denial)
+  R6b delayed ERROR (503) for an abandoned view -> no error toast over the current view (R6's original intent)
   R7 nudge-history poll (running run) is cancelled by navigation; a held poll response is ignored
   R8 delayed Thought detail on a direct link, then Back to the shelf -> shelf stays
   R9 zero non-GET requests; no page errors
@@ -40,6 +42,7 @@ import json
 import sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML_PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "cmd/tass-core/cognition.html"
 HTML = HTML_PATH.read_text()
@@ -112,6 +115,7 @@ class Server:
         return 404, "{}"
 
     def route(self, req):
+        req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
         r = req.request
         path = r.url.replace(ORIGIN, "").split("#")[0]
         if r.method != "GET":
@@ -160,6 +164,8 @@ def view(pg):
         dom:document.getElementById('thoughtDetail').textContent+'|'+document.getElementById('detailTitle').textContent,
         open:o,notes:!!document.getElementById('savedNotes')&&o,nudges:o&&t.includes('Nudge history for'),
         text:o?document.querySelector('.sheet').innerText:'',hash:location.hash,toast:document.getElementById('toast').textContent,
+        notice:(document.getElementById('notice')||{textContent:''}).textContent,noticeVisible:(()=>{const n=document.getElementById('notice');if(!n)return false;const r=n.getBoundingClientRect(),s=getComputedStyle(n);return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0})(),
+        tiles:document.querySelectorAll('.tile').length,banner:document.getElementById('banner').textContent,
         focus:document.activeElement&&(document.activeElement.id||document.activeElement.tagName)}}""")
 
 
@@ -279,8 +285,22 @@ with sync_playwright() as p:
             toast0 = view(pg)["toast"]
             SRV.release(pg)
             v = view(pg)
-            check("R6 delayed error from an abandoned view: no error toast, history stays",
+            check("R6 delayed denial from an abandoned view of the current context: the page fails closed, URL kept",
+                  not v["open"] and v["tiles"] == 0 and "Identity denied" in v["banner"] and v["toast"] == ""
+                  and "view=nudges" in v["hash"], v)
+            SRV.deny.clear()
+
+            # R6b — delayed NON-denial error for the abandoned view: no effect on the current view
+            fresh(); SRV.fail.add("/api/cognition/thoughts/thought_a"); SRV.hold.add("/api/cognition/thoughts/thought_a")
+            open_thought(pg, "alpha thought"); SRV.wait_held(pg, 1)
+            SRV.hold.clear()
+            pg.get_by_role("button", name="Nudge history").click(); pg.wait_for_selector("text=Nudge history for thought_a")
+            toast0 = view(pg)["toast"]
+            SRV.release(pg)
+            v = view(pg)
+            check("R6b delayed 503 from an abandoned view: no error toast, history stays",
                   v["nudges"] and v["toast"] == toast0 and "Thought detail" not in v["toast"], v)
+            SRV.fail.clear()
             SRV.deny.clear()
 
             # R7 — poll cancelled by navigation; held poll response ignored
@@ -364,7 +384,7 @@ with sync_playwright() as p:
             v = view(pg)
             check("F4 denied Refresh after Back: fails closed with a truthful state",
                   closed_clean(v) and "not available" in v["banner"] and "Identity denied" in v["banner"] and v["mode"] == "EVIDENCE UNAVAILABLE"
-                  and "can't be opened" in v["toast"], v)
+                  and "can't be opened" in v["notice"] and v["noticeVisible"] and v["toast"] == "", v)
             check("F4 denied Refresh keeps the Back destination in the URL, no entry added", v["hash"] == HISTORY_HASH and v["hlen"] == h0, v)
             SRV.deny.clear(); click_refresh(pg); pg.wait_for_timeout(700)
             check("F4 a later authorized Refresh opens the kept destination", history_open(view(pg)) and view(pg)["tiles"] == 2, view(pg))
@@ -391,7 +411,8 @@ with sync_playwright() as p:
             v = view(pg)
             check("F7 card missing from the NEW authorized library: honest unavailable route, only then",
                   before["notes"] and before["hash"] == "#thought=thought_a" and not v["open"] and v["hash"] == "" and v["tiles"] == 1
-                  and "not in this identity's authorized library" in v["toast"] and NOTE_A not in v["dom"] and v["hlen"] == h0, {"before": before, "after": v})
+                  and "not in this identity's authorized library" in v["notice"] and v["noticeVisible"] and v["toast"] == ""
+                  and NOTE_A not in v["dom"] and v["hlen"] == h0, {"before": before, "after": v})
 
             # F8 — a superseded DENIED Refresh is not masked while the newest is pending
             fresh(); open_thought(pg, "alpha thought"); settle(pg, "text=" + NOTE_A)
@@ -437,7 +458,8 @@ with sync_playwright() as p:
             SRV.hold.clear(); SRV.release(pg); pg.wait_for_timeout(300)
             v = view(pg)
             check("F11 link during the first library read: kept while pending, opened on release",
-                  not before["open"] and before["hash"] == HISTORY_HASH and "Waiting" in before["toast"] and history_open(v), {"before": before, "after": v})
+                  not before["open"] and before["hash"] == HISTORY_HASH and "Waiting" in before["notice"] and before["noticeVisible"]
+                  and history_open(v), {"before": before, "after": v})
 
             # F12 — held Refresh, then Close
             fresh(); open_thought(pg, "alpha thought"); settle(pg, "#savedNotes")

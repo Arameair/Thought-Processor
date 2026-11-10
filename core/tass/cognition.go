@@ -114,15 +114,20 @@ func cognitionField(name,value string) CognitionField {
 }
 type cognitionScope struct{
     identityID,name,engineID,engineCommit string
-    link CognitionLinkState
+    link CognitionLinkState // link.Link (when set) is the owner link record the scope's discriminator names
 }
-func (c *Core) cognitionAccess()(cognitionScope,error){
+// cognitionAccess authorizes one Cognition request. rq (optional, #106 lifecycle contract) narrows it
+// to the scope the page expects and receives the scope it was authorized under.
+func (c *Core) cognitionAccess(rq ...*CognitionReq)(cognitionScope,error){
     var out cognitionScope
+    r:=cognitionReqOf(rq)
     if c.cfg.IdentitySvc==nil {return out,ErrCognitionDenied}
     state:=c.cfg.IdentitySvc.State()
     if state.State!="UNLOCKED"||state.Entity==nil||state.Entity.EntityID==""||state.Entity.Name=="" {
         return out,ErrCognitionDenied
     }
+    // A different entity is refused before any Identity decision is asked for or any record is read.
+    if r!=nil&&r.Want!=nil&&r.Want.Identity!=state.Entity.EntityID {return out,ErrCognitionScopeMismatch}
     for _,action:=range []string{"conversation","thought.process"}{
         d:=c.cfg.IdentitySvc.Authorize(action,"thought-processor:cognition.read")
         if !d.Allow||d.DecisionID==""||d.EntityID!=state.Entity.EntityID {
@@ -144,6 +149,9 @@ func (c *Core) cognitionAccess()(cognitionScope,error){
     // #82 P0-A: only an owner-reviewed link (canonical Identity entity → Engine entity) scopes
     // Engine data. A matching display name is never used as evidence.
     out.engineID,out.link=c.resolveEngineEntity(out.identityID,out.name,status)
+    got:=out.attested()
+    if !ValidCognitionScope(got){return out,ErrCognitionUnavailable}
+    if err:=r.narrow(got);err!=nil{return out,err}
     return out,nil
 }
 // cognitionOwnedCycle: a cycle belongs to this identity ONLY when its recorded Engine entity is
@@ -151,8 +159,8 @@ func (c *Core) cognitionAccess()(cognitionScope,error){
 func cognitionOwnedCycle(cy engine.CognitionCycle,scope cognitionScope)bool {
     return scope.engineID!="" && cy.EntityID!="" && cy.EntityID==scope.engineID
 }
-func (c *Core) CognitionLibrary()(CognitionLibrary,error){
-    scope,err:=c.cognitionAccess()
+func (c *Core) CognitionLibrary(rq ...*CognitionReq)(CognitionLibrary,error){
+    scope,err:=c.cognitionAccess(rq...)
     if err!=nil{return CognitionLibrary{},err}
     out:=CognitionLibrary{IdentityEntityID:scope.identityID,EngineEntityID:scope.engineID,
         IdentityName:scope.name,EngineCommit:scope.engineCommit,ObservedAt:c.now().UTC(),
@@ -295,11 +303,11 @@ func cognitionCycleOutcome(c engine.CognitionCycle) string{
     if c.Outcome==nil{return "NOT RECORDED"}
     return c.Outcome.Status
 }
-func (c *Core) CognitionThought(id string)(CognitionThought,error){return c.cognitionThought(id,true)}
+func (c *Core) CognitionThought(id string,rq ...*CognitionReq)(CognitionThought,error){return c.cognitionThought(id,true,rq...)}
 // cognitionThought: withDevelopments=false for internal checks (e.g. SaveNudgeDraft, which holds
 // nudgeMu; developments read the nudge journal under nudgeMu, and Note text isn't needed there).
-func (c *Core) cognitionThought(id string,withDevelopments bool)(CognitionThought,error){
-    scope,err:=c.cognitionAccess()
+func (c *Core) cognitionThought(id string,withDevelopments bool,rq ...*CognitionReq)(CognitionThought,error){
+    scope,err:=c.cognitionAccess(rq...)
     if err!=nil{return CognitionThought{},err}
     if !engine.CognitionID.MatchString(id)||scope.engineID==""{return CognitionThought{},ErrCognitionUnavailable}
     raw,err:=c.engine.CognitionThought(scope.engineID,id)
@@ -377,8 +385,8 @@ func cognitionSafeStep(x engine.RecordedStep) engine.RecordedStep {
     return out
 }
 
-func (c *Core) CognitionTimeline(id string)(CognitionTimeline,error){
-    scope,err:=c.cognitionAccess()
+func (c *Core) CognitionTimeline(id string,rq ...*CognitionReq)(CognitionTimeline,error){
+    scope,err:=c.cognitionAccess(rq...)
     if err!=nil{return CognitionTimeline{},err}
     if !engine.CognitionID.MatchString(id){return CognitionTimeline{},ErrCognitionUnavailable}
     cy,err:=c.engine.CognitionCycle(id)
@@ -437,9 +445,9 @@ type CognitionReport struct{
     Verification string `json:"verification"`
     IdentityEvidence string `json:"identity_evidence"`
 }
-func (c *Core) CognitionExport(id,format,coreVersion string)([]byte,string,error){
+func (c *Core) CognitionExport(id,format,coreVersion string,rq ...*CognitionReq)([]byte,string,error){
     if format!="json"&&format!="md" {return nil,"",fmt.Errorf("unsupported Cognition export format")}
-    v,err:=c.CognitionTimeline(id)
+    v,err:=c.CognitionTimeline(id,rq...)
     if err!=nil{return nil,"",err}
     if len(coreVersion)>64 {coreVersion="NOT RECORDED"}
     report:=CognitionReport{Format:"Cognition sanitized v1",CoreVersion:coreVersion,

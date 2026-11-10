@@ -5,6 +5,7 @@ when allowed; a PRE_RESTORE draft offers Copy (with a warning step), never Proce
 import json, sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML=(Path(__file__).resolve().parents[2]/"cmd/tass-core/cognition.html").read_text()
 ORIGIN="http://127.0.0.1:8795"; NOW="2026-11-08T15:00:00Z"
@@ -19,6 +20,7 @@ def nudge(i,**kw):
     n.update(kw); return n
 state={"run":None,"gets":0}; posts=[]
 def route(req):
+    req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     r=req.request; url=r.url
     if url==ORIGIN+"/cognition":
         req.fulfill(status=200,content_type="text/html",body=HTML.replace("__PAGE_TOKEN__","t"));return

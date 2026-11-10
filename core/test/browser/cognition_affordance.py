@@ -20,6 +20,7 @@ Checked at 1280x1000, 960x1000 and 390x844:
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from cognition_scope_fixture import scoped
 
 HTML = (Path(__file__).resolve().parents[2] / "cmd/tass-core/cognition.html").read_text()
 ORIGIN = "http://127.0.0.1:8795"
@@ -54,6 +55,7 @@ writes = []
 
 
 def route(req):
+    req = scoped(req)  # Core attests the scope of every 2xx read (#106 lifecycle contract)
     r = req.request
     path = r.url.replace(ORIGIN, "").split("#")[0]
     if r.method != "GET":
@@ -145,8 +147,11 @@ with sync_playwright() as p:
             mode["denied"] = True
             pg.goto(ORIGIN + "/cognition"); pg.reload(); pg.wait_for_selector(".tile")
             pg.get_by_role("button", name="Inspect identity test (fixture)").click()
-            pg.wait_for_function("document.getElementById('toast').textContent.includes('Thought detail HTTP 403; Identity denied')")
-            assert pg.locator("#savedNotes").count() == 0 and NOTE not in pg.locator(".sheet").inner_text(), "E5 nothing invented"
+            # #106 lifecycle contract (D2, v2 §4 step 2): a current-context 403 fails the WHOLE page closed and says so.
+            pg.wait_for_function("document.getElementById('banner').textContent.includes('Identity denied')")
+            assert pg.locator("#savedNotes").count() == 0 and NOTE not in pg.content(), "E5 nothing invented, nothing left in the page"
+            assert pg.locator(".tile").count() == 0 and not pg.evaluate("document.getElementById('overlay').classList.contains('open')"), "E5 failed closed"
+            assert "thought=" in pg.url, ("E5 the URL is kept for a later authorized retry", pg.url)
             # E6
             assert not writes, ("E6 no writes", writes)
             assert not errs, errs
