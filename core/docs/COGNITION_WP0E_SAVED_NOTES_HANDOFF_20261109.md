@@ -67,3 +67,77 @@
   2. Is the hide/show logic correct across Thought → Nudge history → Back to saved Notes → Back/Forward?
   3. Is there any new data path, write or Note-text exposure?
   4. Is the `1cd08b6` pin unchanged?
+
+---
+
+## Repair 1 (2026-11-10): async view ordering, the delta for Codex's focused re-audit
+
+**Source.** Codex audit [PR #110 comment 6766665902](https://github.com/Arameair/Thought-Processor/pull/110#issuecomment-6766665902) (NEEDS REPAIR) and the assignment in [#106 comment 6766771303](https://github.com/Arameair/Thought-Processor/issues/106#issuecomment-6766771303). Scope is P0 only: no Stage 1, Engine, Identity, permission, merge or deploy.
+
+**Root cause** (pre-existing on `1cd08b6`; still present at `4b5fea6`):
+- `showThought` checked only that the selected card *object* was unchanged after its GET. Switching views on the **same** Thought didn't change that object, so a slow detail response replaced the nudge history.
+- `nudgeHistory` didn't check anything after its GET, so a slow history response replaced the Saved Notes after Back.
+- The same exposure applied to:
+  - **error toasts** from abandoned reads;
+  - the **3-second receipt poll** (it re-armed itself, and its "still on the history?" test read the DOM text);
+  - **owner-action results** (Save draft, Process, Stop, Copy) that re-rendered the history after the owner had moved on.
+
+**Fix** (`core/cmd/tass-core/cognition.html` only, +36 / −18):
+- **A view generation token.** Every change of navigation **intent** takes a new generation through `newView()`, which also cancels the receipt poll. The intents are:
+  - `select()` (including Back/Forward/direct link through `route()`);
+  - `hideSheet()` (Close, or the shelf route);
+  - `refresh()`;
+  - `showThought()`;
+  - `nudgeHistory()`;
+  - `nudgeForm()`;
+  - `loadTimeline()`.
+- **Stale reads are ignored.** Each async read remembers its generation. When it settles, it may touch the DOM, focus, toast, URL, view state or poll timer **only if** `!stale(g)`. Stale successes and stale errors alike are dropped.
+- **The poll is tied to the view.** It re-arms only if its generation is still current (no more DOM-text check), so leaving the history cancels it.
+- **Owner-action results** (Process / Stop / Stop-and-copy / Copy / Save draft) update the screen only while the owner is still on the view they started from (`live()`). The write itself is unaffected, and its durable receipt appears the next time the history is opened. This is the one intentional behaviour change: if the owner navigates away during a POST, its confirmation toast is not shown.
+- **Unchanged:**
+  - authorization (every read is still authorized server-side; the token is presentation only);
+  - Note privacy and `textContent` rendering;
+  - Back/Forward/refresh (`42d4d7d`);
+  - the Saved Notes usability fix;
+  - nudge processing;
+  - `tass.sh` pins (Engine `40d4e91`, Identity `cfc4079`).
+
+  No history entries are added, and no new POST, model call or `innerHTML` is introduced.
+
+**New deterministic test `core/test/browser/cognition_async.py`.** The fixture **holds** chosen GET responses with no timers, changes navigation, then releases them in a chosen order. It accepts an alternative HTML path, so any revision can be re-tested. It runs at 1280, 960 and 390, with 11 checks per width:
+
+| Check | Scenario |
+| --- | --- |
+| R1 | Delayed history → Back to Notes (Codex finding 1) |
+| R2 | Delayed detail → Nudge history (Codex finding 2) |
+| R3 | History → Back → Forward with three held reads, released newest-first and oldest-first |
+| R4 | Cross-Thought: the abandoned Thought's **private Note never appears** |
+| R5 | Delayed detail → Close |
+| R6 | A delayed **403** for an abandoned view gives no error toast |
+| R7 | A held poll response is ignored, and **no further polls** happen after leaving |
+| R8 | Direct link with a delayed detail, then Back |
+| R9 | Zero non-GET requests, no page errors |
+
+**Red/green:**
+
+| Page | Result |
+| --- | --- |
+| `4b5fea6` (Codex-audited candidate) | **FAIL, 21/33**: R1, R2, R6 and R7 fail at every width, in 3 of 3 repetitions |
+| Repaired head | **PASS, 33/33**, in 3 of 3 repetitions |
+| Installed `1cd08b6` | Can't run this test (it predates the Saved Notes heading). Codex reproduced the race there. |
+
+**Other results (repaired head):**
+
+| Check | Result |
+| --- | --- |
+| Go vet / test / race | **PASS** |
+| `cognition_affordance` 3/3, `cognition_p0` 3/3, `cognition_nav` 3/3, `cognition_go` 2/2, `cognition_nudge` 1/1, `cognition_process` 1/1 | **PASS** |
+| Updater 16/16, launcher 6/6 | **PASS** |
+| Isolated native harness, final binary + Engine `40d4e91` + Identity `cfc4079`, fresh marked data, protected ports (39900–39904) | **PASS 73/73 in 8 of 8 runs** (584/584 checks); isolation sentinel PASS in all 8 |
+| Docker, installed stack, real Nemotron, owner click-through | **NOT RUN** |
+| Codex focused delta re-audit | **NOT RUN** (requested) |
+
+**Residual notes for Codex:**
+1. The generation token is page-local. A second browser tab is independent, as before.
+2. Cycle playback (`advance()`) is a timer, and `select()` already stops it.
+3. The confirmation toast for a POST is suppressed if the owner navigates away mid-request (described above).

@@ -87,6 +87,14 @@ function setVisible(id,on){$(id).classList.toggle("hidden",!on);}
 function reveal(el){if(!el)return;el.tabIndex=-1;el.scrollIntoView({block:"nearest"});el.focus({preventScroll:true});}
 // The bottom "saved Notes" action exists only where it changes something: it is hidden while the
 // saved Notes are already on screen and becomes "Back to saved Notes" in the nudge views.
+// WP0-E async ordering (Codex audit #110): every change of navigation INTENT (open a card, switch
+// view, Back/Forward, Close, refresh) takes a new view generation. An async read records the
+// generation it started under and, when it settles, may touch the DOM, focus, toast, URL, view state
+// or poll timer ONLY if that generation is still current. So a slow or failed response can never
+// overwrite a newer view. This is presentation only: every read is still authorized by Core/Identity.
+S.gen=0;
+function newView(){S.gen++;clearTimeout(S.nudgePoll);S.nudgePoll=null;return S.gen;}
+function stale(g){return g!==S.gen;}
 function thoughtView(v){S.view=v;if(S.selected?.kind==="thought"&&LIVE)setVisible("expandEngine",v!=="notes");}
 function stop(){if(S.timer!==null){clearInterval(S.timer);S.timer=null;}setVisible("pause",false);}
 function draw(){
@@ -119,7 +127,7 @@ function field(container,name,value){
   const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
 }
 function select(x,opts={}){
-  stop();S.selected=x;S.timeline=null;S.cursor=-1;
+  newView();stop();S.selected=x;S.timeline=null;S.cursor=-1;
   // P0 navigation: a click adds a browser history entry; Back/Forward (popstate) re-renders without adding one.
   if(!opts.fromHistory)navTo(x.kind==="thought"?{thought:x.source_id}:{card:x.id},"push");
   $("detailKind").textContent=x.kind.toUpperCase()+" · "+val(x.source);
@@ -185,9 +193,11 @@ function showStep(){
   }
 }
 async function loadTimeline(showAll=false){
+  const g=newView();
   try{
     stop();
     const t=await timeline();
+    if(stale(g))return;
     S.cursor=showAll?(t.steps||[]).length-1:-1;
     showStep();
     if(showAll&&t.steps?.length){
@@ -199,7 +209,7 @@ async function loadTimeline(showAll=false){
       }
       const head=mk("h3","","View logs — recorded journal sequence");$("thoughtDetail").append(head,list);reveal(head);
     }
-  }catch(e){message("Journal "+e.message,true);}
+  }catch(e){if(!stale(g))message("Journal "+e.message,true);}
 }
 async function advance(){
   try{
@@ -260,7 +270,7 @@ function navTo(st,mode){
   if(mode==="push"&&hash!==location.hash)history.pushState({cognition:true},"",url);
   else history.replaceState({cognition:true},"",url);
 }
-function hideSheet(){stop();clearTimeout(S.nudgePoll);$("overlay").classList.remove("open");}
+function hideSheet(){newView();stop();$("overlay").classList.remove("open");}
 // route(): render whatever the current URL says (initial load, refresh, Back, Forward).
 function route(){
   if(!LIVE)return;
@@ -297,9 +307,10 @@ function devCard(d){
 async function showThought(focusRequest){
   const x=S.selected;if(!x)return;
   if(x.kind!=="thought"){await loadTimeline(true);return;}
+  const g=newView();
   try{
     const d=await get("/api/cognition/thoughts/"+encodeURIComponent(x.source_id));
-    if(S.selected!==x)return;
+    if(stale(g)||S.selected!==x)return;
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
     const devs=d.developments||[];
     const head=mk("h3","","Saved Notes — what TASS has written");head.id="savedNotes";area.append(head);
@@ -330,7 +341,7 @@ async function showThought(focusRequest){
       if(t){t.classList.add("focus");t.scrollIntoView({block:"center"});t.focus();navTo({thought:x.source_id,dev:focusRequest},"replace");}
       else message("The Note for request "+focusRequest+" is not among the recorded developments of this Thought.",true);
     }
-  }catch(e){message("Thought detail "+e.message,true);}
+  }catch(e){if(!stale(g))message("Thought detail "+e.message,true);}
 }
 function devProposal(){
   if(!S.selected||!S.lib)return;
@@ -340,7 +351,7 @@ function devProposal(){
   location.href="/dev?"+q.toString();
 }
 async function refresh(){
-  stop();S.cards=[];S.lib=null;S.selected=null;
+  newView();stop();S.cards=[];S.lib=null;S.selected=null;
   if(!LIVE){
     $("mode").textContent="PREVIEW ONLY";
     $("banner").className="notice";
@@ -418,6 +429,7 @@ function selectBox(options){const s=mk("select","");for(const [v,t] of options){
 function nudgeForm(){
   const x=S.selected;if(!x||x.kind!=="thought")return;
   const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
+  const g=newView();
   const head=mk("h3","","Manual nudge — draft");area.append(head);
   field(area,"Source persistent Thought",x.source_id);
   field(area,"Sender","The unlocked Identity entity (set by Core, not typed)");
@@ -442,18 +454,21 @@ function nudgeForm(){
           priority:pri.value,expires_in_hours:Number(exp.value)||24,idempotency_key:key})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.error||("HTTP "+r.status));
+      if(stale(g))return; // the owner has moved on; the saved draft is in the nudge history
       message((d.replayed?"Already saved: ":"Draft saved: ")+d.nudge_id+" (highlighted). Not processed.");
       navTo({thought:x.source_id,view:"nudges"},"replace"); // the saved form becomes the history view (no extra Back step)
       await nudgeHistory(x.source_id,d.nudge_id);
-    }catch(e){message("Draft not saved: "+e.message,true);save.disabled=false;}
+    }catch(e){if(!stale(g)){message("Draft not saved: "+e.message,true);save.disabled=false;}}
   };
   area.append(save,how);
   thoughtView("draft");reveal(head);
 }
 async function nudgeHistory(thoughtID,focusNudge){
   if(!thoughtID)return;
+  const g=newView();
   try{
     const d=await get("/api/nudges?thought_id="+encodeURIComponent(thoughtID));
+    if(stale(g)||S.selected?.source_id!==thoughtID)return;
     const area=$("thoughtDetail");area.classList.add("open");area.replaceChildren();
     const head=mk("h3","","Nudge history for "+thoughtID);area.append(head);
     thoughtView("nudges");
@@ -484,9 +499,9 @@ async function nudgeHistory(thoughtID,focusNudge){
     if(ft){ft.classList.add("focus");ft.scrollIntoView({block:"center"});ft.focus();}else reveal(head);
     // While a run is open, refresh its receipt (reads only; nothing is ever re-sent).
     if((d.nudges||[]).some(n=>n.run&&(n.run.state==="SUBMITTED"||n.run.state==="RUNNING"))){
-      clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if($("thoughtDetail").textContent.includes("Nudge history for "+thoughtID))nudgeHistory(thoughtID);},3000);
+      clearTimeout(S.nudgePoll);S.nudgePoll=setTimeout(()=>{if(!stale(g))nudgeHistory(thoughtID);},3000);
     }
-  }catch(e){message("Nudge history "+e.message,true);}
+  }catch(e){if(!stale(g))message("Nudge history "+e.message,true);}
 }
 // ---- Stage 2: process ONE confirmed nudge to TASS himself, stop it, or copy it. ----
 const RUN_TEXT={SUBMITTED:"Accepted locally; not confirmed by the Engine yet",RUNNING:"The Engine is developing the Thought",
@@ -505,6 +520,9 @@ async function nudgePost(path,body){
   return d;
 }
 function nudgeActions(box,n,d,thoughtID){
+  // A process/stop/copy result updates the screen only if the owner is still on this history view;
+  // otherwise the durable receipt shows the outcome next time the history is opened.
+  const vg=S.gen,live=()=>!stale(vg);
   const row=mk("div","");row.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px";
   // P0: offered only when Core's derived state is READY (grant/lock/Engine/run/draft all checked);
   // the confirmation, Identity's bound decision and the Engine's P1/P2 checks still decide.
@@ -526,8 +544,8 @@ function nudgeActions(box,n,d,thoughtID){
       const no=mk("button","","Cancel");no.type="button";no.onclick=()=>{c.remove();b.disabled=false;};
       ok.onclick=async()=>{ok.disabled=true;no.disabled=true;
         try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/process",{body_digest:n.body_digest});
-          message(r.note||"Processing: "+(RUN_TEXT[r.run?.state]||r.run?.state));await nudgeHistory(thoughtID);}
-        catch(e){message("Not processed: "+e.message,true);ok.disabled=false;no.disabled=false;}};
+          live()&&message(r.note||"Processing: "+(RUN_TEXT[r.run?.state]||r.run?.state));live()&&await nudgeHistory(thoughtID);}
+        catch(e){live()&&message("Not processed: "+e.message,true);ok.disabled=false;no.disabled=false;}};
       c.append(ok,no);box.append(c);
     };
     row.append(b);
@@ -536,18 +554,18 @@ function nudgeActions(box,n,d,thoughtID){
     const s=mk("button","","Stop this nudge");s.type="button";
     s.onclick=async()=>{s.disabled=true;
       try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
-        message(r.run?.state==="NOT_DELIVERED"?"Stopped: the model will never be asked for this nudge.":"Too late to stop: "+(RUN_TEXT[r.run?.state]||r.run?.state));
-        await nudgeHistory(thoughtID);}catch(e){message("Not stopped: "+e.message,true);s.disabled=false;}};
+        live()&&message(r.run?.state==="NOT_DELIVERED"?"Stopped: the model will never be asked for this nudge.":"Too late to stop: "+(RUN_TEXT[r.run?.state]||r.run?.state));
+        live()&&await nudgeHistory(thoughtID);}catch(e){live()&&message("Not stopped: "+e.message,true);s.disabled=false;}};
     row.append(s);
     // D14: copying a submitted nudge stops it first; the copy is made only if the stop succeeded.
     const sc=mk("button","","Stop and copy as new");sc.type="button";
     sc.onclick=async()=>{sc.disabled=true;
       try{const r=await nudgePost("/api/nudges/"+encodeURIComponent(n.nudge_id)+"/stop");
-        if(r.run?.state!=="NOT_DELIVERED"){message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.run?.state]||r.run?.state)+"). Wait for it to finish.",true);await nudgeHistory(thoughtID);return;}
+        if(r.run?.state!=="NOT_DELIVERED"){live()&&message("Not copied: the Engine already took this nudge ("+(RUN_TEXT[r.run?.state]||r.run?.state)+"). Wait for it to finish.",true);live()&&await nudgeHistory(thoughtID);return;}
         const c=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
           requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Stopped, and copied as new draft "+c.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,c.nudge_id);}
-      catch(e){message("Not done: "+e.message,true);sc.disabled=false;}};
+        live()&&message("Stopped, and copied as new draft "+c.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");live()&&await nudgeHistory(thoughtID,c.nudge_id);}
+      catch(e){live()&&message("Not done: "+e.message,true);sc.disabled=false;}};
     row.append(sc);
   }
   if(n.pre_restore||(n.run&&n.run.can_copy)){
@@ -558,8 +576,8 @@ function nudgeActions(box,n,d,thoughtID){
       cp.disabled=true;
       try{const r=await nudgePost("/api/nudges",{source_thought_id:n.source_thought_id,recipient_id:n.recipient_id,reason_code:n.reason_code,
           requested_action:n.requested_action,priority:n.priority,expires_in_hours:24,idempotency_key:nudgeKey()});
-        message("Copied as new draft "+r.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");await nudgeHistory(thoughtID,r.nudge_id);}
-      catch(e){message("Not copied: "+e.message,true);cp.disabled=false;}};
+        live()&&message("Copied as new draft "+r.nudge_id+" (highlighted). Nothing was processed; it needs its own confirmation to run.");live()&&await nudgeHistory(thoughtID,r.nudge_id);}
+      catch(e){live()&&message("Not copied: "+e.message,true);cp.disabled=false;}};
     row.append(cp);
   }
   if(row.children.length)box.append(row);
