@@ -38,6 +38,13 @@ type CognitionCard struct {
     ThoughtID string `json:"thought_id,omitempty"`
     RelatedCycleIDs []string `json:"related_cycle_ids,omitempty"`
     Fields []CognitionField `json:"fields"`
+    // Stage 1 slice 1 (WP1-A): metadata-only preview, set for kind=thought only (cognition_preview.go).
+    // None of these fields may carry Note text.
+    Lifecycle string `json:"lifecycle,omitempty"` // active | sleeping | resolved | NOT RECORDED
+    NotesCount *int `json:"notes_count,omitempty"`
+    NotesCountCapped bool `json:"notes_count_capped,omitempty"` // the Engine keeps only its newest Notes; the true total may be higher
+    LatestOutput *CognitionOutput `json:"latest_output,omitempty"`
+    RunActivity *CognitionRunActivity `json:"run_activity,omitempty"`
 }
 type CognitionLibrary struct{
     IdentityEntityID string `json:"identity_entity_id"`
@@ -200,6 +207,7 @@ func (c *Core) CognitionLibrary(rq ...*CognitionReq)(CognitionLibrary,error){
         return thoughts[i].UpdatedAt.After(thoughts[j].UpdatedAt)
     })
     if len(thoughts)>cognitionCardMax {thoughts=thoughts[:cognitionCardMax];out.Limited=true}
+    runActivity:=c.runActivityByThought(scope) // Core's own receipts, read once; no Engine call
     for _,th:=range thoughts{
         related:=[]string{}
         for _,cy:=range validCycles {
@@ -219,6 +227,11 @@ func (c *Core) CognitionLibrary(rq ...*CognitionReq)(CognitionLibrary,error){
                 cognitionField("Related cycles",strings.Join(related,", ")),
             },
         })
+        card:=&out.Thoughts[len(out.Thoughts)-1]
+        var count int
+        card.Lifecycle,count,card.NotesCountCapped,card.LatestOutput=thoughtPreview(th)
+        card.NotesCount=&count
+        if ra,ok:=runActivity[th.ThoughtID];ok{card.RunActivity=&ra}
     }
     for _,cy:=range validCycles {
         if !engine.CognitionID.MatchString(cy.CycleID){continue}
