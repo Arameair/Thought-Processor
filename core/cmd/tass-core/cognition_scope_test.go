@@ -38,6 +38,20 @@ type scopeIdentity struct {
 	authorize int    // POST /v1/authorize calls (each one is an audited Identity decision)
 	stateReqs int    // GET /v1/state calls (read-only, never audited by Identity cfc4079)
 	decisions int
+	revoked   map[string]bool // grants the owner revoked: the entity stays unlocked and linked
+	denied    int             // Identity decisions that said no
+}
+
+// revoke removes grants from the unlocked entity, as the owner does on Identity's page.
+func (s *scopeIdentity) revoke(actions ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.revoked == nil {
+		s.revoked = map[string]bool{}
+	}
+	for _, a := range actions {
+		s.revoked[a] = true
+	}
 }
 
 func (s *scopeIdentity) set(state, who string) {
@@ -56,7 +70,13 @@ func (s *scopeIdentity) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o := scopeOwners[s.who]
-	ent := map[string]any{"entity_id": o.id, "name": o.name, "grants": []string{"conversation", "thought.process", "cognition.nudge.draft"}}
+	grants := []string{}
+	for _, g := range []string{"conversation", "thought.process", "cognition.nudge.draft"} {
+		if !s.revoked[g] {
+			grants = append(grants, g)
+		}
+	}
+	ent := map[string]any{"entity_id": o.id, "name": o.name, "grants": grants}
 	switch r.URL.Path {
 	case "/v1/state":
 		s.stateReqs++
@@ -66,9 +86,17 @@ func (s *scopeIdentity) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no", 401)
 			return
 		}
+		var req struct {
+			Action string `json:"action"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		allow := s.state == "UNLOCKED" && !s.revoked[req.Action] // as Identity cfc4079: unlocked AND the grant is present
 		s.authorize++
 		s.decisions++
-		json.NewEncoder(w).Encode(map[string]any{"allow": s.state == "UNLOCKED", "decision_id": fmt.Sprintf("dec_%s%07d", strings.ToLower(s.who), s.decisions),
+		if !allow {
+			s.denied++
+		}
+		json.NewEncoder(w).Encode(map[string]any{"allow": allow, "decision_id": fmt.Sprintf("dec_%s%07d", strings.ToLower(s.who), s.decisions),
 			"entity_id": o.id, "entity_name": o.name})
 	default:
 		w.WriteHeader(404)
@@ -383,10 +411,7 @@ func TestCognitionExpectedScopeNarrowsReads(t *testing.T) {
 // not answer with the old owner's data (or the old owner's attestation) after it can see the switch.
 func TestCognitionScopeChangedDuringHeldEngineRead(t *testing.T) {
 	for _, rd := range scopedReads {
-		for _, variant := range []string{"switch to B, no precondition", "switch to B, precondition A", "lock", "unlink"} {
-			if rd.name != "thought" && (variant == "lock" || variant == "unlink") {
-				continue
-			}
+		for _, variant := range []string{"switch to B, no precondition", "switch to B, precondition A", "lock", "unlink", "relink same pair"} {
 			t.Run(rd.name+"/"+variant, func(t *testing.T) {
 				env := scopeServer(t)
 				var hdr map[string]string
@@ -404,9 +429,14 @@ func TestCognitionScopeChangedDuringHeldEngineRead(t *testing.T) {
 				switch variant {
 				case "lock":
 					env.ids.set("LOCKED", "A")
-				case "unlink":
+				case "unlink", "relink same pair":
 					if rec := env.post("/api/cognition/unlink", `{}`, nil); rec.Code != 200 {
 						t.Fatalf("unlink during the held read: HTTP %d", rec.Code)
+					}
+					if variant == "relink same pair" { // same Identity entity, same Engine entity, a NEW owner decision
+						if rec := env.post("/api/cognition/link", `{"engine_entity_id":"eng_1"}`, nil); rec.Code != 200 {
+							t.Fatalf("relink during the held read: HTTP %d %s", rec.Code, rec.Body.String())
+						}
 					}
 				default:
 					env.ids.set("UNLOCKED", "B")
@@ -475,9 +505,12 @@ func TestCognitionScopeMismatchedPOSTWritesNothing(t *testing.T) {
 	}
 }
 
-// v2 §2: the response-boundary check must not add audited Identity decisions to every read (the
-// pulse polls every 10 s). Measured: Identity decisions per read, and read-only state requests.
-func TestCognitionScopeAddsNoIdentityDecisions(t *testing.T) {
+// Identity audit cost, MEASURED (Codex audit of ae344e7, repair handoff item 6). Identity is the only
+// grant authority and its only authoritative "may I?" is POST /v1/authorize, which records every
+// decision. A successful Cognition read therefore costs 4 Identity decisions: conversation and
+// thought.process at admission, and both again at the response boundary. Before the repair it was 2.
+// A read refused at admission costs at most 2 and never reaches the Engine or the boundary.
+func TestCognitionIdentityDecisionsPerRead(t *testing.T) {
 	env := scopeServer(t)
 	for _, rd := range scopedReads {
 		a0, s0 := env.ids.counts()
@@ -485,12 +518,93 @@ func TestCognitionScopeAddsNoIdentityDecisions(t *testing.T) {
 			t.Fatalf("%s: HTTP %d", rd.name, rec.Code)
 		}
 		a1, s1 := env.ids.counts()
-		t.Logf("%-11s Identity decisions %d, read-only state requests %d", rd.name, a1-a0, s1-s0)
-		if a1-a0 != 2 {
-			t.Errorf("%s: %d Identity decisions per read, want 2 (unchanged)", rd.name, a1-a0)
+		t.Logf("%-11s successful read: Identity decisions %d, read-only state requests %d", rd.name, a1-a0, s1-s0)
+		if a1-a0 != 4 {
+			t.Errorf("%s: %d Identity decisions per successful read, want 4 (2 at admission + 2 at the response boundary)", rd.name, a1-a0)
 		}
 		if s1-s0 > 3 {
 			t.Errorf("%s: %d Identity state requests per read", rd.name, s1-s0)
+		}
+	}
+	// Refused at admission: no boundary decisions, no record read.
+	env.ids.revoke("thought.process")
+	for _, rd := range scopedReads {
+		a0, _ := env.ids.counts()
+		rec := env.get(rd.path, env.expectOf("A"))
+		a1, _ := env.ids.counts()
+		t.Logf("%-11s refused at admission: HTTP %d, Identity decisions %d", rd.name, rec.Code, a1-a0)
+		if rec.Code != http.StatusForbidden || a1-a0 > 2 {
+			t.Errorf("%s refused at admission: HTTP %d with %d Identity decisions, want 403 with at most 2", rd.name, rec.Code, a1-a0)
+		}
+		noPrivate(t, rd.name+" refused at admission", rec)
+	}
+	// A scope refusal (412) is decided before any Identity decision is asked for.
+	env2 := scopeServer(t)
+	a0, _ := env2.ids.counts()
+	rec := env2.get("/api/cognition/thoughts/thought_1", env2.expectOf("B"))
+	a1, _ := env2.ids.counts()
+	if rec.Code != http.StatusPreconditionFailed || a1-a0 != 0 {
+		t.Errorf("wrong expected owner: HTTP %d with %d Identity decisions, want 412 with 0", rec.Code, a1-a0)
+	}
+}
+
+// Codex audit of ae344e7 (release blocker): the owner REVOKES a read grant while Core is waiting for
+// the Engine. The entity stays unlocked and the link stays the same, so only Identity's own decision
+// can show it. Core must ask Identity again for both read permissions before it answers: 403, no
+// private payload, no attestation, no-store. Every Cognition GET handler, every revocation.
+func TestCognitionGrantRevokedDuringHeldEngineRead(t *testing.T) {
+	for _, rd := range scopedReads {
+		for _, variant := range []struct {
+			name   string
+			revoke []string
+		}{
+			{"revoke conversation", []string{"conversation"}},
+			{"revoke thought.process", []string{"thought.process"}},
+			{"revoke both", []string{"conversation", "thought.process"}},
+			{"grants unchanged (control)", nil},
+		} {
+			t.Run(rd.name+"/"+variant.name, func(t *testing.T) {
+				env := scopeServer(t)
+				entered, release := env.eng.hold(rd.holdAt, rd.holdSkip)
+				done := make(chan *httptest.ResponseRecorder, 1)
+				a0, _ := env.ids.counts()
+				go func() { done <- env.get(rd.path, env.expectOf("A")) }()
+				select {
+				case <-entered:
+				case <-time.After(5 * time.Second):
+					t.Fatalf("the read never reached the held Engine path %s", rd.holdAt)
+				}
+				env.ids.revoke(variant.revoke...)
+				close(release)
+				rec := <-done
+				a1, _ := env.ids.counts()
+				t.Logf("HTTP %d; Identity decisions for this read: %d", rec.Code, a1-a0)
+				if variant.revoke == nil {
+					if rec.Code != 200 || rec.Header().Get("X-Cognition-Identity") != scopeOwners["A"].id {
+						t.Fatalf("control: HTTP %d, attested %q; want 200 for Owner A", rec.Code, rec.Header().Get("X-Cognition-Identity"))
+					}
+					// What proves the record came through: Owner A's text for library and Thought; the cycle
+					// ID for timeline and export (Core passes only whitelisted stage names, never free text).
+					proof := map[string]string{"library": scopeOwners["A"].marker, "thought": scopeOwners["A"].marker,
+						"timeline": "tp_a", "export-md": "tp_a", "export-json": "tp_a"}[rd.name]
+					if proof != "" && !strings.Contains(rec.Body.String(), proof) {
+						t.Errorf("control: the authorized record is missing from the answer")
+					}
+					return
+				}
+				if rec.Code != http.StatusForbidden {
+					t.Errorf("HTTP %d, want 403; body %.160s", rec.Code, rec.Body.String())
+				}
+				noPrivate(t, variant.name, rec)
+				for k, v := range rec.Header() {
+					if strings.Contains(strings.Join(v, " "), "OWNER-") {
+						t.Errorf("response header %s carries private text", k)
+					}
+				}
+				if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+					t.Errorf("Cache-Control %q on the refusal, want no-store", cc)
+				}
+			})
 		}
 	}
 }

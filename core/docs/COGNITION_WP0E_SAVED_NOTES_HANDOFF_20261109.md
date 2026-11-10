@@ -289,3 +289,38 @@ Assertions changed in existing suites, all required by the contract: `cognition_
 4. A second browser tab is independent. Resume hides the shelf until Core answers; the owner has not been asked whether a "revalidating" shelf would be preferable.
 5. The pulse strip labels the Engine pulse as Engine-wide and the waiting junctions as this identity's; the Engine pulse fields themselves are not identity-scoped data.
 6. Not run: Docker, the installed owner stack, owner data, real Nemotron, an owner walkthrough, and Codex's private fixtures.
+
+---
+
+## Focused repair (2026-11-10): grant revoked during an in-flight read
+
+**Finding (Codex audit of `ae344e7`, release blocker):** [PR #110 comment](https://github.com/Arameair/Thought-Processor/pull/110#issuecomment-6780356617); instructions in [#106](https://github.com/Arameair/Thought-Processor/issues/106#issuecomment-6780459193).
+`CognitionRevalidate()` checked only that Identity was unlocked, the entity unchanged and the owner link unchanged. If the owner revoked `conversation` or `thought.process` while Core was waiting for the Engine, Core still answered 200 with the private record.
+
+**Change (`tass/cognition_scope.go`, one line in `tass/cognition.go`, tests).** No page, Engine or Identity change.
+
+`CognitionRevalidate()` now asks Identity again for **both** read permissions (`conversation`, `thought.process`) after the state and link checks, with audit detail `thought-processor:cognition.read.release`. Any refusal is 403 with no payload and no attestation. A decision for a different entity is 412 `SCOPE_CHANGED`. The state and link checks run first, so a lock or scope change adds no decisions.
+
+**Why `Authorize` and not the grant list in Identity's state.** Identity `cfc4079` exposes one authoritative "may I?": `POST /v1/authorize`. `GET /v1/state` also lists grants, and today `Authorize` derives its answer from the same data, but using it would make Core re-implement Identity's decision rule and silently diverge if Identity ever adds a condition. Core therefore asks Identity. A read-only equivalent would need an Identity change and separate approval.
+
+**Identity audit cost (measured by `TestCognitionIdentityDecisionsPerRead`).**
+
+| Read outcome | Identity decisions before | Now |
+| --- | --- | --- |
+| Successful read (any of the 7 GET handlers) | 2 | **4** |
+| Refused at admission | 1–2 | 1–2 (unchanged; never reaches the Engine) |
+| Refused at the response boundary (grant revoked mid-read) | not detected | 3–4 |
+| Scope mismatch (412) before admission | 0 | 0 |
+| Lock or scope change at the boundary | 2 | 2 |
+
+For one visible Cognition tab, the 10-second pulse poll makes 360 reads an hour: **1,440 decisions an hour, 34,560 a day** (before: 720 and 17,280). A hidden tab does not poll. Any Stage 1 auto-refresh would add 4 decisions per read on top. This doubles the growth of Identity's `decisions.jsonl` from Cognition reads; reducing it without weakening the check needs a read-only verification endpoint in Identity, which is a separate, owner-approved change.
+
+**Tests (`cmd/tass-core/cognition_scope_test.go`, real HTTP handler, held Engine read):**
+
+| Test | `ae344e7` Core code | Repair |
+| --- | --- | --- |
+| `TestCognitionGrantRevokedDuringHeldEngineRead`: 7 handlers × {revoke `conversation`, revoke `thought.process`, revoke both, unchanged control} | **21 of 28 FAIL** (every revocation: HTTP 200; library and Thought carry Owner A's private text) | **28 of 28 PASS** (403, no private text in body or headers, no attestation, `no-store`) |
+| `TestCognitionScopeChangedDuringHeldEngineRead`: now lock, unlink and relink-same-pair for every handler (35 cases) | PASS | PASS |
+| `TestCognitionIdentityDecisionsPerRead` (was `…AddsNoIdentityDecisions`, which asserted 2) | FAIL (measures 2) | PASS (measures 4) |
+
+**Limitation.** Nothing can make the check and the response atomic: a revocation after the final decision and before the bytes leave Core is not detected. The proven held-read window is closed.

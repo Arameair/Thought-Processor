@@ -128,7 +128,7 @@ func (c *Core) cognitionAccess(rq ...*CognitionReq)(cognitionScope,error){
     }
     // A different entity is refused before any Identity decision is asked for or any record is read.
     if r!=nil&&r.Want!=nil&&r.Want.Identity!=state.Entity.EntityID {return out,ErrCognitionScopeMismatch}
-    for _,action:=range []string{"conversation","thought.process"}{
+    for _,action:=range cognitionReadActions{
         d:=c.cfg.IdentitySvc.Authorize(action,"thought-processor:cognition.read")
         if !d.Allow||d.DecisionID==""||d.EntityID!=state.Entity.EntityID {
             return out,ErrCognitionDenied
