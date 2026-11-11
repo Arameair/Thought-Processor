@@ -357,6 +357,18 @@ def run():
             print(json.dumps({k: status[k] for k in ("scenario", "engine_bytes", "engine_limit_pct",
                                                     "library_initial_bytes", "result")}), flush=True)
             h.n.stop("engine")
+        # A locked synthetic Identity must deny library/pulse even with a correct
+        # Core page token. Engine is stopped; an authorization refusal must win.
+        lock_code, _ = idn_post("/v1/lock", {})
+        if lock_code not in (200, 204):
+            raise RuntimeError(f"could not lock synthetic Identity: HTTP {lock_code}")
+        locked_lib = sample("locked library", 5, lambda: request_bytes(
+            h.CORE + "/api/cognition/library", {"X-TASS-Token": tok}), log)
+        locked_pulse = sample("locked pulse", 5, lambda: request_bytes(
+            h.CORE + "/api/cognition/pulse", {"X-TASS-Token": tok}), log)
+        locked_denied = locked_lib["status"] == {"403": 5} and locked_pulse["status"] == {"403": 5}
+        result["locked_identity"] = {"library": locked_lib, "pulse": locked_pulse,
+                                     "both_endpoints_denied": locked_denied}
         calls_after = h.fixture().get("requests", 0)
         result["isolation"] = {"fixture_model_calls_before": calls_before,
                                "fixture_model_calls_after": calls_after,
@@ -366,7 +378,7 @@ def run():
         pass_run = (len(result["scenarios"]) == 3 and
                     all(s["result"] == "PASS" for s in result["scenarios"]) and
                     result["isolation"]["no_model_execution_during_load"] and
-                    result["isolation"]["no_owner_port_access"])
+                    result["isolation"]["no_owner_port_access"] and locked_denied)
     except Exception as exc:
         result["execution_error"] = str(exc)
         raise
