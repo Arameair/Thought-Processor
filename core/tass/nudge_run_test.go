@@ -29,7 +29,10 @@ type runEngine struct {
 	completed []string
 	gate      chan struct{} // if set, a nudge POST waits on it before completing
 	refuse    int           // if set, POST nudge answers this status (no claim)
-	srv       *httptest.Server
+	// Ordering controls for the stale-read repair (PR #113 audit). Both are nil in every other test.
+	preClaim   chan struct{}                  // if set, a nudge POST waits on it BEFORE the Engine claims the nudge
+	statusHook func(nid string, claimed bool) // if set, called after a run-status GET decided its answer, before it is sent
+	srv        *httptest.Server
 }
 
 func newRunEngine(t *testing.T) *runEngine {
@@ -88,6 +91,11 @@ func newRunEngine(t *testing.T) *runEngine {
 				json.NewEncoder(w).Encode(map[string]any{"run": runJSON(in.NudgeID)})
 				return
 			}
+			if pre := e.preClaim; pre != nil {
+				e.mu.Unlock()
+				<-pre
+				e.mu.Lock()
+			}
 			e.runs[in.NudgeID], e.reqID[in.NudgeID] = "RUNNING", "mr_"+in.NudgeID[6:14]
 			gate := e.gate
 			e.mu.Unlock()
@@ -111,7 +119,11 @@ func newRunEngine(t *testing.T) *runEngine {
 			nid := strings.TrimPrefix(p, "/api/entities/eng_1/nudges/")
 			e.mu.Lock()
 			_, ok := e.runs[nid]
+			hook := e.statusHook
 			e.mu.Unlock()
+			if hook != nil {
+				hook(nid, ok)
+			}
 			if !ok {
 				w.WriteHeader(404)
 				json.NewEncoder(w).Encode(map[string]any{"run": map[string]any{"nudge_id": nid, "state": "NOT_CLAIMED"}, "state": "NOT_CLAIMED"})
@@ -142,6 +154,9 @@ func runCore(t *testing.T, dir string) (*Core, *fakeIdentitySvc, *runEngine) {
 	if _, err := c.LinkCognition("eng_1"); err != nil {
 		t.Fatal(err)
 	}
+	// Teardown only: wait for a delivery that is still writing its receipts before the test's temp
+	// folder is removed (it was registered first, so it is removed after this). No assertion changes.
+	t.Cleanup(c.StopNudgeDispatch)
 	return c, ids, re
 }
 
