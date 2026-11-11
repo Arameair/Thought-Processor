@@ -6,6 +6,7 @@ package tass
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/Arameair/Thought-Processor/core/engine"
@@ -20,11 +21,15 @@ type CognitionTick struct {
 }
 
 type CognitionPulse struct {
-	ObservedAt    time.Time       `json:"observed_at"`
-	Control       string          `json:"control"` // RUNNING | PAUSED | UNKNOWN (as the Engine reports it)
-	EverySeconds  float64         `json:"every_s"` // configured; 0 = NOT RECORDED
-	State         string          `json:"state"`
-	ActiveJob     string          `json:"active_job,omitempty"`
+	ObservedAt   time.Time `json:"observed_at"`
+	Control      string    `json:"control"` // RUNNING | PAUSED | UNKNOWN (as the Engine reports it)
+	EverySeconds float64   `json:"every_s"` // configured; 0 = NOT RECORDED
+	State        string    `json:"state"`
+	ActiveJob    string    `json:"active_job,omitempty"`
+	// Stage 1 slice 2 (WP1-C): set only while the pulse is RUNNING and BLOCKED. A fixed code derived from
+	// the newest tick's recorded authorization: AUTHORIZATION_DENIED | NOT RECORDED. The Engine's own
+	// sentence names identities (the pulse is Engine-wide), so it is never passed on.
+	BlockedReason string          `json:"blocked_reason,omitempty"`
 	Queued        int             `json:"queued"`
 	Running       int             `json:"running"`
 	Last          *CognitionTick  `json:"last,omitempty"`
@@ -60,11 +65,12 @@ func (c *Core) CognitionPulse(rq ...*CognitionReq) (CognitionPulse, error) {
 		Every     float64 `json:"every_s"`
 		ActiveJob string  `json:"active_job"`
 		Ticks     []struct {
-			PulseID string    `json:"pulse_id"`
-			At      time.Time `json:"at"`
-			Trigger string    `json:"trigger"`
-			State   string    `json:"state"`
-			JobID   string    `json:"job_id"`
+			PulseID       string    `json:"pulse_id"`
+			At            time.Time `json:"at"`
+			Trigger       string    `json:"trigger"`
+			State         string    `json:"state"`
+			JobID         string    `json:"job_id"`
+			Authorization string    `json:"authorization"`
 		} `json:"ticks"`
 		Jobs []struct {
 			State string `json:"state"`
@@ -105,6 +111,14 @@ func (c *Core) CognitionPulse(rq ...*CognitionReq) (CognitionPulse, error) {
 	if len(out.Recent) > 0 {
 		l := out.Recent[0]
 		out.Last = &l
+	}
+	if out.Control == "RUNNING" && out.State == "BLOCKED" {
+		out.BlockedReason = "NOT RECORDED"
+		// Engine pulse.go records a blocked tick as authorization "DENIED: …" (Identity refused, or could
+		// not be asked). Only that recorded fact becomes a code; nothing else is inferred.
+		if len(p.Ticks) > 0 && p.Ticks[0].State == "BLOCKED" && strings.HasPrefix(p.Ticks[0].Authorization, "DENIED:") {
+			out.BlockedReason = "AUTHORIZATION_DENIED"
+		}
 	}
 	c.mu.Lock()
 	out.CoreNextTick = c.nextSync
