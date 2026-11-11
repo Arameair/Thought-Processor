@@ -15,6 +15,9 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .sheet #thoughtDetail button{display:block;width:100%;text-align:left;margin:7px 0;overflow-wrap:anywhere}
 .pulse{margin:0 4% 10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#0f1726;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px}.pulse b{color:var(--fg)}.pulse .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.pulse .ticks{flex-basis:100%;color:var(--muted);font:12px ui-monospace,monospace}
 .linkbox{margin:0 4% 12px;padding:12px 14px;border:1px solid #5a4a2e;border-radius:12px;background:#1d1a12;font-size:13px}.linkbox.ok{border-color:#2f5d4f;background:#0f1d1a}.linkbox button{margin:4px 6px 0 0;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:#1b2738;color:var(--fg)}
+.pulse .act{font-weight:700}.pulse .act.good{color:var(--mint)}.pulse .act.warn{color:var(--amber)}.pulse .act.off{color:var(--muted)}
+.pulse details.ticks summary{cursor:pointer}.pulse details.ticks div{margin-top:4px;overflow-wrap:anywhere}.pulse .ticks.warn{color:var(--amber)}
+.sheet #fresh{margin:10px 0}.sheet #fresh button{margin-left:8px}
 .sheet #thoughtDetail textarea{background:#0a1420;color:var(--fg);border:1px solid var(--line);padding:9px}
 /* P0 (#106): the sheet is the reading surface; half-window and narrow screens get the full width. */
 .sheet{width:min(640px,100%)}
@@ -38,9 +41,9 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 <div class="toolbar"><input id="search" aria-label="Search cognition cards" placeholder="Search thoughts, lessons, cells, outcomes…"><button id="all" data-filter="all" aria-pressed="true">All</button><button data-filter="thought" aria-pressed="false">Thoughts</button><button data-filter="cycle" aria-pressed="false">Cycles</button><button data-filter="lesson" aria-pressed="false">Lessons</button><button data-filter="junction" aria-pressed="false">Junctions</button><button data-filter="cell" aria-pressed="false">Cells</button><button data-filter="skill" aria-pressed="false">Skills</button><button data-filter="outcome" aria-pressed="false">Outcomes</button><button id="refresh" type="button">Refresh</button></div>
 <div id="banner" class="notice" role="status">Loading…</div>
 <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
-<div id="pulse" class="pulse" aria-live="polite"><span class="k">20-second pulse</span> <span>reading…</span></div>
+<div id="pulse" class="pulse" aria-live="polite"><span class="k">Activity</span> <span>reading…</span></div>
 <div id="linkbox" class="linkbox" hidden></div><div id="summary" class="summary"></div><main id="shelves"></main>
-<div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="thoughtDetail"></div><div class="actions">
+<div class="overlay" id="overlay" role="presentation"><aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="sheet-header"><span class="eyebrow" id="detailKind"></span><button id="close" aria-label="Close details">Close ×</button></div><h2 id="detailTitle"></h2><p class="lede" id="detailIntro"></p><dl id="fields"></dl><div id="fresh" class="notice hidden" role="status">Newer recorded information is available for this record. What is shown below was read earlier.<button id="showLatest" type="button">Show latest</button></div><div id="thoughtDetail"></div><div class="actions">
 <button id="expandEngine">Inspect recorded details</button>
 <button id="logs">View Logs</button>
 <button id="play">Play</button><button id="pause" class="hidden">Pause</button><button id="step">Step</button>
@@ -86,6 +89,8 @@ function nav(){
 //   S.snapshot    accepted library snapshots, including same-scope ones.
 //   S.gen         navigation intent: open, switch view, Back/Forward, Close (Repair 1).
 //   S.seq[key]    newest-wins order inside one resource (pulse, nudge history).
+//   S.auto        Stage 1 slice 2: the automatic library read's schedule. It adds no authority and no
+//                 new lifetime: an automatic read is a library read under S.libGen like Refresh.
 // A request takes a TICKET when it starts. After ANY await, nothing is written (DOM, state, URL, focus,
 // timer, toast, clipboard, download) unless live(ticket) still holds. read() and post() are the only
 // two network paths, so no call site can skip the rule.
@@ -111,11 +116,21 @@ function httpError(status){return status?"HTTP "+status+"; "+(status===403?"Iden
 //   3 412, or an attested scope that is not the committed one: invalidate, read the library again
 //   4 only then the full ticket (view generation, resource order) before any effect
 // It returns {ok,data} or {ok:false,error} when the caller may present the result, otherwise null.
-async function read(path,t,format="json"){
+// Stage 1 slice 2: an automatic read may carry a time limit (ms). When it passes, the request is
+// aborted and settles as a failed read through the same rules below; it is never left pending.
+async function read(path,t,format="json",ms=0){
+  const ac=ms?new AbortController():null,timer=ac?setTimeout(()=>ac.abort(),ms):null;
+  try{
+    const out=await readOnce(path,t,format,ac?ac.signal:undefined);
+    if(out&&!out.ok&&ac&&ac.signal.aborted)out.error="no answer within "+Math.round(ms/1000)+" s; evidence unavailable";
+    return out;
+  }finally{clearTimeout(timer);}
+}
+async function readOnce(path,t,format,signal){
   const lib=t.kind==="library";
   if(!lib&&!t.scope)return null;
   let r;
-  try{r=await fetch(path,{method:"GET",cache:"no-store",headers:{"X-TASS-Token":TOKEN,...(lib?{}:expectScope(t.scope))}});}
+  try{r=await fetch(path,{method:"GET",cache:"no-store",signal,headers:{"X-TASS-Token":TOKEN,...(lib?{}:expectScope(t.scope))}});}
   catch{return lib?{ok:false,status:0,error:httpError(0)}:(live(t)?{ok:false,status:0,error:httpError(0)}:null);}
   if(lib){
     let data=null;if(r.ok){try{data=await r.json();}catch{return {ok:false,status:0,error:"unreadable library"};}}
@@ -186,38 +201,72 @@ function thoughtPreview(x){
   const run=r&&RUN_CARD[r.state]?RUN_CARD[r.state]+" · "+stamp(r.at):"";
   return {life,lifeClass,notes,output,run,spoken:[life,notes,output,run].filter(Boolean).join(". ")};
 }
-function draw(){
-  const host=$("shelves");host.replaceChildren();
-  let shown=0;
+// Stage 1 slice 2 (WP1-D): draw() is keyed. draw() builds the shelves from nothing, exactly as before.
+// draw(true), used only by an automatic refresh of the same authorized context, reuses the shelf and
+// tile elements whose card is still in the library (matched by card id) and rewrites a tile only when
+// its card changed, so focus and each rail's scroll position stay where the owner left them. A card
+// that is not in the library has no tile after either call.
+function fillTile(tile,x,kind,glyph){
+  const pv=kind==="thought"?thoughtPreview(x):null; // Stage 1 slice 1: metadata-only preview
+  tile.setAttribute("aria-label","Inspect "+x.title+(pv?". "+pv.spoken:""));
+  const colorsFor=colors[kind]||colors.note;tile.style.setProperty("--tile-a",colorsFor[0]);tile.style.setProperty("--tile-b",colorsFor[1]);
+  const art=mk("div","art");art.append(mk("span","glyph",glyph),mk("span","category",kind));
+  const body=mk("div","content");body.append(mk("h3","",val(x.title)),mk("p","",val(x.summary)));
+  const meta=mk("div","meta");
+  if(pv){
+    meta.append(mk("span","status "+pv.lifeClass,pv.life),mk("span","",val(x.verification)));
+    const facts=mk("div","preview");facts.append(mk("div","",pv.notes),mk("div","",pv.output));
+    if(pv.run)facts.append(mk("div","run",pv.run));
+    body.append(meta,facts);
+  }else{meta.append(mk("span","status",val(x.status)),mk("span","",val(x.verification)));body.append(meta);}
+  tile.replaceChildren(art,body);
+}
+function draw(keep=false){
+  const host=$("shelves");
+  if(keep!==true)host.replaceChildren();
+  for(const e of [...host.children])if(!e.matches("section.shelf"))e.remove();
+  let shown=0,lastSection=null;
+  const wanted=new Set();
   for(const [kind,title,subtitle,glyph] of shelves){
     if(S.filter!=="all"&&S.filter!==kind)continue;
     const filtered=S.cards.filter(x=>x.kind===kind && (x.title+" "+x.summary+" "+x.status+" "+x.source_id).toLowerCase().includes(S.search));
-    const section=mk("section","shelf");
-    const head=mk("div","shelf-head");head.append(mk("h2","",title),mk("span","",subtitle+" · "+filtered.length));section.append(head);
-    const rail=mk("div","rail");
-    for(const x of filtered){
-      const pv=kind==="thought"?thoughtPreview(x):null; // Stage 1 slice 1: metadata-only preview
-      const tile=mk("button","tile");tile.type="button";tile.setAttribute("aria-label","Inspect "+x.title+(pv?". "+pv.spoken:""));
-      const colorsFor=colors[kind]||colors.note;tile.style.setProperty("--tile-a",colorsFor[0]);tile.style.setProperty("--tile-b",colorsFor[1]);
-      const art=mk("div","art");art.append(mk("span","glyph",glyph),mk("span","category",kind));
-      const body=mk("div","content");body.append(mk("h3","",val(x.title)),mk("p","",val(x.summary)));
-      const meta=mk("div","meta");
-      if(pv){
-        meta.append(mk("span","status "+pv.lifeClass,pv.life),mk("span","",val(x.verification)));
-        const facts=mk("div","preview");facts.append(mk("div","",pv.notes),mk("div","",pv.output));
-        if(pv.run)facts.append(mk("div","run",pv.run));
-        body.append(meta,facts);
-      }else{meta.append(mk("span","status",val(x.status)),mk("span","",val(x.verification)));body.append(meta);}
-      tile.append(art,body);tile.onclick=()=>select(x);rail.append(tile);
+    if(!filtered.length&&kind!=="thought")continue;
+    wanted.add(kind);
+    let section=[...host.children].find(e=>e.dataset.kind===kind);
+    if(!section){
+      section=mk("section","shelf");section.dataset.kind=kind;
+      const head=mk("div","shelf-head");head.append(mk("h2","",title),mk("span",""));section.append(head,mk("div","rail"));
     }
+    const sectionAt=lastSection?lastSection.nextSibling:host.firstChild;
+    if(section!==sectionAt)host.insertBefore(section,sectionAt);
+    lastSection=section;
+    const count=section.querySelector(".shelf-head span"),countText=subtitle+" · "+filtered.length;
+    if(count.textContent!==countText)count.textContent=countText;
+    const rail=section.querySelector(".rail");
+    for(const e of [...rail.children])if(!e.matches("button.tile"))e.remove();
+    const have=new Map([...rail.children].map(e=>[e.dataset.id,e]));
+    let lastTile=null;
+    for(const x of filtered){
+      const sig=JSON.stringify(x);
+      let tile=have.get(x.id);
+      if(tile)have.delete(x.id);else{tile=mk("button","tile");tile.type="button";tile.dataset.id=x.id;}
+      if(tile.cardSig!==sig){fillTile(tile,x,kind,glyph);tile.cardSig=sig;}
+      tile.onclick=()=>select(x);
+      const tileAt=lastTile?lastTile.nextSibling:rail.firstChild;
+      if(tile!==tileAt)rail.insertBefore(tile,tileAt);
+      lastTile=tile;
+    }
+    for(const e of have.values())e.remove();
     if(!filtered.length&&kind==="thought"&&S.filter!=="cycle"){
       rail.append(mk("div","empty","Persistent Thoughts NOT RECORDED for this authorized entity. Recent cycles are separate records."));
     }
-    if(filtered.length||kind==="thought") {section.append(rail);host.append(section);}
     shown+=filtered.length;
   }
+  for(const e of [...host.children])if(!wanted.has(e.dataset.kind))e.remove();
   if(!shown)host.append(mk("div","empty","No matching recorded evidence. No simulated thoughts were generated."));
-  $("summary").textContent=shown+" cards · Go projection · "+val(S.lib?.engine_commit)+" · Brain rev "+val(S.lib?.brain_revision);
+  const asOf=LIVE&&S.lib&&S.lib.observed_at&&stamp(S.lib.observed_at)!=="NOT RECORDED"?" · as of "+stamp(S.lib.observed_at):"";
+  $("summary").textContent=shown+" cards · Go projection · "+val(S.lib?.engine_commit)+" · Brain rev "+val(S.lib?.brain_revision)+asOf+
+    (LIVE&&S.lib?" · read again every "+AUTO.library/1000+" s while this tab is visible":"");
 }
 function field(container,name,value){
   const d=mk("div","detail");d.append(mk("dt","",name),mk("dd","",val(value)));container.append(d);
@@ -234,7 +283,7 @@ function select(x,opts={}){
   field(fields,"Recorded at",stamp(x.recorded_at));
   for(const f of (x.fields||[]))field(fields,f.name,f.value);
   $("thoughtDetail").replaceChildren();$("thoughtDetail").classList.remove("open");
-  message("");
+  message("");setVisible("fresh",false);
   const cycle=x.kind==="cycle"||x.kind==="outcome";
   S.view="";$("expandEngine").textContent=x.kind==="thought"&&LIVE?"Back to saved Notes":"Inspect recorded details";
   setVisible("expandEngine",cycle||(x.kind==="thought"&&!LIVE));
@@ -399,6 +448,7 @@ function navTo(st,mode){
 // stay until a Refresh settles, which the Refresh/Back repair depends on.
 function purgeSheet(){for(const id of ["thoughtDetail","fields"])$(id).replaceChildren();
   for(const id of ["detailKind","detailTitle","detailIntro","toast"])$(id).textContent="";
+  setVisible("fresh",false);
   S.selected=null;S.timeline=null;S.timelineReq=null;S.cursor=-1;}
 function hideSheet(){newView();stop();$("overlay").classList.remove("open");purgeSheet();notice("");}
 // route(): render whatever the current URL says (initial load, refresh, Back, Forward).
@@ -512,7 +562,8 @@ function transition(kind,o={}){
   if(!keep)S.authEpoch++;
   S.snapshot++;
   hideSheet();
-  if(!keep)$("pulse").replaceChildren(mk("span","k","20-second pulse"),mk("span","","NOT SHOWN: no authorized Cognition context"));
+  if(!keep){$("pulse").replaceChildren(mk("span","k","Activity"),mk("span","","NOT SHOWN: no authorized Cognition context"));
+    S.pulse.fails=0;S.pulse.notBefore=0;S.pulse.downSince=0;}
   if(kind==="accept"){
     const lib=o.lib;S.scope=o.scope;S.lib=lib;S.ctxState="READY";
     S.cards=[...(lib.thoughts||[]),...(lib.cycles||[]),...(lib.outcomes||[]),...(lib.junctions||[]),...(lib.library||[])];
@@ -523,7 +574,8 @@ function transition(kind,o={}){
       ". Identity scope: "+val(lib.identity_name)+". "+val(lib.note)+
       " Nothing plays live or executes work.";
   }else{
-    S.scope=null;S.lib=null;S.cards=[];$("linkbox").hidden=true;$("linkbox").replaceChildren();
+    S.scope=null;S.lib=null;S.cards=[];$("linkbox").hidden=true;$("linkbox").replaceChildren();S.linkSig="";
+    if(kind==="denied")autoOff("denied");
     const checking=kind==="superseded"||kind==="mismatch"||kind==="resume";
     S.ctxState=checking?"CHECKING":"UNAVAILABLE";
     $("mode").textContent=checking?"CHECKING":"EVIDENCE UNAVAILABLE";$("mode").className=checking?"chip":"chip fail";
@@ -535,7 +587,8 @@ function transition(kind,o={}){
       denied:o.status===401?"The Core page key was refused ("+httpError(401)+"). Nothing is shown. Reload the page from Core.":
         "Identity denied a Cognition read ("+httpError(o.status)+"). Nothing is shown. Unlock Identity, then use Refresh.",
       failed:"Cognition data not available: "+(o.why||httpError(o.status))+
-        ". No demo records substituted. Identity must authorize the read and Engine must support its API."}[kind];
+        ". No demo records substituted. Identity must authorize the read and Engine must support its API."}[kind]+
+      (kind==="failed"||kind==="denied"?autoNote():"");
   }
   draw();
   if(kind==="accept")loadPulse();
@@ -548,7 +601,90 @@ function lose(why,status){
   transition("denied",{status});
 }
 function revalidate(kind){S.libLoading=true;transition(kind);refresh();}
-async function refresh(){
+// ---- Stage 1 slice 2 (WP1-D): automatic refresh. It is a library READ with the SAME rules as Refresh:
+// the same request order (S.libGen), the same body/attestation check, the same fail-closed outcomes.
+//   - refused (401/403), failed, timed out or unverifiable: transition("failed") removes everything,
+//     exactly as for Refresh. Nothing recorded earlier stays on screen as if it were current.
+//   - another Identity entity, Engine entity or link: transition("accept") under a new authEpoch.
+//   - the same authorized scope: absorb() below. The new library REPLACES the old one in one step (a
+//     card that is not in it is gone after this one read); only the open view, focus and scroll are
+//     kept, because they were read under the context that was just authorized again.
+// It only ever GETs /api/cognition/library. It never posts, nudges, runs a lesson or calls a model.
+// Schedule: one timer, set when a library read settles and cleared when one starts, so two library
+// reads never overlap. No request while the tab is hidden (the resume rule below reads again).
+// Failures back off 60 s, 120 s, 240 s, 300 s, 300 s and then stop; a refusal stops at once. Refresh,
+// or returning to the tab, starts again.
+const AUTO={library:60000,retryCap:300000,retries:5,libraryTimeout:30000,pulse:10000,pulseCap:300000,pulseTimeout:20000};
+S.auto={timer:null,fails:0,off:"",next:0,quiet:false};S.pulse={pending:0,fails:0,notBefore:0,downSince:0};S.linkSig="";
+function clockTime(x){return new Date(x).toLocaleTimeString();}
+function autoOff(why){
+  clearTimeout(S.auto.timer);S.auto.timer=null;S.auto.off=why;
+  // A refusal seen while an AUTOMATIC library read is still out: that read's answer is discarded
+  // whatever it says. The owner did not ask for it, and it began before the refusal.
+  if(S.auto.quiet&&S.libLoading){S.libGen++;S.libLoading=false;S.auto.quiet=false;}
+}
+function planAuto(ok,status){
+  clearTimeout(S.auto.timer);S.auto.timer=null;S.auto.off="";
+  if(!LIVE)return;
+  let wait=AUTO.library;
+  if(ok)S.auto.fails=0;
+  else if(status===401||status===403){autoOff("denied");return;}
+  else if(++S.auto.fails>AUTO.retries){autoOff("limit");return;}
+  else wait=Math.min(AUTO.library*2**(S.auto.fails-1),AUTO.retryCap);
+  S.auto.next=Date.now()+wait;S.auto.timer=setTimeout(autoTick,wait);
+}
+function autoTick(){
+  S.auto.timer=null;
+  if(!LIVE||document.hidden)return;
+  if(S.libLoading){S.auto.timer=setTimeout(autoTick,AUTO.library);return;}
+  loadLibrary(true);
+}
+function autoNote(){
+  if(S.auto.off==="denied")return " Automatic refresh is off until a Refresh is authorized.";
+  if(S.auto.off==="limit")return " Automatic retries stopped after "+AUTO.retries+" failed attempts. Use Refresh to try again.";
+  if(S.auto.timer&&S.auto.fails)return " Trying again automatically at "+clockTime(S.auto.next)+" (attempt "+S.auto.fails+" of "+AUTO.retries+").";
+  return "";
+}
+// absorb(): an automatic read answered for the SAME authorized scope while the page is READY. The
+// authEpoch is kept, so reads of the open view that are still out may land. Card objects are kept by
+// id (and updated in place), so S.selected stays the card the open view belongs to.
+function absorb(lib){
+  S.snapshot++;
+  const old=new Map(S.cards.map(c=>[c.id,c])),seen=new Set(),cards=[];
+  let changed=false;
+  for(const n of [...(lib.thoughts||[]),...(lib.cycles||[]),...(lib.outcomes||[]),...(lib.junctions||[]),...(lib.library||[])]){
+    if(!n||seen.has(n.id))continue;
+    seen.add(n.id);
+    const o=old.get(n.id);
+    if(!o){cards.push(n);continue;}
+    if(JSON.stringify(o)!==JSON.stringify(n)){
+      for(const k of Object.keys(o))delete o[k];
+      Object.assign(o,n);
+      if(o===S.selected)changed=true;
+    }
+    cards.push(o);
+  }
+  const sel=S.selected,gone=!!sel&&old.get(sel.id)===sel&&!seen.has(sel.id);
+  S.lib=lib;S.cards=cards;
+  if(JSON.stringify(lib.link||{})!==S.linkSig)drawLink(lib.link||{});
+  const banner="Engine provenance: "+val(lib.engine_commit)+". Identity scope: "+val(lib.identity_name)+". "+val(lib.note)+
+    " Nothing plays live or executes work.";
+  if($("banner").textContent!==banner){$("banner").className="notice ok";$("banner").textContent=banner;}
+  draw(true);
+  const open=$("overlay").classList.contains("open");
+  // The open record is no longer in the authorized library: route() closes and purges the sheet and
+  // says so. A link that was waiting for a library (sheet closed, URL set) is opened now.
+  if(gone||(!open&&location.hash))route();
+  else if(open&&changed&&S.view!=="draft")setVisible("fresh",true);
+}
+function showLatest(){
+  const x=S.selected;setVisible("fresh",false);
+  if(!x)return;
+  if(x.kind==="thought"&&LIVE){if(S.view==="nudges")nudgeHistory(x.source_id);else showThought();}
+  else select(x,{fromHistory:true});
+}
+function refresh(){S.auto.fails=0;return loadLibrary(false);}
+async function loadLibrary(quiet){
   if(!LIVE){
     newView();stop();S.cards=[];S.lib=null;S.selected=null;
     $("mode").textContent="PREVIEW ONLY";
@@ -556,48 +692,93 @@ async function refresh(){
     $("banner").textContent="Visual shell preview. No fabricated records are shown. Run this page inside the authenticated Core to view real recorded cognition.";
     draw();return;
   }
-  const f=++S.libGen;S.libLoading=true;
-  if(S.ctxState==="READY"){$("banner").className="notice";$("banner").textContent="Refreshing… The cards shown are the last authorized library until Core answers.";}
-  else if(S.ctxState==="LOADING"){$("banner").className="notice";$("banner").textContent="Reading authorized Go projections…";}
-  const r=await read("/api/cognition/library",{kind:"library"});
+  const f=++S.libGen;S.libLoading=true;S.auto.quiet=quiet;
+  clearTimeout(S.auto.timer);S.auto.timer=null;
+  // An automatic read says nothing while it is out: the banner keeps describing the committed context.
+  if(!quiet&&S.ctxState==="READY"){$("banner").className="notice";$("banner").textContent="Refreshing… The cards shown are the last authorized library until Core answers.";}
+  else if(!quiet&&S.ctxState==="LOADING"){$("banner").className="notice";$("banner").textContent="Reading authorized Go projections…";}
+  const r=await read("/api/cognition/library",{kind:"library"},"json",quiet?AUTO.libraryTimeout:0);
   if(f!==S.libGen){
     if((r.status===401||r.status===403)&&S.libLoading&&S.lib)transition("superseded",{status:r.status});
     return;
   }
-  S.libLoading=false;
-  if(!r.ok){transition("failed",{status:r.status,why:r.status?"":r.error});return;}
+  S.libLoading=false;S.auto.quiet=false;
+  if(!r.ok){planAuto(false,r.status);transition("failed",{status:r.status,why:r.status?"":r.error});return;}
   // The library is the bootstrap: its body and Core's attestation must name the same scope.
   const lib=r.data,sc=r.scope;
   if(!lib||!sc||lib.identity_entity_id!==sc.identity||(lib.engine_entity_id||"UNLINKED")!==sc.engine||
      ((lib.link||{}).link?.identity_decision_id||"NONE")!==sc.link){
-    transition("failed",{why:"Core's scope attestation for the library could not be verified"});return;
+    planAuto(false,0);transition("failed",{why:"Core's scope attestation for the library could not be verified"});return;
   }
-  transition("accept",{lib,scope:sc});
+  planAuto(true);
+  if(quiet&&S.ctxState==="READY"&&sameScope(sc,S.scope))absorb(lib);
+  else transition("accept",{lib,scope:sc});
 }
 // ---- #82 P1: the real 20-second pulse (GET only; never starts, steps or pauses it) ----
 // It belongs to the authorized context and has its own newest-wins order (S.seq.pulse). No context, no
 // request. The Engine pulse is Engine-wide; the waiting junctions are this identity's.
+// Stage 1 slice 2 (WP1-C): the strip says, in plain words, what the Engine RECORDED: the owner's
+// PAUSED setting, READY, a recorded active job, a recorded BLOCKED reason code. A failed read shows
+// UNAVAILABLE and nothing from the previous answer. The tick list is collapsed under "Recent ticks".
+function activity(p){
+  const job=p.active_job?String(p.active_job):"";
+  if(p.control==="PAUSED")return ["PAUSED","off","Paused — the owner's setting. Nothing is processed automatically."+
+    (job?" The Engine still records job "+job+" as active.":"")];
+  if(p.control!=="RUNNING")return ["UNAVAILABLE","warn","UNAVAILABLE — the Engine did not report whether its pulse is running or paused. No activity is shown."];
+  if(p.state==="READY")return ["READY","good","Ready — automatic processing is on. No job is running."];
+  if(p.state==="WORKING")return ["WORKING","good",job?"Working — recorded active job: "+job:"Working — no active job is recorded."];
+  if(p.state==="BUSY")return ["BUSY","warn","Busy — the Engine recorded that the model is in use by other work. "+
+    (job?"Recorded active job: "+job:"No active job is recorded.")];
+  if(p.state==="BLOCKED"){
+    const waiting=p.last&&p.last.state==="BLOCKED"&&p.last.job_id?" ("+p.last.job_id+")":"";
+    return ["BLOCKED","warn",p.blocked_reason==="AUTHORIZATION_DENIED"?
+      "Blocked — the Engine recorded that authorization was denied for the next queued job"+waiting+". It stays queued; nothing ran.":
+      "Blocked — the reason is not recorded."];
+  }
+  return ["UNAVAILABLE","warn","UNAVAILABLE — the Engine has not recorded a pulse state. No activity is shown."];
+}
 async function loadPulse(){
-  if(!LIVE){$("pulse").replaceChildren(mk("span","k","20-second pulse"),mk("span","","NOT CONNECTED (preview)"));return;}
+  if(!LIVE){$("pulse").replaceChildren(mk("span","k","Activity"),mk("span","","NOT CONNECTED (preview)"));return;}
   if(S.ctxState!=="READY")return;
   const t=ticket("context","pulse");
-  const r=await read("/api/cognition/pulse",t);
+  let r;
+  S.pulse.pending++;
+  try{r=await read("/api/cognition/pulse",t,"json",AUTO.pulseTimeout);}finally{S.pulse.pending--;}
   if(!r)return;
   const box=$("pulse");
-  if(!r.ok){box.replaceChildren(mk("span","k","20-second pulse"),mk("span","","UNAVAILABLE: "+r.error+". Nothing was started."));return;}
+  if(!r.ok){
+    // Bounded retry: the 10-second timer waits 20 s, 40 s, 80 s … up to 5 minutes between failed reads.
+    S.pulse.fails++;S.pulse.notBefore=Date.now()+Math.min(AUTO.pulse*2**S.pulse.fails,AUTO.pulseCap)-AUTO.pulse/2;
+    if(!S.pulse.downSince)S.pulse.downSince=Date.now();
+    const act=mk("b","act warn","UNAVAILABLE since "+clockTime(S.pulse.downSince)+": "+r.error+". No activity is shown. Nothing was started.");
+    act.id="activity";act.dataset.activity="UNAVAILABLE";
+    box.replaceChildren(mk("span","k","Activity"),act);return;
+  }
+  S.pulse.fails=0;S.pulse.notBefore=0;S.pulse.downSince=0;
   const p=r.data;
   box.replaceChildren();
+  const [code,cls,text]=activity(p);
+  const act=mk("b","act "+cls,text);act.id="activity";act.dataset.activity=code;
+  box.append(mk("span","k","Activity"),act);
   const add=(k,v)=>{const s=mk("span");s.append(mk("span","k",k+" "),mk("b","",val(v)));box.append(s);};
-  add("Engine pulse (whole Engine)",p.control);add("every",p.every_s?p.every_s+" s":"NOT RECORDED");add("state",p.state);
-  add("last tick",p.last?p.last.pulse_id+" · "+stamp(p.last.at)+" · "+p.last.trigger+" · "+p.last.state+(p.last.job_id?" · "+p.last.job_id:""):"NOT RECORDED");
-  add("active job",p.active_job||"none");add("queued / running",p.queued+" / "+p.running);
-  add("Core tick",(p.core_tick_every_s||"?")+" s, next "+stamp(p.core_next_tick));
+  add("Engine pulse (whole Engine)",val(p.control)+" · every "+(p.every_s?p.every_s+" s":"NOT RECORDED"));
+  add("last pulse",p.last?stamp(p.last.at)+" · "+val(p.last.pulse_id)+" · "+val(p.last.state):"none recorded");
+  add("queued / running",val(p.queued)+" / "+val(p.running));
   const j=p.junctions||{};add("junctions waiting (this identity)",Object.keys(j).length?Object.entries(j).map(([k,v])=>k+" "+v).join(", "):"none");
-  const tk=mk("div","ticks",(p.recent||[]).slice(0,6).map(x=>stamp(x.at)+" "+x.pulse_id+" "+x.trigger+" "+x.state+(x.job_id?" "+x.job_id:"")).join("  ·  ")||"no ticks recorded");
-  box.append(mk("div","ticks",val(p.note)),tk);
+  add("as of",stamp(p.observed_at));
+  const seen=Date.parse(p.observed_at),last=p.last?Date.parse(p.last.at):NaN;
+  if(p.control==="RUNNING"&&p.every_s>0&&seen-last>3*p.every_s*1000)
+    box.append(mk("div","ticks warn","No pulse tick recorded since "+stamp(p.last.at)+"."));
+  const recent=p.recent||[];
+  const more=mk("details","ticks");more.append(mk("summary","","Recent ticks ("+recent.length+" recorded)"));
+  for(const x of recent)more.append(mk("div","",stamp(x.at)+" · "+val(x.pulse_id)+" · "+val(x.trigger)+" · "+val(x.state)+(x.job_id?" · "+x.job_id:"")));
+  if(!recent.length)more.append(mk("div","","No ticks recorded."));
+  more.append(mk("div","","Core tick: every "+(p.core_tick_every_s||"?")+" s, next "+stamp(p.core_next_tick)),mk("div","",val(p.note)));
+  box.append(more);
 }
 // ---- #82 P0-A: owner-reviewed Identity ↔ Engine link (an explicit owner action, not playback) ----
 function drawLink(l){
+  S.linkSig=JSON.stringify(l);
   const box=$("linkbox");box.replaceChildren();box.hidden=false;box.className="linkbox"+(l.state==="LINKED"?" ok":"");
   box.append(mk("b","","Engine history link: "+val(l.state)+" "),mk("span","",val(l.explanation)));
   if(l.unscoped_cycles||l.other_entity_cycles)box.append(mk("div","",`Not shown: ${l.unscoped_cycles||0} UNSCOPED cycle(s) without an Engine entity, ${l.other_entity_cycles||0} cycle(s) of other Engine entities.`));
@@ -797,13 +978,14 @@ function nudgeActions(box,n,d,thoughtID){
   }
   if(row.children.length)box.append(row);
 }
-setInterval(()=>{if(LIVE&&!document.hidden&&S.ctxState==="READY")loadPulse();},10000);
+// One pulse read at a time from the timer, none while hidden, and a wait after a failed read.
+setInterval(()=>{if(LIVE&&!document.hidden&&S.ctxState==="READY"&&!S.pulse.pending&&Date.now()>=S.pulse.notBefore)loadPulse();},AUTO.pulse);
 // Resume (contract v2 §6): while hidden, playback and the receipt poll stop. A page that comes back,
 // or is restored from the back/forward cache, may show a context that changed elsewhere: nothing
 // private is presented as current until Core answers a fresh library read. The URL (intent) stays.
 document.addEventListener("visibilitychange",()=>{
   if(!LIVE)return;
-  if(document.hidden){stop();clearTimeout(S.nudgePoll);S.nudgePoll=null;S.wasHidden=true;return;}
+  if(document.hidden){stop();clearTimeout(S.nudgePoll);S.nudgePoll=null;clearTimeout(S.auto.timer);S.auto.timer=null;S.wasHidden=true;return;}
   if(S.wasHidden){S.wasHidden=false;revalidate("resume");}
 });
 window.addEventListener("pageshow",e=>{if(LIVE&&e.persisted)revalidate("resume");});
@@ -812,7 +994,8 @@ $("search").oninput=e=>{S.search=e.target.value.toLowerCase();draw();};
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
   S.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(c=>c.setAttribute("aria-pressed",String(b===c)));draw();
 });
-$("refresh").onclick=refresh;
+$("refresh").onclick=()=>refresh();
+$("showLatest").onclick=showLatest;
 $("close").onclick=()=>{hideSheet();navTo({},"push");};
 $("overlay").onclick=e=>{if(e.target===$("overlay"))$("close").click();};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click();
