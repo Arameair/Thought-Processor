@@ -266,14 +266,27 @@ func (c *Core) runView(id string) *RunView {
 	st.mu.Lock()
 	sending := st.dispatching[id]
 	st.mu.Unlock()
+	// Whether Core had ALREADY recorded the Engine's claim is decided before the Engine is asked.
+	// The delivery (dispatchNudge) runs at the same time as this read, so "not claimed" can be an
+	// answer from before the claim that arrives after observed.json was written. Only a read that
+	// STARTED after the recorded claim can show that the Engine lost the run.
+	var ob coreObserved
+	claimSeen, _, _ := coreReadOnce(c.runPath(id, "observed.json"), &ob)
 	run, code, err := c.engine.NudgeRun(sub.EngineEntityID, id)
 	switch {
 	case err != nil:
 		v.State, v.Detail, v.CanStop = "SUBMITTED", "accepted locally; the Engine can't be read right now ("+err.Error()+")", true
 		return v
 	case code == 404 || run.State == "NOT_CLAIMED":
-		var ob coreObserved
-		if oex, _, _ := coreReadOnce(c.runPath(id, "observed.json"), &ob); oex {
+		if !claimSeen {
+			if oex, _, _ := coreReadOnce(c.runPath(id, "observed.json"), &ob); oex {
+				// The claim was recorded while this read was out: the answer is older than the
+				// record and proves nothing. Derive again; that pass starts with the claim recorded,
+				// so its own read is decisive (at most one extra pass).
+				return c.runView(id)
+			}
+		}
+		if claimSeen {
 			st.mu.Lock()
 			st.divergence = "the Engine no longer has nudge " + id + " that Core saw it claim (data restored partially?)"
 			st.mu.Unlock()
