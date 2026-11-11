@@ -191,6 +191,8 @@ def sample(label, count, fn, log):
     delta_lines, delta_bytes = after[0] - before[0], after[1] - before[1]
     return {"name": label, "requests": count, "status": statuses,
             "failure_count": sum(x["status"] != 200 for x in calls),
+            "private_canary_in_any_response": any(CANARY.encode() in x["body"] or DECOY.encode() in x["body"] for x in calls),
+            "decoy_id_in_any_response": any(b"wp1e-decoy-001" in x["body"] for x in calls),
             "errors": [x["error"] for x in calls if x["error"]],
             "response_bytes_min": min(len(x["body"]) for x in calls),
             "response_bytes_max": max(len(x["body"]) for x in calls),
@@ -336,6 +338,10 @@ def run():
                       "library_initial_http": current["status"],
                       "library_initial_bytes": len(current["body"]),
                       "library": lib, "pulse": pulse,
+                      "audit_visible_hour_lines_estimated": 60 * lib["identity_lines_per_request"] + 360 * pulse["identity_lines_per_request"],
+                      "audit_visible_hour_bytes_estimated": 60 * lib["identity_bytes_per_request"] + 360 * pulse["identity_bytes_per_request"],
+                      "audit_library_extra_lines_per_hour": 60 * lib["identity_lines_per_request"],
+                      "audit_pulse_existing_lines_per_hour": 360 * pulse["identity_lines_per_request"],
                       "private_note_absent_from_cards": private_absent,
                       "decoy_thought_absent_from_cards": decoy_absent,
                       "no_nudge_post": all_get_only,
@@ -344,7 +350,9 @@ def run():
                                     "identity": process_rss(h.n.procs["identity"].pid)}}
             status["result"] = "PASS" if (current["status"] == 200 and lib["failure_count"] == 0
                                                     and pulse["failure_count"] == 0 and private_absent
-                                                    and decoy_absent and all_get_only) else "FAIL"
+                                                    and decoy_absent and all_get_only
+                                                    and not lib["private_canary_in_any_response"]
+                                                    and not lib["decoy_id_in_any_response"]) else "FAIL"
             result["scenarios"].append(status)
             print(json.dumps({k: status[k] for k in ("scenario", "engine_bytes", "engine_limit_pct",
                                                     "library_initial_bytes", "result")}), flush=True)
