@@ -4,17 +4,17 @@
 
 **Status: executable test-only runner COMMITTED; pinned native service scenarios NOT RUN.** This supersedes the *harness missing* blocker elsewhere in the historical analysis below. The runner is [core/test/cognition_wp1e_native.py](https://github.com/Arameair/Thought-Processor/blob/docs/cognition-stage1-wp1e-evidence-20261111-gpt6/core/test/cognition_wp1e_native.py), added to **this same draft PR #115**. Core, Engine and Identity production files were not changed.
 
-**Actually executed in the isolated coding container:** \`python3 -m py_compile\` PASS; \`python3 cognition_wp1e_native.py --self-test\` PASS; offline metric-function self-check PASS (30 synthetic latency values, median 15.5 ms, nearest-rank p95 29 ms, byte/status counting and fail-closed missing \`APP_HOME\`). These are **not real TASS response timings** and must not be substituted into the load tables. Native three-service execution: **NOT RUN** because the container lacks network access to clone/build the pinned repos. No owner's machine was used.
+**Actually executed in the isolated coding container:** `python3 -m py_compile` PASS; `python3 cognition_wp1e_native.py --self-test` PASS; offline metric-function self-check PASS (30 synthetic latency values, median 15.5 ms, nearest-rank p95 29 ms, byte/status counting and fail-closed missing `APP_HOME`). These are **not real TASS response timings** and must not be substituted into the load tables. Native three-service execution: **NOT RUN** because the container lacks network access to clone/build the pinned repos. No owner's machine was used.
 
-**Fixture mechanics:** the script reuses \`nudge_process_native.py\`'s isolated ports, owner-port sentinel (with positive control), clean environments and fixture model. It creates one disposable canonical Identity and two disposable Engine entities, explicitly links only one Engine entity through Core, stops Engine, writes strict-loader-compatible synthetic Thought JSON under that entity, then restarts Engine for each size. The other Engine entity holds a private decoy canary to test owner scoping. Never edits a live record. Each Thought has 50 **400-character** synthetic Notes, one \`formed\` and 50 \`developed\` history steps; the history detail mirrors the Engine's retained Note text. Deterministic timestamps start 2026-11-11T00:00:00Z. **State mix:** small 1 active; medium 50 active; large 50 active + 50 resolved, so no more than 50 open. No heartbeat/grant/autonomy/model execution is authorized or requested.
+**Fixture mechanics:** the script reuses `nudge_process_native.py`'s isolated ports, owner-port sentinel (with positive control), clean environments and fixture model. It creates one disposable canonical Identity and two disposable Engine entities, explicitly links only one Engine entity through Core, stops Engine, writes strict-loader-compatible synthetic Thought JSON under that entity, then restarts Engine for each size. The other Engine entity holds a private decoy canary to test owner scoping. Never edits a live record. Each Thought has 50 **400-character** synthetic Notes, one `formed` and 50 `developed` history steps; the history detail mirrors the Engine's retained Note text. Deterministic timestamps start 2026-11-11T00:00:00Z. **State mix:** small 1 active; medium 50 active; large 50 active + 50 resolved, so no more than 50 open. No heartbeat/grant/autonomy/model execution is authorized or requested.
 
-**Native measurement output:** 3 scenarios, Engine raw response status/bytes/% of 6 MiB, library response bytes, 3 warmups and 30 measured GETs per library and pulse class, request status histograms and failures, true request median and nearest-rank p95, per-class Identity line/byte delta, optional Linux RSS, private Note canary absence in library, decoy Thought absence, fixture model request count before/after, watched owner-port hits, and SHA-256 hashes of each binary. The runner writes \`APP_HOME/wp1e-results.json\` even on most in-run errors, and exits nonzero on failed acceptance assertions. Hidden-tab **actual** audit growth remains NOT RUN without a live-browser measurement.
+**Native measurement output:** 3 scenarios, Engine raw response status/bytes/% of 6 MiB, library response bytes, 3 warmups and 30 measured GETs per library and pulse class, request status histograms and failures, true request median and nearest-rank p95, per-class Identity line/byte delta, optional Linux RSS, private Note canary absence in library, decoy Thought absence, fixture model request count before/after, watched owner-port hits, and SHA-256 hashes of each binary. The runner writes `APP_HOME/wp1e-results.json` even on most in-run errors, and exits nonzero on failed acceptance assertions. At the end it locks the **synthetic** Identity and checks that both library and pulse refuse five GETs each with HTTP 403; no installed Identity is involved. Hidden-tab **actual** audit growth remains NOT RUN without a live-browser measurement.
 
 ### Exact isolated WSL reproduction (run outside the installed TASS checkout)
 
-**These commands clone new independent source directories under /tmp, pin all three revisions, build three test binaries, and run only the fixture service on isolated ports.** They do not call \`tass.sh\`, change deployment, or require stopping TASS. The private Engine clone requires a GitHub credential with read access. The test aborts if its ports are occupied or \`APP_HOME\` is not an empty /tmp/wp1e directory.
+**These commands clone new independent source directories under /tmp, pin all three revisions, build three test binaries, and run only the fixture service on isolated ports.** They do not call `tass.sh`, change deployment, or require stopping TASS. The private Engine clone requires a GitHub credential with read access. The test aborts if its ports are occupied or `APP_HOME` is not an empty /tmp/wp1e directory.
 
-\`\`\`bash
+```bash
 set -euo pipefail
 W="$(mktemp -d /tmp/tass-wp1e.XXXXXXXX)"
 mkdir -p "$W/src" "$W/bin" "$W/seed"
@@ -45,16 +45,16 @@ python3 "$W/src/pr115/core/test/cognition_wp1e_native.py"
 
 python3 -m json.tool "$W/app/wp1e-results.json" > "$W/wp1e-pretty.json"
 printf 'Raw results: %s\n' "$W/app/wp1e-results.json"
-\`\`\`
+```
 
-**Keep the result JSON.** If the native command returns nonzero, the results file and service logs under \`$W/app/logs\` are the first evidence to inspect; do not claim PASS from a partially completed run. \`W\` is shell-local to the session. Do not move fixture secrets into GitHub. The JSON contains no real owner data but includes disposable IDs and binary hashes. To publish full evidence, amend **this report in PR #115** with the actual scenario table, status histograms, failures and raw sample counts, and attach or quote a redacted synthetic-only result. All three scenarios in the existing table remain **NOT RUN** until this occurs.
+**Keep the result JSON.** If the native command returns nonzero, the results file and service logs under `$W/app/logs` are the first evidence to inspect; do not claim PASS from a partially completed run. `W` is shell-local to the session. Do not move fixture secrets into GitHub. The JSON contains no real owner data but includes disposable IDs and binary hashes. To publish full evidence, amend **this report in PR #115** with the actual scenario table, status histograms, failures and raw sample counts, and attach or quote a redacted synthetic-only result. All three scenarios in the existing table remain **NOT RUN** until this occurs.
 
-**Threshold:** only actual \`large.engine_bytes > 3,145,728\` warrants a separate summary-endpoint proposal issue; the script records \`over_half_limit\` but does not automatically create an issue or change the response ceiling.
+**Threshold:** only actual `large.engine_bytes > 3,145,728` warrants a separate summary-endpoint proposal issue; the script records `over_half_limit` but does not automatically create an issue or change the response ceiling.
 
 ---
 
 
-**Verdict: HARNESS COMMITTED / NOT RUN for the three required native load scenarios.** This report is an evidence inventory and reproducibility handoff, **not** a PASS, not a characterization of 100 Thoughts, and not owner acceptance. Do not infer measured response sizes or threshold status from its presence. No production behavior, install, vault, grant, model or source code was modified.
+**Verdict: HARNESS COMMITTED / NOT RUN for the three required native load scenarios.** This report is an evidence inventory and reproducibility handoff, **not** a PASS, not a characterization of 100 Thoughts, and not owner acceptance. Do not infer measured response sizes or threshold status from its presence. No production behavior, installed data, vault, grant, model or production source code was modified; the new file is test-only.
 
 **Authority:** [Stage 1 plan #109, WP1-E](https://github.com/Arameair/Thought-Processor/pull/109), [Slice 2 #113](https://github.com/Arameair/Thought-Processor/pull/113), [audited repair #114](https://github.com/Arameair/Thought-Processor/pull/114), [workflow #111](https://github.com/Arameair/Thought-Processor/issues/111). Delta-only: previous release tests and the Slice 2 audit-log measurement are **referenced**, not claimed as new runs.
 
@@ -116,7 +116,7 @@ Memory/CPU measurements: **NOT RUN**. No reliable service process or PID was ava
 | No Note text in library cards at the three loads | **NOT RUN**; previously tested by Slice 1/2 fixtures, not this dataset |
 | GET-only polling and no action/nudge/lesson/model execution at load | **NOT RUN**; prior Slice 2 fixture evidence only |
 | Memory and CPU sampling | **NOT RUN** |
-| No contact with or modification of installed TASS / real vault / saved Thoughts / Nemotron | **PASS** (no service started; GitHub documentation only) |
+| No contact with or modification of installed TASS / real vault / saved Thoughts / Nemotron | **PASS** (no service started; GitHub test-only code and report changes only) |
 | No production code, policy, merge, deployment or next-stage work | **PASS** |
 
 **Observed regressions in this WP1-E run:** none can be assessed, because the load run did not execute. This is **not** evidence of regression-free behavior or an acceptance pass.
