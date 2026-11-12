@@ -50,6 +50,12 @@ Several engineers or AIs can develop simultaneously **on different local worktre
 
 For the first safe updater trial, see [coordinated release/update pilot](docs/UPDATE_RELEASE_WORKFLOW.md) and [existing issue #79](https://github.com/Arameair/Thought-Processor/issues/79). The current script already has update/recovery mechanisms; do not build a second updater. A PR merge is not owner approval to update.
 
+## Review without a bottleneck (proposed)
+
+Contributors can work on **several unrelated tasks in parallel** under preapproved issue categories, in separate branches/worktrees and PRs. Select risk tier early using [the R0–R3 review matrix](docs/ENTITY_CONTRIBUTOR_WORKFLOW.md#fast-flow-review-policy-parallel-work-risk-based-gates): routine documentation/test fixtures and bounded non-sensitive changes get **proportional maintainer review and applicable automated checks**; shared contracts/data need integration evidence; Identity, cross-owner privacy, credentials and protected execution require **independent security audit**. Do not make the owner personally review every routine change or require a release-suite rerun for docs. Service maintainers should have a qualified backup reviewer.
+
+**Rights remain separate:** proposing a PR ≠ merge authorization ≠ Identity execution grant ≠ owner-approved installation or external release. CI and delegation rules are proposed until adopted and verified on each repository. Repair test/audit findings on the existing PR rather than opening a second implementation PR.
+
 ## Entity-assisted contribution and issue claiming
 
 The owner has selected a **future collaborative direction**: any authorized contributor may use their own entity to discover suitable issues, coordinate a claim, build in an isolated branch and submit a draft PR, subject to scoped GitHub/Identity permissions and service-maintainer review. **This is not implemented automation or a guarantee that every issue is available.** Start with a contributor-ready issue, do not assume comments are atomic locks, and never let an issue authorize a protected operation. See [entity-assisted contributor workflow](docs/ENTITY_CONTRIBUTOR_WORKFLOW.md).
