@@ -59,6 +59,9 @@
 - [ ] Migrate/confirm one **verified accepted baseline** per runtime repo via separately reviewed PRs; only then update default-branch references, CI and branch/tag protections with the required approval. Preserve legacy refs and their original SHAs.
 - [ ] Verify a new engineer can find: service ownership and Identity permission boundaries; the exact installed version; one command/runbook for startup/status; how to submit an issue/PR; tests/audits and real-vs-fixture claims; safe update/rollback; and where to get next work.
 - [ ] Ask an independent contributor to perform a **cold-start documentation walkthrough** on a non-owner copy without changing the live install; capture confusing steps as focused issues.
+- [ ] **Test contribution flow without an owner bottleneck:** classify sample tasks under the [R0–R3 review policy](ENTITY_CONTRIBUTOR_WORKFLOW.md#fast-flow-review-policy-parallel-work-risk-based-gates), designate service reviewers/backups, and check that two non-overlapping low-risk contributor PRs can progress independently without a high-risk release gate or duplicate full-suite runs. **Do not actually merge or configure permissions here without a separate adoption decision.**
+- [ ] **Measure queue health:** review wait time by risk tier, duplicate/obsolete PRs, rework and combined compatibility failures; confirm that high-risk privacy/Identity changes still require independent negative testing and owner-approved protected actions. Record real pilot evidence, or **NOT RUN** if Stage 3/post-stabilization restrictions prevent it.
+
 
 **Exit gate:** a new contributor can reproduce the intended dev/test setup and locate accepted implementation, known risks and active work **without reading months of historical PRs or being told to assume a branch is current**.
 
