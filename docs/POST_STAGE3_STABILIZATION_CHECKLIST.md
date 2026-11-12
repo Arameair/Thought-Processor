@@ -81,6 +81,16 @@
 
 **Exit gate:** an owner-used, documented, reproducible, reviewable and recoverable foundation, with explicit approval to resume new feature development.
 
+## Preserved next capability: notebook-cell junction wiring (NOT authorized during stabilization)
+
+After Checkpoints 0–6, **the owner's intended Development/Cognition loop** remains a candidate for the *first separately authorized new feature*: [Development PR #7 — wire-to-junction design](https://github.com/Arameair/Development/pull/7), especially [design 06](https://github.com/Arameair/Development/blob/experiment/wire-flow-junction-concept-20261111/ideas/tass-development-platform/06-wire-flow-junctions-and-trust.md) and its 2026-11-12 owner clarification. This must survive repository cleanup, branch migration and prototype triage; preserve the unique design and review its compatibility with accepted Stage 3 runtime contracts before selecting the next milestone.
+
+**Do not confuse these two acceptance gates:**
+- **Stage 3A/B/C:** honest provenance → one **instruction-line** variation in an isolated A/B → saved owner assessment. This is the *current authorized scope*, [issue #120](https://github.com/Arameair/Thought-Processor/issues/120).
+- **Future cell-binding proof:** one real, pinned notebook cell attached to a named junction by a typed Development connection; **the actual runtime consumes that revision**, Identity checks the relevant operation, Cognition displays correlated **new** execution records, and controlled A/B proves an attributable difference or honestly returns INCONCLUSIVE. Old Cognition recordings, original Thoughts and the accepted live graph do not change.
+
+**Decision after stabilization:** Owner chooses whether this should be the first new feature. Until separately approved, preserve this as a traced design requirement, **not a new code assignment, runtime grant, automatic learning, feature promotion or Stage 4 authorization**. A lesson's `LEARNED` status, a decorative line and an instruction-only model response are insufficient proof of executable skill behavior.
+
 ## Evidence and decision ledger
 
 Populate as work actually happens. Do **not** prefill dates, SHAs, results or approver names. Use the existing coordinating issue for progress and link here from the release record, rather than opening one PR per checklist item.
