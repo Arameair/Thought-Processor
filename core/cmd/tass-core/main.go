@@ -675,6 +675,54 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusServiceUnavailable,map[string]string{"error":"source Thought NOT RECORDED or Engine unavailable; nothing saved"})
         }
     })
+    // Stage 3B (#120; design #107 §3.3, §6): one instruction change, planned as an isolated A/B
+    // experiment. Saving a plan is a local write with zero model calls; no route here can run an arm
+    // (that needs owner decisions D4–D7 and a new Identity action and grant, none of which exist).
+    expErr:=func(w http.ResponseWriter,err error){
+        switch {
+        case errors.Is(err,tass.ErrDevelopmentRunNotFound),errors.Is(err,tass.ErrExperimentNotFound):
+            reply(w,http.StatusNotFound,map[string]string{"error":"No experiment or processed nudge with this ID for this owner"})
+        case errors.Is(err,tass.ErrExperimentConflict):
+            reply(w,http.StatusConflict,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrExperimentInvalid):
+            reply(w,http.StatusBadRequest,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrExperimentWrite):
+            reply(w,http.StatusInternalServerError,map[string]string{"error":tass.ErrExperimentWrite.Error()})
+        default:
+            cognitionErr(w,err)
+        }
+    }
+    mux.HandleFunc("GET /api/development/experiments",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        list,err:=core.Experiments(r.URL.Query().Get("run"),rq)
+        if err!=nil{expErr(w,err);return}
+        if !attest(w,rq){return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(list)
+    })
+    mux.HandleFunc("GET /api/development/experiments/{id}",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        v,err:=core.ExperimentByID(r.PathValue("id"),rq)
+        if err!=nil{expErr(w,err);return}
+        if !attest(w,rq){return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(v)
+    })
+    mux.HandleFunc("POST /api/development/experiments",func(w http.ResponseWriter,r *http.Request){
+        var body tass.ExperimentDraft
+        if !pagePost(w,r,&body){return}
+        w.Header().Set("Cache-Control","no-store")
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        v,err:=core.SaveExperimentDraft(body,rq)
+        if scopeErr(w,err){return}
+        switch {
+        case err==nil && v.Replayed: reply(w,http.StatusOK,v)
+        case err==nil: reply(w,http.StatusCreated,v)
+        default: expErr(w,err)
+        }
+    })
     // Stage 2: process ONE confirmed nudge to TASS himself, or stop it (design rev 4).
     nudgeAction:=func(w http.ResponseWriter,r *http.Request,process bool){
         var body struct{ BodyDigest string `json:"body_digest"` }

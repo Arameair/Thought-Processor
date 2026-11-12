@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,7 +43,8 @@ type runEngine struct {
 	statusCommit, recordCommit string
 	extraHist                  []map[string]any
 	hideNotes                  bool
-	hideNotesExceptExtra       bool // Stage 3A repair: serve only extraNotes (the Note under test)
+	hideNotesExceptExtra       bool         // Stage 3A repair: serve only extraNotes (the Note under test)
+	nonGet                     atomic.Int64 // Stage 3B: every non-GET request the Engine received
 	srv                        *httptest.Server
 }
 
@@ -102,6 +104,9 @@ func newRunEngine(t *testing.T) *runEngine {
 	e := &runEngine{runs: map[string]string{}, reqID: map[string]string{}, dec: map[string]string{}, att: map[string]string{}}
 	stamp := time.Date(2026, 11, 8, 9, 0, 0, 0, time.UTC)
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			e.nonGet.Add(1)
+		}
 		if r.Header.Get("Authorization") != "Bearer testkey" {
 			w.WriteHeader(401)
 			return

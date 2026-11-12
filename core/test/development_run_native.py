@@ -162,6 +162,40 @@ def run():
     check("R7 Core's answer carries no foreign bytes; the reply is still RECORDED", c == 200 and "FOREIGN-" not in body
           and (st2.get("model_reply") or {}).get("status") == "RECORDED" and (st2.get("model_reply") or {}).get("text") == reply, f"{c}")
 
+    # R8 (Stage 3B plan slice): save an experiment plan for this run on the real stack. Zero model requests,
+    # no Engine write, the Thought unchanged; the same form submitted twice is one plan; no arm can run.
+    files8, base8, logs8 = files(f"{h.APP}/data"), h.fixture(), [size(p) for p in logs]
+    dpath = f"{h.APP}/data/identity/decisions.jsonl"
+    dsize = size(dpath)
+    _, t8 = h.thought_detail(eid, tid)
+    plan = {"baseline_nudge_id": nid, "variant": "Answer the Thought's question directly from the evidence; if it can't, say what is missing.",
+            "snapshot": "AS_OF_NOW", "idempotency_key": "native-exp-0001"}
+    c1, p1 = http("POST", h.CORE + "/api/development/experiments", plan, {"X-TASS-Token": tok})
+    c2, p2 = http("POST", h.CORE + "/api/development/experiments", plan, {"X-TASS-Token": tok})
+    check("R8 an experiment plan is saved once (201, then the same plan 200)", c1 == 201 and c2 == 200 and p1.get("experiment_id") == p2.get("experiment_id")
+          and str(p1.get("experiment_id", "")).startswith("exp_"), f"{c1} {c2} {str(p1)[:200]}")
+    check("R8 the plan names this run and the real request, AS_OF_NOW, arms NOT RUN and not runnable",
+          p1.get("baseline_nudge_id") == nid and p1.get("baseline_request_id") == r.get("request_id") and p1.get("snapshot") == "AS_OF_NOW"
+          and [(a.get("arm"), a.get("state"), a.get("runnable")) for a in p1.get("arms", [])] == [("A", "NOT RUN", False), ("B", "NOT RUN", False)], str(p1)[:300])
+    check("R8 the control is CONFIRMED on the reconciled Engine", p1.get("control_status") == "CONFIRMED", p1.get("control_status"))
+    c3, p3 = http("POST", h.CORE + "/api/development/experiments", dict(plan, variant="NOTE: forced", idempotency_key="native-exp-0002"), {"X-TASS-Token": tok})
+    check("R8 a NOTE: variant is refused (400)", c3 == 400, f"{c3} {p3}")
+    after8 = files(f"{h.APP}/data")
+    eng8 = [p for p in set(files8) | set(after8) if p.startswith(eng) and files8.get(p) != after8.get(p)]
+    core8 = [p for p in set(files8) | set(after8) if p.startswith(f"{h.APP}/data/core") and files8.get(p) != after8.get(p)
+             and not p.endswith((".log", "events.jsonl", "state.json", "experiments.jsonl"))]
+    with open(dpath) as f:
+        f.seek(max(dsize, 0))
+        acts = sorted({json.loads(l).get("action") for l in f if l.strip()})
+    check("R8 saving made zero model requests (all requests the fixture model received)", h.fixture()["requests"] == base8["requests"], f"{base8} -> {h.fixture()}")
+    check("R8 no Engine log line, file or Thought change", [size(p) for p in logs] == logs8 and not eng8
+          and json.dumps(t8, sort_keys=True) == json.dumps(h.thought_detail(eid, tid)[1], sort_keys=True), eng8[:5])
+    check("R8 the only Core data written is the experiment journal", not core8 and any(p.endswith("experiments.jsonl") for p in after8), core8[:5])
+    check("R8 Identity was asked only for the Cognition read grants (no model, nudge or experiment action)",
+          set(acts) <= {"conversation", "thought.process"}, acts)
+    c4, _ = http("POST", h.CORE + f"/api/development/experiments/{p1.get('experiment_id')}/arms/A", {}, {"X-TASS-Token": tok})
+    check("R8 no arm route exists (404/405)", c4 in (404, 405), str(c4))
+
     browser(tok, tid, nid, r.get("request_id"))
 
     code, _ = idn_post("/v1/lock", {})

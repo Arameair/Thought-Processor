@@ -169,6 +169,7 @@ type Core struct {
 	cogMu   sync.Mutex // cognition_links.json (cognition_link.go)
 	junMu   sync.Mutex // junctions.json (junction.go)
 	nudgeMu sync.Mutex // nudges.jsonl (nudge.go)
+	expMu   sync.Mutex // experiments.jsonl (experiment.go)
 	junBusy atomic.Bool // one junction worker at a time
 }
 
