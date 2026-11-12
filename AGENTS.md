@@ -13,3 +13,5 @@ See [docs/TASS_ISSUE_PR_WORKFLOW.md](docs/TASS_ISSUE_PR_WORKFLOW.md) for the per
 
 - Parallel agents work in **separate branches/worktrees/PRs** with explicit issue and dependency links; coordinate overlapping files, do not mutate live owner ports/data, and test the combined pinned candidate rather than assuming separately green PRs integrate.
 - Release/updater changes follow [docs/UPDATE_RELEASE_WORKFLOW.md](docs/UPDATE_RELEASE_WORKFLOW.md) and existing [issue #79](https://github.com/Arameair/Thought-Processor/issues/79). Do not consider an arbitrary `origin/*` branch head an approved update; start with read-only manifest-based eligibility, and preserve existing `tass.sh` recovery behavior.
+
+- **Updater owner:** release manifest/discovery/eligibility work belongs in [Arameair/updater](https://github.com/Arameair/updater/issues/1); actual apply/recovery remains in Core `tass.sh` ([issue #79](https://github.com/Arameair/Thought-Processor/issues/79)). Do not duplicate installers or claim an empty/bootstrap repo is functional.
