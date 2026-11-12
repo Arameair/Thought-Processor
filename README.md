@@ -49,3 +49,5 @@ Project direction and owner approval: [Arameair](https://github.com/Arameair). T
 ## Proposed cross-repository versioning convention
 
 We are gradually evaluating a simple shared convention: `main` = understandable project entry point and eventual accepted source baseline; `experiment/*` = unpromoted work; `stable` = owner-used release approved for others to try; a separate release record pins compatible component SHAs. **This is a target convention, not a claim that current refs meet it.** Existing `alpha`/`stable` meanings and installed revisions remain unchanged pending review. See [repository and release policy](docs/TASS_REPOSITORY_RELEASE_POLICY.md).
+
+**Maintenance and contributor handoff (proposed, not yet adopted):** [issue → PR → review → close workflow](docs/TASS_ISSUE_PR_WORKFLOW.md) · [open PR inventory and closure history](docs/OPEN_PR_TRIAGE_20261112.md). Before adoption, reconcile this proposal with the existing [branching workflow](docs/WORKFLOW.md); their `alpha`/`main`/`stable` meanings differ. Current owner-controlled approvals remain unchanged.
