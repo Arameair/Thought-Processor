@@ -97,6 +97,10 @@ After every accepted stage or material release candidate, and periodically if wo
 - Avoid expensive build/CI runs merely to classify docs. Run actual verification when approving executable code or a release gate.
 - Stop and request a decision before changing protected branches, repo defaults, Identity security, model calls, runtime data, deployed software or public stable status.
 
+### After Stage 3C acceptance
+
+Use [the stabilization checklist](POST_STAGE3_STABILIZATION_CHECKLIST.md) for the ordered cleanup sequence and objective exit gates. Stage 3A or 3B passing by itself does **not** authorize cleanup deployment/branch migration, and the dated inventory must be refreshed before any closure.
+
 ### Documentation consistency and migration gate
 
 The owner has selected the target model of accepted source on `main` and an owner-used externally shareable release on `stable`. The revised [WORKFLOW.md](WORKFLOW.md) and [TASS release policy](TASS_REPOSITORY_RELEASE_POLICY.md) now describe the **same destination model inside governance draft PR #118**. The older live `main` workflow and branch refs remain legacy until this docs proposal is reviewed and any later code/default migration is independently approved. Do not present the future convention as the current deployed state. No implicit change to active Stage 2 / Stage 3 work bases.
