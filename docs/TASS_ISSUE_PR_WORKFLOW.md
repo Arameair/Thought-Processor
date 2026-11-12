@@ -62,7 +62,7 @@ Ask **“Is there a concrete repository change for reviewers to accept?”**
 - **Cross-repo decisions:** one coordination issue first; open per-repo PRs only after the decision is approved and actual file changes are ready. Do not open placeholders in each repo simply to advertise a future policy.
 - **Never auto-close based on age, PR number, title or a passing fixture.** Closure requires source/dependency check and a reason. Don't erase branches or confuse a closed review PR with a fixed product defect.
 
-First cleanup example: [2026-11-12 inventory/dispositions](OPEN_PR_TRIAGE_20261112.md) (121 open initially → 110 after eleven evidence-linked, nonmerged closures).
+Cleanup example: [2026-11-12 inventory/dispositions](OPEN_PR_TRIAGE_20261112.md) (121 open initially → 105 after sixteen evidence-linked, nonmerged closures at the last check).
 
 ## Maintenance instructions for every future team (human, Claude, Codex or other agent)
 
@@ -97,8 +97,8 @@ After every accepted stage or material release candidate, and periodically if wo
 - Avoid expensive build/CI runs merely to classify docs. Run actual verification when approving executable code or a release gate.
 - Stop and request a decision before changing protected branches, repo defaults, Identity security, model calls, runtime data, deployed software or public stable status.
 
-### Documentation consistency gate
+### Documentation consistency and migration gate
 
-Before marking repository governance accepted, reconcile existing [docs/WORKFLOW.md](WORKFLOW.md) with the proposed [TASS branch/release policy](TASS_REPOSITORY_RELEASE_POLICY.md). **They currently disagree:** historical workflow says experiments → `alpha` → `stable` → `main` release, while proposed convention says accepted source on `main` and owner-trialed externally shareable release on `stable`. Do not tell contributors both are in force. Record which definition the owner chooses and migrate branch pointers, badges, README wording and release records only by separately authorized review. No implicit change to the active Stage 2 / Stage 3 working base.
+The owner has selected the target model of accepted source on `main` and an owner-used externally shareable release on `stable`. The revised [WORKFLOW.md](WORKFLOW.md) and [TASS release policy](TASS_REPOSITORY_RELEASE_POLICY.md) now describe the **same destination model inside governance draft PR #118**. The older live `main` workflow and branch refs remain legacy until this docs proposal is reviewed and any later code/default migration is independently approved. Do not present the future convention as the current deployed state. No implicit change to active Stage 2 / Stage 3 work bases.
 
 **Definition of success:** a new contributor can determine *what is the problem, who owns it, what commit is being verified, where the evidence is, what is installed, and what happens next* without reading 100 historical PRs.
