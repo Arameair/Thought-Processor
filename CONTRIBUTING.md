@@ -43,3 +43,9 @@ At a stage checkpoint, consult the [PR maintenance checklist](docs/TASS_ISSUE_PR
 The **target** convention is reviewed source on `main`, short-lived `experiment/*` branches, and a separate owner-approved external-trial `stable` release pinned by tags and a cross-repository manifest. Existing `alpha`, `main`, `stable` and default-branch states are **not** automatically migrated. Do not rebase active work, change branch protections, merge, deploy, alter Identity grants, run the real model, enable autonomy or handle private owner data without the applicable approval.
 
 For detailed rules and transition steps: [WORKFLOW.md](docs/WORKFLOW.md). For historical context, [STATUS.md](docs/STATUS.md) is an October 27 snapshot and **not a current installed-build report**.
+
+## Working in parallel and preparing updates
+
+Several engineers or AIs can develop simultaneously **on different local worktrees/branches and PRs**. Each person owns their branch, links their issue, and identifies cross-repo dependencies. No contributor may silently overwrite another's candidate, share the owner's test ports/data, or assume independent green tests prove the combined application works. The release coordinator verifies exact Core/Engine/Identity pins before a candidate is eligible for an update.
+
+For the first safe updater trial, see [coordinated release/update pilot](docs/UPDATE_RELEASE_WORKFLOW.md) and [existing issue #79](https://github.com/Arameair/Thought-Processor/issues/79). The current script already has update/recovery mechanisms; do not build a second updater. A PR merge is not owner approval to update.
