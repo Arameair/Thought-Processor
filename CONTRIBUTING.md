@@ -49,3 +49,8 @@ For detailed rules and transition steps: [WORKFLOW.md](docs/WORKFLOW.md). For hi
 Several engineers or AIs can develop simultaneously **on different local worktrees/branches and PRs**. Each person owns their branch, links their issue, and identifies cross-repo dependencies. No contributor may silently overwrite another's candidate, share the owner's test ports/data, or assume independent green tests prove the combined application works. The release coordinator verifies exact Core/Engine/Identity pins before a candidate is eligible for an update.
 
 For the first safe updater trial, see [coordinated release/update pilot](docs/UPDATE_RELEASE_WORKFLOW.md) and [existing issue #79](https://github.com/Arameair/Thought-Processor/issues/79). The current script already has update/recovery mechanisms; do not build a second updater. A PR merge is not owner approval to update.
+
+## Entity-assisted contribution and issue claiming
+
+The owner has selected a **future collaborative direction**: any authorized contributor may use their own entity to discover suitable issues, coordinate a claim, build in an isolated branch and submit a draft PR, subject to scoped GitHub/Identity permissions and service-maintainer review. **This is not implemented automation or a guarantee that every issue is available.** Start with a contributor-ready issue, do not assume comments are atomic locks, and never let an issue authorize a protected operation. See [entity-assisted contributor workflow](docs/ENTITY_CONTRIBUTOR_WORKFLOW.md).
+
