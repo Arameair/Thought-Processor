@@ -46,8 +46,10 @@ At this writing, some `main` branches are documentation/portfolio entry points; 
 
 **Principle:** Make the current truth obvious without presenting plans or mocks as working software.
 
-## Required policy reconciliation before adoption (found 2026-11-12)
+## Owner-selected direction and migration still outstanding (2026-11-12)
 
-The existing [Thought-Processor workflow](WORKFLOW.md) **currently conflicts** with this proposed branch model. It documents `alpha` as experiment base, `stable` as approved snapshot and `main` as release lane; the proposed model would use `main` as accepted project baseline and `stable` as owner-used release ready for others to try. **Do not merge this proposal and tell teams it is operative until the owner explicitly chooses a migration.** Inventory active branches, dependent PRs and installed full SHAs, then reconcile existing `WORKFLOW.md`, `STATUS.md`, READMEs and protection rules in reviewable changes. Do not change Codex's active Stage 2 base automatically. Until reconciliation, this file is advisory and existing restrictions on merges/deployment stay in force.
+The owner selected the **destination workflow** after reviewing the historical branch-model conflict: short-lived experiments and reviewed PRs → accepted source on `main` → separate owner trial → externally trial-ready owner-approved `stable`, pinned by version tags and a cross-repo manifest. The proposed text in [WORKFLOW.md](WORKFLOW.md) now agrees with that destination model.
 
-Future maintainer instructions: [issue → PR → acceptance workflow and hygiene checklist](TASS_ISSUE_PR_WORKFLOW.md); [dated open PR inventory](OPEN_PR_TRIAGE_20261112.md). The index must be refreshed before treating its counts or statuses as current.
+**This does not make the migration complete.** The live `main`, `alpha`, `stable` and default-branch pointers still have legacy contents/meanings; the actual current-installed SHAs are not established by this document. Keep using assigned exact baselines until each repository's dependency inventory, CI/protection review, owner-authorized code promotion, README/status updates and release-record verification are completed. Nothing authorizes moving refs, merging a runtime candidate, changing Identity grants or interrupting active Cognition Stage 2.
+
+Future maintainer quick-start: [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md). Detailed [issue → PR → acceptance workflow and hygiene checklist](TASS_ISSUE_PR_WORKFLOW.md); [dated open PR inventory](OPEN_PR_TRIAGE_20261112.md). Refresh the snapshot before treating its counts/statuses as current.
