@@ -1,6 +1,33 @@
-# Stage 1 WP1-E — Bounded-load evidence and execution blocker (2026-11-11)
+# Stage 1 WP1-E — Bounded-load evidence (2026-11-11 through 2026-11-12)
 
-## WP1-E harness delivery — 2026-11-11 (current)
+## Native WP1-E execution — owner WSL result, 2026-11-12 (CURRENT; independent audit pending)
+
+**Owner-supplied terminal evidence:** The owner ran the new native harness on WSL using disposable `/tmp/tass-wp1e.o4y2iNsR` directories, the three pinned Go binaries, `S2_PORT_BASE=39100`, `WP1E_READS=30`, `WP1E_WARMUP=3`. The harness printed scenario PASS for all three, wrote `/tmp/tass-wp1e.o4y2iNsR/app/wp1e-results.json`, and exited **0**. A follow-up local JSON reader printed `completed: true`. **The raw JSON file is on the owner's WSL machine and has not yet been independently obtained or audited via the repository.** Tables below are transcribed from the owner's terminal excerpts, not a reproducible fresh GitHub-run measurement. The published `core-tests` CI check passed on harness SHA `15092fe9e504148db5369a632c2d2d1de05c66db`, independently of native owner execution.
+
+Exact pinned builds: Core `2ed99269a1ef8da96319d2c776ba0651b71633ca`, Engine `40d4e91e3b04196fa4e4f55a92b25789b82d8675`, Identity `cfc4079b690e2f7dc57afb9f14c6832ae38fdf54`.
+
+| Scenario | Thoughts × Notes | Raw Engine bytes | % of 6 MiB | Library initial bytes | Library median / nearest-rank p95 | Library / pulse statuses | Native result |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| Small | 1 × 50 | 63,702 | 1.0125% | 2,450 | 7.092 / 11.326 ms | 30/30 HTTP 200 each | **PASS** |
+| Medium | 50 × 50 | 3,097,391 | 49.2317% | 35,525 | 58.762 / 76.641 ms | 30/30 HTTP 200 each | **PASS** |
+| Large | 100 × 50 | **6,193,092** | **98.4365%** | 69,575 | 104.383 / 110.946 ms | 30/30 HTTP 200 each | **PASS** |
+
+Pulse median/p95 at small, medium, large: **4.770/5.280**, **4.882/5.558**, **4.922/5.243 ms**, respectively. All three scenarios recorded **4.0 Identity audit lines per library request and per pulse request**. Approx. logged bytes/request by scenario (library; pulse): small **1,079.67; 1,079.63**, medium **1,079.50; 1,079.70**, large **1,079.33; 1,079.57**. Extrapolated on a continuously visible page at 60 library + 360 pulse reads/hour, this is **1,680 decision lines/hour** and roughly **453 KiB/hour**; these hourly values are estimates, not an hour-long soak.
+
+Sampled Linux RSS (Core / Engine / Identity), in bytes: small **15,040,512 / 14,782,464 / 14,196,736**; medium **21,970,944 / 35,741,696 / 14,086,144**; large **33,636,352 / 58,621,952 / 14,450,688**. RSS is a point observation, not a peak.
+
+**Isolation from owner-supplied JSON summary:** `fixture_model_calls_before: 0`, `fixture_model_calls_after: 0`, `no_model_execution_during_load: true`, `no_owner_port_access: true`, `owner_port_sentinel_hits: []`. Synthetic Identity locked read denial: `both_endpoints_denied: true`. All three scenarios' harness result: PASS. The published excerpts do not enumerate each privacy subcheck individually; those are covered by the harness's PASS predicate and remain subject to independent review.
+
+**Capacity trigger:** The large raw response exceeds the approved **50% / 3,145,728-byte proposal threshold**; only **98,364 bytes** remain below 6,291,456 bytes. [Thought-engine issue #21](https://github.com/Arameair/Thought-engine/issues/21) now records a **proposal-only** bounded-summary retrieval design review. No Engine implementation, limit increase, deployment or permission change was made.
+
+**Unresolved evidence:** `hidden_tab_audit: NOT RUN: no live browser used`. Existing Slice 2 browser tests covered tab visibility, but a new actual hidden-tab audit-log delta was not measured here. The full `wp1e-results.json` still needs to be retained with the PR (synthetic-only, review for secrets before upload) and independently reviewed by Codex. **Stage 1 final sign-off and any Stage 2 work remain pending that audit and owner acceptance.**
+
+---
+
+## Prior evidence inventory (historical, superseded as to native load execution)
+
+
+## WP1-E harness delivery — 2026-11-11 (historical, before owner execution)
 
 **Status: executable test-only runner COMMITTED; pinned native service scenarios NOT RUN.** This supersedes the *harness missing* blocker elsewhere in the historical analysis below. The runner is [core/test/cognition_wp1e_native.py](https://github.com/Arameair/Thought-Processor/blob/docs/cognition-stage1-wp1e-evidence-20261111-gpt6/core/test/cognition_wp1e_native.py), added to **this same draft PR #115**. Core, Engine and Identity production files were not changed.
 
