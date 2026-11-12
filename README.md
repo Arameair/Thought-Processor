@@ -50,4 +50,6 @@ Project direction and owner approval: [Arameair](https://github.com/Arameair). T
 
 We are gradually evaluating a simple shared convention: `main` = understandable project entry point and eventual accepted source baseline; `experiment/*` = unpromoted work; `stable` = owner-used release approved for others to try; a separate release record pins compatible component SHAs. **This is a target convention, not a claim that current refs meet it.** Existing `alpha`/`stable` meanings and installed revisions remain unchanged pending review. See [repository and release policy](docs/TASS_REPOSITORY_RELEASE_POLICY.md).
 
+**After Stage 3 owner acceptance:** follow the [post-Stage-3 stabilization and cleanup checklist](docs/POST_STAGE3_STABILIZATION_CHECKLIST.md) before authorizing Stage 4 or restructuring repositories. This is a prepared plan, **not evidence that 3A/3B/3C are finished**.
+
 **For future contributors (proposed in draft PR #118):** [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) · [issue → PR → review → close workflow](docs/TASS_ISSUE_PR_WORKFLOW.md) · [open PR inventory and closure history](docs/OPEN_PR_TRIAGE_20261112.md). The [revised branching workflow](docs/WORKFLOW.md) agrees with the proposed target convention, but **existing branches and installed software have not migrated**. Current owner-controlled approvals remain unchanged.
