@@ -1,63 +1,86 @@
-# Branching, validation and owner promotion
+# TASS development workflow — issue, PR, verification, acceptance
 
-**No automatic promotion.** The owner picks when to keep or discard an experiment. Documented states are not software approval.
+**Status:** Owner-selected **target workflow**, documented 2026-11-12. Proposed in [governance draft PR #118](https://github.com/Arameair/Thought-Processor/pull/118); **not yet a branch migration or an approved deployment.** Existing protected operations and the exact baseline assigned to any active task remain in force. Read [repository/release policy](TASS_REPOSITORY_RELEASE_POLICY.md), [contributor guide](../CONTRIBUTING.md), and [work-item hygiene](TASS_ISSUE_PR_WORKFLOW.md).
 
-## Branch meanings
+## At a glance
 
 ```text
-experiment/new-idea-YYYYMMDD  ─┐
-experiment/alternate-YYYYMMDD ─┼── compare evidence → owner selects → alpha
-                                │                           |
-                                └── never auto-merge        v
-                                                stable (approved snapshot)
-                                                         |
-                                                         v
-                                                 main (release approval)
+Issue (problem, evidence, acceptance criteria)
+  -> experiment/* or fix/* branch + one focused draft PR
+  -> tests, independent review, repairs on that PR
+  -> explicit acceptance/merge decision -> main (accepted source)
+  -> owner-authorized installed trial of a pinned build, when needed
+  -> separate public-trial release gate -> release tag + manifest + stable
 ```
 
-- `alpha`: base for **all new experiments**, and active owner-selected integration.
-- `experiment/<topic>-YYYYMMDD`: single, explicit hypothesis; latest Alpha SHA pinned in its note. Do not fork randomly from another experiment. If old work is useful, **port it explicitly onto a new branch from Alpha**, preserving attribution.
-- `stable`: **snapshot** of what the owner has accepted, never a moving default and never automatically updated.
-- `main`: public-facing lane when the owner explicitly approves a release. The repository can remain private regardless of branch name.
-- Document archive and rollback refs before advancing an already-tested candidate; avoid unsafe force-updates.
+An owner trial may happen **before** the merge if the owner explicitly authorizes installation of the audited candidate. The installed revision must be recorded regardless of branch. The flow is not permission to deploy or run the real model. Documentation-only PRs need an appropriate content review, not a full runtime release suite.
 
-### Historical bootstrap exception for the originally empty repository
+## Branch definitions: destination policy, not current repository state
 
-Initially `main`, `stable` and `alpha` were initialized at a documentation-only commit. **That is no longer the current Alpha state**: the owner subsequently promoted runnable P0 at [`ae9e96b`](https://github.com/Arameair/Thought-Processor/commit/ae9e96bb6004f64fe11edf40ff32dc1bd6ade47e). `stable` remains the old documentation snapshot and `main` is public-facing documentation. Branch new work from **current Alpha**, not the historic bootstrap commit. Promotion remains manual. See [status](STATUS.md).
+| Name | Meaning once migrated |
+| --- | --- |
+| `main` | Latest reviewed and accepted source code, documentation and tests; normal base for **new** work once the repository's migration is complete. Not necessarily deployed or externally released. |
+| `experiment/*` or `fix/*` | Temporary, isolated branch for one coherent change, with a linked issue and PR. A passing fixture does not mean owner acceptance. |
+| `stable` | Moving convenience pointer to the last **owner-used and explicitly approved release suitable for other people to try**. Not automatically current installation, not a substitute for version tags. No `stable` release is implied by this policy. |
+| Versioned **release tag** | Treat an annotated tag as immutable by policy and protect released tags. It pins a specific component commit. |
+| Cross-repo **release manifest** | Identifies the exact compatible Core, Engine, Identity and required feature commits, build artifact hashes where available, test/acceptance evidence and recovery instructions. |
+| `alpha` | **Legacy branch category.** Existing `alpha` branches are preserved for pending work and reference; no blanket deletion, force update or automatic promotion. Retire the category only after dependent work is inventoried and safely migrated. |
 
-## Working on a feature
+### Transition warning: what actually exists today
 
-1. Read `README.md`, `docs/STATUS.md`, `docs/ARCHITECTURE.md` and current issue.
-2. Note exact `alpha` SHA; create a fresh experimental branch **from Alpha**.
-3. Describe one hypothesis, anticipated behavior, affected service contracts, tests and rollback.
-4. Keep worker, Thought Engine, Identity and producer applications independent. No hidden auto-start/stop of other programs.
-5. Build, run test suites and a real-system integration scenario; distinguish stand-ins from live services.
-6. Use Project Controller Play/Stop and **Copy Context / Copy Logs** where appropriate; verify OS, port, build SHA, source identities, per-request timings, actual data and clean shutdown.
-7. Update experiment report and `docs/STATUS.md` in **the experiment branch**. Do not edit Alpha, Stable or Main as a reporting shortcut.
-8. Present exact branch/commit, comparisons, failures, user steps and **ask the owner before promoting**. The owner decides keep/revert/critical.
-9. After approval, update the authoritative `docs/STATUS.md` as part of the approved branch change; record previous SHA and rollback. No automatic Alpha→Stable→Main merges.
+This repository's current `main` has historically been a **documentation/portfolio lane**, the existing `stable` is an **older documentation-only snapshot**, and `alpha` was an earlier owner-promoted baseline. The previous workflow said `experiment/* → alpha → stable → main`. That is **historical**, not the destination convention. Thought Engine currently uses an experimental default branch; other services have their own release histories.
 
-## Required test matrix
+**Until a separately reviewed migration is complete, NEVER assume `main`, `alpha`, `stable` or a repository default contains the running code.** Before any new implementation, inspect the work issue, active implementation PR and assigned exact Core/Engine/Identity SHAs. Existing Stage 2/3 work stays on its reviewed, pinned branches until explicitly transitioned. Do not silently rebase it onto `main`.
 
-| Check | Evidence |
-|---|---|
-| Build | Go/platform versions; exact branch and SHA; build command; elapsed time |
-| Independent lifecycle | Play/Stop only own process; no orphaned processes; no stopping other apps |
-| Readiness | Real service identity and protocol, not merely HTML HTTP 200 |
-| Feature authorization | Denied identities cannot process; revocation enforced; history retained |
-| Feeds | One real authorized log source; pause affects feature subscription, not source |
-| Worker | Ready/busy/blocked/uncertain; no duplicate uncertain sends; real-vs-stand-in |
-| End-to-end | log → queue → processing → evidence → persistent Thought → live Processor |
-| Persistence | Stop/restart, identity isolation, source/worker changes |
-| Diagnostics | Real status, request IDs, elapsed timings, errors, truthful zeroes |
-| Failure | Unavailable, incompatible or changed dependency → clear fail/no invented state |
+For the historical October 27 branch snapshot, see [STATUS.md](STATUS.md); it is **not** an up-to-date installed-version report. For current stage scope see [workflow trial issue #111](https://github.com/Arameair/Thought-Processor/issues/111), [Cognition stage planning PR #109](https://github.com/Arameair/Thought-Processor/pull/109) and the relevant active PR. Validate exact head SHA and current decision comments before using them.
 
-For owner acceptance, record a manual test on the owner's actual Project Controller configuration; passing tests in an isolated sandbox alone is not the same.
+## One work item, start to finish
 
-## Experiment report template
+1. **Find or open an issue.** Search for duplicates. State observed problem or proposal, reproduction or source reference, expected outcome, risk, and objective acceptance criteria. Contributor AIs may report confirmed defects; new feature scope and changed security requirements need an owner decision. An unverified hypothesis is labeled as such.
+2. **Choose the correct base.** Use the currently accepted `main` **after migration**; until then use the explicit source pin in the owner-approved work assignment. Record upstream and cross-repo dependencies. Do not fork an old experiment merely because it appears to contain more code.
+3. **Open a focused draft PR.** Link the issue, list changed files and non-goals, assign an implementer, record head SHA and component pins. Keep the PR as the primary evolving record: `DONE / OPEN / NEXT / BLOCKED`.
+4. **Test and challenge.** Implementer runs focused tests and the appropriate final candidate gate. Independent auditor verifies the exact commit, especially Identity/authorization/privacy, durable writes, concurrency and recovery where applicable. Record commands, environment and PASS/FAIL/NOT RUN; distinguish fixtures, real binaries, local model and owner machine. A comment or a mock is never proof of installed behavior.
+5. **Repair on the same PR when practical.** Attach failure evidence to that PR, commit the smallest fix, and audit the **new** SHA. Open a new issue only for a genuinely independent defect. If a change affects the release gate, re-run applicable checks on the revised candidate.
+6. **Decide.** The authorized owner/reviewer accepts/merges, requests revisions, or closes as superseded/rejected/historical with a linked explanation. Approval of a PR is **not** automatic approval of a deployment, Identity grant, model action or `stable` promotion.
+7. **Record installed behavior separately.** Owner-authorized installation trials include the exact component SHAs, local model identity, outcome, backup/recovery evidence, limitations and rollback notes. A staged/accepted `main` commit may differ from the installed build.
+8. **Release intentionally.** After repeated owner use, integration/security/recovery checks, clear limitations and explicit approval for external users, publish the pinned release manifest and protected tag. Point `stable` at that exact released commit only as part of an approved, atomic release procedure; if multiple repositories have `stable` refs, keep their compatibility recorded in one release manifest.
 
-Copy [EXPERIMENT_TEMPLATE.md](EXPERIMENT_TEMPLATE.md) into `docs/experiments/<date>-<topic>.md` in the experiment branch. Newest-first ledger row and issue link are required. Record negatives and unverified cases, not only successes.
+## Required evidence and hard boundaries
 
-## Safety
+| Gate | What to record |
+| --- | --- |
+| Build and regression | Exact full SHA, environment, commands, test totals, failures and NOT RUN |
+| Service compatibility | Matched Core + Engine + Identity revisions, interface/route checks |
+| Identity/security | Denials, revocation, owner/entity isolation, no privilege granted by a UI or model |
+| Persistence/recovery | Append/save and restart behavior, backup/recover/rollback **when authorized** |
+| Model evidence | Real Nemotron versus fixture, call receipts and honest uncertain outcomes |
+| Owner usability | What was tested on the actual install; owner sign-off explicitly recorded |
+| Release | Immutable tag, hashes if available, manifest, limitations, installation and recovery |
 
-No promotion to Alpha/Stable/Main without owner approval. No deleting repos or thought data as a side effect of removing an identity or feature. No live code replacement hidden behind a "Connect" action. Keep data directories outside throwaway checkouts and show provenance/retention in logs.
+**Safety:** No merges to protected release lanes, deployments, owner-machine restarts, model requests, autonomous changes, permission changes, branch-default changes, repo deletion or private data access without the existing explicit authorization. Never replace a real security check with a fixture PASS; never delete user data as a casual rollback step. Identity owns authorization; Engine owns its cognition execution/data; Core coordinates; Development experiments; Cognition presents recorded evidence.
+
+## PR closing and keeping the project clean
+
+A PR that contains an actual candidate change **to code, tests or durable documentation** is legitimate. An issue describes a defect, idea or assignment. A review verdict usually belongs as a comment on the PR it reviewed; only open a separate report PR when that report itself is intended to be merged.
+
+At each accepted stage/checkpoint:
+- Reconcile open/closed/merged PR counts and unique active work with the [dated inventory](OPEN_PR_TRIAGE_20261112.md).
+- Verify whether old PRs are still depended on before closing. Preserve unique design, evidence, unresolved defects and successor references. No automatic closures by age or count.
+- Every open PR needs an owner/next action or explicit BLOCKED reason; every closure needs a reason and correct linked issue/replacement.
+- Update the one canonical issue and PR rather than spawning handoff/audit PRs for the same change.
+
+See the detailed [future-team maintenance checklist](TASS_ISSUE_PR_WORKFLOW.md).
+
+## Migration sequence — separate decisions, one repository at a time
+
+- [ ] Confirm this documentation and release meanings with the owner and reviewers; **do not merge as a declaration that the migration is finished**.
+- [ ] Inventory current branch heads, dependent PR bases, active release candidates, installed SHAs and whether `main` contains the source tree.
+- [ ] Select a verified accepted code baseline for each repo; propose how to bring it into `main` without losing unique changes or overwriting history. Preserve existing `alpha` refs and log prior SHAs.
+- [ ] Verify CI, security tests, repository links, and applicable branch/tag protections **before** changing defaults. Protect active Stage 2/3 work from surprise rebases.
+- [ ] Update README/STATUS to truthfully describe accepted source and installed/release manifests. Only then use `main` as the normal development base.
+- [ ] Prepare the first `stable` reference **only** when the external-trial acceptance gate is actually met.
+- [ ] Remove obsolete instructions/branches only through reviewed and documented housekeeping; keep useful history.
+
+## Historical record
+
+The prior Thought-Processor workflow used `alpha` as the experiment base and `main` as an owner-approved release/documentation lane. It remains traceable in Git history before this documentation revision. Past experiments and their original acceptance criteria are not retroactively reclassified by this new guide.
