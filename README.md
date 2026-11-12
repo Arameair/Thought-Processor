@@ -4,7 +4,7 @@
 
 Thought Processor is the application people and administrators use to understand and manage a modular system. It **coordinates** work and presents the next meaningful action; it does not itself grant privileges or perform the AI reasoning. [Identity](https://github.com/Arameair/identity) is the authority for durable identities and permissions. Optional features, including [Thought Engine](https://github.com/Arameair/Thought-engine), own their execution and data.
 
-> **Status · October 27, 2026:** An **owner-promoted runnable P0 Alpha** exists. A more advanced **P1 feature/identity foundation is an unpromoted experiment**, not a production release. Claude reports successful deterministic-fixture integration tests, but the owner has **not yet performed the P1 hands-on acceptance test**. Public `main` is a documentation/portfolio entry point, while `stable` remains an earlier documentation-only snapshot.
+> **Historical snapshot · October 27, 2026 — not a current installed-state report:** An **owner-promoted runnable P0 Alpha** existed. A more advanced **P1 feature/identity foundation is an unpromoted experiment**, not a production release. Claude reports successful deterministic-fixture integration tests, but the owner has **not yet performed the P1 hands-on acceptance test**. Public `main` is a documentation/portfolio entry point, while `stable` remains an earlier documentation-only snapshot.
 
 ## What problem does it solve?
 
@@ -22,7 +22,7 @@ Independent services often have separate identities, connection states, permissi
 
 **Discovered ≠ paired ≠ installed ≠ authorized ≠ running.** Processor can help create a disconnected identity with no grants, and that identity can recommend features. Recommendations are **not** permission to install or use them. Reusable grants support autonomous operations for specifically authorized identities and capabilities; Identity and the receiving feature enforce the decision. In the selected v1 policy, protected work fails closed if Identity cannot validate authorization.
 
-## Current software and evidence
+## Historical October 27 software and evidence
 
 | Lane | What exists | What still requires proof |
 | --- | --- | --- |
@@ -50,4 +50,4 @@ Project direction and owner approval: [Arameair](https://github.com/Arameair). T
 
 We are gradually evaluating a simple shared convention: `main` = understandable project entry point and eventual accepted source baseline; `experiment/*` = unpromoted work; `stable` = owner-used release approved for others to try; a separate release record pins compatible component SHAs. **This is a target convention, not a claim that current refs meet it.** Existing `alpha`/`stable` meanings and installed revisions remain unchanged pending review. See [repository and release policy](docs/TASS_REPOSITORY_RELEASE_POLICY.md).
 
-**Maintenance and contributor handoff (proposed, not yet adopted):** [issue → PR → review → close workflow](docs/TASS_ISSUE_PR_WORKFLOW.md) · [open PR inventory and closure history](docs/OPEN_PR_TRIAGE_20261112.md). Before adoption, reconcile this proposal with the existing [branching workflow](docs/WORKFLOW.md); their `alpha`/`main`/`stable` meanings differ. Current owner-controlled approvals remain unchanged.
+**For future contributors (proposed in draft PR #118):** [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) · [issue → PR → review → close workflow](docs/TASS_ISSUE_PR_WORKFLOW.md) · [open PR inventory and closure history](docs/OPEN_PR_TRIAGE_20261112.md). The [revised branching workflow](docs/WORKFLOW.md) agrees with the proposed target convention, but **existing branches and installed software have not migrated**. Current owner-controlled approvals remain unchanged.
