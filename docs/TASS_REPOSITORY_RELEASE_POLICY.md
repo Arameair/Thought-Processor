@@ -45,3 +45,9 @@ At this writing, some `main` branches are documentation/portfolio entry points; 
 - [ ] After real Stage 3 owner-use acceptance, evaluate first owner-approved `stable` release for external trial.
 
 **Principle:** Make the current truth obvious without presenting plans or mocks as working software.
+
+## Required policy reconciliation before adoption (found 2026-11-12)
+
+The existing [Thought-Processor workflow](WORKFLOW.md) **currently conflicts** with this proposed branch model. It documents `alpha` as experiment base, `stable` as approved snapshot and `main` as release lane; the proposed model would use `main` as accepted project baseline and `stable` as owner-used release ready for others to try. **Do not merge this proposal and tell teams it is operative until the owner explicitly chooses a migration.** Inventory active branches, dependent PRs and installed full SHAs, then reconcile existing `WORKFLOW.md`, `STATUS.md`, READMEs and protection rules in reviewable changes. Do not change Codex's active Stage 2 base automatically. Until reconciliation, this file is advisory and existing restrictions on merges/deployment stay in force.
+
+Future maintainer instructions: [issue → PR → acceptance workflow and hygiene checklist](TASS_ISSUE_PR_WORKFLOW.md); [dated open PR inventory](OPEN_PR_TRIAGE_20261112.md). The index must be refreshed before treating its counts or statuses as current.
