@@ -4,6 +4,8 @@ package main
 // scope precondition. A refused POST writes nothing and the Engine receives no write.
 
 import (
+	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,4 +60,94 @@ func TestExperimentPlanRoutesKeepTheCognitionBoundary(t *testing.T) {
 			t.Errorf("%s: HTTP %d (an arm route must not exist)", p, rec.Code)
 		}
 	}
+}
+
+// Stage 3B slice-1 repair (Codex audit, PR #122): an unsafe journal refuses every experiment route with one
+// fixed sentence: no saved plan in the answer, no attestation header, and the journal left byte-identical.
+func TestExperimentRoutesFailClosedOnAnUnsafeJournal(t *testing.T) {
+	const secret = "PRIVATE-HTTP-PLAN-TEXT"
+	a := scopeOwners["A"]
+	rec := func(id string) []byte {
+		return []byte(fmt.Sprintf(`{"schema":"thought-processor.experiment-plan/1","experiment_id":"%s","owner_entity_id":"%s","engine_entity_id":"%s","thought_id":"thought_1","baseline_nudge_id":"nudge_00000000000000000001","baseline_request_id":"mr_00000001","snapshot":"AS_OF_NOW","variable":"instruction","control":"c","variant":"%s","idempotency_key":"exp-http-seed","body_digest":"x"}`+"\n", id, a.id, a.engine, secret))
+	}
+	valid := rec("exp_aaaaaaaaaaaaaaaaaaaa")
+	post := `{"baseline_nudge_id":"nudge_00000000000000000001","variant":"Answer the question directly.","snapshot":"AS_OF_NOW","idempotency_key":"exp-http-0002"}`
+	big := append([]byte{}, valid...)
+	for i := 0; len(big) <= 4<<20; i++ {
+		big = append(big, rec(fmt.Sprintf("exp_%020x", i))...)
+	}
+	for _, tc := range []struct {
+		name string
+		data []byte
+		mode os.FileMode
+	}{
+		{"complete corrupt record", append(append([]byte{}, valid...), []byte("{broken}\n")...), 0o600},
+		{"over the 4 MiB ceiling", big, 0o600},
+		{"mode 0644", valid, 0o644},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := scopeServer(t)
+			journal := filepath.Join(env.dir, "experiments.jsonl")
+			if err := os.WriteFile(journal, tc.data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			os.Chmod(journal, tc.mode)
+			for name, call := range map[string]func() (int, string, http.Header){
+				"GET plan": func() (int, string, http.Header) {
+					r := env.get("/api/development/experiments/exp_aaaaaaaaaaaaaaaaaaaa", env.expectOf("A"))
+					return r.Code, r.Body.String(), r.Header()
+				},
+				"GET list": func() (int, string, http.Header) {
+					r := env.get("/api/development/experiments?run=nudge_00000000000000000001", env.expectOf("A"))
+					return r.Code, r.Body.String(), r.Header()
+				},
+				"POST plan": func() (int, string, http.Header) {
+					r := env.post("/api/development/experiments", post, env.expectOf("A"))
+					return r.Code, r.Body.String(), r.Header()
+				},
+			} {
+				code, body, hdr := call()
+				if code != http.StatusServiceUnavailable || scopeCode2(body) != "EXPERIMENT_JOURNAL_UNSAFE" {
+					t.Errorf("%s: HTTP %d %s", name, code, body)
+				}
+				if strings.Contains(body, secret) || strings.Contains(body, "exp_aaaa") || strings.Contains(body, "record") || hdr.Get("X-Cognition-Identity") != "" {
+					t.Errorf("%s: the refusal exposes journal content or an attestation: %s", name, body)
+				}
+			}
+			now, _ := os.ReadFile(journal)
+			fi, _ := os.Stat(journal)
+			if !bytes.Equal(now, tc.data) || fi.Mode().Perm() != tc.mode {
+				t.Errorf("the journal changed (%d → %d bytes, mode %v)", len(tc.data), len(now), fi.Mode().Perm())
+			}
+			if len(env.eng.nonGET) != 0 {
+				t.Errorf("Engine writes: %v", env.eng.nonGET)
+			}
+		})
+	}
+	// Positive control: with the same valid record in a safe journal the routes get past the journal
+	// (the fixture has no processed nudge, so they end at the ordinary 404, not the journal refusal).
+	env := scopeServer(t)
+	os.WriteFile(filepath.Join(env.dir, "experiments.jsonl"), valid, 0o600)
+	if r := env.get("/api/development/experiments/exp_aaaaaaaaaaaaaaaaaaaa", env.expectOf("A")); r.Code != http.StatusNotFound || strings.Contains(r.Body.String(), secret) {
+		t.Errorf("safe journal: HTTP %d %s", r.Code, r.Body.String())
+	}
+	// Unicode bypasses are refused by the server (400) before anything is written.
+	for _, v := range []string{"Answer.\u2028Then stop.", "Answer.\u2029Then stop.", "Answer. NOTE： yes", "Answer. STATE＝ keep"} {
+		body := strings.Replace(post, "Answer the question directly.", v, 1)
+		if r := env.post("/api/development/experiments", body, env.expectOf("A")); r.Code != http.StatusBadRequest {
+			t.Errorf("variant %q: HTTP %d %s", v, r.Code, r.Body.String())
+		}
+	}
+	if now, _ := os.ReadFile(filepath.Join(env.dir, "experiments.jsonl")); !bytes.Equal(now, valid) {
+		t.Error("a refused variant changed the journal")
+	}
+}
+
+func scopeCode2(body string) string {
+	i := strings.Index(body, `"code":"`)
+	if i < 0 {
+		return ""
+	}
+	rest := body[i+8:]
+	return rest[:strings.Index(rest, `"`)]
 }

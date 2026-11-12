@@ -686,6 +686,9 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusConflict,map[string]string{"error":err.Error()})
         case errors.Is(err,tass.ErrExperimentInvalid):
             reply(w,http.StatusBadRequest,map[string]string{"error":err.Error()})
+        case errors.Is(err,tass.ErrExperimentJournal):
+            // Fail closed: the fixed sentence only (never the file's content or which record is bad).
+            reply(w,http.StatusServiceUnavailable,map[string]string{"error":tass.ErrExperimentJournal.Error(),"code":"EXPERIMENT_JOURNAL_UNSAFE"})
         case errors.Is(err,tass.ErrExperimentWrite):
             reply(w,http.StatusInternalServerError,map[string]string{"error":tass.ErrExperimentWrite.Error()})
         default:

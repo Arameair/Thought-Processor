@@ -120,7 +120,7 @@ func TestExperimentPlanRefusesAnythingButOneInstructionSentence(t *testing.T) {
 		})
 	}
 	if _, err := os.Stat(filepath.Join(dir, "data", "core", experimentFile)); err == nil {
-		if all, _, _ := c.readExperiments(); len(all) != 0 {
+		if all, _ := c.readExperiments(); len(all) != 0 {
 			t.Fatalf("a refused plan was saved: %d", len(all))
 		}
 	}
@@ -144,7 +144,7 @@ func TestExperimentPlanIsIdempotentAndOwnerScoped(t *testing.T) {
 	if _, err := c.SaveExperimentDraft(expDraft(nid, "exp-key-same", "Something else entirely, please.")); !errors.Is(err, ErrExperimentConflict) {
 		t.Fatalf("reused key: %v", err)
 	}
-	if all, _, _ := c.readExperiments(); len(all) != 1 {
+	if all, _ := c.readExperiments(); len(all) != 1 {
 		t.Fatalf("journal holds %d plans", len(all))
 	}
 	// Not a processed nudge of this owner → the same 404 as the run view; nothing saved.
@@ -196,7 +196,7 @@ func TestExperimentPlanDeniedWhenLockedOrReadGrantRevoked(t *testing.T) {
 			if _, err := c.SaveExperimentDraft(expDraft(nid, "exp-key-denied", expVariant)); err == nil {
 				t.Fatal("saved while denied")
 			}
-			if all, _, _ := c.readExperiments(); len(all) != 0 {
+			if all, _ := c.readExperiments(); len(all) != 0 {
 				t.Fatal("a denied plan was written")
 			}
 		})

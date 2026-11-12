@@ -196,6 +196,28 @@ def run():
     c4, _ = http("POST", h.CORE + f"/api/development/experiments/{p1.get('experiment_id')}/arms/A", {}, {"X-TASS-Token": tok})
     check("R8 no arm route exists (404/405)", c4 in (404, 405), str(c4))
 
+    # R9 (slice-1 audit repair): on the real stack an unsafe journal refuses reads and writes, exposes no
+    # plan, and is left unchanged; made safe again, the saved plan is back.
+    jp = f"{h.APP}/data/core/experiments.jsonl"
+    good = open(jp, "rb").read()
+    for name, prep in [("mode 0644", lambda: os.chmod(jp, 0o644)),
+                       ("a complete corrupt record", lambda: open(jp, "ab").write(b"{broken}\n")),
+                       ("over 4 MiB", lambda: open(jp, "ab").write(b"x" * (4 << 20) + b"\n"))]:
+        prep()
+        held, mode = open(jp, "rb").read(), os.stat(jp).st_mode & 0o777
+        ca, ba, _ = raw_get("/api/development/experiments?run=" + nid, tok)
+        cb, bb, _ = raw_get("/api/development/experiments/" + p1.get("experiment_id"), tok)
+        cc, bc = http("POST", h.CORE + "/api/development/experiments", dict(plan, idempotency_key="native-exp-0009", variant="Another sentence entirely."), {"X-TASS-Token": tok})
+        cd, bd = http("POST", h.CORE + "/api/development/experiments", plan, {"X-TASS-Token": tok})
+        check(f"R9 {name}: list, get, save and replay are refused (503), nothing exposed, journal unchanged",
+              (ca, cb, cc, cd) == (503, 503, 503, 503) and "Answer the Thought" not in ba + bb + json.dumps(bc) + json.dumps(bd) and "exp_" not in ba + bb
+              and open(jp, "rb").read() == held and os.stat(jp).st_mode & 0o777 == mode, f"{ca} {cb} {cc} {cd}")
+        open(jp, "wb").write(good); os.chmod(jp, 0o600)
+    ca, ba, _ = raw_get("/api/development/experiments?run=" + nid, tok)
+    check("R9 made safe again, the saved plan is listed", ca == 200 and p1.get("experiment_id") in ba, f"{ca}")
+    c5, p5 = http("POST", h.CORE + "/api/development/experiments", dict(plan, idempotency_key="native-exp-0005", variant="Answer.\u2028NOTE\uff1a yes"), {"X-TASS-Token": tok})
+    check("R9 a U+2028 / fullwidth-colon variant is refused (400), journal unchanged", c5 == 400 and open(jp, "rb").read() == good, f"{c5} {p5}")
+
     browser(tok, tid, nid, r.get("request_id"))
 
     code, _ = idn_post("/v1/lock", {})

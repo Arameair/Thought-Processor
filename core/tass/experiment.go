@@ -19,12 +19,14 @@ package tass
 // history, the advisory Design graph, settings or code.
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -55,10 +57,11 @@ var (
 	ErrExperimentConflict = errors.New("experiment idempotency conflict")
 	ErrExperimentWrite    = errors.New("the experiment plan could not be saved on this computer; nothing was saved")
 	ErrExperimentNotFound = errors.New("no experiment with this ID for this owner")
+	// ErrExperimentJournal: the local journal is damaged, over its size ceiling, or not a private regular
+	// file. Nothing is read from it and nothing is appended to it until the owner has looked at the file.
+	ErrExperimentJournal = errors.New("the experiment journal on this computer is damaged, too large or not private; nothing was read from it and nothing was changed")
 
 	experimentIDRE = regexp.MustCompile(`^exp_[0-9a-f]{20}$`)
-	// A line the Engine's parser (reNote/reState) would read as part of the output contract.
-	experimentContractRE = regexp.MustCompile(`(?i)\b(NOTE|STATE)\s*\**\s*[:=]`)
 )
 
 // ExperimentDraft is what the owner submits.
@@ -175,26 +178,78 @@ func (d *ExperimentDraft) normalize() error {
 		return fmt.Errorf("%w: snapshot must be AS_OF_NOW", ErrExperimentInvalid)
 	}
 	v := d.Variant
-	switch {
-	case v == "":
+	if v == "" {
 		return fmt.Errorf("%w: write the changed instruction sentence", ErrExperimentInvalid)
-	case !utf8.ValidString(v):
+	}
+	if !utf8.ValidString(v) {
 		return fmt.Errorf("%w: the instruction is not valid text", ErrExperimentInvalid)
-	case utf8.RuneCountInString(v) > experimentVariantMax:
+	}
+	if utf8.RuneCountInString(v) > experimentVariantMax {
 		return fmt.Errorf("%w: the instruction is longer than %d characters", ErrExperimentInvalid, experimentVariantMax)
-	case strings.ContainsAny(v, "\r\n"):
-		return fmt.Errorf("%w: the instruction must be one line; the reply format lines are fixed", ErrExperimentInvalid)
-	case experimentContractRE.MatchString(v):
-		return fmt.Errorf("%w: the instruction may not contain NOTE: or STATE:; the reply format is fixed so the Engine's parser stays valid", ErrExperimentInvalid)
-	case strings.Join(strings.Fields(v), " ") == experimentControl:
-		return fmt.Errorf("%w: B must differ from A: change the instruction sentence", ErrExperimentInvalid)
 	}
 	for _, r := range v {
-		if unicode.IsControl(r) {
+		switch {
+		// Every line break Unicode knows: CR, LF, VT, FF, NEL (U+0085), LINE SEPARATOR (U+2028),
+		// PARAGRAPH SEPARATOR (U+2029).
+		case r == '\n' || r == '\r' || r == '\v' || r == '\f' || r == 0x85 || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r):
+			return fmt.Errorf("%w: the instruction must be one line; the reply format lines are fixed", ErrExperimentInvalid)
+		case unicode.IsControl(r):
 			return fmt.Errorf("%w: the instruction contains a control character", ErrExperimentInvalid)
+		// Format characters (zero-width, joiners, direction overrides, BOM), private-use and unassigned code
+		// points cannot be seen on the page, so what is saved would not be what the owner read.
+		case unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Co, r) || unicode.Is(unicode.Cs, r) || r == utf8.RuneError || !unicode.IsPrint(r) && !unicode.IsSpace(r):
+			return fmt.Errorf("%w: the instruction contains an invisible or unprintable character (U+%04X)", ErrExperimentInvalid, r)
 		}
 	}
+	if experimentHasContractMarker(v) {
+		return fmt.Errorf("%w: the instruction may not contain NOTE: or STATE: (in any script or look-alike punctuation); the reply format is fixed so the Engine's parser stays valid", ErrExperimentInvalid)
+	}
+	if strings.Join(strings.Fields(v), " ") == experimentControl { // Fields splits on every Unicode space
+		return fmt.Errorf("%w: B must differ from A: change the instruction sentence", ErrExperimentInvalid)
+	}
 	return nil
+}
+
+// experimentHasContractMarker reports whether v contains the word NOTE or STATE followed by something that
+// is, or could be read as, the delimiter of a reply-format line. It fails closed:
+//   - letters are folded first: fullwidth forms (ＮＯＴＥ) to ASCII, then Unicode upper-casing (ſtate → STATE);
+//   - after the word, any run of spaces (every Unicode space), emphasis marks (* _ ` ~ " ') and combining
+//     marks is skipped;
+//   - the next character is then a marker if it is ASCII ':' or '=', or ANY non-ASCII punctuation or symbol.
+//     That covers every colon and equals look-alike (： ﹕ ∶ ꞉ ։ ＝ ⩵ …) without a list that could miss one.
+//     Ordinary ASCII punctuation after the word ("take note, then …", "the state.") is allowed.
+//
+// The word must start at a word boundary, so "footnotes:" and "estate:" are not markers.
+func experimentHasContractMarker(v string) bool {
+	fold := make([]rune, 0, len(v))
+	for _, r := range v {
+		if r >= 0xFF01 && r <= 0xFF5E { // fullwidth ASCII block → ASCII
+			r -= 0xFEE0
+		}
+		fold = append(fold, unicode.ToUpper(r))
+	}
+	isWord := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	for i := range fold {
+		if i > 0 && isWord(fold[i-1]) {
+			continue
+		}
+		for _, w := range [][]rune{[]rune("NOTE"), []rune("STATE")} {
+			if i+len(w) > len(fold) || string(fold[i:i+len(w)]) != string(w) {
+				continue
+			}
+			j := i + len(w)
+			for j < len(fold) && (unicode.IsSpace(fold[j]) || unicode.Is(unicode.Mn, fold[j]) || unicode.Is(unicode.Me, fold[j]) || strings.ContainsRune("*_`~\"'", fold[j])) {
+				j++
+			}
+			if j == len(fold) {
+				continue
+			}
+			if r := fold[j]; r == ':' || r == '=' || (r > unicode.MaxASCII && (unicode.IsPunct(r) || unicode.IsSymbol(r))) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (d ExperimentDraft) digest() string {
@@ -208,12 +263,17 @@ func (c *Core) SaveExperimentDraft(d ExperimentDraft, rq ...*CognitionReq) (Expe
 	if err := d.normalize(); err != nil {
 		return ExperimentView{}, err
 	}
-	// The owner-scoped, read-only run view decides that the baseline exists and is this owner's.
-	run, err := c.DevelopmentRun(d.BaselineNudgeID, rq...)
+	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return ExperimentView{}, err
 	}
-	scope, err := c.cognitionAccess(rq...)
+	// An unsafe journal refuses the request before anything else is read (and again, under the same lock
+	// as the append, below).
+	if err := c.experimentJournalSafe(); err != nil {
+		return ExperimentView{}, err
+	}
+	// The owner-scoped, read-only run view decides that the baseline exists and is this owner's.
+	run, err := c.DevelopmentRun(d.BaselineNudgeID, rq...)
 	if err != nil {
 		return ExperimentView{}, err
 	}
@@ -224,9 +284,9 @@ func (c *Core) SaveExperimentDraft(d ExperimentDraft, rq ...*CognitionReq) (Expe
 
 	c.expMu.Lock()
 	defer c.expMu.Unlock()
-	all, _, err := c.readExperiments()
+	all, err := c.readExperiments()
 	if err != nil {
-		return ExperimentView{}, ErrCognitionUnavailable
+		return ExperimentView{}, err
 	}
 	for _, e := range all {
 		if e.OwnerEntityID == scope.identityID && e.IdempotencyKey == d.IdempotencyKey {
@@ -259,7 +319,7 @@ func (c *Core) SaveExperimentDraft(d ExperimentDraft, rq ...*CognitionReq) (Expe
 		CreatedAt: c.now().UTC(), IdempotencyKey: d.IdempotencyKey, BodyDigest: digest,
 	}
 	if err := c.appendExperiment(e); err != nil {
-		if errors.Is(err, ErrExperimentInvalid) {
+		if errors.Is(err, ErrExperimentInvalid) || errors.Is(err, ErrExperimentJournal) {
 			return ExperimentView{}, err
 		}
 		return ExperimentView{}, fmt.Errorf("%w: %v", ErrExperimentWrite, err)
@@ -270,19 +330,22 @@ func (c *Core) SaveExperimentDraft(d ExperimentDraft, rq ...*CognitionReq) (Expe
 
 // Experiments lists this owner's plans for one baseline run (newest first), with the form's options.
 func (c *Core) Experiments(baselineNudgeID string, rq ...*CognitionReq) (ExperimentList, error) {
-	run, err := c.DevelopmentRun(baselineNudgeID, rq...)
-	if err != nil {
-		return ExperimentList{}, err
-	}
 	scope, err := c.cognitionAccess(rq...)
 	if err != nil {
 		return ExperimentList{}, err
 	}
+	if err := c.experimentJournalSafe(); err != nil {
+		return ExperimentList{}, err
+	}
+	run, err := c.DevelopmentRun(baselineNudgeID, rq...)
+	if err != nil {
+		return ExperimentList{}, err
+	}
 	c.expMu.Lock()
-	all, _, err := c.readExperiments()
+	all, err := c.readExperiments()
 	c.expMu.Unlock()
 	if err != nil {
-		return ExperimentList{}, ErrCognitionUnavailable
+		return ExperimentList{}, err
 	}
 	out := ExperimentList{Experiments: []ExperimentView{}, Control: experimentControl, Contract: experimentContract,
 		VariantMax: experimentVariantMax, Snapshots: experimentSnapshots,
@@ -308,10 +371,10 @@ func (c *Core) ExperimentByID(id string, rq ...*CognitionReq) (ExperimentView, e
 		return ExperimentView{}, err
 	}
 	c.expMu.Lock()
-	all, _, err := c.readExperiments()
+	all, err := c.readExperiments()
 	c.expMu.Unlock()
 	if err != nil {
-		return ExperimentView{}, ErrCognitionUnavailable
+		return ExperimentView{}, err
 	}
 	for _, e := range all {
 		if e.ExperimentID == id && e.OwnerEntityID == scope.identityID && e.EngineEntityID == scope.engineID {
@@ -346,49 +409,120 @@ func (c *Core) experimentView(e Experiment, run DevelopmentRun) ExperimentView {
 }
 
 // ---------- journal ----------
+//
+// experiments.jsonl is one JSON plan per line, each line ended by '\n', appended with one write and an
+// fsync. Every access first checks the file WITHOUT reading it (experimentJournalCheck) and fails closed
+// with ErrExperimentJournal when it:
+//   - is not a regular file (a symlink, directory or device is refused; Lstat, never followed);
+//   - has any permission bit beyond owner read/write (anything more permissive than 0600). It is created 0600;
+//   - is larger than experimentJournalMax. The size is checked before the file is opened, the read is
+//     bounded by the same ceiling, and an append that would cross it is refused, so the journal can never
+//     grow into a state that locks itself.
+// Then every COMPLETE record (a line ended by '\n') must be a valid plan: valid JSON, this schema, a
+// well-formed and unique experiment ID. One bad complete record, a blank line or a duplicate ID anywhere
+// refuses the whole journal: no plan is returned and nothing is appended.
+//
+// The one recovery rule is for bytes after the last '\n'. A record is acknowledged only after its full
+// line, newline included, was written and fsynced, so trailing bytes without a newline are an append that
+// was cut off and never acknowledged. Reads never return them, whatever they contain, and never change the
+// file. The next save first copies exactly those bytes to experiments.jsonl.partial-<time> (0600, fsync),
+// cuts the journal back to its last complete record (fsync), and only then appends.
 
-func (c *Core) readExperiments() ([]Experiment, int, error) {
-	b, err := os.ReadFile(c.file(experimentFile))
+// experimentOpenRead opens the journal for reading; tests count calls to prove the size check comes first.
+var experimentOpenRead = func(name string) (*os.File, error) { return os.Open(name) }
+
+// experimentJournalCheck inspects the journal without opening it. exists=false means there is no journal.
+func (c *Core) experimentJournalCheck() (size int64, exists bool, err error) {
+	fi, err := os.Lstat(c.file(experimentFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, 0, nil
+		return 0, false, nil
 	}
 	if err != nil {
-		return nil, 0, err
+		return 0, false, fmt.Errorf("%w (it cannot be inspected)", ErrExperimentJournal)
 	}
-	var out []Experiment
-	invalid := 0
-	for _, line := range strings.Split(string(b), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		var e Experiment
-		if json.Unmarshal([]byte(line), &e) != nil || e.Schema != experimentSchema || !experimentIDRE.MatchString(e.ExperimentID) {
-			invalid++
-			continue
-		}
-		out = append(out, e)
+	switch {
+	case !fi.Mode().IsRegular():
+		return 0, true, fmt.Errorf("%w (it is not a regular file)", ErrExperimentJournal)
+	case fi.Mode().Perm()&^0o600 != 0 || fi.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0:
+		return 0, true, fmt.Errorf("%w (its permissions are %04o; nothing beyond owner read/write, 0600, is accepted)", ErrExperimentJournal, fi.Mode().Perm())
+	case fi.Size() > experimentJournalMax:
+		return 0, true, fmt.Errorf("%w (it is %d bytes; the limit is %d)", ErrExperimentJournal, fi.Size(), experimentJournalMax)
 	}
-	return out, invalid, nil
+	return fi.Size(), true, nil
 }
 
+// experimentJournalLoad returns the valid plans and the length of the complete-record prefix (the offset
+// just after the last '\n'). Caller holds expMu.
+func (c *Core) experimentJournalLoad() (plans []Experiment, complete int64, size int64, err error) {
+	size, exists, err := c.experimentJournalCheck()
+	if err != nil || !exists {
+		return nil, 0, 0, err
+	}
+	f, err := experimentOpenRead(c.file(experimentFile))
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("%w (it cannot be opened)", ErrExperimentJournal)
+	}
+	defer f.Close()
+	// Bounded: never more than the ceiling plus one byte, whatever the file became since the check.
+	b, err := io.ReadAll(io.LimitReader(f, experimentJournalMax+1))
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("%w (it cannot be read)", ErrExperimentJournal)
+	}
+	if len(b) > experimentJournalMax {
+		return nil, 0, 0, fmt.Errorf("%w (it grew past the limit of %d bytes)", ErrExperimentJournal, experimentJournalMax)
+	}
+	end := bytes.LastIndexByte(b, '\n') + 1 // 0 when there is no complete record
+	seen := map[string]bool{}
+	n := 0
+	for rest := b[:end]; len(rest) > 0; {
+		i := bytes.IndexByte(rest, '\n')
+		line := rest[:i]
+		rest = rest[i+1:]
+		n++
+		var e Experiment
+		dec := json.NewDecoder(bytes.NewReader(line))
+		if dec.Decode(&e) != nil || dec.More() || e.Schema != experimentSchema || !experimentIDRE.MatchString(e.ExperimentID) || seen[e.ExperimentID] {
+			return nil, 0, 0, fmt.Errorf("%w (record %d is not a valid, unique plan)", ErrExperimentJournal, n)
+		}
+		seen[e.ExperimentID] = true
+		plans = append(plans, e)
+	}
+	return plans, int64(end), int64(len(b)), nil
+}
+
+// experimentJournalSafe validates the whole journal and returns nothing from it.
+func (c *Core) experimentJournalSafe() error {
+	c.expMu.Lock()
+	defer c.expMu.Unlock()
+	_, err := c.readExperiments()
+	return err
+}
+
+func (c *Core) readExperiments() ([]Experiment, error) {
+	plans, _, _, err := c.experimentJournalLoad()
+	return plans, err
+}
+
+// appendExperiment re-validates the whole journal, quarantines a cut-off trailing append if there is one,
+// then appends one record. Caller holds expMu.
 func (c *Core) appendExperiment(e Experiment) error {
 	p := c.file(experimentFile)
-	if fi, err := os.Stat(p); err == nil && fi.Size() > experimentJournalMax {
-		return fmt.Errorf("%w: the local experiment journal is full; export and archive it first", ErrExperimentInvalid)
+	_, complete, size, err := c.experimentJournalLoad()
+	if err != nil {
+		return err
 	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		return err
 	}
 	line := append(b, '\n')
-	if r, err := os.Open(p); err == nil {
-		if fi, err := r.Stat(); err == nil && fi.Size() > 0 {
-			last := make([]byte, 1)
-			if _, err := r.ReadAt(last, fi.Size()-1); err == nil && last[0] != '\n' {
-				line = append([]byte{'\n'}, line...)
-			}
+	if complete+int64(len(line)) > experimentJournalMax {
+		return fmt.Errorf("%w: the local experiment journal is full; export and archive it first", ErrExperimentInvalid)
+	}
+	if size > complete {
+		if err := c.quarantineExperimentTail(p, complete, size); err != nil {
+			return err
 		}
-		r.Close()
 	}
 	f, err := nudgeOpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -402,5 +536,47 @@ func (c *Core) appendExperiment(e Experiment) error {
 		f.Close()
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	// The journal must end up private whatever the process umask or a concurrent chmod did.
+	if _, _, err := c.experimentJournalCheck(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// quarantineExperimentTail moves the bytes [complete, size) of the journal (a cut-off, unacknowledged
+// append) into a private side file and cuts the journal back to its last complete record.
+func (c *Core) quarantineExperimentTail(p string, complete, size int64) error {
+	f, err := os.OpenFile(p, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("%w (its cut-off last write cannot be set aside)", ErrExperimentJournal)
+	}
+	defer f.Close()
+	tail := make([]byte, size-complete)
+	if _, err := io.ReadFull(io.NewSectionReader(f, complete, size-complete), tail); err != nil {
+		return fmt.Errorf("%w (its cut-off last write cannot be set aside)", ErrExperimentJournal)
+	}
+	q, err := os.OpenFile(fmt.Sprintf("%s.partial-%s", p, c.now().UTC().Format("20060102T150405.000000000Z")), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("%w (its cut-off last write cannot be set aside)", ErrExperimentJournal)
+	}
+	if _, err := q.Write(tail); err == nil {
+		err = q.Sync()
+	}
+	if cerr := q.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("%w (its cut-off last write cannot be set aside)", ErrExperimentJournal)
+	}
+	if err := f.Truncate(complete); err != nil {
+		return fmt.Errorf("%w (it cannot be cut back to its last complete record)", ErrExperimentJournal)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("%w (it cannot be cut back to its last complete record)", ErrExperimentJournal)
+	}
+	c.event("problem", "The experiment journal ended in a cut-off write. It was set aside in a .partial file and the journal was cut back to its last complete record.")
+	return nil
 }
