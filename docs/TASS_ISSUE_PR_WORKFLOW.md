@@ -107,6 +107,10 @@ The owner has selected the target model of accepted source on `main` and an owne
 
 **Definition of success:** a new contributor can determine *what is the problem, who owns it, what commit is being verified, where the evidence is, what is installed, and what happens next* without reading 100 historical PRs.
 
+## Proportional review and queue health (target policy, not yet active)
+
+Apply [R0–R3 review routing](ENTITY_CONTRIBUTOR_WORKFLOW.md#fast-flow-review-policy-parallel-work-risk-based-gates): routine docs/fixtures require qualified lightweight review and pertinent checks; R1 bounded work needs service-maintainer review; R2 shared interfaces/persistence need combined compatibility review; R3 Identity, cross-owner privacy or protected execution needs independent adversarial audit at the final SHA plus applicable explicit authorizations. An older audit cannot approve a changed SHA. Avoid a universal full release suite for documentation, one owner-assigned reviewer for every issue, and one-PR-per-repository limits. Track reviewer waiting time and assign backups; improve CI and triage instead of bypassing protective gates. This is a *proposed* process; GitHub settings and branch authority are unchanged until adopted.
+
 ## Entity-assisted open contribution (future pilot)
 
 The owner selected an opt-in contributor-ready issue model in which a developer's own authorized entity may help read an issue, coordinate a claim, work in isolation and prepare a draft PR. See [entity contribution proposal](ENTITY_CONTRIBUTOR_WORKFLOW.md). A GitHub comment or assignee is **not** an exclusive lease or additional permission. Multiple PRs per repo may coexist; only one accountable implementation per focused issue unless team coordination is explicit. GitHub access, Identity capabilities, maintainer review, combined-SHA tests and owner release approval remain separate. **Do not implement a claim bot during Stage 3 or mistake this design for deployed capability.**
