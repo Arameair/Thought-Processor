@@ -96,3 +96,8 @@ Multiple human or AI contributors can work simultaneously using **separate isola
 A reviewed change on `main` is **not** an installable update. The existing `core/tass.sh` update/rollback machinery should only be extended through a separately verified release manifest and owner-controlled approval path. Start with a **read-only** release eligibility pilot, never treat a changing Git branch as a release. See [coordinated update/release workflow](UPDATE_RELEASE_WORKFLOW.md) and existing [update/recovery issue #79](https://github.com/Arameair/Thought-Processor/issues/79).
 
 **Dedicated project:** [Arameair/updater](https://github.com/Arameair/updater) owns read-only release discovery, manifest checks and eligibility ([issue #1](https://github.com/Arameair/updater/issues/1)); Core `tass.sh` remains the sole local execution/backup/recovery backend ([Core issue #79](https://github.com/Arameair/Thought-Processor/issues/79)). Its private repo status means external release distribution is a later separate decision. No live update is authorized.
+
+## Contributor/entity collaboration (proposed, not enabled)
+
+The owner wants multiple people and their **own entities** to pick up contributor-ready GitHub issues, coordinate claims, work in isolated branches and submit draft PRs. The full hybrid microservice-maintainer approach, authorization boundaries, non-atomic claim caveat and phased pilot live in [ENTITY_CONTRIBUTOR_WORKFLOW.md](ENTITY_CONTRIBUTOR_WORKFLOW.md). **Multiple open PRs per repository are allowed; integrate reviewed changes one compatible candidate at a time.** Do not start an issue-claiming bot or new autonomous agent work before Stage 3C owner acceptance and the stabilization gate.
+
