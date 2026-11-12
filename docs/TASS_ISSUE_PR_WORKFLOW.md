@@ -63,3 +63,42 @@ Ask **“Is there a concrete repository change for reviewers to accept?”**
 - **Never auto-close based on age, PR number, title or a passing fixture.** Closure requires source/dependency check and a reason. Don't erase branches or confuse a closed review PR with a fixed product defect.
 
 First cleanup example: [2026-11-12 inventory/dispositions](OPEN_PR_TRIAGE_20261112.md) (121 open initially → 110 after eleven evidence-linked, nonmerged closures).
+
+## Maintenance instructions for every future team (human, Claude, Codex or other agent)
+
+**Until the owner adopts this proposal, the existing branch/release workflow and current issue-specific instructions remain authoritative.** This is a proposed operating checklist, not permission to merge, deploy or rebase an active stage.
+
+### When new work is discovered
+1. Search the repo for an **existing issue or active PR** describing the same observed problem. Add evidence there first; do not duplicate tickets or open multiple parallel PRs for the same repair.
+2. For a new independent defect, open **one issue** with reproduction, expected/actual behavior, impact, exact affected SHA/environment (if known), and proposed acceptance tests. A hypothesis is labeled UNVERIFIED; do not call it confirmed.
+3. Ideas or design questions belong in an issue; a candidate **file change meant for review** belongs in a PR. Audit findings go on the PR they reviewed, except an intentionally accepted permanent report document.
+4. Identify the current active release/implementation chain and pinned component revisions before choosing a base. An old default branch or PR title is **not proof** of what runs. Do not base new work on an unrelated older experiment by convenience.
+5. Give each active task **one accountable implementer and one next action**. Independent audit cannot be self-certified.
+
+### While a PR is open
+1. Link its issue; identify head/base SHA, dependency PRs, changed files, scope boundaries, the acceptance gate and whether it is DRAFT or ready for review.
+2. Keep the record short: **DONE / OPEN / NEXT / BLOCKED**. Update after meaningful code/evidence changes; link historical decisions instead of copying long reports into new PRs.
+3. A failed test is initially a **comment on the same PR**; repair on that branch where feasible, retest the new exact SHA, and keep original failures visible. Open a separate issue only for a genuinely independent defect.
+4. Preserve PASS/FAIL/NOT RUN with test command, environment, fixture-vs-real-model status, and permission/owner scope. Never loosen a test just to obtain PASS; never report fixture/visual behavior as real TASS acceptance.
+5. No extra audit PR just to announce a finished audit of another PR: publish the verdict, evidence link and blockers on the existing PR/issue. If a durable audit file genuinely needs merging, a narrowly scoped docs PR is acceptable.
+
+### At the end of a task
+1. **Decide explicitly:** merge with required approval, or close with reason as SUPERSEDED / HISTORICAL / REJECTED; if work continues, keep it ACTIVE / REVIEW / READY / BLOCKED with one named next action.
+2. Before closing an unmerged PR, verify there are no still-needed unique changes or dependency consumers. Record replacement issue/PR and last useful evidence in a **closure comment**. Never delete the branch or rewrite the original audit history as part of routine triage.
+3. A merged PR closes the **code review**, not necessarily the defect, deployment, owner acceptance or public stable release. Link the accepted commit to the release manifest and separate installed-state record when applicable.
+4. Update the work issue and active PR ledger without opening a second PR just to say the first PR closed. Keep decisions in the existing coordinating issue.
+
+### Scheduled hygiene trigger
+After every accepted stage or material release candidate, and periodically if work piles up:
+- Recount **open PRs and issues** per repo, distinguish open/closed/merged, and compare to the last snapshot.
+- Identify PRs with no clear next action, duplicate plans, report-only reviews, and stacked branches whose actual dependent head must be checked before changes.
+- Verify any proposed closure against real content, approvals and successor links; close **in small batches**, not by age or a target number.
+- Publish a compact delta: **opened, closed, merged, reviewed, blocked, owner decisions required, exact active SHAs**. Reconcile the dated inventory; never replace original evidence with guessed status.
+- Avoid expensive build/CI runs merely to classify docs. Run actual verification when approving executable code or a release gate.
+- Stop and request a decision before changing protected branches, repo defaults, Identity security, model calls, runtime data, deployed software or public stable status.
+
+### Documentation consistency gate
+
+Before marking repository governance accepted, reconcile existing [docs/WORKFLOW.md](WORKFLOW.md) with the proposed [TASS branch/release policy](TASS_REPOSITORY_RELEASE_POLICY.md). **They currently disagree:** historical workflow says experiments → `alpha` → `stable` → `main` release, while proposed convention says accepted source on `main` and owner-trialed externally shareable release on `stable`. Do not tell contributors both are in force. Record which definition the owner chooses and migrate branch pointers, badges, README wording and release records only by separately authorized review. No implicit change to the active Stage 2 / Stage 3 working base.
+
+**Definition of success:** a new contributor can determine *what is the problem, who owns it, what commit is being verified, where the evidence is, what is installed, and what happens next* without reading 100 historical PRs.
