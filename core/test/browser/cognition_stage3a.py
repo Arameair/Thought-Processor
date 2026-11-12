@@ -145,7 +145,7 @@ with sync_playwright() as p:
 
             # H2–H5
             pg.locator("#dev-" + REQ + " a.how").click()
-            pg.wait_for_selector("#runView li.st")
+            pg.wait_for_selector("#runView li.st", state="attached")
             v = pg.evaluate(RUNPROBE)
             check("H2 lands on /dev?run=<nudge>", pg.url == ORIGIN + "/dev?run=" + NID, pg.url)
             check("H2 title", v and v["title"] == "How this Note was produced", v)
@@ -175,11 +175,11 @@ with sync_playwright() as p:
 
             # H6: refresh, Back, Forward, direct URL
             n_run = gets.count("/api/development/runs/" + NID)
-            pg.reload(); pg.wait_for_selector("#runView li.st")
+            pg.reload(); pg.wait_for_selector("#runView li.st", state="attached")
             check("H6 refresh reads the run again and shows it", gets.count("/api/development/runs/" + NID) == n_run + 1 and len(pg.evaluate(RUNPROBE)["stages"]) == 12, "")
             pg.go_back(); pg.wait_for_selector("#dev-" + REQ)
             check("H6 Back returns to the Note in Cognition", "/cognition" in pg.url and pg.locator("#dev-" + REQ).count() == 1, pg.url)
-            pg.go_forward(); pg.wait_for_selector("#runView li.st")
+            pg.go_forward(); pg.wait_for_selector("#runView li.st", state="attached")
             check("H6 Forward returns to the run", pg.url == ORIGIN + "/dev?run=" + NID and len(pg.evaluate(RUNPROBE)["stages"]) == 12, pg.url)
             check("H6 history: one entry for Development", pg.evaluate("history.length") == h0 + 1, (h0, pg.evaluate("history.length")))
             # H5: the next action
@@ -190,7 +190,7 @@ with sync_playwright() as p:
             # U1–U3: the repaired, unreconciled state, from Core's real output.
             unrec = copy.deepcopy(UNREC); unrec["nudge_id"] = NID
             state["run"] = (200, unrec)
-            pg.goto(ORIGIN + "/dev?run=" + NID); pg.wait_for_selector("#runView li.st")
+            pg.goto(ORIGIN + "/dev?run=" + NID); pg.wait_for_selector("#runView li.st", state="attached")
             v = pg.evaluate(RUNPROBE)
             body = pg.evaluate("document.body.innerText")
             check("U1 header shows Core's result line, not 'verified by Core'", UNREC["result"] in v["ids"] and "verified by Core" not in body, v["ids"])
@@ -211,7 +211,7 @@ with sync_playwright() as p:
                                      ("503", (503, "unavailable"), "not available right now"),
                                      ("answer for another nudge", (200, other), "could not be read")]:
                 state["run"] = (200, RUN)
-                pg.goto(ORIGIN + "/dev?run=" + NID); pg.wait_for_selector("#runView li.st")
+                pg.goto(ORIGIN + "/dev?run=" + NID); pg.wait_for_selector("#runView li.st", state="attached")
                 state["run"] = resp
                 pg.reload(); pg.wait_for_selector("#runView .err")
                 v = pg.evaluate(RUNPROBE)

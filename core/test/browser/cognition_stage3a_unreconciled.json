@@ -1,13 +1,150 @@
 {
+  "blocks": [
+    {
+      "id": "thought",
+      "stages": [
+        "thought"
+      ],
+      "status": "PARTIAL",
+      "summary": "This is the Thought's current question; this run's logged prompt was not available to confirm it was the one sent.",
+      "title": "Thought"
+    },
+    {
+      "id": "attention",
+      "stages": [
+        "attention"
+      ],
+      "status": "RECORDED",
+      "summary": "Your saved text matches the digest Core submitted and the digest the Engine recorded for this run.",
+      "title": "Your attention"
+    },
+    {
+      "id": "authorization",
+      "stages": [
+        "authorization"
+      ],
+      "status": "RECORDED",
+      "summary": "Identity issued one single-use processing decision for this exact nudge; the Engine redeemed that same decision before running it.",
+      "title": "Authorization"
+    },
+    {
+      "id": "model_request",
+      "stages": [
+        "context_sent",
+        "instruction",
+        "model_call"
+      ],
+      "status": "PARTIAL",
+      "summary": "One request to the local model, recorded by the Engine before it was sent and after it was answered. What was sent to the model: NOT RECORDED. The instruction: PARTIAL.",
+      "title": "Model request"
+    },
+    {
+      "id": "model_reply",
+      "stages": [
+        "model_reply"
+      ],
+      "status": "NOT RECORDED",
+      "summary": "This run recorded no reply digest (the request did not succeed, or its response record is missing), so no logged reply can be tied to it and none is shown.",
+      "title": "Model reply"
+    },
+    {
+      "id": "saved_note",
+      "stages": [
+        "parse"
+      ],
+      "status": "PARTIAL",
+      "summary": "The Thought holds 2 Notes with nudge nudge_0bae0ff3fba6b11be224 and request mr_0bae0ff3, so none can be shown as the one this run saved.",
+      "title": "Saved Note"
+    },
+    {
+      "id": "verification",
+      "stages": [
+        "saved"
+      ],
+      "status": "PARTIAL",
+      "summary": "When Core wrote its receipt it verified one saved Note and one developed step for this request. The Thought now holds 2 Notes and 1 developed step with this nudge and request ID, so none of them can be identified as that Note.",
+      "title": "Verification"
+    }
+  ],
   "engine_commit": "21b3d502775b3ed065ab445b88f51909500770b3",
   "engine_entity_id": "eng_1",
   "engine_revision": "MISMATCH",
-  "nudge_id": "nudge_cfa0b13d07419171dc65",
+  "extra": [
+    {
+      "id": "memory_retrieval",
+      "stages": [
+        "memory_retrieval"
+      ],
+      "status": "NOT RECORDED",
+      "summary": "No record of a memory search exists for this run. The Engine reports a different revision now than the one in this run's record. Whether this revision ever searches memory is not described here.",
+      "title": "Memory search"
+    },
+    {
+      "id": "tools",
+      "stages": [
+        "tools"
+      ],
+      "status": "NOT RECORDED",
+      "summary": "No record shows a tool, skill or notebook for this run. The Engine reports a different revision now than the one in this run's record. A Note that describes an action is not evidence the action happened.",
+      "title": "Tools and skills"
+    },
+    {
+      "id": "model_reasoning",
+      "stages": [
+        "model_reasoning"
+      ],
+      "status": "NOT RECORDED",
+      "summary": "No reasoning text was recorded for this run. The Engine reports a different revision now than the one in this run's record. Nothing is inferred in its place.",
+      "title": "Model reasoning"
+    }
+  ],
+  "links": [
+    {
+      "basis": "Core's draft for this nudge and the Engine's claim for the same nudge name the same Thought.",
+      "from": "thought",
+      "status": "CONNECTED",
+      "to": "attention"
+    },
+    {
+      "basis": "The Identity decision Core obtained for this nudge is the one the Engine redeemed, and your saved text matches the attention digest both recorded.",
+      "from": "attention",
+      "status": "CONNECTED",
+      "to": "authorization"
+    },
+    {
+      "basis": "The Engine's claim, which redeemed the decision, and its HTTP attempt record name the same request ID.",
+      "from": "authorization",
+      "status": "CONNECTED",
+      "to": "model_request"
+    },
+    {
+      "basis": "The reply's sha256 equals the reply digest the Engine recorded for this run.",
+      "from": "model_request",
+      "missing": "This run recorded no reply digest, so no reply can be tied to it.",
+      "status": "NOT ESTABLISHED",
+      "to": "model_reply"
+    },
+    {
+      "basis": "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply.",
+      "from": "model_reply",
+      "missing": "The Thought holds 2 Notes with this nudge and request, so no single Note can be tied to this reply.",
+      "status": "NOT ESTABLISHED",
+      "to": "saved_note"
+    },
+    {
+      "basis": "Core's receipt verified this request, and the Thought now holds a single Note and a single developed step for it.",
+      "from": "saved_note",
+      "missing": "Core's receipt verified this request when it was written, but the Thought now holds 2 Notes and 1 developed step for it.",
+      "status": "PARTIAL",
+      "to": "verification"
+    }
+  ],
+  "nudge_id": "nudge_0bae0ff3fba6b11be224",
   "question": "q",
   "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
   "receipt_verified": true,
   "record_engine_commit": "b594357c021db3a5164f321ec2b66b21198a8455",
-  "request_id": "mr_cfa0b13d",
+  "request_id": "mr_0bae0ff3",
   "result": "COMPLETED · receipt verified when written; the Thought now holds 2 Notes and 1 developed step for it",
   "run_state": "COMPLETED",
   "source_revision": "2026-11-08T09:00:00Z",
@@ -42,11 +179,11 @@
       "fields": [
         {
           "label": "Draft",
-          "value": "nudge_cfa0b13d07419171dc65"
+          "value": "nudge_0bae0ff3fba6b11be224"
         },
         {
           "label": "Saved",
-          "value": "2026-11-12T18:32:15Z"
+          "value": "2026-11-12T20:43:08Z"
         },
         {
           "label": "Digest Core submitted",
@@ -80,7 +217,7 @@
         },
         {
           "label": "Identity's redeem record",
-          "value": "redeem_cfa0b13d"
+          "value": "redeem_0bae0ff3"
         }
       ],
       "stage": "authorization",
@@ -92,7 +229,7 @@
       "fields": [],
       "stage": "context_sent",
       "status": "NOT RECORDED",
-      "summary": "No log record for request mr_cfa0b13d was found in the newest 8 MiB of the Engine's call log; it may be older than that window.",
+      "summary": "No log record for request mr_0bae0ff3 was found in the newest 8 MiB of the Engine's call log; it may be older than that window.",
       "title": "What was sent to the model"
     },
     {
@@ -119,7 +256,7 @@
       "fields": [
         {
           "label": "Request",
-          "value": "mr_cfa0b13d"
+          "value": "mr_0bae0ff3"
         },
         {
           "label": "Sent",

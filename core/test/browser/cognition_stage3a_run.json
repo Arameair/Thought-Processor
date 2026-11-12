@@ -1,7 +1,7 @@
 {
-  "nudge_id": "nudge_93adff1a6ad4d56fccbf",
+  "nudge_id": "nudge_5054094f9c71fe3cc2f4",
   "thought_id": "thought_1",
-  "request_id": "mr_93adff1a",
+  "request_id": "mr_5054094f",
   "engine_entity_id": "eng_1",
   "source_revision": "2026-11-08T09:00:00Z",
   "engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
@@ -47,11 +47,11 @@
       "fields": [
         {
           "label": "Draft",
-          "value": "nudge_93adff1a6ad4d56fccbf"
+          "value": "nudge_5054094f9c71fe3cc2f4"
         },
         {
           "label": "Saved",
-          "value": "2026-11-12T18:32:15Z"
+          "value": "2026-11-12T20:43:08Z"
         },
         {
           "label": "Digest Core submitted",
@@ -85,7 +85,7 @@
         },
         {
           "label": "Identity's redeem record",
-          "value": "redeem_93adff1a"
+          "value": "redeem_5054094f"
         }
       ]
     },
@@ -101,7 +101,7 @@
         },
         {
           "label": "Request",
-          "value": "mr_93adff1a"
+          "value": "mr_5054094f"
         }
       ],
       "text_label": "Prompt, as the Engine logged it",
@@ -137,7 +137,7 @@
       "fields": [
         {
           "label": "Request",
-          "value": "mr_93adff1a"
+          "value": "mr_5054094f"
         },
         {
           "label": "Settings (CODE-DEFINED)",
@@ -161,7 +161,7 @@
         },
         {
           "label": "Reply sha256",
-          "value": "f0e8ef05a7c72e726fb5bde7ed7789c719ea603153cb295d64be1c3d2a46dd68"
+          "value": "892b3eb207d66d4927f0d2c9c21c4672c58b4c0909a32ca367d5743e42bad5d8"
         },
         {
           "label": "Model",
@@ -180,7 +180,7 @@
       "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
       "fields": [],
       "text_label": "Reply, exactly as returned",
-      "text": "NOTE: NOTE-TEXT-nudge_93adff1a6ad4d56fccbf\nSTATE: resolve"
+      "text": "NOTE: NOTE-TEXT-nudge_5054094f9c71fe3cc2f4\nSTATE: resolve"
     },
     {
       "stage": "parse",
@@ -198,7 +198,7 @@
         }
       ],
       "text_label": "The saved Note (the kept NOTE line)",
-      "text": "NOTE-TEXT-nudge_93adff1a6ad4d56fccbf"
+      "text": "NOTE-TEXT-nudge_5054094f9c71fe3cc2f4"
     },
     {
       "stage": "saved",
@@ -246,5 +246,140 @@
       "fields": []
     }
   ],
-  "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file."
+  "blocks": [
+    {
+      "id": "thought",
+      "title": "Thought",
+      "status": "RECORDED",
+      "summary": "This question appears word for word in the prompt the Engine logged for this run.",
+      "stages": [
+        "thought"
+      ]
+    },
+    {
+      "id": "attention",
+      "title": "Your attention",
+      "status": "RECORDED",
+      "summary": "Your saved text matches the digest Core submitted and the digest the Engine recorded for this run.",
+      "stages": [
+        "attention"
+      ]
+    },
+    {
+      "id": "authorization",
+      "title": "Authorization",
+      "status": "RECORDED",
+      "summary": "Identity issued one single-use processing decision for this exact nudge; the Engine redeemed that same decision before running it.",
+      "stages": [
+        "authorization"
+      ]
+    },
+    {
+      "id": "model_request",
+      "title": "Model request",
+      "status": "RECORDED",
+      "summary": "One request to the local model, recorded by the Engine before it was sent and after it was answered.",
+      "stages": [
+        "context_sent",
+        "instruction",
+        "model_call"
+      ]
+    },
+    {
+      "id": "model_reply",
+      "title": "Model reply",
+      "status": "RECORDED",
+      "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
+      "stages": [
+        "model_reply"
+      ]
+    },
+    {
+      "id": "saved_note",
+      "title": "Saved Note",
+      "status": "RECORDED",
+      "summary": "The Thought holds one saved Note with nudge nudge_5054094f9c71fe3cc2f4 and request mr_5054094f.",
+      "stages": [
+        "parse"
+      ]
+    },
+    {
+      "id": "verification",
+      "title": "Verification",
+      "status": "RECORDED",
+      "summary": "Core's receipt verified one saved Note and one developed step with this request ID, and the Thought still holds exactly one of each. That shows it was saved, not that it answers the question.",
+      "stages": [
+        "saved"
+      ]
+    }
+  ],
+  "extra": [
+    {
+      "id": "memory_retrieval",
+      "title": "Memory search",
+      "status": "NOT PART OF THIS PATH",
+      "summary": "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes.",
+      "stages": [
+        "memory_retrieval"
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "Tools and skills",
+      "status": "NOT PART OF THIS PATH",
+      "summary": "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened.",
+      "stages": [
+        "tools"
+      ]
+    },
+    {
+      "id": "model_reasoning",
+      "title": "Model reasoning",
+      "status": "NOT RECORDED",
+      "summary": "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place.",
+      "stages": [
+        "model_reasoning"
+      ]
+    }
+  ],
+  "links": [
+    {
+      "from": "thought",
+      "to": "attention",
+      "status": "CONNECTED",
+      "basis": "Core's draft for this nudge and the Engine's claim for the same nudge name the same Thought."
+    },
+    {
+      "from": "attention",
+      "to": "authorization",
+      "status": "CONNECTED",
+      "basis": "The Identity decision Core obtained for this nudge is the one the Engine redeemed, and your saved text matches the attention digest both recorded."
+    },
+    {
+      "from": "authorization",
+      "to": "model_request",
+      "status": "CONNECTED",
+      "basis": "The Engine's claim, which redeemed the decision, and its HTTP attempt record name the same request ID."
+    },
+    {
+      "from": "model_request",
+      "to": "model_reply",
+      "status": "CONNECTED",
+      "basis": "The reply's sha256 equals the reply digest the Engine recorded for this run."
+    },
+    {
+      "from": "model_reply",
+      "to": "saved_note",
+      "status": "CONNECTED",
+      "basis": "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply."
+    },
+    {
+      "from": "saved_note",
+      "to": "verification",
+      "status": "CONNECTED",
+      "basis": "Core's receipt verified this request, and the Thought now holds a single Note and a single developed step for it."
+    }
+  ],
+  "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
+  "note": "NOTE-TEXT-nudge_5054094f9c71fe3cc2f4"
 }

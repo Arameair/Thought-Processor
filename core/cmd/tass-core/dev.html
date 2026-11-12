@@ -50,6 +50,51 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
 #runView pre.rt{max-height:340px;margin:4px 0 0;overflow-wrap:anywhere;word-break:break-word}
 #runView .ro{font-size:12px;color:var(--muted);margin-top:10px}
 @media (max-width:700px){#runView dl{grid-template-columns:1fr}#runView dt{margin-top:4px}}
+/* Stage 3A UX repair: one workspace, two modes. Observe = what TASS actually did (read only);
+   Design = the existing Brain Builder (advisory). Nothing from one mode is drawn under the other. */
+#modeBar{display:inline-flex;border:1px solid #3a3f6b;border-radius:9px;overflow:hidden;margin-left:6px}
+#modeBar button{border:0;border-radius:0;background:#141a2e;color:#c9cff0;padding:5px 14px;font-weight:600}
+#modeBar button+button{border-left:1px solid #3a3f6b}
+#modeBar button[aria-pressed=true]{background:#3b2f6e;color:#fff;box-shadow:inset 0 -2px 0 var(--violet)}
+#modeBar button:disabled{opacity:.5}
+body[data-mode=observe] .design-only{display:none!important}
+body[data-mode=design] #runView{display:none!important}
+#designNote{padding:8px 16px;background:#1a1733;border-bottom:1px solid #3a3f6b;color:#d6cff6;font-size:13px}
+#runView button:focus-visible,#modeBar button:focus-visible,#runView a:focus-visible,#runView summary:focus-visible{outline:2px solid #d2c2ff;outline-offset:2px}
+#runView{background:linear-gradient(180deg,#10162a,#0d1320 220px);padding:12px 16px 14px}
+#runView .kicker{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#b9a8f4;margin-bottom:2px}
+#runView .obs{display:grid;grid-template-columns:minmax(250px,1fr) minmax(250px,290px) minmax(270px,340px);gap:14px;align-items:start;margin-top:8px}
+#runView .card{border:1px solid #2c3556;background:#131a2d;border-radius:11px;padding:10px 12px}
+#runView .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9aa6c8;margin-bottom:3px}
+#runQuestion .val{font-size:16px;font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}
+#runStory{margin:8px 0;color:#d5dcf0;overflow-wrap:anywhere}
+#runOutcome{margin-top:8px}#runOutcome pre{margin:2px 0 0;max-height:120px;background:#0f1526;border-color:#2c3556;font-size:13px;color:#eef2ff}
+#runView .lead #runNext{margin:10px 0 0;max-width:none;background:#171d3a;border-color:#4b4290}
+#runMap{list-style:none;margin:0;padding:0}
+#runMap li{margin:0}
+#runView .blk{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#161e35;border:1px solid #33406a;border-left:4px solid #3b6079;border-radius:9px;padding:6px 9px;color:var(--text)}
+#runView .blk b{flex:1;font-weight:600}
+#runView .blk .status,#runView .chipS{font:11px ui-monospace,monospace;border:1px solid #3a4a70;border-radius:5px;padding:0 5px;color:#c7d3e2;white-space:nowrap}
+#runView .blk[data-status=RECORDED]{border-left-color:var(--teal)}#runView .blk[data-status=PARTIAL]{border-left-color:var(--amber)}
+#runView .blk[data-status="NOT RECORDED"]{border-left-color:var(--red)}#runView .blk[data-status="CODE-DEFINED"]{border-left-color:var(--blue)}
+#runView .blk[data-status="NOT PART OF THIS PATH"]{border-left-color:#4a5568}
+#runView .lnk{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-radius:6px;padding:1px 9px 1px 18px;color:#8fe0c4;font-size:12px;text-align:left}
+#runView .lnk .ln{display:inline-block;width:2px;height:16px;background:currentColor;margin-right:4px}
+#runView .lnk.gap{color:var(--amber)}#runView .lnk.gap .ln{background:repeating-linear-gradient(currentColor 0 3px,transparent 3px 6px)}
+#runView .lnk[data-status="NOT ESTABLISHED"]{color:var(--red)}
+#runView .blk:hover,#runView .lnk:hover{background:#1f2950}
+#runView .blk[aria-pressed=true]{border-color:var(--violet);background:#2a2556;box-shadow:0 0 0 1px var(--violet)}
+#runView .lnk[aria-pressed=true]{background:#2a2556;box-shadow:0 0 0 1px var(--violet)}
+#runExtra{margin-top:8px;font-size:12px;color:var(--muted)}#runExtra .blk{display:inline-flex;width:auto;margin:3px 4px 0 0;padding:2px 7px;font-size:12px}
+#runView .key{font-size:11.5px;color:var(--muted);margin:0 0 6px}#runView .key span{margin-right:10px}
+#runInsp{min-height:120px}#runInsp h3{margin:0 0 6px;font-size:15px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+#runInsp p{margin:5px 0;overflow-wrap:anywhere}#runInsp .lbl{margin-top:8px}
+#runInsp details{margin-top:8px}#runInsp summary,#techEvidence>summary{cursor:pointer;color:#c7c2f3}
+#runInsp h4{margin:8px 0 2px;font-size:13px}
+#techEvidence{margin-top:12px;border-top:1px solid #2c3556;padding-top:8px}
+#techEvidence>summary{font-weight:600}
+@media (max-width:1000px){#runView .obs{grid-template-columns:minmax(0,1fr) minmax(230px,280px)}#runInsp{grid-column:1/-1}}
+@media (max-width:640px){#runView .obs{grid-template-columns:minmax(0,1fr)}#runModeHint{display:none}header{gap:6px 10px}}
 </style>
 </head>
 <body>
@@ -57,19 +102,25 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <h1>TASS <small>· Development</small></h1>
   <a href="/" style="color:#9fd2ff">← Talk / Core</a>
   <a href="/cognition" style="color:#9fd2ff">Cognition →</a>
-  <span id="rev" class="chip">revision —</span><span id="dirty" class="chip">saved</span>
+  <nav id="modeBar" aria-label="Development mode">
+    <button id="modeObserve" aria-pressed="false" title="What TASS actually did in one run. Read only.">Observe</button>
+    <button id="modeDesign" aria-pressed="false" title="The Brain Builder: your advisory map of how TASS could be organised.">Design</button>
+  </nav>
+  <span id="rev" class="chip design-only">revision —</span><span id="dirty" class="chip design-only">saved</span>
   <span class="sp"></span>
-  <label class="hint"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
-  <button id="llabBtn" aria-expanded="false">Teach &amp; test</button>
-  <button id="jlabBtn" aria-expanded="false">Junction lab</button>
-  <button id="undo" disabled>Undo</button>
-  <button id="check">Check</button>
-  <input id="change" placeholder="what changed (optional)" style="width:180px">
-  <button id="save" class="primary">Save revision</button>
+  <label class="hint design-only"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
+  <button id="llabBtn" class="design-only" aria-expanded="false">Teach &amp; test</button>
+  <button id="jlabBtn" class="design-only" aria-expanded="false">Junction lab</button>
+  <button id="undo" class="design-only" disabled>Undo</button>
+  <button id="check" class="design-only">Check</button>
+  <input id="change" class="design-only" placeholder="what changed (optional)" style="width:180px">
+  <button id="save" class="primary design-only">Save revision</button>
 </header>
-<div id="cognitionProposal" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
+<div id="designNote" class="design-only" role="note"><b>DESIGN · advisory.</b> This brain map is your proposal for how TASS could be organised.
+  Editing or saving it does not change how any run happened, and nothing here runs TASS. <span id="designNoteRun"></span></div>
+<div id="cognitionProposal" class="design-only" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
 <section id="runView" hidden aria-labelledby="runTitle"></section>
-<section id="llab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
+<section id="llab" class="design-only" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
   <div class="row"><b>Teach &amp; test one lesson</b>
     <span class="hint">Choose → Study → Inspect answer → Check grade → Approve → Test again → Evidence. <b>PASSED</b> (graded) ≠ <b>LEARNED</b> (you approved) ≠ <b>RETESTED</b> (applied on a new question) ≠ a <b>skill</b> (separate Identity grant + your approval + run receipt). Nothing here runs code.</span></div>
   <div class="row"><span class="kv">1 · Choose</span><select id="lPick" style="min-width:320px"></select><button id="lReload">Reload</button><span id="lPulse" class="hint"></span></div>
@@ -87,7 +138,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   </div>
   <div id="lMsg" class="hint" role="status"></div>
 </section>
-<section id="jlab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:46vh;overflow:auto">
+<section id="jlab" class="design-only" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:46vh;overflow:auto">
   <div class="row"><b>Junction lab · lesson metadata</b><span class="hint">A cell describes what the fixed Go handler <code>lesson-metadata.v1</code> returns. Nothing in a cell runs. Proposals are never activated here.</span></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px">
     <div><h2>Active cell</h2><div id="jActive" class="hint"></div><pre id="jActiveText"></pre>
@@ -99,7 +150,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
     <div><h2>Receipts &amp; comparisons</h2><div id="jReceipts"></div><div id="jCmp"></div></div>
   </div>
 </section>
-<div class="shell">
+<div class="shell design-only">
   <aside class="lib">
     <h2>Find / add</h2>
     <input id="q" placeholder="search lessons, cells, skills, notes" style="width:100%">
@@ -115,7 +166,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
     <div id="insp" class="hint">Select a block or a connection.</div>
   </aside>
 </div>
-<div class="bottom">
+<div class="bottom design-only">
   <div><h2>Check</h2><div id="report" class="hint">Not checked yet. Checks never run anything.</div></div>
   <div><h2>History</h2><div id="hist" class="hint">No saved revisions yet.</div></div>
   <div><h2>Ask TASS using this brain</h2>
@@ -381,30 +432,152 @@ async function loadRun(id) {
   const back = el("a", "", "Back to this Note in Cognition");
   back.href = "/cognition#thought=" + encodeURIComponent(d.thought_id) + (d.request_id ? "&dev=" + encodeURIComponent(d.request_id) : "");
   next.append(el("b", "", "Next: "), back,
-    el("div", "hint", "Read the stages below, then go back to the Note. Trying a changed instruction and comparing replies comes in a later step (Stage 3B); nothing on this page can run anything."));
+    el("div", "hint", "Select a step or a connection on the map to see its evidence. Trying a changed instruction and comparing replies comes in a later step (Stage 3B); nothing on this page can run anything."));
   const legend = el("details", "legend");
   legend.append(el("summary", "", "What the labels mean"));
   for (const [k, v] of Object.entries(STATUS_MEANS)) { const p = el("div"); p.append(el("b", "", k + " — "), document.createTextNode(v)); legend.append(p); }
   const list = el("ol");
-  for (const s of d.stages) {
-    const li = el("li", "st " + String(s.status || "").replace(/ /g, "-"));
-    li.id = "stage-" + s.stage;
-    li.dataset.status = s.status || "";
-    const sh = el("div", "sh");
-    sh.append(el("b", "", s.title || s.stage), el("span", "status", s.status || "NOT RECORDED"));
-    li.append(sh, el("div", "sum", s.summary || ""));
-    if ((s.fields || []).length) {
-      const dl = el("dl");
-      for (const f of s.fields) dl.append(el("dt", "", f.label), el("dd", "", f.value));
-      li.append(dl);
+  for (const s of d.stages) list.append(stageItem(s, "li", "stage-" + s.stage));
+  // Technical evidence: the twelve original stages, IDs, revisions, prompt, reply and receipts. Collapsed.
+  const tech = el("details"); tech.id = "techEvidence";
+  tech.append(el("summary", "", "Technical evidence · 12 stages, IDs, revisions, prompt, reply and receipts"), ids, legend, list, el("div", "ro", d.read_only || "Read only."));
+  // Observe: the question, a plain summary, the outcome, the map and the inspector. Connections come
+  // only from Core's links (recorded correlations); the page never joins two blocks on its own.
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [], links = Array.isArray(d.links) ? d.links : [], extra = Array.isArray(d.extra) ? d.extra : [];
+  const stageBy = Object.fromEntries(d.stages.map(s => [s.stage, s]));
+  const blockBy = Object.fromEntries(blocks.concat(extra).map(b => [b.id, b]));
+  const q = el("section", "card"); q.id = "runQuestion";
+  q.append(el("div", "lbl", "Thought · the question TASS was developing"), el("div", "val", d.question || "NOT RECORDED"));
+  const rec = blocks.filter(b => b.status === "RECORDED").length, con = links.filter(l => l.status === "CONNECTED").length;
+  const story = el("p"); story.id = "runStory";
+  story.textContent = "One run of TASS developing this Thought from your attention. Result: " + (d.result || d.run_state || "NOT RECORDED") + ". " +
+    rec + " of " + blocks.length + " steps fully recorded; " + con + " of " + links.length + " connections established" +
+    (con < links.length || rec < blocks.length ? " — the gaps are marked on the map." : ".");
+  const out = el("section", "card"); out.id = "runOutcome";
+  out.append(el("div", "lbl", "Saved Note · the outcome"));
+  if (d.note) out.append(el("pre", "", d.note));
+  else out.append(el("div", "hint", (blockBy.saved_note || {}).summary || "NOT RECORDED"));
+  const lead = el("div", "lead"); lead.append(q, story, out, next);
+  const mapCol = el("div", "mapcol card");
+  const key = el("div", "key"); key.append(el("span", "", "│ connected"), el("span", "", "┊ partial / not established"));
+  const map = el("ol"); map.id = "runMap"; map.setAttribute("aria-label", "Processing map");
+  const mapBtns = [];
+  const pick = (kind, id) => { selectRun(kind, id); };
+  const mkBlock = b => {
+    const bt = el("button", "blk"); bt.type = "button"; bt.dataset.block = b.id; bt.dataset.status = b.status || "NOT RECORDED";
+    bt.setAttribute("aria-pressed", "false"); bt.setAttribute("aria-label", b.title + ": " + (b.status || "NOT RECORDED"));
+    bt.append(el("b", "", b.title), el("span", "status", b.status || "NOT RECORDED"));
+    bt.onclick = () => pick("block", b.id); return bt;
+  };
+  const LINKWORD = {"CONNECTED": "connected", "PARTIAL": "partial link", "NOT ESTABLISHED": "not established"};
+  blocks.forEach((b, i) => {
+    const li = el("li"); const bt = mkBlock(b); li.append(bt); map.append(li); mapBtns.push(bt);
+    const l = links[i];
+    if (l && l.from === b.id) {
+      const li2 = el("li"); const lb = el("button", "lnk" + (l.status === "CONNECTED" ? "" : " gap")); lb.type = "button";
+      lb.dataset.from = l.from; lb.dataset.to = l.to; lb.dataset.status = l.status;
+      lb.setAttribute("aria-pressed", "false");
+      lb.setAttribute("aria-label", "Connection " + b.title + " to " + ((blockBy[l.to] || {}).title || l.to) + ": " + (LINKWORD[l.status] || l.status));
+      lb.append(el("span", "ln"), el("span", "", LINKWORD[l.status] || String(l.status).toLowerCase()));
+      lb.onclick = () => pick("link", i);
+      li2.append(lb); map.append(li2); mapBtns.push(lb);
     }
-    if (s.text) li.append(el("div", "tl", s.text_label || "Text"), el("pre", "rt", s.text));
-    list.append(li);
-  }
-  box.replaceChildren(head, ids, next, legend, list, el("div", "ro", d.read_only || "Read only."));
+  });
+  map.addEventListener("keydown", ev => {
+    const i = mapBtns.indexOf(document.activeElement); if (i < 0) return;
+    const j = {ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: mapBtns.length - 1}[ev.key];
+    if (j === undefined) return; ev.preventDefault(); mapBtns[Math.max(0, Math.min(mapBtns.length - 1, j))].focus();
+  });
+  const ex = el("div"); ex.id = "runExtra"; ex.append(el("span", "", "Also looked for: "));
+  for (const b of extra) ex.append(mkBlock(b));
+  mapCol.append(el("div", "lbl", "Processing map · what happened, in order"), key, map, ex);
+  const insp = el("aside", "card"); insp.id = "runInsp"; insp.setAttribute("aria-label", "Inspector"); insp.setAttribute("aria-live", "polite");
+  insp.append(el("div", "lbl", "Inspector"), el("p", "hint", "Select a step or a connection to see what happened, how sure the record is, and what is missing."));
+  const grid = el("div", "obs"); grid.append(lead, mapCol, insp);
+  const kick = el("div", "kicker", "Observe · what TASS actually did · read only");
+  box.replaceChildren(kick, head, grid, tech);
+  RUN = {d, blocks, links, blockBy, stageBy};
 }
-if (/^nudge_[0-9a-f]{20}$/.test(runParam)) { $("cognitionProposal").hidden = true; loadRun(runParam); }
-else if (runParam) { const b = $("runView"); b.hidden = false; b.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "That is not a nudge ID. Nothing is shown.")); }
+let RUN = null;
+// One stage, rendered literally (textContent only): used in technical evidence and in the inspector.
+function stageItem(s, tagName, id) {
+  const li = el(tagName, "st " + String(s.status || "").replace(/ /g, "-"));
+  if (id) li.id = id;
+  li.dataset.status = s.status || "";
+  const sh = el("div", "sh");
+  sh.append(el("b", "", s.title || s.stage), el("span", "status", s.status || "NOT RECORDED"));
+  li.append(sh, el("div", "sum", s.summary || ""));
+  if ((s.fields || []).length) {
+    const dl = el("dl");
+    for (const f of s.fields) dl.append(el("dt", "", f.label), el("dd", "", f.value));
+    li.append(dl);
+  }
+  if (s.text) li.append(el("div", "tl", s.text_label || "Text"), el("pre", "rt", s.text));
+  return li;
+}
+function selectRun(kind, id) {
+  if (!RUN) return;
+  const insp = $("runInsp"); if (!insp) return;
+  for (const b of document.querySelectorAll("#runView .blk")) b.setAttribute("aria-pressed", String(kind === "block" && b.dataset.block === id));
+  for (const b of document.querySelectorAll("#runMap .lnk")) b.setAttribute("aria-pressed", String(kind === "link" && RUN.links[id] && b.dataset.from === RUN.links[id].from));
+  const h = el("h3"), body = [];
+  const means = st => { const p = el("p"); p.append(el("b", "", "Evidence: " + st + " — "), document.createTextNode(STATUS_MEANS[st] || "")); return p; };
+  const tech = el("details"); tech.append(el("summary", "", "Technical details"));
+  if (kind === "block") {
+    const b = RUN.blockBy[id]; if (!b) return;
+    h.append(el("span", "", b.title), el("span", "chipS", b.status));
+    body.push(el("div", "lbl", "What happened"), el("p", "", b.summary || "NOT RECORDED"), means(b.status));
+    const rel = RUN.links.filter(l => l.from === id || l.to === id);
+    if (rel.length) {
+      body.push(el("div", "lbl", "Connections"));
+      for (const l of rel) {
+        const other = RUN.blockBy[l.from === id ? l.to : l.from] || {};
+        body.push(el("p", "", (l.from === id ? "To " : "From ") + (other.title || "?") + ": " + l.status));
+      }
+    }
+    for (const sid of b.stages || []) if (RUN.stageBy[sid]) tech.append(stageItem(RUN.stageBy[sid], "div"));
+  } else {
+    const l = RUN.links[id]; if (!l) return;
+    const f = RUN.blockBy[l.from] || {}, t = RUN.blockBy[l.to] || {};
+    h.append(el("span", "", (f.title || l.from) + " → " + (t.title || l.to)), el("span", "chipS", l.status));
+    body.push(el("div", "lbl", "What this connection means"),
+      el("p", "", "Whether the record ties “" + (f.title || l.from) + "” to “" + (t.title || l.to) + "” in this run. Status: " + l.status + "."),
+      el("div", "lbl", l.status === "CONNECTED" ? "Established by" : "Would be established by"), el("p", "", l.basis || ""));
+    if (l.status !== "CONNECTED") body.push(el("div", "lbl", "Missing"), el("p", "", l.missing || "NOT RECORDED"));
+    const dl = el("dl");
+    for (const [k, v] of [[f.title || l.from, f.status], [t.title || l.to, t.status], ["Nudge", RUN.d.nudge_id], ["Request", RUN.d.request_id || "NOT RECORDED"]]) dl.append(el("dt", "", k), el("dd", "", v || "NOT RECORDED"));
+    tech.append(dl);
+  }
+  insp.replaceChildren(el("div", "lbl", "Inspector"), h, ...body, tech);
+  if (window.innerWidth <= 1000) insp.scrollIntoView({block: "nearest"});
+}
+// ---- Observe / Design: one Development workspace, two modes, one URL each. ----
+// /dev?run=<nudge> opens Observe; &mode=design (or plain /dev) opens the existing Brain Builder. The
+// Brain Builder is read only when Design is first shown, so Observe never loads or draws it.
+const validRun = /^nudge_[0-9a-f]{20}$/.test(runParam);
+let designLoaded = false, runLoaded = false;
+function modeFromURL() { const u = new URLSearchParams(location.search); return (u.get("mode") === "design" || !runParam) ? "design" : "observe"; }
+function setMode(m, push) {
+  document.body.dataset.mode = m;
+  $("modeObserve").setAttribute("aria-pressed", String(m === "observe"));
+  $("modeDesign").setAttribute("aria-pressed", String(m === "design"));
+  if (push) {
+    const u = new URLSearchParams(location.search);
+    if (m === "design") u.set("mode", "design"); else u.delete("mode");
+    history.pushState(null, "", location.pathname + "?" + u.toString());
+  }
+  if (m === "design" && !designLoaded) { designLoaded = true; load(); }
+  if (m === "observe" && !runLoaded) {
+    runLoaded = true; $("cognitionProposal").hidden = true;
+    if (validRun) loadRun(runParam);
+    else { const b = $("runView"); b.hidden = false; b.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "That is not a nudge ID. Nothing is shown.")); }
+  }
+}
+if (!runParam) { $("modeObserve").disabled = true; $("modeObserve").title = "Open a Note in Cognition and choose “How this Note was produced” to observe a run."; }
+else $("designNoteRun").textContent = "To see what TASS actually did in run " + runParam + ", choose Observe.";
+$("modeObserve").onclick = () => { if (document.body.dataset.mode !== "observe") setMode("observe", true); };
+$("modeDesign").onclick = () => { if (document.body.dataset.mode !== "design") setMode("design", true); };
+window.addEventListener("popstate", () => setMode(modeFromURL(), false));
 // ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----
 let J = null;
 async function loadJ() {
@@ -550,9 +723,9 @@ $("lRetest").onclick = () => {
   for (const line of $("lQs").value.split("\n")) { const i = line.indexOf("=>"); if (line.trim() === "") continue; if (i < 0) return lMsg("Each line needs: question => expected answer", true); qs.push({n: qs.length + 1, ask: line.slice(0, i).trim(), answer: line.slice(i + 2).trim(), from: "owner"}); }
   lPost("retest", {questions: qs});
 };
-setInterval(() => { if (!$("llab").hidden) loadL(); }, 5000);
+setInterval(() => { if (!$("llab").hidden && designLoaded) loadL(); }, 5000);
 if (new URLSearchParams(location.search).get("learn")) setTimeout(() => { $("llab").hidden = false; $("llabBtn").setAttribute("aria-expanded", "true"); loadL(new URLSearchParams(location.search).get("learn")); }, 200);
-load();
+setMode(modeFromURL(), false);
 </script>
 </body>
 </html>

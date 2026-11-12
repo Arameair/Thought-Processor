@@ -70,6 +70,26 @@ type ProvenanceStage struct {
 	Text      string            `json:"text,omitempty"` // shown literally; private: this single-run view only
 }
 
+// ProvenanceBlock is one box on the Observe map: a presentation grouping of recorded stages.
+type ProvenanceBlock struct {
+	ID      string   `json:"id"`
+	Title   string   `json:"title"`
+	Status  string   `json:"status"`
+	Summary string   `json:"summary"`
+	Stages  []string `json:"stages"`
+}
+
+// ProvenanceLink is one connection on the Observe map. Basis is the CONDITION that would join the two
+// blocks, never a statement that it holds. Status: CONNECTED (the condition holds on recorded IDs or
+// digests) | PARTIAL (part of it holds; Missing says what does not) | NOT ESTABLISHED (drawn as a gap).
+type ProvenanceLink struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Status  string `json:"status"`
+	Basis   string `json:"basis"`
+	Missing string `json:"missing,omitempty"`
+}
+
 type DevelopmentRun struct {
 	NudgeID        string `json:"nudge_id"`
 	ThoughtID      string `json:"thought_id"`
@@ -88,7 +108,16 @@ type DevelopmentRun struct {
 	RecordEngineCommit string            `json:"record_engine_commit"`
 	Question           string            `json:"question"`
 	Stages             []ProvenanceStage `json:"stages"`
-	ReadOnly           string            `json:"read_only"`
+	// Stage 3A UX repair: the Observe map. Blocks group stages for the owner; links say whether recorded
+	// IDs or digests tie two blocks together. They are decided here, from the same correlations as the
+	// stages, never by the page. A link is CONNECTED only when its Basis holds.
+	Blocks   []ProvenanceBlock `json:"blocks"`
+	Extra    []ProvenanceBlock `json:"extra"` // recorded facts outside the processing path (memory, tools, reasoning)
+	Links    []ProvenanceLink  `json:"links"`
+	ReadOnly string            `json:"read_only"`
+	// Note is the text of the single current Note with this nudge and request ID; empty when there is not
+	// exactly one, so Observe never shows one of several as "the" outcome.
+	Note string `json:"note,omitempty"`
 }
 
 func devSHA256(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
@@ -236,6 +265,9 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 		}
 	}
 	out.Verified = out.ReceiptVerified && len(curNotes) == 1 && curSteps == 1
+	if len(curNotes) == 1 {
+		out.Note = curNotes[0].Text
+	}
 	switch {
 	case out.Verified:
 		out.Result = out.RunState + " · verified by Core"
@@ -481,5 +513,179 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 		add(ProvenanceStage{Stage: "model_reasoning", Title: "The model's reasoning", Status: "NOT RECORDED", Fields: []ProvenanceField{},
 			Summary: "No reasoning text was recorded for this run. " + revWhy + " Nothing is inferred in its place."})
 	}
+	out.Blocks, out.Extra, out.Links = runMap(out, mapFacts{
+		nid: nid, tid: tid, claim: claim, httpReq: httpRequestID(rec), httpPresent: claim != nil && rec.HTTP.Present,
+		httpReadable: claim != nil && rec.HTTP.Readable, decision: sub.DecisionID, attentionOK: claim != nil && devSHA256(n.RequestedAction) == sub.AttentionSHA &&
+			sub.AttentionSHA == claim.AttentionSHA, modelBound: modelBound, replyDigest: replyDigest, callReply: claim != nil && rec.Call != nil && rec.Call.Reply != "",
+		replyText: modelText(rec, modelBound), notes: curNotes, steps: curSteps})
 	return out, nil
+}
+
+func httpRequestID(rec engine.NudgeRecord) string {
+	if rec.HTTP.Readable && rec.HTTP.Value != nil {
+		return rec.HTTP.Value.RequestID
+	}
+	return ""
+}
+
+func modelText(rec engine.NudgeRecord, bound bool) string {
+	if bound {
+		return rec.ModelRequest.Text
+	}
+	return ""
+}
+
+// mapFacts: the correlations runMap may use. Everything here was already checked to build the stages.
+type mapFacts struct {
+	nid, tid                  string
+	claim                     *engine.RecordClaim
+	httpReq                   string
+	httpPresent, httpReadable bool
+	decision                  string
+	attentionOK               bool
+	modelBound                bool
+	replyDigest               string
+	callReply                 bool
+	replyText                 string // only when modelBound
+	notes                     []engine.ThoughtNote
+	steps                     int
+}
+
+// runMap groups the stages into the Observe map and decides each connection from recorded evidence.
+// Two RECORDED blocks are never joined unless an ID or digest ties them.
+func runMap(out DevelopmentRun, f mapFacts) ([]ProvenanceBlock, []ProvenanceBlock, []ProvenanceLink) {
+	st := map[string]ProvenanceStage{}
+	for _, s := range out.Stages {
+		st[s.Stage] = s
+	}
+	blk := func(id, title string, stages ...string) ProvenanceBlock {
+		b := ProvenanceBlock{ID: id, Title: title, Status: st[stages[len(stages)-1]].Status, Summary: st[stages[len(stages)-1]].Summary, Stages: stages}
+		if len(stages) == 1 {
+			b.Status, b.Summary = st[stages[0]].Status, st[stages[0]].Summary
+		}
+		// A block that groups stages is never stronger than its weakest part: a recorded call whose prompt
+		// was not recorded is PARTIAL, and the summary says which part is missing.
+		if b.Status == "RECORDED" {
+			for _, sid := range stages[:len(stages)-1] {
+				if s := st[sid].Status; s != "RECORDED" && s != "CODE-DEFINED" {
+					b.Status = "PARTIAL"
+					b.Summary += " " + st[sid].Title + ": " + orNR(s) + "."
+				}
+			}
+		}
+		return b
+	}
+	req := orNR(out.RequestID)
+	note := ProvenanceBlock{ID: "saved_note", Title: "Saved Note", Stages: []string{"parse"}}
+	switch len(f.notes) {
+	case 1:
+		note.Status, note.Summary = "RECORDED", "The Thought holds one saved Note with nudge "+f.nid+" and request "+req+"."
+	case 0:
+		note.Status, note.Summary = "NOT RECORDED", "The Thought holds no Note with nudge "+f.nid+" and request "+req+" (never saved, or no longer stored)."
+	default:
+		note.Status, note.Summary = "PARTIAL", fmt.Sprintf("The Thought holds %d Notes with nudge %s and request %s, so none can be shown as the one this run saved.", len(f.notes), f.nid, req)
+	}
+	blocks := []ProvenanceBlock{
+		blk("thought", "Thought", "thought"),
+		blk("attention", "Your attention", "attention"),
+		blk("authorization", "Authorization", "authorization"),
+		blk("model_request", "Model request", "context_sent", "instruction", "model_call"),
+		blk("model_reply", "Model reply", "model_reply"),
+		note,
+		blk("verification", "Verification", "saved"),
+	}
+	extra := []ProvenanceBlock{blk("memory_retrieval", "Memory search", "memory_retrieval"), blk("tools", "Tools and skills", "tools"),
+		blk("model_reasoning", "Model reasoning", "model_reasoning")}
+
+	link := func(from, to string) ProvenanceLink { return ProvenanceLink{From: from, To: to} }
+	c := f.claim
+	var links []ProvenanceLink
+	// 1. Thought → attention: Core's draft and the Engine's claim name the same Thought.
+	l := link("thought", "attention")
+	l.Basis = "Core's draft for this nudge and the Engine's claim for the same nudge name the same Thought."
+	if c != nil {
+		l.Status = "CONNECTED"
+	} else {
+		l.Status, l.Missing = "PARTIAL", "Core's draft names this Thought, but the Engine has no usable claim for this nudge to confirm it."
+	}
+	links = append(links, l)
+	// 2. Attention → authorization: the decision Core obtained for this nudge is the one the Engine redeemed,
+	// and the attention digest is the same at Core, at the Engine and for the saved text.
+	l = link("attention", "authorization")
+	l.Basis = "The Identity decision Core obtained for this nudge is the one the Engine redeemed, and your saved text matches the attention digest both recorded."
+	redeemed := c != nil && f.decision != "" && f.decision == c.Decision && c.Redeemed != ""
+	switch {
+	case redeemed && f.attentionOK:
+		l.Status = "CONNECTED"
+	case redeemed || f.attentionOK:
+		l.Status = "PARTIAL"
+		if !redeemed {
+			l.Missing = "The decision Core obtained and the decision the Engine redeemed are not the same, or not both recorded."
+		} else {
+			l.Missing = "Your saved text does not match the attention digest recorded for this run."
+		}
+	case c == nil:
+		l.Status, l.Missing = "PARTIAL", "Core obtained decision "+orNR(f.decision)+", but no Engine claim shows it was redeemed."
+	default:
+		l.Status, l.Missing = "NOT ESTABLISHED", "Neither the decision nor the attention digest matches between Core and the Engine."
+	}
+	links = append(links, l)
+	// 3. Authorization → model request: the claim that redeemed the decision and the HTTP attempt name one request.
+	l = link("authorization", "model_request")
+	l.Basis = "The Engine's claim, which redeemed the decision, and its HTTP attempt record name the same request ID."
+	switch {
+	case c == nil:
+		l.Status, l.Missing = "NOT ESTABLISHED", "The Engine has no usable claim for this nudge."
+	case !f.httpPresent:
+		l.Status, l.Missing = "NOT ESTABLISHED", "No HTTP attempt is recorded for this run."
+	case !f.httpReadable:
+		l.Status, l.Missing = "PARTIAL", "An HTTP attempt record exists but cannot be read."
+	case c.RequestID != "" && f.httpReq == c.RequestID && c.Redeemed != "":
+		l.Status = "CONNECTED"
+	default:
+		l.Status, l.Missing = "NOT ESTABLISHED", "The claim and the HTTP attempt do not name the same request, or the decision was not redeemed."
+	}
+	links = append(links, l)
+	// 4. Model request → model reply: the reply's bytes hash to the digest recorded for this run.
+	l = link("model_request", "model_reply")
+	l.Basis = "The reply's sha256 equals the reply digest the Engine recorded for this run."
+	switch {
+	case f.modelBound:
+		l.Status = "CONNECTED"
+	case f.replyDigest != "" && f.callReply:
+		l.Status, l.Missing = "PARTIAL", "Only this run's call-log copy of the reply is available; it is not checked against the digest."
+	case f.replyDigest == "":
+		l.Status, l.Missing = "NOT ESTABLISHED", "This run recorded no reply digest, so no reply can be tied to it."
+	default:
+		l.Status, l.Missing = "NOT ESTABLISHED", "No logged reply matches the digest recorded for this run."
+	}
+	links = append(links, l)
+	// 5. Model reply → saved Note: exactly one Note carries this nudge and request, and its text is in the verified reply.
+	l = link("model_reply", "saved_note")
+	l.Basis = "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply."
+	switch {
+	case out.RequestID == "":
+		l.Status, l.Missing = "NOT ESTABLISHED", "No request ID is recorded for this run, so no saved Note can be tied to it."
+	case len(f.notes) != 1:
+		l.Status, l.Missing = "NOT ESTABLISHED", fmt.Sprintf("The Thought holds %d Notes with this nudge and request, so no single Note can be tied to this reply.", len(f.notes))
+	case f.modelBound && strings.TrimSpace(f.notes[0].Text) != "" && strings.Contains(f.replyText, strings.TrimSpace(f.notes[0].Text)):
+		l.Status = "CONNECTED"
+	default:
+		l.Status, l.Missing = "PARTIAL", "The saved Note carries this nudge and request ID, but its text could not be found in a verified reply."
+	}
+	links = append(links, l)
+	// 6. Saved Note → verification: Core's receipt verified the request and the Thought is still unique for it.
+	l = link("saved_note", "verification")
+	l.Basis = "Core's receipt verified this request, and the Thought now holds a single Note and a single developed step for it."
+	switch {
+	case out.Verified:
+		l.Status = "CONNECTED"
+	case out.ReceiptVerified:
+		l.Status, l.Missing = "PARTIAL", "Core's receipt verified this request when it was written, but the Thought now holds "+
+			plural(len(f.notes), "Note", "Notes")+" and "+plural(f.steps, "developed step", "developed steps")+" for it."
+	default:
+		l.Status, l.Missing = "NOT ESTABLISHED", "Core's receipt does not verify this save ("+orNR(out.RunState)+")."
+	}
+	links = append(links, l)
+	return blocks, extra, links
 }
