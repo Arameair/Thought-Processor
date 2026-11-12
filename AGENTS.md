@@ -10,3 +10,6 @@ The **source of workflow truth** is [docs/WORKFLOW.md](docs/WORKFLOW.md); the sh
 - For cross-repo work, use a coordinating issue and exact compatible SHAs. Identity owns permission decisions; Engine owns reasoning/persistent Thought data; Core coordinates UI/workflows; Development is controlled experimentation; Cognition is evidence display.
 
 See [docs/TASS_ISSUE_PR_WORKFLOW.md](docs/TASS_ISSUE_PR_WORKFLOW.md) for the periodic maintenance checklist and [docs/OPEN_PR_TRIAGE_20261112.md](docs/OPEN_PR_TRIAGE_20261112.md) for the dated inventory (refresh before relying on counts).
+
+- Parallel agents work in **separate branches/worktrees/PRs** with explicit issue and dependency links; coordinate overlapping files, do not mutate live owner ports/data, and test the combined pinned candidate rather than assuming separately green PRs integrate.
+- Release/updater changes follow [docs/UPDATE_RELEASE_WORKFLOW.md](docs/UPDATE_RELEASE_WORKFLOW.md) and existing [issue #79](https://github.com/Arameair/Thought-Processor/issues/79). Do not consider an arbitrary `origin/*` branch head an approved update; start with read-only manifest-based eligibility, and preserve existing `tass.sh` recovery behavior.
