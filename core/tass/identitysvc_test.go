@@ -1,8 +1,8 @@
 package tass
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,10 +21,11 @@ import (
 type fakeIdentitySvc struct {
 	skillGranted    bool
 	junctionGranted bool
-	nudgeGranted    bool // cognition.nudge.draft: an owner grant, never a default
+	nudgeGranted    bool              // cognition.nudge.draft: an owner grant, never a default
 	processGranted  bool              // Stage 2: cognition.nudge.process (bound decisions only)
+	revoked         []string          // Stage 3A: grants the owner has taken away (nil elsewhere)
 	bound           map[string]string // decision ID → binding (Stage 2)
-	entityID, name  string // default ent_0123 / Mira
+	entityID, name  string            // default ent_0123 / Mira
 	mu              sync.Mutex
 	state           string
 	lessonEnabled   bool
@@ -51,6 +52,14 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 		}
 		if f.processGranted {
 			grants = append(grants, "cognition.nudge.process")
+		}
+		for _, g := range f.revoked {
+			for i := 0; i < len(grants); i++ {
+				if grants[i] == g {
+					grants = append(grants[:i], grants[i+1:]...)
+					i--
+				}
+			}
 		}
 		eid, ename := f.entityID, f.name
 		if eid == "" {
@@ -93,6 +102,11 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			f.decisions = append(f.decisions, in["action"])
 			allow := f.state == "UNLOCKED"
 			reason := map[bool]string{true: "granted", false: "LOCKED"}[allow]
+			for _, g := range f.revoked { // Stage 3A: a revoked grant is refused like any missing grant
+				if allow && in["action"] == g {
+					allow, reason = false, "the entity has no grant for "+g
+				}
+			}
 			if allow && strings.HasPrefix(in["action"], "skill.") && !f.skillGranted { // skills need their own grant (#72)
 				allow, reason = false, "the entity has no grant for "+in["action"]
 			}

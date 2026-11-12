@@ -376,6 +376,19 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         w.Header().Set("Content-Type","application/json; charset=utf-8")
         json.NewEncoder(w).Encode(view)
     })
+    // Stage 3A (#120; design #107 §3.2): how one processed nudge's Note was produced. Read only, the
+    // same access, scope expectation and response-boundary attestation as the Thought detail. The nudge
+    // must be this owner's and linked Engine entity's; one 404 for "not yours" and "never processed".
+    mux.HandleFunc("GET /api/development/runs/{id}",func(w http.ResponseWriter,r *http.Request){
+        if !cognitionResponse(w,r){return}
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        run,err:=core.DevelopmentRun(r.PathValue("id"),rq)
+        if errors.Is(err,tass.ErrDevelopmentRunNotFound){http.Error(w,"No processed nudge with this ID for this owner",http.StatusNotFound);return}
+        if err!=nil{cognitionErr(w,err);return}
+        if !attest(w,rq){return}
+        w.Header().Set("Content-Type","application/json; charset=utf-8")
+        json.NewEncoder(w).Encode(run)
+    })
     mux.HandleFunc("GET /api/cognition/cycles/{id}/timeline",func(w http.ResponseWriter,r *http.Request){
         if !cognitionResponse(w,r){return}
         rq,ok:=cognitionExpect(w,r);if !ok{return}

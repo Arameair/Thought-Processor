@@ -89,9 +89,9 @@ def clean_env(extra):
             "TMPDIR": f"{APP}/home", **extra}
 
 
-def start(name, cmd, env, health_url):
+def start(name, cmd, env, health_url, cwd=None):
     out = open(f"{APP}/logs/{name}.log", "a")
-    n.procs[name] = subprocess.Popen(cmd, env=clean_env(env), stdout=out, stderr=subprocess.STDOUT)
+    n.procs[name] = subprocess.Popen(cmd, env=clean_env(env), stdout=out, stderr=subprocess.STDOUT, cwd=cwd)
     ok = wait(name, lambda: n.up(health_url), 40, 1)
     log(f"started {name}: {cmd[0]} healthy={bool(ok)}")
     if not ok:
@@ -196,7 +196,7 @@ def start_core():
 def start_engine():
     start("engine", [f"{BIN}/{ENGINE_BIN}", "-data", f"{APP}/data/engine", "-model", MODEL, "-worker", "nemotron",
           "-identity-url", IDN, "-identity-key-file", f"{APP}/secrets/engine.key", "-pulse", "20s"],
-          {"PORT": str(P_ENG)}, ENG + "/api/model")
+          {"PORT": str(P_ENG)}, ENG + "/api/model", cwd=os.environ.get("ENGINE_CWD") or None)
 
 
 def kill9(name):

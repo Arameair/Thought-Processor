@@ -28,6 +28,7 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .dev .note.missing{color:var(--amber);font-size:14px}
 .dev .meta{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .dev .meaning{font-size:12px;color:var(--muted);margin-top:6px}
+.dev a.how{display:inline-block;margin-top:8px;font-size:13px;color:var(--mint)}
 .dev .action{font-size:13px;line-height:1.4;margin:0 0 6px;overflow-wrap:anywhere;color:var(--fg)}.dev .action.verified{color:var(--mint)}.dev .action.uncertain{color:var(--amber)}
 .sheet details{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}.sheet summary{cursor:pointer;color:var(--muted)}
 .readiness{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}.readiness.ready{border-color:#317261}
@@ -401,7 +402,9 @@ async function copyEvidence(){
   let copied=true;
   try{await navigator.clipboard.writeText(output);}catch{copied=false;}
   if(!live(t))return;
-  if(copied)message("Sanitized evidence copied.");else copyFallback(output);
+  // Stage 3A: the confirmation sits under the actions; on a phone a longer Note card can push it below
+  // the screen, so it is brought into view only when it isn't already (nothing moves otherwise).
+  if(copied){message("Sanitized evidence copied.");$("toast").scrollIntoView({block:"nearest"});}else copyFallback(output);
 }
 async function downloadEvidence(format){
   const id=cycleID();if(!id)return;
@@ -534,6 +537,10 @@ function devCard(d,ctx){
   const meaning=shared?"Several saved developments have request ID "+d.request_id+"; they cannot be told apart by ID, so each is shown as recorded.":
     withheld?"This record is shown as saved. Core's nudge receipt is not attributed to it (see above).":d.meaning;
   box.append(mk("div","meta",meta.join(" · ")),mk("div","meaning",meaning));
+  // Stage 3A (#120): this owner's processed nudge → its recorded run in Development (a read-only GET page).
+  if(/^nudge_[0-9a-f]{20}$/.test(d.source_nudge_id||"")&&d.nudge_receipt&&d.nudge_receipt!=="NOT_IN_THIS_OWNERS_JOURNAL"){
+    const how=mk("a","how","How this Note was produced →");how.href="/dev?run="+d.source_nudge_id;box.append(how);
+  }
   return box;
 }
 async function showThought(focusRequest){
