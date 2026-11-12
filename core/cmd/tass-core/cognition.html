@@ -402,7 +402,9 @@ async function copyEvidence(){
   let copied=true;
   try{await navigator.clipboard.writeText(output);}catch{copied=false;}
   if(!live(t))return;
-  if(copied)message("Sanitized evidence copied.");else copyFallback(output);
+  // Stage 3A: the confirmation sits under the actions; on a phone a longer Note card can push it below
+  // the screen, so it is brought into view only when it isn't already (nothing moves otherwise).
+  if(copied){message("Sanitized evidence copied.");$("toast").scrollIntoView({block:"nearest"});}else copyFallback(output);
 }
 async function downloadEvidence(format){
   const id=cycleID();if(!id)return;
