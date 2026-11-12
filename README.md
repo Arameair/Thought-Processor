@@ -53,3 +53,6 @@ We are gradually evaluating a simple shared convention: `main` = understandable 
 **After Stage 3 owner acceptance:** follow the [post-Stage-3 stabilization and cleanup checklist](docs/POST_STAGE3_STABILIZATION_CHECKLIST.md) before authorizing Stage 4 or restructuring repositories. This is a prepared plan, **not evidence that 3A/3B/3C are finished**.
 
 **For future contributors (proposed in draft PR #118):** [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) · [issue → PR → review → close workflow](docs/TASS_ISSUE_PR_WORKFLOW.md) · [open PR inventory and closure history](docs/OPEN_PR_TRIAGE_20261112.md). The [revised branching workflow](docs/WORKFLOW.md) agrees with the proposed target convention, but **existing branches and installed software have not migrated**. Current owner-controlled approvals remain unchanged.
+
+**Entity-assisted contributions (proposed):** [shared contributor-ready issue board and claim/PR workflow](docs/ENTITY_CONTRIBUTOR_WORKFLOW.md). Multiple human/AI contributors can prepare independent PRs, but a claim is not a lock or a grant and releases remain owner-approved.
+
