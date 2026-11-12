@@ -51,3 +51,15 @@ At agreed checkpoints, a contributor reviews the OPEN PR inventory: reconcile ac
 - [ ] Confirm current Codex Stage 2 active head and dependent branches before touching related work.
 - [ ] Triage historical PR candidates in small batches with evidence and owner-visible results.
 - [ ] Introduce PR/issue templates or automated labels only after this process proves useful by reducing ambiguous open work.
+
+## Decision gate: ticket or PR?
+
+Ask **“Is there a concrete repository change for reviewers to accept?”**
+
+- **Issue:** behavior request, defect report, coordination assignment, design question, review verdict/finding or rollout decision. Keep subsequent repairs in the same linked implementation PR if possible.
+- **PR:** an actual candidate change to source, tests **or durable documentation** which is intended for review and eventual merge. Documentation is not categorically “issue-only.”
+- **Audit-only PR exception:** a distinct report document intended to be added permanently to the repo can be a legitimate PR. If instead it is a completed audit of an existing implementation/design PR, attach verdict and evidence to that PR/issue and close the extra report-only PR with preservation links.
+- **Cross-repo decisions:** one coordination issue first; open per-repo PRs only after the decision is approved and actual file changes are ready. Do not open placeholders in each repo simply to advertise a future policy.
+- **Never auto-close based on age, PR number, title or a passing fixture.** Closure requires source/dependency check and a reason. Don't erase branches or confuse a closed review PR with a fixed product defect.
+
+First cleanup example: [2026-11-12 inventory/dispositions](OPEN_PR_TRIAGE_20261112.md) (121 open initially → 110 after eleven evidence-linked, nonmerged closures).
