@@ -11,6 +11,12 @@ R2  GET /api/development/runs/<nudge>: every stage of a completed run is RECORDE
 R3  reading it calls no model, adds no Engine log line and no run file, changes no Thought
 R4  scoped and fail-closed: a draft never processed, an unknown or malformed ID -> 404; Identity LOCKED -> 403;
     POST -> 405; the Engine record itself needs the Engine key
+R7  (repair A) another owner's model-log line with this run's request ID and purpose, appended to the REAL
+    Engine's model log, reaches neither the Engine record, Core's answer nor the page; this run's own
+    reply is still shown, RECORDED
+R6  (repair C) the Engine reports, now and in the run record, the revision it was built from (ENGINE_CWD is
+    the Engine checkout, so its git reports the Engine's own HEAD, not this Core checkout's), and Core
+    reconciles it; required: run with ENGINE_CWD=<Thought-engine checkout at the candidate commit>
 R5  in a real browser: Cognition links the development to /dev?run=<nudge>; Development shows the 12 stages,
     the next action, and sends zero POSTs
     APP_HOME=/tmp/e2e/s3a BIN=/tmp/e2e/bin SEED=/tmp/e2e/seed CORE_BIN=… ENGINE_BIN=… IDENTITY_BIN=… \\
@@ -88,13 +94,20 @@ def run():
     code, body, hdr = raw_get("/api/development/runs/" + nid, tok)
     check("R2 GET /api/development/runs/<nudge> -> 200 with the scope attestation", code == 200 and hdr.get("X-Cognition-Identity", "").startswith("ent_"), f"{code} {body[:200]}")
     r = json.loads(body) if code == 200 else {}
+    import subprocess
+    want_rev = subprocess.run(["git", "-C", os.environ.get("ENGINE_CWD", "/nonexistent"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    check("R6 the Engine revision is the Engine checkout's, the same now and in the run record, and reconciled",
+          len(want_rev) == 40 and r.get("engine_commit") == want_rev and r.get("record_engine_commit") == want_rev and r.get("engine_revision") == "RECONCILED",
+          json.dumps({k: r.get(k) for k in ("engine_commit", "record_engine_commit", "engine_revision")}) + " want " + want_rev)
     st = {s["stage"]: s for s in r.get("stages", [])}
     want = {"thought": "RECORDED", "attention": "RECORDED", "authorization": "RECORDED", "context_sent": "RECORDED", "instruction": "CODE-DEFINED",
             "model_call": "RECORDED", "model_reply": "RECORDED", "parse": "CODE-DEFINED", "saved": "RECORDED",
             "memory_retrieval": "NOT PART OF THIS PATH", "tools": "NOT PART OF THIS PATH", "model_reasoning": "NOT RECORDED"}
     got = {k: v["status"] for k, v in st.items()}
     check("R2 every stage has the expected status from the REAL Engine record", got == want, json.dumps({k: (v["status"], v["summary"][:90]) for k, v in st.items() if want.get(k) != v["status"]}))
-    check("R2 header: Thought, request, verified", r.get("thought_id") == tid and (r.get("request_id") or "").startswith("mr_") and r.get("verified") is True, json.dumps({k: r.get(k) for k in ("thought_id", "request_id", "verified", "run_state")}))
+    check("R2 header: Thought, request, verified now and in the receipt", r.get("thought_id") == tid and (r.get("request_id") or "").startswith("mr_")
+          and r.get("verified") is True and r.get("receipt_verified") is True and r.get("result") == "COMPLETED · verified by Core",
+          json.dumps({k: r.get(k) for k in ("thought_id", "request_id", "verified", "receipt_verified", "result", "run_state")}))
     prompt = (st.get("context_sent") or {}).get("text", "")
     check("R2 the logged prompt holds the attention's digest only", "[owner attention sha256:" in prompt and "Pay attention to whether" not in prompt
           and "Reply with exactly two lines" in prompt, prompt[-300:])
@@ -130,6 +143,20 @@ def run():
     check("R4 the Engine record needs the Engine key", c == 401, str(c))
     c, rec = http("GET", f"{h.ENG}/api/entities/{eid}/nudges/{nid}/record", None, {"Authorization": "Bearer " + h.ekey()})
     check("R4 with the key the Engine returns this run's record", c == 200 and (rec.get("run") or {}).get("nudge_id") == nid and rec.get("call") and rec.get("model_request"), str(c))
+
+    # R7: the audited collision, end to end (after R3, which proves reading writes nothing).
+    sentinel = "FOREIGN-OWNER-PRIVATE-REPLY"
+    with open(os.path.join(eng, "model-requests.jsonl"), "a") as f:
+        f.write(json.dumps({"request_id": r.get("request_id"), "identity": "someone-else", "purpose": "engine:nudge", "ok": True,
+                            "text": sentinel, "authorized": "FOREIGN-AUTHORIZED-META", "model": "FOREIGN-MODEL-META",
+                            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}) + "\n")
+    c, rec = http("GET", f"{h.ENG}/api/entities/{eid}/nudges/{nid}/record", None, {"Authorization": "Bearer " + h.ekey()})
+    check("R7 the real Engine record carries no foreign bytes and still this run's reply", c == 200 and "FOREIGN-" not in json.dumps(rec)
+          and (rec.get("model_request") or {}).get("text") == reply, str(c))
+    c, body, _ = raw_get("/api/development/runs/" + nid, tok)
+    st2 = {s["stage"]: s for s in (json.loads(body).get("stages", []) if c == 200 else [])}
+    check("R7 Core's answer carries no foreign bytes; the reply is still RECORDED", c == 200 and "FOREIGN-" not in body
+          and (st2.get("model_reply") or {}).get("status") == "RECORDED" and (st2.get("model_reply") or {}).get("text") == reply, f"{c}")
 
     browser(tok, tid, nid, r.get("request_id"))
 
@@ -167,6 +194,7 @@ def browser(tok, tid, nid, req):
         statuses = pg.evaluate("[...document.querySelectorAll('#runView li.st')].map(l=>l.id+':'+l.dataset.status)")
         nxt = pg.evaluate("(document.querySelector('#runNext a')||{}).textContent||''")
         check("R5 Development shows the 12 stages and the next action", len(statuses) == 12 and nxt == "Back to this Note in Cognition", statuses)
+        check("R7 the page shows no foreign bytes", "FOREIGN-" not in pg.content(), "")
         pg.screenshot(path="/tmp/stage3a-native-half.png", full_page=False)
         pg.reload(); pg.wait_for_timeout(1500)
         check("R5 zero POSTs from the browser (Cognition, link, Development, refresh)", not [s for s in sent if s[0] != "GET"], [s for s in sent if s[0] != "GET"])

@@ -37,7 +37,12 @@ type runEngine struct {
 	dec, att   map[string]string // nid → decision ID / attention sha256 received in the POST
 	recordGets int
 	recordHook func(nid string, rec map[string]any) (int, any)
-	srv        *httptest.Server
+	// Stage 3A repair: what the Engine reports as its commit in /api/status and in a run record ("" = the
+	// values of the audited fixture, which disagree), extra developed steps, and hiding the saved Notes.
+	statusCommit, recordCommit string
+	extraHist                  []map[string]any
+	hideNotes                  bool
+	srv                        *httptest.Server
 }
 
 // recordOf builds the Engine's run record for a claimed nudge, consistent with what this stand-in did.
@@ -69,8 +74,27 @@ func (e *runEngine) recordOf(nid string, at time.Time) map[string]any {
 		"call_scan":          map[string]any{"found": true, "files": []string{"calls.jsonl"}, "bytes_scanned": 1000, "window_bytes": 8 << 20},
 		"model_request":      map[string]any{"at": at, "request_id": req, "ok": true, "text": reply, "elapsed_ms": 12, "authorized": "policy: model.request allowed", "model": "local"},
 		"model_request_scan": map[string]any{"found": true, "files": []string{"model-requests.jsonl"}, "bytes_scanned": 1000, "window_bytes": 8 << 20},
-		"engine_commit":      "b594357c021db3a5164f321ec2b66b21198a8455",
+		"engine_commit":      e.commitOrLocked(false),
 	}
+}
+
+// commitOr: the commit the stand-in reports (status=true: /api/status; false: a run record).
+func (e *runEngine) commitOr(status bool) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.commitOrLocked(status)
+}
+func (e *runEngine) commitOrLocked(status bool) string {
+	if status {
+		if e.statusCommit != "" {
+			return e.statusCommit
+		}
+		return "21b3d502775b3ed065ab445b88f51909500770b3"
+	}
+	if e.recordCommit != "" {
+		return e.recordCommit
+	}
+	return "b594357c021db3a5164f321ec2b66b21198a8455"
 }
 
 func newRunEngine(t *testing.T) *runEngine {
@@ -97,7 +121,7 @@ func newRunEngine(t *testing.T) *runEngine {
 		case r.Method == "GET" && p == "/api/status":
 			json.NewEncoder(w).Encode(map[string]any{"entities": []any{
 				map[string]any{"card": map[string]string{"entity_id": "eng_1", "display_name": "Mira", "entity_type": "ai_companion"}},
-			}, "config": map[string]string{"commit": "21b3d502775b3ed065ab445b88f51909500770b3"}})
+			}, "config": map[string]string{"commit": e.commitOr(true)}})
 		case r.Method == "GET" && p == "/api/entities/eng_1/thoughts/thought_1":
 			e.mu.Lock()
 			var notes, hist []any
@@ -108,6 +132,12 @@ func newRunEngine(t *testing.T) *runEngine {
 			}
 			for _, n := range e.extraNotes {
 				notes = append(notes, n)
+			}
+			for _, h := range e.extraHist {
+				hist = append(hist, h)
+			}
+			if e.hideNotes {
+				notes = nil
 			}
 			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"thought": map[string]any{"thought_id": "thought_1", "entity_id": "eng_1", "topic": "t",

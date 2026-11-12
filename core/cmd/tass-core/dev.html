@@ -367,9 +367,13 @@ async function loadRun(id) {
   }
   const head = el("h2", "rv", "How this Note was produced"); head.id = "runTitle";
   const ids = el("div", "ids");
+  // Stage 3A repair: Core decides the result line (a historical receipt is not current attribution) and
+  // whether the Engine revision is reconciled; when it is not, both reported revisions are shown.
+  const short = x => /^[0-9a-f]{40}$/.test(x || "") ? x.slice(0, 12) : (x || "NOT RECORDED");
+  const engine = d.engine_revision === "RECONCILED" ? short(d.engine_commit) :
+    (d.engine_revision || "NOT REPORTED") + " — now " + short(d.engine_commit) + " · run record " + short(d.record_engine_commit);
   for (const [k, v] of [["Thought", d.thought_id], ["Nudge", d.nudge_id], ["Request", d.request_id || "NOT RECORDED"],
-      ["Thought revision when drafted", d.source_revision], ["Engine", d.engine_commit ? d.engine_commit.slice(0, 12) : "NOT RECORDED"],
-      ["Result", (d.run_state || "NOT RECORDED") + (d.verified ? " · verified by Core" : "")]]) {
+      ["Thought revision when drafted", d.source_revision], ["Engine", engine], ["Result", d.result || d.run_state || "NOT RECORDED"]]) {
     const s = el("span", "", k + " "); s.append(el("b", "", v)); ids.append(s);
   }
   const next = el("div", "next");

@@ -66,6 +66,7 @@ var stageOrder = []string{"thought", "attention", "authorization", "context_sent
 
 func TestDevelopmentRunShowsEachRecordedStage(t *testing.T) {
 	c, _, re, nid, dir := processedRun(t)
+	reconciled(re) // an Engine that reports, now and in the run record, one inspected revision
 	re.mu.Lock()
 	posts := re.posts
 	re.mu.Unlock()
@@ -363,7 +364,8 @@ func TestNudgeInstructionSummaryMatchesThePinnedEngine(t *testing.T) {
 // verified run: same stages, titles, statuses, summaries and text labels. IDs and texts are fixture values.
 // STAGE3A_WRITE_FIXTURE=1 rewrites it from Core.
 func TestDevelopmentRunBrowserFixtureIsCoreOutput(t *testing.T) {
-	c, _, _, nid, _ := processedRun(t)
+	c, _, re, nid, _ := processedRun(t)
+	reconciled(re)
 	r, err := c.DevelopmentRun(nid)
 	if err != nil {
 		t.Fatal(err)

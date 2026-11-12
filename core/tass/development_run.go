@@ -14,6 +14,14 @@ package tass
 //       NOT RECORDED         no record of it exists (or none could be found, which the reason says)
 //       NOT PART OF THIS PATH  this kind of processing does not happen for a nudge
 //     The model's private reasoning is never claimed: nudges run with thinking off, so none exists.
+//   - Repair after Codex's audit (PR #121, comment 6832088431):
+//       A  model-log text and metadata are used only when they hash to THIS run's recorded reply digest;
+//       B  a verified historical receipt is reported as what it was, and "verified" now also needs the
+//          current Thought to hold exactly one Note and one developed step for this nudge and request;
+//       C  statements that come from the Engine's code (CODE-DEFINED, NOT PART OF THIS PATH, settings,
+//          "thinking off") are made only when the revision the Engine reports now equals the one in the
+//          run record AND is a revision whose code was inspected. Otherwise both are shown and those
+//          stages say the revision was not reconciled.
 
 import (
 	"crypto/sha256"
@@ -35,6 +43,7 @@ var ErrDevelopmentRunNotFound = errors.New("no processed nudge with this ID for 
 var nudgeInstructionEngineCommits = []string{
 	"40d4e91e3b04196fa4e4f55a92b25789b82d8675", // installed Stage 2 Engine
 	"b594357c021db3a5164f321ec2b66b21198a8455", // + the read-only run record (prompts unchanged)
+	"c54390df43edddc161c5853c35db64462c39d37f", // + model-log binding repair (prompts unchanged)
 }
 
 const (
@@ -62,17 +71,24 @@ type ProvenanceStage struct {
 }
 
 type DevelopmentRun struct {
-	NudgeID        string            `json:"nudge_id"`
-	ThoughtID      string            `json:"thought_id"`
-	RequestID      string            `json:"request_id"` // "" = NOT RECORDED
-	EngineEntityID string            `json:"engine_entity_id"`
-	SourceRevision string            `json:"source_revision"` // the Thought's revision when the draft was saved
-	EngineCommit   string            `json:"engine_commit"`
-	RunState       string            `json:"run_state"` // Core's view (RunView.State)
-	Verified       bool              `json:"verified"`
-	Question       string            `json:"question"`
-	Stages         []ProvenanceStage `json:"stages"`
-	ReadOnly       string            `json:"read_only"`
+	NudgeID        string `json:"nudge_id"`
+	ThoughtID      string `json:"thought_id"`
+	RequestID      string `json:"request_id"` // "" = NOT RECORDED
+	EngineEntityID string `json:"engine_entity_id"`
+	SourceRevision string `json:"source_revision"` // the Thought's revision when the draft was saved
+	EngineCommit   string `json:"engine_commit"`
+	RunState       string `json:"run_state"` // Core's view (RunView.State)
+	// Verified: Core's receipt verified this run AND the current Thought still holds exactly one Note and
+	// one developed step with this nudge and request ID. ReceiptVerified is the receipt alone.
+	Verified        bool   `json:"verified"`
+	ReceiptVerified bool   `json:"receipt_verified"`
+	Result          string `json:"result"` // one line for the header
+	// EngineRevision: RECONCILED | MISMATCH | NOT INSPECTED | NOT REPORTED (see engineRevision).
+	EngineRevision     string            `json:"engine_revision"`
+	RecordEngineCommit string            `json:"record_engine_commit"`
+	Question           string            `json:"question"`
+	Stages             []ProvenanceStage `json:"stages"`
+	ReadOnly           string            `json:"read_only"`
 }
 
 func devSHA256(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
@@ -88,6 +104,42 @@ func devStamp(t time.Time) string {
 		return "NOT RECORDED"
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+func hex40(s string) string {
+	if len(s) != 40 {
+		return ""
+	}
+	for _, r := range s {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return ""
+		}
+	}
+	return s
+}
+
+// engineRevision compares the revision the Engine reports now with the one its run record names.
+func engineRevision(now, record string) string {
+	now, record = hex40(now), hex40(record)
+	switch {
+	case now == "" || record == "":
+		return "NOT REPORTED"
+	case now != record:
+		return "MISMATCH"
+	}
+	for _, c := range nudgeInstructionEngineCommits {
+		if c == now {
+			return "RECONCILED"
+		}
+	}
+	return "NOT INSPECTED"
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 func orNR(s string) string {
@@ -146,13 +198,52 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 		EngineCommit: orNR(scope.engineCommit), Question: clipRunes(raw.Thought.Question, 900),
 		ReadOnly: "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file."}
 	if v != nil {
-		out.RunState, out.Verified = v.State, v.State == "COMPLETED" && v.Verified
+		out.RunState, out.ReceiptVerified = v.State, v.State == "COMPLETED" && v.Verified
 	}
 	var claim *engine.RecordClaim
 	if claimed && rec.Claim.Readable && rec.Claim.Value != nil && !rec.Claim.Value.Void && rec.Claim.Value.NudgeID == nid &&
 		rec.Claim.Value.EntityID == scope.engineID && rec.Claim.Value.ThoughtID == tid {
 		claim = rec.Claim.Value
 		out.RequestID = cognitionRef(claim.RequestID)
+	}
+	if claimed {
+		out.RecordEngineCommit = orNR(hex40(rec.EngineCommit))
+	} else {
+		out.RecordEngineCommit = "NOT RECORDED"
+	}
+	out.EngineRevision = engineRevision(scope.engineCommit, rec.EngineCommit)
+	codeOK := out.EngineRevision == "RECONCILED" // C: code-derived statements only for a reconciled revision
+	revFields := []ProvenanceField{{"Engine revision reported now", out.EngineCommit}, {"Engine revision in this run's record", out.RecordEngineCommit},
+		{"Reconciliation", out.EngineRevision}}
+	revWhy := map[string]string{
+		"MISMATCH":      "The Engine reports a different revision now than the one in this run's record.",
+		"NOT INSPECTED": "The Engine's revision is not one whose code was inspected for this view.",
+		"NOT REPORTED":  "The Engine did not report its revision (or the run record has none).",
+	}[out.EngineRevision]
+	// B: what the current Thought holds for this nudge and request ID.
+	var curNotes []engine.ThoughtNote
+	curSteps := 0
+	if out.RequestID != "" {
+		for _, nt := range raw.Thought.Notes {
+			if nt.NudgeID == nid && nt.RequestID == out.RequestID {
+				curNotes = append(curNotes, nt)
+			}
+		}
+		for _, st := range raw.Thought.History {
+			if st.Kind == "developed" && st.NudgeID == nid && st.RequestID == out.RequestID {
+				curSteps++
+			}
+		}
+	}
+	out.Verified = out.ReceiptVerified && len(curNotes) == 1 && curSteps == 1
+	switch {
+	case out.Verified:
+		out.Result = out.RunState + " · verified by Core"
+	case out.ReceiptVerified:
+		out.Result = out.RunState + " · receipt verified when written; the Thought now holds " + plural(len(curNotes), "Note", "Notes") +
+			" and " + plural(curSteps, "developed step", "developed steps") + " for it"
+	default:
+		out.Result = orNR(out.RunState)
 	}
 	noRun := "The Engine has no claim for this nudge, so there is no run record to read."
 	if claimed && claim == nil {
@@ -180,9 +271,11 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 		switch {
 		case rec.Call != nil && claim != nil && strings.Contains(rec.Call.Prompt, "Thought: "+engineQuote(raw.Thought.Question)):
 			s.Status, s.Summary = "RECORDED", "This question appears word for word in the prompt the Engine logged for this run."
-		default:
+		case codeOK:
 			s.Status, s.Summary = "PARTIAL", "This is the Thought's current question. The Engine sets a question once, when the Thought is formed, "+
 				"but this run's logged prompt was not available to confirm it."
+		default:
+			s.Status, s.Summary = "PARTIAL", "This is the Thought's current question; this run's logged prompt was not available to confirm it was the one sent."
 		}
 		add(s)
 	}
@@ -246,19 +339,35 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 		add(s)
 	}
 	// 5. The instruction.
-	add(ProvenanceStage{Stage: "instruction", Title: "The instruction", Status: "CODE-DEFINED",
-		Summary:   "Not stored per run: fixed by the Thought Engine's code (thinkPrompt). The same lines appear at the end of the logged prompt above when it was recorded.",
-		TextLabel: "Instruction", Text: nudgeInstructionSummary,
-		Fields: []ProvenanceField{{"Defined by Engine commit", out.EngineCommit}}})
+	if codeOK {
+		add(ProvenanceStage{Stage: "instruction", Title: "The instruction", Status: "CODE-DEFINED",
+			Summary:   "Not stored per run: fixed by the Thought Engine's code (thinkPrompt) at the revision below, which the Engine reports now and recorded for this run. The same lines appear at the end of the logged prompt above when it was recorded.",
+			TextLabel: "Instruction", Text: nudgeInstructionSummary, Fields: revFields})
+	} else {
+		add(ProvenanceStage{Stage: "instruction", Title: "The instruction", Status: "PARTIAL", Fields: revFields,
+			Summary: revWhy + " The instruction is not stored per run, so it is not described here; if the prompt above was recorded, its last lines are the instruction as logged."})
+	}
+	// A: the model-log record (no entity or Thought field of its own) is used, text or metadata, only when it
+	// hashes to the reply digest recorded in THIS run's response record.
+	replyDigest := ""
+	if claim != nil && rec.Response.Readable && rec.Response.Value != nil {
+		replyDigest = rec.Response.Value.ReplySHA256
+	}
+	modelBound := claim != nil && rec.ModelRequest != nil && len(replyDigest) == 64 && devSHA256(rec.ModelRequest.Text) == replyDigest
 	// 6. The model call.
 	{
 		s := ProvenanceStage{Stage: "model_call", Title: "The model request"}
-		s.Fields = []ProvenanceField{{"Request", orNR(out.RequestID)}, {"Settings (CODE-DEFINED)", nudgeModelSettings}}
+		s.Fields = []ProvenanceField{{"Request", orNR(out.RequestID)}}
+		if codeOK {
+			s.Fields = append(s.Fields, ProvenanceField{"Settings (CODE-DEFINED)", nudgeModelSettings})
+		}
 		switch {
 		case claim == nil:
 			s.Status, s.Summary = "NOT RECORDED", noRun
-		case !rec.HTTP.Present:
+		case !rec.HTTP.Present && codeOK:
 			s.Status, s.Summary = "NOT RECORDED", "The Engine has no record of an HTTP attempt for this run; by its design that record is written before any request, so none was sent."
+		case !rec.HTTP.Present:
+			s.Status, s.Summary = "NOT RECORDED", "The Engine has no record of an HTTP attempt for this run."
 		case !rec.HTTP.Readable:
 			s.Status, s.Summary = "PARTIAL", "The Engine's HTTP attempt record for this run is unreadable."
 		case !rec.Response.Readable || rec.Response.Value == nil:
@@ -269,7 +378,7 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 			s.Fields = append(s.Fields, ProvenanceField{"Sent", devStamp(rec.HTTP.Value.At)}, ProvenanceField{"Answered", fmt.Sprint(r.HTTPAnswer)},
 				ProvenanceField{"Reply usable", fmt.Sprint(r.OK)}, ProvenanceField{"Time", fmt.Sprintf("%d ms", r.ElapsedMS)},
 				ProvenanceField{"Reply sha256", orNR(r.ReplySHA256)})
-			if rec.ModelRequest != nil {
+			if modelBound {
 				s.Fields = append(s.Fields, ProvenanceField{"Model", orNR(rec.ModelRequest.Model)}, ProvenanceField{"Identity check at the model", orNR(rec.ModelRequest.Authorized)})
 			}
 			if r.Error != "" {
@@ -282,27 +391,23 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 	// 7. The raw reply.
 	{
 		s := ProvenanceStage{Stage: "model_reply", Title: "The model's reply"}
-		var want string
-		if claim != nil && rec.Response.Value != nil {
-			want = rec.Response.Value.ReplySHA256
-		}
 		switch {
 		case claim == nil:
 			s.Status, s.Summary = "NOT RECORDED", noRun
-		case rec.ModelRequest != nil && want != "" && devSHA256(rec.ModelRequest.Text) == want:
+		case modelBound:
 			s.Status, s.Summary = "RECORDED", "The full reply. Its sha256 matches the reply digest the Engine recorded for this run."
 			s.TextLabel, s.Text = "Reply, exactly as returned", rec.ModelRequest.Text
-		case rec.ModelRequest != nil && want == "":
-			s.Status, s.Summary = "PARTIAL", "The Engine logged this reply, but the run recorded no reply digest to confirm it (the request did not succeed)."
-			s.TextLabel, s.Text = "Reply, as logged", rec.ModelRequest.Text
-			if rec.ModelRequest.Error != "" {
-				s.Fields = []ProvenanceField{{"Error", clipRunes(rec.ModelRequest.Error, 300)}}
+		case replyDigest == "":
+			s.Status, s.Summary = "NOT RECORDED", "This run recorded no reply digest (the request did not succeed, or its response record is missing), so no logged reply can be tied to it and none is shown."
+			if r := rec.Response.Value; rec.Response.Readable && r != nil && r.Error != "" {
+				s.Fields = []ProvenanceField{{"Error recorded for this run", clipRunes(r.Error, 300)}}
 			}
 		case rec.ModelRequest != nil:
 			s.Status, s.Summary = "PARTIAL", "A log record has this request ID, but its text does not match the run's reply digest, so it is not shown."
 		case rec.Call != nil && rec.Call.Reply != "":
+			// calls.jsonl records are matched by the Engine on entity, Thought, request and purpose.
 			s.Status = "PARTIAL"
-			s.Summary = "The full reply record was not found (the model log keeps about 10 MB). This is the reply as the call log kept it"
+			s.Summary = "The full reply record was not found (the model log keeps about 10 MB). This is the reply as this run's call-log record kept it"
 			if rec.Call.ReplyClipped {
 				s.Summary += ", cut off at 1,000 bytes."
 			} else {
@@ -317,55 +422,64 @@ func (c *Core) DevelopmentRun(nid string, rq ...*CognitionReq) (DevelopmentRun, 
 	// 8. Parsing.
 	{
 		s := ProvenanceStage{Stage: "parse", Title: "What the Engine kept from the reply", Status: "CODE-DEFINED", Summary: nudgeParseRule}
-		var notes []engine.ThoughtNote
-		for _, nt := range raw.Thought.Notes {
-			if nt.NudgeID == nid && out.RequestID != "" && nt.RequestID == out.RequestID {
-				notes = append(notes, nt)
-			}
+		if !codeOK {
+			s.Status, s.Summary = "PARTIAL", revWhy+" How the Engine reads a reply is not stored per run, so it is not described here."
 		}
 		suggested := "NOT RECORDED"
 		if claimed && rec.Outcome.Value != nil && rec.Outcome.Value.Suggested != "" {
 			suggested = rec.Outcome.Value.Suggested + " — not applied"
 		}
 		s.Fields = []ProvenanceField{{"Suggested state", suggested}}
-		switch len(notes) {
+		switch len(curNotes) {
 		case 1:
-			s.TextLabel, s.Text = "The saved Note (the kept NOTE line)", notes[0].Text
-			s.Fields = append(s.Fields, ProvenanceField{"Note saved", devStamp(notes[0].At)})
+			s.TextLabel, s.Text = "The saved Note (the kept NOTE line)", curNotes[0].Text
+			s.Fields = append(s.Fields, ProvenanceField{"Note saved", devStamp(curNotes[0].At)})
 		case 0:
-			s.Fields = append(s.Fields, ProvenanceField{"Saved Note", "none with this nudge and request ID (never saved, or no longer stored: the Engine keeps the newest 200)"})
+			s.Fields = append(s.Fields, ProvenanceField{"Saved Note", "none with this nudge and request ID (never saved, or no longer stored)"})
 		default:
-			s.Fields = append(s.Fields, ProvenanceField{"Saved Note", fmt.Sprintf("%d Notes share this nudge and request ID, so none is shown as the one kept", len(notes))})
+			s.Fields = append(s.Fields, ProvenanceField{"Saved Note", fmt.Sprintf("%d Notes share this nudge and request ID, so none is shown as the one kept", len(curNotes))})
 		}
 		add(s)
 	}
-	// 9. Saved and verified.
+	// 9. Saved and verified. B: the historical receipt and the present Thought are reported separately.
 	{
 		s := ProvenanceStage{Stage: "saved", Title: "Saved and checked"}
 		eState := "NOT RECORDED"
 		if claimed {
 			eState = orNR(rec.Run.State)
 		}
-		s.Fields = []ProvenanceField{{"Engine's state", eState}, {"Core's state", orNR(out.RunState)}, {"Core verified", fmt.Sprint(out.Verified)}}
-		if claimed {
-			s.Fields = append(s.Fields, ProvenanceField{"Matching Notes / steps", fmt.Sprintf("%d / %d", rec.Run.Evidence.Notes, rec.Run.Evidence.Steps)})
-		}
+		s.Fields = []ProvenanceField{{"Engine's state", eState}, {"Core's state", orNR(out.RunState)},
+			{"Core's receipt verified", fmt.Sprint(out.ReceiptVerified)},
+			{"Now in the Thought (Notes / developed steps)", fmt.Sprintf("%d / %d", len(curNotes), curSteps)}}
+		now := plural(len(curNotes), "Note", "Notes") + " and " + plural(curSteps, "developed step", "developed steps")
 		switch {
 		case out.Verified:
-			s.Status, s.Summary = "RECORDED", "Core's receipt verified exactly one saved Note and one developed step with this request ID. That shows it was saved, not that it answers the question."
+			s.Status, s.Summary = "RECORDED", "Core's receipt verified one saved Note and one developed step with this request ID, and the Thought still holds exactly one of each. That shows it was saved, not that it answers the question."
+		case out.ReceiptVerified:
+			s.Status, s.Summary = "PARTIAL", "When Core wrote its receipt it verified one saved Note and one developed step for this request. "+
+				"The Thought now holds "+now+" with this nudge and request ID, so none of them can be identified as that Note."
 		case v == nil:
 			s.Status, s.Summary = "NOT RECORDED", "Core has no receipt for this run."
 		default:
-			s.Status, s.Summary = "PARTIAL", "Core's receipt says "+orNR(out.RunState)+"; it is not a verified save."
+			s.Status, s.Summary = "PARTIAL", "Core's receipt says "+orNR(out.RunState)+"; it is not a verified save. The Thought now holds "+now+" with this nudge and request ID."
 		}
 		add(s)
 	}
-	// 10–12. What this path does not do, and what does not exist.
-	add(ProvenanceStage{Stage: "memory_retrieval", Title: "Memory search", Status: "NOT PART OF THIS PATH", Fields: []ProvenanceField{},
-		Summary: "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes."})
-	add(ProvenanceStage{Stage: "tools", Title: "Tools, skills or notebooks", Status: "NOT PART OF THIS PATH", Fields: []ProvenanceField{},
-		Summary: "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened."})
-	add(ProvenanceStage{Stage: "model_reasoning", Title: "The model's reasoning", Status: "NOT RECORDED", Fields: []ProvenanceField{},
-		Summary: "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place."})
+	// 10–12. What this path does not do, and what does not exist. These come from the Engine's code (C).
+	if codeOK {
+		add(ProvenanceStage{Stage: "memory_retrieval", Title: "Memory search", Status: "NOT PART OF THIS PATH", Fields: []ProvenanceField{},
+			Summary: "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes."})
+		add(ProvenanceStage{Stage: "tools", Title: "Tools, skills or notebooks", Status: "NOT PART OF THIS PATH", Fields: []ProvenanceField{},
+			Summary: "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened."})
+		add(ProvenanceStage{Stage: "model_reasoning", Title: "The model's reasoning", Status: "NOT RECORDED", Fields: []ProvenanceField{},
+			Summary: "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place."})
+	} else {
+		add(ProvenanceStage{Stage: "memory_retrieval", Title: "Memory search", Status: "NOT RECORDED", Fields: []ProvenanceField{},
+			Summary: "No record of a memory search exists for this run. " + revWhy + " Whether this revision ever searches memory is not described here."})
+		add(ProvenanceStage{Stage: "tools", Title: "Tools, skills or notebooks", Status: "NOT RECORDED", Fields: []ProvenanceField{},
+			Summary: "No record shows a tool, skill or notebook for this run. " + revWhy + " A Note that describes an action is not evidence the action happened."})
+		add(ProvenanceStage{Stage: "model_reasoning", Title: "The model's reasoning", Status: "NOT RECORDED", Fields: []ProvenanceField{},
+			Summary: "No reasoning text was recorded for this run. " + revWhy + " Nothing is inferred in its place."})
+	}
 	return out, nil
 }

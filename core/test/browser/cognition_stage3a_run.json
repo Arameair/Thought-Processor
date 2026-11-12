@@ -1,12 +1,16 @@
 {
-  "nudge_id": "nudge_62c03a026c50b8b62621",
+  "nudge_id": "nudge_93adff1a6ad4d56fccbf",
   "thought_id": "thought_1",
-  "request_id": "mr_62c03a02",
+  "request_id": "mr_93adff1a",
   "engine_entity_id": "eng_1",
   "source_revision": "2026-11-08T09:00:00Z",
-  "engine_commit": "21b3d502775b3ed065ab445b88f51909500770b3",
+  "engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
   "run_state": "COMPLETED",
   "verified": true,
+  "receipt_verified": true,
+  "result": "COMPLETED · verified by Core",
+  "engine_revision": "RECONCILED",
+  "record_engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
   "question": "q",
   "stages": [
     {
@@ -43,11 +47,11 @@
       "fields": [
         {
           "label": "Draft",
-          "value": "nudge_62c03a026c50b8b62621"
+          "value": "nudge_93adff1a6ad4d56fccbf"
         },
         {
           "label": "Saved",
-          "value": "2026-11-12T11:53:48Z"
+          "value": "2026-11-12T18:32:15Z"
         },
         {
           "label": "Digest Core submitted",
@@ -81,7 +85,7 @@
         },
         {
           "label": "Identity's redeem record",
-          "value": "redeem_62c03a02"
+          "value": "redeem_93adff1a"
         }
       ]
     },
@@ -97,7 +101,7 @@
         },
         {
           "label": "Request",
-          "value": "mr_62c03a02"
+          "value": "mr_93adff1a"
         }
       ],
       "text_label": "Prompt, as the Engine logged it",
@@ -107,11 +111,19 @@
       "stage": "instruction",
       "title": "The instruction",
       "status": "CODE-DEFINED",
-      "summary": "Not stored per run: fixed by the Thought Engine's code (thinkPrompt). The same lines appear at the end of the logged prompt above when it was recorded.",
+      "summary": "Not stored per run: fixed by the Thought Engine's code (thinkPrompt) at the revision below, which the Engine reports now and recorded for this run. The same lines appear at the end of the logged prompt above when it was recorded.",
       "fields": [
         {
-          "label": "Defined by Engine commit",
-          "value": "21b3d502775b3ed065ab445b88f51909500770b3"
+          "label": "Engine revision reported now",
+          "value": "c54390df43edddc161c5853c35db64462c39d37f"
+        },
+        {
+          "label": "Engine revision in this run's record",
+          "value": "c54390df43edddc161c5853c35db64462c39d37f"
+        },
+        {
+          "label": "Reconciliation",
+          "value": "RECONCILED"
         }
       ],
       "text_label": "Instruction",
@@ -125,7 +137,7 @@
       "fields": [
         {
           "label": "Request",
-          "value": "mr_62c03a02"
+          "value": "mr_93adff1a"
         },
         {
           "label": "Settings (CODE-DEFINED)",
@@ -149,7 +161,7 @@
         },
         {
           "label": "Reply sha256",
-          "value": "c73395d49be2f5ee4806a7fe7d1c0868588cb05c79c5a3212bef866ab79f27f6"
+          "value": "f0e8ef05a7c72e726fb5bde7ed7789c719ea603153cb295d64be1c3d2a46dd68"
         },
         {
           "label": "Model",
@@ -168,7 +180,7 @@
       "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
       "fields": [],
       "text_label": "Reply, exactly as returned",
-      "text": "NOTE: NOTE-TEXT-nudge_62c03a026c50b8b62621\nSTATE: resolve"
+      "text": "NOTE: NOTE-TEXT-nudge_93adff1a6ad4d56fccbf\nSTATE: resolve"
     },
     {
       "stage": "parse",
@@ -186,13 +198,13 @@
         }
       ],
       "text_label": "The saved Note (the kept NOTE line)",
-      "text": "NOTE-TEXT-nudge_62c03a026c50b8b62621"
+      "text": "NOTE-TEXT-nudge_93adff1a6ad4d56fccbf"
     },
     {
       "stage": "saved",
       "title": "Saved and checked",
       "status": "RECORDED",
-      "summary": "Core's receipt verified exactly one saved Note and one developed step with this request ID. That shows it was saved, not that it answers the question.",
+      "summary": "Core's receipt verified one saved Note and one developed step with this request ID, and the Thought still holds exactly one of each. That shows it was saved, not that it answers the question.",
       "fields": [
         {
           "label": "Engine's state",
@@ -203,11 +215,11 @@
           "value": "COMPLETED"
         },
         {
-          "label": "Core verified",
+          "label": "Core's receipt verified",
           "value": "true"
         },
         {
-          "label": "Matching Notes / steps",
+          "label": "Now in the Thought (Notes / developed steps)",
           "value": "1 / 1"
         }
       ]

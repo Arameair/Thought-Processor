@@ -31,7 +31,7 @@ here="$(pwd)"
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
 # engine: experiment/stage2-nudge-run-20261108 (durable nudge runs, Stop, verified development; Stage 2 + ST2-I01 repair)
-ENGINE_COMMIT_PIN="b594357c021db3a5164f321ec2b66b21198a8455"
+ENGINE_COMMIT_PIN="c54390df43edddc161c5853c35db64462c39d37f"
 # identity: experiment/nudge-process-stop-20261108 (single-use bound decisions for nudge process / stop; Stage 2)
 IDENTITY_COMMIT_PIN="cfc4079b690e2f7dc57afb9f14c6832ae38fdf54"
 

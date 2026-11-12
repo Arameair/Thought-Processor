@@ -16,6 +16,13 @@ H7  zero POSTs in all of it; Development reads only /api/development/runs/<id> (
 H8  refused (403), not found (404), unavailable (503), an answer for another nudge, or a bad ID: an error
     line, no stage, nothing left from an earlier view
 H9  1280 / 960 / 390: no sideways scrolling in the run view; the title and next action are on screen
+Repair after Codex's audit (PR #121, comment 6832088431). cognition_stage3a_unreconciled.json is Core's real
+output (TestDevelopmentRunUnreconciledBrowserFixtureIsCoreOutput) for a run whose model-log record is not tied
+to it, whose Thought now holds two Notes for it, and whose Engine revision does not match its run record:
+U1  the header shows Core's result line, never "verified by Core"; no "exactly one" anywhere
+U2  the Engine line shows MISMATCH with BOTH revisions; no stage is CODE-DEFINED; no instruction text
+U3  no FOREIGN bytes and no reply text anywhere in the page
+U4  the reconciled positive control keeps "verified by Core", one Engine revision and two CODE-DEFINED stages
     python3 cognition_stage3a.py
 """
 import copy
@@ -30,6 +37,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COG = (ROOT / "cmd/tass-core/cognition.html").read_text()
 DEV = (ROOT / "cmd/tass-core/dev.html").read_text()
 RUN = json.loads((Path(__file__).resolve().parent / "cognition_stage3a_run.json").read_text())
+UNREC = json.loads((Path(__file__).resolve().parent / "cognition_stage3a_unreconciled.json").read_text())
 ORIGIN = "http://127.0.0.1:8795"
 NOW = "2026-11-12T10:00:00Z"
 NID, OTHER = RUN["nudge_id"], "nudge_%020x" % 0xbeef
@@ -158,6 +166,9 @@ with sync_playwright() as p:
             check("H5 one next action back to the same Note", v["next"] == "Back to this Note in Cognition" and v["href"] == "/cognition#thought=" + TID + "&dev=" + REQ, v)
             check("H5 says nothing here can run anything", "nothing on this page can run anything" in v["text"], "")
             check("H9 no sideways scrolling in the run view", v["over"] <= 1, v["over"])
+            check("U4 reconciled: header 'verified by Core', one Engine revision, two CODE-DEFINED stages",
+                  "verified by Core" in v["ids"] and "MISMATCH" not in v["ids"] and (RUN["engine_commit"] or "")[:12] in v["ids"]
+                  and [s["id"] for s in v["stages"] if s["status"] == "CODE-DEFINED"] == ["stage-instruction", "stage-parse"], v["ids"])
             tbox, nbox = pg.locator("#runTitle").bounding_box(), pg.locator("#runNext").bounding_box()
             check("H9 title and next action on screen", tbox and nbox and tbox["y"] >= 0 and nbox["y"] + 20 <= h and nbox["x"] + 40 <= w, (tbox, nbox))
             pg.screenshot(path=f"/tmp/stage3a-{tag}.png")
@@ -175,6 +186,23 @@ with sync_playwright() as p:
             pg.get_by_role("link", name="Back to this Note in Cognition").click()
             pg.wait_for_selector("#dev-" + REQ + ".focus")
             check("H5 the next action opens the same Note, focused", pg.locator("#dev-" + REQ + ".focus").count() == 1 and "dev=" + REQ in pg.url, pg.url)
+
+            # U1–U3: the repaired, unreconciled state, from Core's real output.
+            unrec = copy.deepcopy(UNREC); unrec["nudge_id"] = NID
+            state["run"] = (200, unrec)
+            pg.goto(ORIGIN + "/dev?run=" + NID); pg.wait_for_selector("#runView li.st")
+            v = pg.evaluate(RUNPROBE)
+            body = pg.evaluate("document.body.innerText")
+            check("U1 header shows Core's result line, not 'verified by Core'", UNREC["result"] in v["ids"] and "verified by Core" not in body, v["ids"])
+            check("U1 no 'exactly one' anywhere", "exactly one" not in body, "")
+            check("U2 Engine line: MISMATCH with both revisions", "MISMATCH" in v["ids"] and UNREC["engine_commit"][:12] in v["ids"]
+                  and UNREC["record_engine_commit"][:12] in v["ids"], v["ids"])
+            check("U2 no CODE-DEFINED stage, no instruction text", not [s for s in v["stages"] if s["status"] == "CODE-DEFINED"]
+                  and v["stages"][4]["id"] == "stage-instruction" and v["stages"][4]["text"] == "", [s["status"] for s in v["stages"]])
+            check("U3 no foreign bytes, no reply text", "FOREIGN" not in body and "FOREIGN" not in pg.content() and not [s for s in v["stages"] if s["id"] == "stage-model_reply" and s["text"]], "")
+            check("U1-U3 no sideways scrolling", v["over"] <= 1, v["over"])
+            pg.screenshot(path=f"/tmp/stage3a-unreconciled-{tag}.png")
+            state["run"] = (200, RUN)
 
             # H8: refusals and bad answers, each from a direct URL, after a good view in the same tab
             other = copy.deepcopy(RUN); other["nudge_id"] = OTHER
