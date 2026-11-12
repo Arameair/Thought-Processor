@@ -84,3 +84,9 @@ See the detailed [future-team maintenance checklist](TASS_ISSUE_PR_WORKFLOW.md).
 ## Historical record
 
 The prior Thought-Processor workflow used `alpha` as the experiment base and `main` as an owner-approved release/documentation lane. It remains traceable in Git history before this documentation revision. Past experiments and their original acceptance criteria are not retroactively reclassified by this new guide.
+
+## Parallel work and update automation
+
+Multiple human or AI contributors can work simultaneously using **separate isolated branches and PRs**. A PR is a proposed change, not a shared workspace. Every branch must name its actual baseline, linked issue and dependent component/PR pins; overlapping changes require an explicit integration order and retest of the **combined** candidate. The owner has one running TASS deployment, which independent contributors must not modify as part of normal PR testing.
+
+A reviewed change on `main` is **not** an installable update. The existing `core/tass.sh` update/rollback machinery should only be extended through a separately verified release manifest and owner-controlled approval path. Start with a **read-only** release eligibility pilot, never treat a changing Git branch as a release. See [coordinated update/release workflow](UPDATE_RELEASE_WORKFLOW.md) and existing [update/recovery issue #79](https://github.com/Arameair/Thought-Processor/issues/79).
