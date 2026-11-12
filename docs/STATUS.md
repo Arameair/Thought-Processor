@@ -1,6 +1,8 @@
 # Thought Processor — implementation status and evidence
 
-**Reviewed:** October 27, 2026. Distinguish **code present**, **reported developer testing**, **independent review**, **owner-observed acceptance** and **branch promotion**. No publication or production security is implied.
+**Historical snapshot reviewed October 27, 2026 — NOT a current installed-build ledger.** For current work, consult the exact active PR/issue and owner installation record. The target workflow is proposed in [governance PR #118](https://github.com/Arameair/Thought-Processor/pull/118) and the [revised workflow](WORKFLOW.md) on that draft branch. **Do not select a development base or infer current deployment from this historical page.**
+
+**Reviewed for historical contents:** October 27, 2026. Distinguish **code present**, **reported developer testing**, **independent review**, **owner-observed acceptance** and **branch promotion**. No publication or production security is implied.
 
 ## Current snapshot
 
