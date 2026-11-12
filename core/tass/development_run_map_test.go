@@ -138,7 +138,7 @@ func TestDevelopmentRunMapShowsGapsNotInventedConnections(t *testing.T) {
 			rec["model_request"].(map[string]any)["text"] = text
 			val(rec, "response")["reply_sha256"] = hex.EncodeToString(h[:])
 			return 200, rec
-		}, nil, want{"model_reply>saved_note": "PARTIAL", "block:model_reply": "RECORDED", "block:saved_note": "RECORDED", "model_request>model_reply": "CONNECTED"}},
+		}, nil, want{"model_reply>saved_note": "NOT ESTABLISHED", "block:model_reply": "RECORDED", "block:saved_note": "RECORDED", "model_request>model_reply": "CONNECTED"}},
 		{"reply does not match the run's digest", func(rec map[string]any) (int, any) {
 			rec["model_request"].(map[string]any)["text"] = "NOTE: forged\nSTATE: keep"
 			return 200, rec

@@ -42,6 +42,7 @@ type runEngine struct {
 	statusCommit, recordCommit string
 	extraHist                  []map[string]any
 	hideNotes                  bool
+	hideNotesExceptExtra       bool // Stage 3A repair: serve only extraNotes (the Note under test)
 	srv                        *httptest.Server
 }
 
@@ -138,6 +139,12 @@ func newRunEngine(t *testing.T) *runEngine {
 			}
 			if e.hideNotes {
 				notes = nil
+			}
+			if e.hideNotesExceptExtra {
+				notes = nil
+				for _, n := range e.extraNotes {
+					notes = append(notes, n)
+				}
 			}
 			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"thought": map[string]any{"thought_id": "thought_1", "entity_id": "eng_1", "topic": "t",

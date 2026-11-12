@@ -116,6 +116,10 @@ def run():
     notes = [x for x in (t0 or {}).get("notes") or [] if x.get("source_nudge_id") == nid]
     check("R2 the saved Note is the Thought's Note, and it came from the shown reply", len(notes) == 1 and (st.get("parse") or {}).get("text") == notes[0].get("text")
           and notes[0].get("text", "")[:20] in reply, f"{reply[:200]} / {json.dumps(notes)[:200]}")
+    links = {(x.get("from"), x.get("to")): x for x in r.get("links") or []}
+    lk = links.get(("model_reply", "saved_note")) or {}
+    check("R2 (audit repair) the REAL Engine's reply and saved Note: Model reply -> Saved Note CONNECTED by the parser rule, and Core's outcome is that Note",
+          lk.get("status") == "CONNECTED" and len(notes) == 1 and r.get("note") == notes[0].get("text"), json.dumps(lk)[:300])
     check("R2 suggested state not applied", "not applied" in json.dumps((st.get("parse") or {}).get("fields")), json.dumps((st.get("parse") or {}).get("fields")))
 
     for _ in range(2):

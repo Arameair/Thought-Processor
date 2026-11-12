@@ -53,7 +53,7 @@
         "parse"
       ],
       "status": "PARTIAL",
-      "summary": "The Thought holds 2 Notes with nudge nudge_0bae0ff3fba6b11be224 and request mr_0bae0ff3, so none can be shown as the one this run saved.",
+      "summary": "The Thought holds 2 Notes with nudge nudge_9e60d1e84cfd72dc7859 and request mr_9e60d1e8, so none can be shown as the one this run saved.",
       "title": "Saved Note"
     },
     {
@@ -125,7 +125,7 @@
       "to": "model_reply"
     },
     {
-      "basis": "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply.",
+      "basis": "The single saved Note is exactly the NOTE value the Engine's parser keeps from the digest-checked reply: its first NOTE line, cleaned and cut at 400 characters.",
       "from": "model_reply",
       "missing": "The Thought holds 2 Notes with this nudge and request, so no single Note can be tied to this reply.",
       "status": "NOT ESTABLISHED",
@@ -139,12 +139,12 @@
       "to": "verification"
     }
   ],
-  "nudge_id": "nudge_0bae0ff3fba6b11be224",
+  "nudge_id": "nudge_9e60d1e84cfd72dc7859",
   "question": "q",
   "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
   "receipt_verified": true,
   "record_engine_commit": "b594357c021db3a5164f321ec2b66b21198a8455",
-  "request_id": "mr_0bae0ff3",
+  "request_id": "mr_9e60d1e8",
   "result": "COMPLETED · receipt verified when written; the Thought now holds 2 Notes and 1 developed step for it",
   "run_state": "COMPLETED",
   "source_revision": "2026-11-08T09:00:00Z",
@@ -179,11 +179,11 @@
       "fields": [
         {
           "label": "Draft",
-          "value": "nudge_0bae0ff3fba6b11be224"
+          "value": "nudge_9e60d1e84cfd72dc7859"
         },
         {
           "label": "Saved",
-          "value": "2026-11-12T20:43:08Z"
+          "value": "2026-11-12T21:42:28Z"
         },
         {
           "label": "Digest Core submitted",
@@ -217,7 +217,7 @@
         },
         {
           "label": "Identity's redeem record",
-          "value": "redeem_0bae0ff3"
+          "value": "redeem_9e60d1e8"
         }
       ],
       "stage": "authorization",
@@ -229,7 +229,7 @@
       "fields": [],
       "stage": "context_sent",
       "status": "NOT RECORDED",
-      "summary": "No log record for request mr_0bae0ff3 was found in the newest 8 MiB of the Engine's call log; it may be older than that window.",
+      "summary": "No log record for request mr_9e60d1e8 was found in the newest 8 MiB of the Engine's call log; it may be older than that window.",
       "title": "What was sent to the model"
     },
     {
@@ -256,7 +256,7 @@
       "fields": [
         {
           "label": "Request",
-          "value": "mr_0bae0ff3"
+          "value": "mr_9e60d1e8"
         },
         {
           "label": "Sent",

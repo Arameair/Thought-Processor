@@ -1,7 +1,7 @@
 {
-  "nudge_id": "nudge_5054094f9c71fe3cc2f4",
+  "nudge_id": "nudge_193b6fe46264f5b5bfec",
   "thought_id": "thought_1",
-  "request_id": "mr_5054094f",
+  "request_id": "mr_193b6fe4",
   "engine_entity_id": "eng_1",
   "source_revision": "2026-11-08T09:00:00Z",
   "engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
@@ -47,11 +47,11 @@
       "fields": [
         {
           "label": "Draft",
-          "value": "nudge_5054094f9c71fe3cc2f4"
+          "value": "nudge_193b6fe46264f5b5bfec"
         },
         {
           "label": "Saved",
-          "value": "2026-11-12T20:43:08Z"
+          "value": "2026-11-12T21:42:28Z"
         },
         {
           "label": "Digest Core submitted",
@@ -85,7 +85,7 @@
         },
         {
           "label": "Identity's redeem record",
-          "value": "redeem_5054094f"
+          "value": "redeem_193b6fe4"
         }
       ]
     },
@@ -101,7 +101,7 @@
         },
         {
           "label": "Request",
-          "value": "mr_5054094f"
+          "value": "mr_193b6fe4"
         }
       ],
       "text_label": "Prompt, as the Engine logged it",
@@ -137,7 +137,7 @@
       "fields": [
         {
           "label": "Request",
-          "value": "mr_5054094f"
+          "value": "mr_193b6fe4"
         },
         {
           "label": "Settings (CODE-DEFINED)",
@@ -161,7 +161,7 @@
         },
         {
           "label": "Reply sha256",
-          "value": "892b3eb207d66d4927f0d2c9c21c4672c58b4c0909a32ca367d5743e42bad5d8"
+          "value": "b6f2e6685d83d627d780c6c8e2e33cf9c0257eb6664f6ab25fb2ffd4aa0d2199"
         },
         {
           "label": "Model",
@@ -180,7 +180,7 @@
       "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
       "fields": [],
       "text_label": "Reply, exactly as returned",
-      "text": "NOTE: NOTE-TEXT-nudge_5054094f9c71fe3cc2f4\nSTATE: resolve"
+      "text": "NOTE: NOTE-TEXT-nudge_193b6fe46264f5b5bfec\nSTATE: resolve"
     },
     {
       "stage": "parse",
@@ -198,7 +198,7 @@
         }
       ],
       "text_label": "The saved Note (the kept NOTE line)",
-      "text": "NOTE-TEXT-nudge_5054094f9c71fe3cc2f4"
+      "text": "NOTE-TEXT-nudge_193b6fe46264f5b5bfec"
     },
     {
       "stage": "saved",
@@ -298,7 +298,7 @@
       "id": "saved_note",
       "title": "Saved Note",
       "status": "RECORDED",
-      "summary": "The Thought holds one saved Note with nudge nudge_5054094f9c71fe3cc2f4 and request mr_5054094f.",
+      "summary": "The Thought holds one saved Note with nudge nudge_193b6fe46264f5b5bfec and request mr_193b6fe4.",
       "stages": [
         "parse"
       ]
@@ -371,7 +371,7 @@
       "from": "model_reply",
       "to": "saved_note",
       "status": "CONNECTED",
-      "basis": "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply."
+      "basis": "The single saved Note is exactly the NOTE value the Engine's parser keeps from the digest-checked reply: its first NOTE line, cleaned and cut at 400 characters."
     },
     {
       "from": "saved_note",
@@ -381,5 +381,5 @@
     }
   ],
   "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
-  "note": "NOTE-TEXT-nudge_5054094f9c71fe3cc2f4"
+  "note": "NOTE-TEXT-nudge_193b6fe46264f5b5bfec"
 }

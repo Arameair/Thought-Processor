@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -662,16 +663,26 @@ func runMap(out DevelopmentRun, f mapFacts) ([]ProvenanceBlock, []ProvenanceBloc
 	links = append(links, l)
 	// 5. Model reply → saved Note: exactly one Note carries this nudge and request, and its text is in the verified reply.
 	l = link("model_reply", "saved_note")
-	l.Basis = "A single saved Note carries this nudge and request ID, and its text appears in the digest-checked reply."
+	l.Basis = "The single saved Note is exactly the NOTE value the Engine's parser keeps from the digest-checked reply: its first NOTE line, cleaned and cut at 400 characters."
 	switch {
 	case out.RequestID == "":
 		l.Status, l.Missing = "NOT ESTABLISHED", "No request ID is recorded for this run, so no saved Note can be tied to it."
 	case len(f.notes) != 1:
 		l.Status, l.Missing = "NOT ESTABLISHED", fmt.Sprintf("The Thought holds %d Notes with this nudge and request, so no single Note can be tied to this reply.", len(f.notes))
-	case f.modelBound && strings.TrimSpace(f.notes[0].Text) != "" && strings.Contains(f.replyText, strings.TrimSpace(f.notes[0].Text)):
-		l.Status = "CONNECTED"
+	case !f.modelBound:
+		l.Status, l.Missing = "PARTIAL", "The saved Note carries this nudge and request ID, but no reply is tied to this run by its digest, so the Note cannot be checked against it."
+	case out.EngineRevision != "RECONCILED":
+		l.Status, l.Missing = "PARTIAL", "The saved Note carries this nudge and request ID, but the Engine revision is "+orNR(out.EngineRevision)+
+			", so how it reads a reply was not inspected for this view and the Note is not checked against the reply."
 	default:
-		l.Status, l.Missing = "PARTIAL", "The saved Note carries this nudge and request ID, but its text could not be found in a verified reply."
+		switch parsed, why := engineNoteFromReply(f.replyText); {
+		case why != "":
+			l.Status, l.Missing = "NOT ESTABLISHED", "The digest-checked reply "+why+", so the Engine's parser would keep no Note from it; the saved Note conflicts with the reply."
+		case parsed != f.notes[0].Text:
+			l.Status, l.Missing = "NOT ESTABLISHED", "The saved Note differs from the NOTE value the Engine's parser keeps from the digest-checked reply (its first NOTE line, cleaned)."
+		default:
+			l.Status = "CONNECTED"
+		}
 	}
 	links = append(links, l)
 	// 6. Saved Note → verification: Core's receipt verified the request and the Thought is still unique for it.
@@ -688,4 +699,28 @@ func runMap(out DevelopmentRun, f mapFacts) ([]ProvenanceBlock, []ProvenanceBloc
 	}
 	links = append(links, l)
 	return blocks, extra, links
+}
+
+// engineNoteFromReply is the Thought Engine's NOTE extraction in parseThink (prompts.go: reNote, then
+// cleanLine(m[1], 400), refused under 8 characters) at the revisions in nudgeInstructionEngineCommits, where
+// a nudge's saved Note text is exactly this value. TestEngineNoteExtractionMatchesInspectedEngineSource compares
+// it with the Engine source in the release gate. It is used only for a RECONCILED revision. parseThink's
+// further refusal of a NOTE that only repeats its inputs is not reproduced: the inputs are not recorded, and a
+// saved Note shows that check passed. why is "" when a Note would be kept.
+var engineReNote = regexp.MustCompile(`(?im)^\s*\**\s*NOTE\s*\**\s*[:=]\s*(.+?)\s*$`)
+
+func engineNoteFromReply(reply string) (note, why string) {
+	m := engineReNote.FindStringSubmatch(reply)
+	if m == nil {
+		return "", "has no NOTE line"
+	}
+	s := strings.Trim(strings.TrimSpace(m[1]), `"*`)
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > 400 {
+		s = string(r[:400])
+	}
+	if len([]rune(s)) < 8 {
+		return "", "has a NOTE that is too short (under 8 characters)"
+	}
+	return s, ""
 }
