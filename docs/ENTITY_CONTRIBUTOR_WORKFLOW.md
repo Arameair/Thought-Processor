@@ -62,7 +62,7 @@ Issues may still be discussed and corrected when not ready; their contents are *
 | Work type | Entity may prepare in an isolated workspace? | Integration/operation gate |
 | --- | --- | --- |
 | Read public/permitted issues; propose documentation/UX/tests | Yes, with granted read/write scope and sandbox boundaries | Review and appropriate GitHub PR checks |
-| Ordinary feature or bug fix on a permitted repo | Yes, if issue marked contributor-ready and user authorizes workspace/branch/PR actions | Service maintainer + independent review, applicable CI |
+| Ordinary feature or bug fix on a permitted repo | Yes, for a contributor-ready task under scoped workspace/branch/PR authority | Service maintainer or delegated reviewer + applicable CI for R1; independent technical/security audit only if R2/R3 risks are present |
 | Cross-service contract or persistent schema changes | May draft plan/tests on authorized branches | Cross-repo owners, compatibility and recovery evidence |
 | Identity/security, credential handling, live model use, arbitrary code actions, real deployments | **Never infer permission from an issue claim.** Protected actions need a separate, specific authorization | Identity **and** GitHub/host permissions; security review; explicit owner approval |
 | Merge into accepted branch; owner update; external release | Entity may summarize evidence or prepare a candidate | Authorized human/release process; no silent merge or deploy |
