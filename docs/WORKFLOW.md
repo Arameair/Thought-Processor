@@ -97,6 +97,12 @@ A reviewed change on `main` is **not** an installable update. The existing `core
 
 **Dedicated project:** [Arameair/updater](https://github.com/Arameair/updater) owns read-only release discovery, manifest checks and eligibility ([issue #1](https://github.com/Arameair/updater/issues/1)); Core `tass.sh` remains the sole local execution/backup/recovery backend ([Core issue #79](https://github.com/Arameair/Thought-Processor/issues/79)). Its private repo status means external release distribution is a later separate decision. No live update is authorized.
 
+## Long-term notebook-to-behavior product target (design, not current runtime)
+
+The owner wants the **Notebook/Learning library** to teach TASS through revisioned lesson cells; **Development** to visually connect selected cells to named, supported thought-process junctions; **Core/Engine** to consume only validated, authorized bindings; **Cognition** to display the resulting *new* real recordings and measured A/B outcomes; and **Identity** to enforce both workflow-wide and per-block automation ceilings. TASS may recommend connections and when to run already authorized operations, but cannot grant his own permissions or rewrite historical evidence.
+
+**Technical design source:** [Development PR #7 and wire-flow design 06](https://github.com/Arameair/Development/pull/7). [Stage 3 issue #120](https://github.com/Arameair/Thought-Processor/issues/120) tests read-only provenance and then a controlled **instruction-change** experiment; it does **not yet** implement live notebook-cell→junction wiring. Preserve this gap during [post-Stage-3 stabilization](POST_STAGE3_STABILIZATION_CHECKLIST.md), and only assign the next feature after separate owner approval. A saved canvas connection is advisory unless a verified runtime consumer uses it with a durable receipt.
+
 ## Contributor/entity collaboration (proposed, not enabled)
 
 The owner wants multiple people and their **own entities** to pick up contributor-ready GitHub issues, coordinate claims, work in isolated branches and submit draft PRs. The full hybrid microservice-maintainer approach, authorization boundaries, non-atomic claim caveat and phased pilot live in [ENTITY_CONTRIBUTOR_WORKFLOW.md](ENTITY_CONTRIBUTOR_WORKFLOW.md). **Multiple open PRs per repository are allowed; integrate reviewed changes one compatible candidate at a time.** Do not start an issue-claiming bot or new autonomous agent work before Stage 3C owner acceptance and the stabilization gate.
