@@ -221,3 +221,26 @@ For each PR, assign one **verified** disposition: ACTIVE, REVIEW, READY, BLOCKED
 ### Future classifications
 
 **Use an issue** for a reported defect, proposed behavior, unresolved design question, work assignment, audit finding or decision needing follow-up. **Use a PR** when the branch contains a concrete intended repository change (code, tests, or approved documentation). Independent reviews generally belong on the implementation PR/issue unless there is a report artifact specifically intended to be merged. A document edit is a valid PR; a proposal to *write* a document is an issue. Do not reopen old PRs automatically or close others merely because their name starts with `Docs:`.
+
+## Update: second review — junction coordination and design review (2026-11-12)
+
+**Verified after this batch: 105 open PRs** across seven repos (Thought-Processor 57, Thought-engine 11, identity 12, Development 5, TASS 13, Cognition 0, Avatar 7). Five additional PRs closed **unmerged**; cumulative reductions are 16 from the original 121. These five have their findings linked in existing issue trackers, and their original branch/diffs remain intact.
+
+| PR closed | Evidence-based reason | Existing canonical issue home |
+| --- | --- | --- |
+| [Development #3](https://github.com/Arameair/Development/pull/3) | November 5 cross-loop coordination note, actual Junction prototype reported in Core #87 but effect on thinking not measured | [Development #1](https://github.com/Arameair/Development/issues/1) |
+| [Thought-engine #16](https://github.com/Arameair/Thought-engine/pull/16) | November 5 Go pulse/junction design coordination; no runtime implementation | [Engine #21](https://github.com/Arameair/Thought-engine/issues/21) historical context (current issue's capacity proposal remains separate) |
+| [identity #39](https://github.com/Arameair/identity/pull/39) | Historical permission-boundary junction design; not a grant or change to Identity | [Identity #30](https://github.com/Arameair/identity/issues/30) |
+| [TASS #26](https://github.com/Arameair/TASS/pull/26) | Historical owner thought-circle/junction design; duplicates owner issue and canonical cross-repo proposal | [TASS #25](https://github.com/Arameair/TASS/issues/25) |
+| [Thought-Processor #107](https://github.com/Arameair/Thought-Processor/pull/107) | Completed independent Cognition↔Development review against older pins; design needed revision, future A/B not authorized | [Core #106](https://github.com/Arameair/Thought-Processor/issues/106) |
+
+### Four other central design PRs — intentionally kept open, not approved for merge
+
+- **[Core #85](https://github.com/Arameair/Thought-Processor/pull/85):** cross-repo source of the historical owner loop/junction alignment with **three** substantial docs, including future teaching handoff. Preserve unique text and determine archival home before final disposition; the four lightweight companion PRs have been closed. Don't assume source baseline is current.
+- **[Core #91](https://github.com/Arameair/Thought-Processor/pull/91):** C1–C10 remediation register with distinct risk/test items for issues #89/#90 and Engine #17. Must reconcile each conflict against newer versions before closing or promoting; not all are proven fixed.
+- **[Core #101](https://github.com/Arameair/Thought-Processor/pull/101):** owner-reviewed supervised nudge design revision 4 with a recorded DESIGN PASS, linked to Issue #100 and component PRs. Contains security and restore contracts: don't discard or merge casually; design PASS is not runtime/owner acceptance.
+- **[Core #109](https://github.com/Arameair/Thought-Processor/pull/109):** stage plan and current Stage 2 scope authority. Protected until Stage 2 audit and owner acceptance conclude. The title says Stage 1, but latest comments now govern Stage 2 (Expanded Thought).
+
+### New cross-document governance blocker
+
+[Current `docs/WORKFLOW.md`](https://github.com/Arameair/Thought-Processor/blob/main/docs/WORKFLOW.md) says experiments→`alpha`→`stable`→`main` with legacy meanings. [Proposed policy](TASS_REPOSITORY_RELEASE_POLICY.md) would use `main` as accepted source and `stable` as externally trial-ready owner-approved software. **No one should treat the proposal as live instructions until the owner chooses and the files are reconciled.** Future-team hygiene checklist is in [TASS_ISSUE_PR_WORKFLOW.md](TASS_ISSUE_PR_WORKFLOW.md).
