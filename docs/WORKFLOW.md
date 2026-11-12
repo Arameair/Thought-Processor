@@ -85,6 +85,10 @@ See the detailed [future-team maintenance checklist](TASS_ISSUE_PR_WORKFLOW.md).
 
 The prior Thought-Processor workflow used `alpha` as the experiment base and `main` as an owner-approved release/documentation lane. It remains traceable in Git history before this documentation revision. Past experiments and their original acceptance criteria are not retroactively reclassified by this new guide.
 
+## Post-Stage-3 maintenance gate
+
+Once **all** Stage 3 slices are owner-accepted (issue #120), follow the [post-Stage-3 stabilization and cleanup checklist](POST_STAGE3_STABILIZATION_CHECKLIST.md). Preserve accepted installed pins/backup before branch changes or PR retirement, then inventory, clean, document, and separately validate the updater. Do not expand to Stage 4 until the owner explicitly concludes stabilization. The checklist is prepared ahead of Stage 3C and does not authorize any current build/merge/deployment.
+
 ## Parallel work and update automation
 
 Multiple human or AI contributors can work simultaneously using **separate isolated branches and PRs**. A PR is a proposed change, not a shared workspace. Every branch must name its actual baseline, linked issue and dependent component/PR pins; overlapping changes require an explicit integration order and retest of the **combined** candidate. The owner has one running TASS deployment, which independent contributors must not modify as part of normal PR testing.
