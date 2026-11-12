@@ -1,12 +1,23 @@
 # TASS coordinated releases and owner-approved updates — incremental pilot
 
-**Status:** Proposed integration contract, 2026-11-12, in [governance PR #118](https://github.com/Arameair/Thought-Processor/pull/118). **Design and engineering handoff only; no updater code has been changed or deployed by this document.** Implementation/recovery remains tracked in [existing issue #79](https://github.com/Arameair/Thought-Processor/issues/79), with earlier requirements in [#32](https://github.com/Arameair/Thought-Processor/issues/32) and [#44](https://github.com/Arameair/Thought-Processor/issues/44).
+**Status:** Proposed integration contract, 2026-11-12, in [governance PR #118](https://github.com/Arameair/Thought-Processor/pull/118). **Design and engineering handoff only; no updater code has been changed or deployed by this document.** Read-only discovery/eligibility work belongs in **[Arameair/updater issue #1](https://github.com/Arameair/updater/issues/1)**. Applying updates, backups and recovery remain in **[Thought-Processor issue #79](https://github.com/Arameair/Thought-Processor/issues/79)**, with earlier requirements in [#32](https://github.com/Arameair/Thought-Processor/issues/32) and [#44](https://github.com/Arameair/Thought-Processor/issues/44).
 
 ## Why we need this
 
 Multiple people can work at once on **separate branches and PRs**, but the owner installs **one compatible TASS application**. A latest Git ref, a green isolated test or a merged PR does **not** mean a compatible, authorized, recoverable update exists. One verified release candidate must pin the exact Core, Engine, Identity and required feature versions that were tested together.
 
 **Already in the source:** at the inspected `core/tass.sh` branch `experiment/nudge-stale-preclaim-read-repair-20261111` (historical inspected snapshot, not proof of owner deployment), CLI functions include `check-update`, `update`, `rollback`, `restore-previous`, `recover`, `history`, and a verified-backup attempt. `check-update` defaults to `origin/$TASS_TRACK` and prints candidate SHA/pinned Engine/Identity commits and an update command. It **does not by itself establish that that branch head is audited, owner-approved or a shareable release**. Don't replace or bypass this existing updater: add eligibility checking in small, separately tested steps.
+
+## Repository ownership — reuse the existing `updater` repository
+
+[Arameair/updater](https://github.com/Arameair/updater) is an **existing, private repository**, confirmed empty before its documentation bootstrap on 2026-11-12. Its new [README](https://github.com/Arameair/updater/blob/main/README.md) and [issue #1](https://github.com/Arameair/updater/issues/1) establish a boundary, **not an implemented release service**.
+
+- **updater:** trusted release catalog/manifest schema, read-only candidate discovery and eligibility evaluation; later, an optional small UI/client that requests an explicitly approved update. This need not be a separate daemon.
+- **Thought-Processor `core/tass.sh`:** the **only local installer/runtime executor** for backup, stage/build, Docker switch, health validation, restore, rollback and installed-state record. An adapter may be added here in a separate focused PR **after** `updater` proves its read-only contract.
+- **Identity:** owns authentication/grants and remains independent; `updater` cannot bypass it, execute a model call or read raw private owner records.
+- **Coordinator/owner:** explicitly signs off the final compatible pins and release publication; moving `main`, creating a PR, or setting a manifest `approved` flag cannot substitute for trusted release authorization.
+
+Because `updater` is currently private, an owner-only pilot is feasible with authorized access; **external users would need a separately reviewed manifest distribution and trust model**. Do not assume private GitHub repo access is available to a publicly distributed application.
 
 ## Parallel contributor workflow
 
@@ -36,7 +47,7 @@ Manifest generation may be automated; **approval and trust of the manifest canno
 
 ## Minimal pilot: safer read-only update availability
 
-**First engineering slice (separate focused PR, no deployment):** inspect the installed/current deployment record and an explicitly named **approved candidate manifest**; show candidate and installed full pins, integrity/provenance, approval status and changed components.
+**First engineering slice (in a focused `Arameair/updater` PR, no deployment):** validate an explicitly named owner-approved release manifest and a supplied read-only installed-state snapshot. Show candidate and installed full pins, integrity/provenance, approval status and changed components. Only once this is verified should a separate Core PR adapt current `tass.sh check-update` to consume the result.
 
 - **NO UPDATE:** same verified release record/pins.
 - **AVAILABLE FOR OWNER REVIEW:** trusted manifest and required evidence present; source/artifact/compatibility checks pass; authorization for **applying** still not granted.
@@ -61,9 +72,9 @@ Read-only pilot must **not** alter running containers, owner data, permissions, 
 
 ## Pilot order and owners
 
-- **Now (documentation):** maintain this contract inside [PR #118](https://github.com/Arameair/Thought-Processor/pull/118) and the implementation scope on **existing issue #79**. No new duplicate roadmap issue.
-- **Next (read-only engineering PR):** one contributor adds release-eligibility inspection to the **current** source-pinned `tass.sh`/manifest path (only after checking it against Codex's active Stage 2 source). Another contributor independently tests it; neither calls live update.
-- **Later (owner-gated change):** integrate manifest-qualified updates into existing `update`, verify backup/rollback/restore with an intentionally failed **isolated** candidate, then owner authorizes one live trial.
+- **Now (documentation):** maintain this contract inside [PR #118](https://github.com/Arameair/Thought-Processor/pull/118) and the [updater repository issue #1](https://github.com/Arameair/updater/issues/1), with Core apply/recovery still tracked in [existing issue #79](https://github.com/Arameair/Thought-Processor/issues/79). No parallel installer or duplicated feature issue.
+- **Next (read-only engineering PR):** implement manifest parsing, validation and eligibility in **Arameair/updater**, with isolated fake installed-state inputs and no owner-machine actions. Independently audit exact SHA. Only after success, develop a **separate small Thought-Processor PR** to connect the current pinned `tass.sh check-update` to that vetted result (without changing its existing apply/restore semantics or Codex's active Stage 2 source).
+- **Later (owner-gated change):** after read-only adapter verification, integrate manifest-qualified updates into existing **Core `tass.sh update`**, verify backup/rollback/restore with an intentionally failed isolated candidate, then owner authorizes one live trial. `updater` coordinates; it does not reimplement those operations.
 - **Only after owner acceptance:** expose the same truthful results via a desktop Update control; a button must not pretend to perform an operation the backend cannot perform.
 
 ## Stop conditions
