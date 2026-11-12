@@ -21,6 +21,18 @@ E13 opening, deep link (#thought=…&dev=…), Back/Forward and refresh send zer
 E14 closing the sheet removes every Note and action line; the tiles never carry Note text
 E15 1280 / 960 / 390: no sideways scrolling in the sheet; the newest card's action line is in view
     with its Note
+Repair after Codex's audit on PR #117 (comment 6821466314); whole-card assertions, Core's real output:
+D1  two saved Notes share one request ID and a verified receipt (cognition_stage2_dup.json, checked
+    against Core by TestCognitionDuplicateRequestIDIsWhatThePageReceives): on NEITHER card, anywhere,
+    "Verified by Core", "produced this Note", "verified the same IDs", "one Note and one developed
+    step" or "correlated"; both say the shared request ID and that the receipt is not attributed
+D2  every card whose verified receipt is not attributed (disagreeing IDs, no request ID, duplicate):
+    no verified wording anywhere on the card, meta and meaning included
+D3  a truncated list (developments_truncated): a unique correlated verified record is NOT attributed
+    either (unseen records could share its ID); says so
+D4  positive control: the unique, complete, verified record keeps the narrow verified wording and
+    Core's meaning
+D5  a deep link to a shared request ID says several developments share it and attributes nothing
     python3 cognition_stage2.py [path/to/cognition.html]
 """
 import json
@@ -35,6 +47,12 @@ ORIGIN = "http://127.0.0.1:8795"
 NOW = "2026-11-12T10:00:00Z"
 NOTE = "PRIVATE-STAGE2-NOTE"
 HOSTILE = '<img src=x onerror="window.__xss=1">'
+DUP = json.loads((Path(__file__).resolve().parent / "cognition_stage2_dup.json").read_text())["developments"]
+# Core's own wording (cognition_notes.go developmentMeaning), for the verified positive control.
+CORE_VERIFIED_MEANING = ("Saved: one Note and one developed step share this request ID. That shows it was saved, not that it "
+                         "answers the Thought's question. Core's receipt for the supervised nudge verified the same IDs.")
+# Verified wording that must not appear anywhere on a card whose receipt is not attributed to its Note.
+CLAIMS = ["Verified by Core", "produced this Note", "verified the same IDs", "Core verified"]
 
 
 def nid(i):
@@ -57,7 +75,7 @@ def dev(req, minute, persistence="NOTE_AND_STEP_CORRELATED", nudge=None, receipt
 # (dom id, development, expected kind, phrases that must appear, phrases that must not)
 CASES = [
     ("mr_plain", dev("mr_plain", 0, suggested="resolve"), "none", ["No verified action recorded for this Note."], ["Verified"]),
-    ("mr_verified", dev("mr_verified", 1, nudge=nid(1), receipt="COMPLETED_VERIFIED"), "verified",
+    ("mr_verified", dict(dev("mr_verified", 1, nudge=nid(1), receipt="COMPLETED_VERIFIED"), meaning=CORE_VERIFIED_MEANING), "verified",
      ["Verified by Core", nid(1), "produced this Note", "not evidence that any tool, skill or other change ran"], ["No verified action"]),
     ("mr_evicted", dev("mr_evicted", 2, "STEP_ONLY", nudge=nid(2), receipt="COMPLETED_VERIFIED", note=False), "verified",
      ["Verified by Core", nid(2), "Note is no longer stored", "not evidence that any tool, skill or other change ran"], ["produced this Note"]),
@@ -94,7 +112,11 @@ LIB = {"identity_entity_id": "ent_0123", "engine_entity_id": "eng_1", "identity_
        "cycles": [], "outcomes": [], "library": []}
 THOUGHT = {"thought_id": "thought_1", "question": "What does the fixture skill do?", "state": "active", "history_total": 1,
            "history": [{"at": NOW, "kind": "formed", "event_id": "evt_1"}],
-           "developments": [c[1] for c in CASES], "developments_total": len(CASES), "traces": [], "related_cycle_ids": []}
+           "developments": DUP + [c[1] for c in CASES], "developments_total": len(DUP) + len(CASES), "traces": [], "related_cycle_ids": []}
+# D3: the newest 2 of 60 developments; the verified one is unique among those shown.
+TRUNC = dict(THOUGHT, developments=[dict(dev("mr_trunc", 0, nudge=nid(30), receipt="COMPLETED_VERIFIED"), meaning=CORE_VERIFIED_MEANING),
+                                    dev("mr_trunc2", 1)], developments_total=60, developments_truncated=True)
+state = {"thought": THOUGHT}
 posts, reads = [], []
 
 
@@ -110,7 +132,7 @@ def route(req):
     if "/api/cognition/library" in url:
         req.fulfill(status=200, content_type="application/json", body=json.dumps(LIB)); return
     if "/api/cognition/thoughts/thought_1" in url:
-        req.fulfill(status=200, content_type="application/json", body=json.dumps(THOUGHT)); return
+        req.fulfill(status=200, content_type="application/json", body=json.dumps(state["thought"])); return
     if "/api/cognition/pulse" in url:
         req.fulfill(status=503, body="n/a"); return
     req.fulfill(status=404)
@@ -119,7 +141,8 @@ def route(req):
 PROBE = """()=>[...document.querySelectorAll('#thoughtDetail .dev')].map(d=>{
   const kids=[...d.children], a=d.querySelectorAll('.action');
   const first=a[0], noteAt=kids.findIndex(e=>e.classList.contains('note')), actAt=first?kids.indexOf(first):-1;
-  return {id:d.id, actions:a.length, kind:first?first.dataset.action||'':'', text:first?first.textContent:'',
+  const n=(d.querySelector('.note')||{}).textContent||'', dup=/dup-(first|second)/.exec(n);
+  return {id:dup?'dup-'+dup[1]:d.id, actions:a.length, kind:first?first.dataset.action||'':'', text:first?first.textContent:'',
           html:first?first.innerHTML:'', adjacent:actAt===noteAt+1, meta:(d.querySelector('.meta')||{}).textContent||'',
           meaning:(d.querySelector('.meaning')||{}).textContent||'', all:d.textContent};})"""
 
@@ -147,7 +170,7 @@ with sync_playwright() as p:
             pg.get_by_role("button", name="Inspect stage two (fixture)").click()
             pg.wait_for_selector("#dev-mr_plain")
             cards = {c["id"]: c for c in pg.evaluate(PROBE)}
-            check("E1 one card per development", len(cards) == len(CASES), list(cards))
+            check("E1 one card per development", len(cards) == len(CASES) + len(DUP), list(cards))
             for dom, d, kind, want, avoid in CASES:
                 c = cards.get("dev-" + dom)
                 if not c:
@@ -160,12 +183,34 @@ with sync_playwright() as p:
                     check(f"dev-{dom}: does not say {x!r}", x not in c["text"], c["text"])
                 for x in NEVER:
                     check(f"E12 dev-{dom}: no claim of non-execution ({x!r})", x.lower() not in c["all"].lower(), c["all"])
-                check(f"E11 dev-{dom}: Core's meaning line unchanged", c["meaning"] == d["meaning"], c["meaning"])
+                if kind == "verified" or d.get("nudge_receipt") != "COMPLETED_VERIFIED":
+                    check(f"E11 dev-{dom}: Core's meaning line unchanged", c["meaning"] == d["meaning"], c["meaning"])
+                else:
+                    for x in CLAIMS:
+                        check(f"D2 dev-{dom}: no {x!r} anywhere on a card whose receipt is not attributed", x not in c["all"], c["all"])
             check("E9 hostile code is literal and runs nothing", pg.evaluate("window.__xss") is None and pg.locator("#thoughtDetail img").count() == 0
                   and "<img" not in cards.get("dev-mr_hostile", {}).get("html", "<img"), cards.get("dev-mr_hostile"))
             check("E11 suggested state still 'not applied'", "suggested state: resolve — not applied" in cards["dev-mr_plain"]["meta"], cards["dev-mr_plain"]["meta"])
+            # D1: the duplicate pair, from Core's real output.
+            for key in ("dup-first", "dup-second"):
+                c = cards.get(key)
+                if not c:
+                    check(f"D1 {key} present", False, list(cards)); continue
+                check(f"D1 {key}: one action line under the Note, uncertain", c["actions"] == 1 and c["adjacent"] and c["kind"] == "uncertain", c)
+                for x in CLAIMS + ["one Note and one developed step", "Saved and correlated", "correlated"]:
+                    check(f"D1 {key}: no {x!r} anywhere on the card", x not in c["all"], c["all"])
+                for x in ["share request ID mr_dupe0001", "not attributed to this Note"]:
+                    check(f"D1 {key}: says {x!r}", x in c["text"], c["text"])
+                for x in NEVER:
+                    check(f"D1 {key}: no claim of non-execution ({x!r})", x.lower() not in c["all"].lower(), c["all"])
+            # D4: the unique, complete, verified record is unchanged.
+            c = cards["dev-mr_verified"]
+            check("D4 positive control keeps the narrow verified wording and Core's meaning", c["kind"] == "verified" and "produced this Note" in c["text"]
+                  and c["meaning"] == CORE_VERIFIED_MEANING and "Core verified the same IDs" in c["meta"], c)
             verified = sorted(k for k, c in cards.items() if "Verified by Core" in c["all"])
             check("E12 only the two receipt-backed cards say 'Verified by Core'", verified == ["dev-mr_evicted", "dev-mr_verified"], verified)
+            legacy = sorted(k for k, c in cards.items() if "verified the same IDs" in c["all"])
+            check("D2 'verified the same IDs' only on the two attributable cards", legacy == ["dev-mr_evicted", "dev-mr_verified"], legacy)
             sheet_text = pg.locator("#thoughtDetail").inner_text()
             check("E2 the plan's over-claiming wording is absent", "No action was executed" not in sheet_text, "")
             check("E15 no sideways scrolling in the sheet", pg.evaluate("(()=>{const s=document.querySelector('.sheet');return s.scrollWidth<=s.clientWidth+1})()"), tag)
@@ -177,6 +222,22 @@ with sync_playwright() as p:
             check("E15 newest card's action line is on screen with its Note", box and nbox and 0 <= nbox["y"] and box["y"] + box["height"] <= vp["height"]
                   and box["x"] >= 0 and box["x"] + box["width"] <= vp["width"] + 1, (box, nbox, vp))
             pg.screenshot(path=f"/tmp/stage2-{tag}.png")
+
+            # D5: a deep link to the shared request ID attributes nothing.
+            pg.goto(ORIGIN + "/cognition#thought=thought_1&dev=mr_dupe0001")
+            pg.wait_for_selector("#thoughtDetail .dev"); pg.wait_for_timeout(400)
+            note = pg.locator("#toast").inner_text() if pg.locator("#toast").count() else ""
+            check("D5 deep link to a shared request ID says so and attributes nothing", "share request ID mr_dupe0001" in note
+                  and not any(x in note for x in CLAIMS), note)
+
+            # D3: a truncated list.
+            state["thought"] = TRUNC
+            pg.goto(ORIGIN + "/cognition#thought=thought_1")
+            pg.wait_for_selector("#dev-mr_trunc"); pg.wait_for_timeout(200)
+            t = {c["id"]: c for c in pg.evaluate(PROBE)}.get("dev-mr_trunc", {})
+            check("D3 truncated list: the verified record is not attributed", t.get("kind") == "uncertain" and "not attributed to this Note" in t.get("text", "")
+                  and "newest 2 of 60" in t.get("text", "") and not any(x in t.get("all", "") for x in CLAIMS), t)
+            state["thought"] = THOUGHT
 
             # E13: deep link, Back/Forward, refresh: still zero POSTs and the action line follows the card.
             pg.goto(ORIGIN + "/cognition#thought=thought_1&dev=mr_verified")

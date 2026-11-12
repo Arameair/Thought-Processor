@@ -5,6 +5,7 @@ package tass
 // Test only: nudgeReceipt is unchanged.
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -70,5 +71,65 @@ func TestCognitionNudgeReceiptVocabulary(t *testing.T) {
 		if (tc.want == "COMPLETED_VERIFIED") != (tc.name == "verified, same request") {
 			t.Errorf("%s: only one case may be COMPLETED_VERIFIED", tc.name)
 		}
+	}
+}
+
+// Stage 2 repair (Codex audit on PR #117): Core's real output when two saved Notes share one request ID
+// and that request has a verified nudge receipt. Core marks only the SECOND record IDS_DISAGREE; the first
+// stays NOTE_AND_STEP_CORRELATED and BOTH carry COMPLETED_VERIFIED. Core is unchanged; the page must not
+// attribute the receipt to either. The browser fixture (test/browser/cognition_stage2_dup.json) is this
+// output; this test fails if Core's shape or wording drifts from it.
+func TestCognitionDuplicateRequestIDIsWhatThePageReceives(t *testing.T) {
+	c, _, re := runCore(t, t.TempDir())
+	v := selfDraft(c, t, "key-stage2-dup-0001")
+	if _, ok, err := c.ProcessNudge(v.NudgeID, v.BodyDigest); err != nil || !ok {
+		t.Fatalf("process: %v", err)
+	}
+	run := waitRun(t, c, v.NudgeID, "COMPLETED")
+	re.mu.Lock()
+	re.extraNotes = []map[string]any{{"at": time.Date(2026, 11, 8, 9, 0, 0, 0, time.UTC), "text": "SECOND-NOTE-SAME-REQUEST",
+		"by": "Nemotron (owner-nudge)", "worker_request_id": run.RequestID, "source_nudge_id": v.NudgeID}}
+	re.mu.Unlock()
+	th, err := c.CognitionThought("thought_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(th.Developments) != 2 {
+		t.Fatalf("developments: %+v", th.Developments)
+	}
+	got := map[string]CognitionDevelopment{}
+	for _, d := range th.Developments {
+		if d.RequestID != run.RequestID || d.SourceNudgeID != v.NudgeID || d.NudgeReceipt != "COMPLETED_VERIFIED" {
+			t.Fatalf("both records carry the shared request ID, the nudge and its verified receipt: %+v", d)
+		}
+		got[d.Persistence] = d
+	}
+	first, second := got["NOTE_AND_STEP_CORRELATED"], got["IDS_DISAGREE"]
+	if first.Note == nil || second.Note == nil || first.Note.Text == second.Note.Text {
+		t.Fatalf("one correlated and one disagreeing record, two distinct Notes: %+v", th.Developments)
+	}
+	b, err := os.ReadFile("../test/browser/cognition_stage2_dup.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Developments []struct {
+			Persistence  string `json:"persistence"`
+			NudgeReceipt string `json:"nudge_receipt"`
+			Meaning      string `json:"meaning"`
+		} `json:"developments"`
+	}
+	if err := json.Unmarshal(b, &fx); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{}
+	for _, d := range fx.Developments {
+		if d.NudgeReceipt != "COMPLETED_VERIFIED" {
+			t.Fatalf("fixture receipt drifted: %+v", d)
+		}
+		want[d.Persistence] = d.Meaning
+	}
+	if len(want) != 2 || want["NOTE_AND_STEP_CORRELATED"] != first.Meaning || want["IDS_DISAGREE"] != second.Meaning {
+		t.Fatalf("the browser fixture no longer matches Core's output:\nfixture %q\ncore    %q / %q", want, first.Meaning, second.Meaning)
 	}
 }

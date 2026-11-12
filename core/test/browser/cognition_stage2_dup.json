@@ -1,0 +1,14 @@
+{
+  "_comment": "Core's real output for two saved Notes sharing one request ID with a verified nudge receipt (Stage 2 repair, Codex audit on PR #117). persistence, nudge_receipt and meaning are checked against Core by TestCognitionDuplicateRequestIDIsWhatThePageReceives; IDs and text are fixture values.",
+  "developments": [
+    {"request_id": "mr_dupe0001", "at": "2026-11-12T09:59:30Z", "source_nudge_id": "nudge_000000000000000000d1",
+     "persistence": "NOTE_AND_STEP_CORRELATED", "nudge_receipt": "COMPLETED_VERIFIED",
+     "step": {"at": "2026-11-12T09:59:30Z", "kind": "developed", "by": "owner-nudge"},
+     "note": {"at": "2026-11-12T09:59:30Z", "text": "PRIVATE-STAGE2-NOTE dup-first a saved idea.", "by": "Nemotron (owner-nudge)", "suggested_state": "", "suggested_state_applied": false},
+     "meaning": "Saved: one Note and one developed step share this request ID. That shows it was saved, not that it answers the Thought's question. Core's receipt for the supervised nudge verified the same IDs."},
+    {"request_id": "mr_dupe0001", "at": "2026-11-12T09:59:20Z", "source_nudge_id": "nudge_000000000000000000d1",
+     "persistence": "IDS_DISAGREE", "nudge_receipt": "COMPLETED_VERIFIED", "step": null,
+     "note": {"at": "2026-11-12T09:59:20Z", "text": "PRIVATE-STAGE2-NOTE dup-second a saved idea.", "by": "Nemotron (owner-nudge)", "suggested_state": "", "suggested_state_applied": false},
+     "meaning": "The recorded IDs disagree; both records are shown as they are."}
+  ]
+}

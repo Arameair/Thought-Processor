@@ -32,6 +32,7 @@ type runEngine struct {
 	// Ordering controls for the stale-read repair (PR #113 audit). Both are nil in every other test.
 	preClaim   chan struct{}                  // if set, a nudge POST waits on it BEFORE the Engine claims the nudge
 	statusHook func(nid string, claimed bool) // if set, called after a run-status GET decided its answer, before it is sent
+	extraNotes []map[string]any               // Stage 2 repair: Notes served in addition to the completed nudges' (nil elsewhere)
 	srv        *httptest.Server
 }
 
@@ -67,6 +68,9 @@ func newRunEngine(t *testing.T) *runEngine {
 				notes = append(notes, map[string]any{"at": stamp, "text": "NOTE-TEXT-" + nid, "by": "Nemotron (owner-nudge)", "suggested_state": "resolve",
 					"worker_request_id": e.reqID[nid], "source_nudge_id": nid})
 				hist = append(hist, map[string]any{"at": stamp, "kind": "developed", "detail": "DETAIL-REPEATS-NOTE", "by": "owner-nudge", "worker_request_id": e.reqID[nid], "source_nudge_id": nid})
+			}
+			for _, n := range e.extraNotes {
+				notes = append(notes, n)
 			}
 			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"thought": map[string]any{"thought_id": "thought_1", "entity_id": "eng_1", "topic": "t",
