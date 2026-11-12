@@ -2,7 +2,7 @@
 
 ## Native WP1-E execution — owner WSL result, 2026-11-12 (CURRENT; independent audit pending)
 
-**Owner-supplied terminal evidence:** The owner ran the new native harness on WSL using disposable `/tmp/tass-wp1e.o4y2iNsR` directories, the three pinned Go binaries, `S2_PORT_BASE=39100`, `WP1E_READS=30`, `WP1E_WARMUP=3`. The harness printed scenario PASS for all three, wrote `/tmp/tass-wp1e.o4y2iNsR/app/wp1e-results.json`, and exited **0**. A follow-up local JSON reader printed `completed: true`. **The raw JSON file is on the owner's WSL machine and has not yet been independently obtained or audited via the repository.** Tables below are transcribed from the owner's terminal excerpts, not a reproducible fresh GitHub-run measurement. The published `core-tests` CI check passed on harness SHA `15092fe9e504148db5369a632c2d2d1de05c66db`, independently of native owner execution.
+**Owner-supplied terminal evidence:** The owner ran the new native harness on WSL using disposable `/tmp/tass-wp1e.o4y2iNsR` directories, the three pinned Go binaries, `S2_PORT_BASE=39100`, `WP1E_READS=30`, `WP1E_WARMUP=3`. The harness printed scenario PASS for all three, wrote `/tmp/tass-wp1e.o4y2iNsR/app/wp1e-results.json`, and exited **0**. A follow-up local JSON reader printed `completed: true`. **The exact owner-uploaded raw JSON evidence is now committed in this draft PR at [core/test/evidence/cognition_wp1e_owner_wsl_20261112.json](../test/evidence/cognition_wp1e_owner_wsl_20261112.json) (original uploaded file SHA-256: `f909eabf5e53b317984e77f8373b93d7449ccdaadbbc264a1c2e0b616d45a3c8`).** Sample arrays, per-request audit counts, response statuses, build hashes and isolation flags were reviewed; all 30-value median and nearest-rank p95 calculations match. The measurement was performed by the owner in WSL, not GitHub CI. Independent Codex audit remains pending. The published `core-tests` CI check passed on harness SHA `15092fe9e504148db5369a632c2d2d1de05c66db`, independently of native owner execution.
 
 Exact pinned builds: Core `2ed99269a1ef8da96319d2c776ba0651b71633ca`, Engine `40d4e91e3b04196fa4e4f55a92b25789b82d8675`, Identity `cfc4079b690e2f7dc57afb9f14c6832ae38fdf54`.
 
@@ -20,7 +20,7 @@ Sampled Linux RSS (Core / Engine / Identity), in bytes: small **15,040,512 / 14,
 
 **Capacity trigger:** The large raw response exceeds the approved **50% / 3,145,728-byte proposal threshold**; only **98,364 bytes** remain below 6,291,456 bytes. [Thought-engine issue #21](https://github.com/Arameair/Thought-engine/issues/21) now records a **proposal-only** bounded-summary retrieval design review. No Engine implementation, limit increase, deployment or permission change was made.
 
-**Unresolved evidence:** `hidden_tab_audit: NOT RUN: no live browser used`. Existing Slice 2 browser tests covered tab visibility, but a new actual hidden-tab audit-log delta was not measured here. The full `wp1e-results.json` still needs to be retained with the PR (synthetic-only, review for secrets before upload) and independently reviewed by Codex. **Stage 1 final sign-off and any Stage 2 work remain pending that audit and owner acceptance.**
+**Unresolved evidence:** `hidden_tab_audit: NOT RUN: no live browser used`. Existing Slice 2 browser tests covered tab visibility, but a new actual hidden-tab audit-log delta was not measured here. The owner-run raw JSON is preserved in the PR, reviewed for exposed credentials and real owner data (none detected), and awaits independent Codex audit. **Stage 1 final sign-off and any Stage 2 work remain pending that audit and owner acceptance.**
 
 ---
 
@@ -74,7 +74,7 @@ python3 -m json.tool "$W/app/wp1e-results.json" > "$W/wp1e-pretty.json"
 printf 'Raw results: %s\n' "$W/app/wp1e-results.json"
 ```
 
-**Keep the result JSON.** If the native command returns nonzero, the results file and service logs under `$W/app/logs` are the first evidence to inspect; do not claim PASS from a partially completed run. `W` is shell-local to the session. Do not move fixture secrets into GitHub. The JSON contains no real owner data but includes disposable IDs and binary hashes. To publish full evidence, amend **this report in PR #115** with the actual scenario table, status histograms, failures and raw sample counts, and attach or quote a redacted synthetic-only result. All three scenarios in the existing table remain **NOT RUN** until this occurs.
+**Evidence archival note (previous handoff, now fulfilled):** The owner-run fixture JSON is preserved in this PR at [the committed evidence path](../test/evidence/cognition_wp1e_owner_wsl_20261112.json), and current measurements appear in the top section. Only historical pre-execution tables later in this report retain NOT RUN labels; those labels describe the earlier blocked attempt, not the current native results. Do not move fixture secrets into GitHub.
 
 **Threshold:** only actual `large.engine_bytes > 3,145,728` warrants a separate summary-endpoint proposal issue; the script records `over_half_limit` but does not automatically create an issue or change the response ceiling.
 
@@ -101,7 +101,7 @@ Inspection was through pinned GitHub files:
 - [Core Engine client](https://github.com/Arameair/Thought-Processor/blob/2ed99269a1ef8da96319d2c776ba0651b71633ca/core/engine/cognition.go): reads the *full* Engine entity JSON through a hard **6 MiB** byte cap before projecting the library.
 - [Engine `Entity` response](https://github.com/Arameair/Thought-engine/blob/40d4e91e3b04196fa4e4f55a92b25789b82d8675/server.go) contains full Thoughts, Notes, history, plus other entity fields. Engine default `MaxOpenThoughts=50` ([engine.go](https://github.com/Arameair/Thought-engine/blob/40d4e91e3b04196fa4e4f55a92b25789b82d8675/engine.go)); this restricts **open** Thoughts, not necessarily total retained Thoughts. A 100-Thought dataset must declare its state mix and not pretend to represent 100 concurrently open Thoughts.
 
-## WP1-E required measurements — actual results
+## WP1-E required measurements — historical pre-execution status (superseded by native results above)
 
 **Dataset target:** Notes per Thought = 50; tests must capture true raw HTTP byte counts from Engine and separately the Core Cognition library projection. None was run here.
 
