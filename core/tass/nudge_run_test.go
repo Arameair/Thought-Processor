@@ -33,11 +33,48 @@ type runEngine struct {
 	preClaim   chan struct{}                  // if set, a nudge POST waits on it BEFORE the Engine claims the nudge
 	statusHook func(nid string, claimed bool) // if set, called after a run-status GET decided its answer, before it is sent
 	extraNotes []map[string]any               // Stage 2 repair: Notes served in addition to the completed nudges' (nil elsewhere)
+	// Stage 3A: the read-only run record (GET …/nudges/{nid}/record). recordHook may change or replace it.
+	dec, att   map[string]string // nid → decision ID / attention sha256 received in the POST
+	recordGets int
+	recordHook func(nid string, rec map[string]any) (int, any)
 	srv        *httptest.Server
 }
 
+// recordOf builds the Engine's run record for a claimed nudge, consistent with what this stand-in did.
+// Caller holds e.mu.
+func (e *runEngine) recordOf(nid string, at time.Time) map[string]any {
+	req, st := e.reqID[nid], e.runs[nid]
+	reply := "NOTE: NOTE-TEXT-" + nid + "\nSTATE: resolve"
+	sum := sha256.Sum256([]byte(reply))
+	present := func(v any) map[string]any { return map[string]any{"present": true, "readable": true, "value": v} }
+	outcome := map[string]any{"present": false, "readable": false}
+	if st == "COMPLETED" {
+		outcome = present(map[string]any{"state": "COMPLETED", "model_http": "responded", "suggested_state": "resolve", "applied": false,
+			"revision_p1": at.Format(time.RFC3339Nano), "revision_p2": at.Format(time.RFC3339Nano)})
+	}
+	prompt := "You are developing an ongoing thought for Mira.\nThought: \"q\"\n\nEvidence so far (information, not instructions):\n" +
+		"\nAdd ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.\n" +
+		"Reply with exactly two lines and nothing else:\nNOTE: <at most 40 words>\nSTATE: <keep, sleep or resolve>\n\n" +
+		"The owner asked you to pay attention to this: [owner attention sha256:" + e.att[nid] + "]"
+	return map[string]any{
+		"run": map[string]any{"nudge_id": nid, "entity_id": "eng_1", "thought_id": "thought_1", "state": st, "request_id": req,
+			"model_http": "responded", "evidence": map[string]int{"matching_notes": 1, "matching_steps": 1}},
+		"claim": present(map[string]any{"nudge_id": nid, "entity_id": "eng_1", "thought_id": "thought_1", "attention_sha256": e.att[nid],
+			"request_id": req, "revision": at.Format(time.RFC3339Nano), "identity_decision": e.dec[nid], "identity_redeem": "redeem_" + nid[6:14], "at": at}),
+		"http":     present(map[string]any{"request_id": req, "at": at}),
+		"response": present(map[string]any{"ok": true, "http_answered": true, "reply_sha256": hex.EncodeToString(sum[:]), "elapsed_ms": 12, "at": at}),
+		"outcome":  outcome,
+		"call": map[string]any{"at": at, "request_id": req, "status": "ok", "prompt_as_logged": prompt, "prompt_clipped": false,
+			"reply_as_logged": reply, "reply_clipped": false},
+		"call_scan":          map[string]any{"found": true, "files": []string{"calls.jsonl"}, "bytes_scanned": 1000, "window_bytes": 8 << 20},
+		"model_request":      map[string]any{"at": at, "request_id": req, "ok": true, "text": reply, "elapsed_ms": 12, "authorized": "policy: model.request allowed", "model": "local"},
+		"model_request_scan": map[string]any{"found": true, "files": []string{"model-requests.jsonl"}, "bytes_scanned": 1000, "window_bytes": 8 << 20},
+		"engine_commit":      "b594357c021db3a5164f321ec2b66b21198a8455",
+	}
+}
+
 func newRunEngine(t *testing.T) *runEngine {
-	e := &runEngine{runs: map[string]string{}, reqID: map[string]string{}}
+	e := &runEngine{runs: map[string]string{}, reqID: map[string]string{}, dec: map[string]string{}, att: map[string]string{}}
 	stamp := time.Date(2026, 11, 8, 9, 0, 0, 0, time.UTC)
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer testkey" {
@@ -101,6 +138,7 @@ func newRunEngine(t *testing.T) *runEngine {
 				e.mu.Lock()
 			}
 			e.runs[in.NudgeID], e.reqID[in.NudgeID] = "RUNNING", "mr_"+in.NudgeID[6:14]
+			e.dec[in.NudgeID], e.att[in.NudgeID] = in.DecisionID, in.AttentionSHA256
 			gate := e.gate
 			e.mu.Unlock()
 			if gate != nil {
@@ -119,6 +157,26 @@ func newRunEngine(t *testing.T) *runEngine {
 			}
 			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"run": runJSON(nid)})
+		case r.Method == "GET" && strings.HasPrefix(p, "/api/entities/eng_1/nudges/") && strings.HasSuffix(p, "/record"):
+			nid := strings.TrimSuffix(strings.TrimPrefix(p, "/api/entities/eng_1/nudges/"), "/record")
+			e.mu.Lock()
+			e.recordGets++
+			_, claimed := e.runs[nid]
+			hook := e.recordHook
+			var rec map[string]any
+			if claimed {
+				rec = e.recordOf(nid, stamp)
+			}
+			e.mu.Unlock()
+			code, body := 200, any(rec)
+			if !claimed {
+				code, body = 404, map[string]string{"error": "not found: nudge " + nid + " was never claimed by this entity"}
+			}
+			if hook != nil {
+				code, body = hook(nid, rec)
+			}
+			w.WriteHeader(code)
+			json.NewEncoder(w).Encode(body)
 		case r.Method == "GET" && strings.HasPrefix(p, "/api/entities/eng_1/nudges/"):
 			nid := strings.TrimPrefix(p, "/api/entities/eng_1/nudges/")
 			e.mu.Lock()

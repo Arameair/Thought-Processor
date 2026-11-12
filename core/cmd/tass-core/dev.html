@@ -31,6 +31,25 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
 .bottom>div{padding:10px 12px;overflow:auto;border-right:1px solid var(--line)}
 .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}.muted{color:var(--muted)}.err{color:var(--red)}.ok{color:#8fe0c4}
 .hint{color:var(--muted);font-size:12px}.ev{margin:4px 0;font-size:12.5px}.ev b{color:#9fd2ff}
+/* Stage 3A: how one processed nudge's Note was produced (read only) */
+#runView{padding:14px 16px 16px;border-bottom:1px solid var(--line);background:#0f1722}
+#runView h2.rv{font-size:18px;letter-spacing:0;text-transform:none;color:var(--text);margin:0 0 4px}
+#runView .ids{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin:6px 0 10px}#runView .ids b{color:var(--text);font-weight:600;overflow-wrap:anywhere}
+#runView .next{border:1px solid #3b6079;background:#132637;border-radius:10px;padding:10px 12px;margin:10px 0 12px;max-width:980px}
+#runView .next a{color:#9fd2ff;font-weight:600}
+#runView details.legend{font-size:12.5px;color:var(--muted);margin:0 0 10px;max-width:980px}#runView details.legend summary{cursor:pointer;color:#c7e4f3}
+#runView ol{list-style:none;margin:0;padding:0;max-width:980px}
+#runView li.st{border:1px solid var(--line);border-left:4px solid #3b6079;border-radius:9px;background:#121b27;padding:10px 12px;margin:8px 0}
+#runView li.st.RECORDED{border-left-color:var(--teal)}#runView li.st.PARTIAL{border-left-color:var(--amber)}#runView li.st.NOT-RECORDED{border-left-color:var(--red)}
+#runView li.st.CODE-DEFINED{border-left-color:var(--blue)}#runView li.st.NOT-PART-OF-THIS-PATH{border-left-color:#4a5568}
+#runView .sh{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}#runView .sh b{font-size:15px}
+#runView .status{font:12px ui-monospace,monospace;border:1px solid #3a4a60;border-radius:5px;padding:0 6px;color:#c7d3e2}
+#runView .sum{margin:5px 0 4px;overflow-wrap:anywhere}
+#runView dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:2px 12px;margin:6px 0 0;font-size:12.5px}#runView dt{color:var(--muted)}#runView dd{margin:0;overflow-wrap:anywhere}
+#runView .tl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px}
+#runView pre.rt{max-height:340px;margin:4px 0 0;overflow-wrap:anywhere;word-break:break-word}
+#runView .ro{font-size:12px;color:var(--muted);margin-top:10px}
+@media (max-width:700px){#runView dl{grid-template-columns:1fr}#runView dt{margin-top:4px}}
 </style>
 </head>
 <body>
@@ -49,6 +68,7 @@ pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-
   <button id="save" class="primary">Save revision</button>
 </header>
 <div id="cognitionProposal" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
+<section id="runView" hidden aria-labelledby="runTitle"></section>
 <section id="llab" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
   <div class="row"><b>Teach &amp; test one lesson</b>
     <span class="hint">Choose → Study → Inspect answer → Check grade → Approve → Test again → Evidence. <b>PASSED</b> (graded) ≠ <b>LEARNED</b> (you approved) ≠ <b>RETESTED</b> (applied on a new question) ≠ a <b>skill</b> (separate Identity grant + your approval + run receipt). Nothing here runs code.</span></div>
@@ -308,6 +328,79 @@ if (/^(thought|cycle|junction):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognition
       " · source Brain revision " + cognitionRev +
       ". Review the record, then manually add an owner note or propose a change. No graph, settings, skill or file was changed.";
 }
+// ---- Stage 3A (#120; design #107 §3.2): how one processed nudge's Note was produced. ----
+// /dev?run=nudge_… shows what Core and the Engine RECORDED about that run, stage by stage, from one
+// owner-scoped GET. Read only: it sends no POST, calls no model and changes no Thought, Note or graph.
+// Every value is set with textContent. Nothing is shown from a failed or refused read.
+const STATUS_MEANS = {
+  "RECORDED": "Read from a record of this run, and consistent with the other records.",
+  "PARTIAL": "Recorded, but clipped, incomplete or not fully confirmed. The line says which.",
+  "CODE-DEFINED": "Not stored for each run; fixed by the Thought Engine's code at the commit shown.",
+  "NOT RECORDED": "No record of it exists, or none could be found. The line says which.",
+  "NOT PART OF THIS PATH": "This kind of processing does not happen when TASS develops a Thought from a nudge."
+};
+const runParam = new URLSearchParams(location.search).get("run") || "";
+async function loadRun(id) {
+  const box = $("runView");
+  box.hidden = false;
+  box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "hint", "Reading the recorded run…"));
+  box.querySelector("h2").id = "runTitle";
+  let r;
+  try { r = await fetch("/api/development/runs/" + encodeURIComponent(id), {method: "GET", cache: "no-store", headers: {"X-TASS-Token": TOKEN}}); }
+  catch (e) { r = null; }
+  if (!r || !r.ok) {
+    const why = !r ? "Core could not be reached." :
+      r.status === 404 ? "There is no processed nudge " + id + " for the Identity that is signed in now." :
+      r.status === 403 ? "Identity did not allow this read (locked, or the Cognition read permission is off)." :
+      r.status === 401 ? "This page is not signed in. Open Development from TASS's Core page." :
+      "The run record is not available right now (HTTP " + r.status + "). Nothing is shown in its place.";
+    box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", why),
+      el("div", "ro", "Nothing was run or changed."));
+    box.querySelector("h2").id = "runTitle";
+    return;
+  }
+  let d;
+  try { d = await r.json(); } catch (e) { d = null; }
+  if (!d || d.nudge_id !== id || !Array.isArray(d.stages)) {
+    box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "Core's answer could not be read. Nothing is shown in its place."));
+    return;
+  }
+  const head = el("h2", "rv", "How this Note was produced"); head.id = "runTitle";
+  const ids = el("div", "ids");
+  for (const [k, v] of [["Thought", d.thought_id], ["Nudge", d.nudge_id], ["Request", d.request_id || "NOT RECORDED"],
+      ["Thought revision when drafted", d.source_revision], ["Engine", d.engine_commit ? d.engine_commit.slice(0, 12) : "NOT RECORDED"],
+      ["Result", (d.run_state || "NOT RECORDED") + (d.verified ? " · verified by Core" : "")]]) {
+    const s = el("span", "", k + " "); s.append(el("b", "", v)); ids.append(s);
+  }
+  const next = el("div", "next");
+  next.id = "runNext";
+  const back = el("a", "", "Back to this Note in Cognition");
+  back.href = "/cognition#thought=" + encodeURIComponent(d.thought_id) + (d.request_id ? "&dev=" + encodeURIComponent(d.request_id) : "");
+  next.append(el("b", "", "Next: "), back,
+    el("div", "hint", "Read the stages below, then go back to the Note. Trying a changed instruction and comparing replies comes in a later step (Stage 3B); nothing on this page can run anything."));
+  const legend = el("details", "legend");
+  legend.append(el("summary", "", "What the labels mean"));
+  for (const [k, v] of Object.entries(STATUS_MEANS)) { const p = el("div"); p.append(el("b", "", k + " — "), document.createTextNode(v)); legend.append(p); }
+  const list = el("ol");
+  for (const s of d.stages) {
+    const li = el("li", "st " + String(s.status || "").replace(/ /g, "-"));
+    li.id = "stage-" + s.stage;
+    li.dataset.status = s.status || "";
+    const sh = el("div", "sh");
+    sh.append(el("b", "", s.title || s.stage), el("span", "status", s.status || "NOT RECORDED"));
+    li.append(sh, el("div", "sum", s.summary || ""));
+    if ((s.fields || []).length) {
+      const dl = el("dl");
+      for (const f of s.fields) dl.append(el("dt", "", f.label), el("dd", "", f.value));
+      li.append(dl);
+    }
+    if (s.text) li.append(el("div", "tl", s.text_label || "Text"), el("pre", "rt", s.text));
+    list.append(li);
+  }
+  box.replaceChildren(head, ids, next, legend, list, el("div", "ro", d.read_only || "Read only."));
+}
+if (/^nudge_[0-9a-f]{20}$/.test(runParam)) { $("cognitionProposal").hidden = true; loadRun(runParam); }
+else if (runParam) { const b = $("runView"); b.hidden = false; b.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "That is not a nudge ID. Nothing is shown.")); }
 // ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----
 let J = null;
 async function loadJ() {

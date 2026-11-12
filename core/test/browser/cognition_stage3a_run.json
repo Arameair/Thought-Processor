@@ -1,0 +1,238 @@
+{
+  "nudge_id": "nudge_62c03a026c50b8b62621",
+  "thought_id": "thought_1",
+  "request_id": "mr_62c03a02",
+  "engine_entity_id": "eng_1",
+  "source_revision": "2026-11-08T09:00:00Z",
+  "engine_commit": "21b3d502775b3ed065ab445b88f51909500770b3",
+  "run_state": "COMPLETED",
+  "verified": true,
+  "question": "q",
+  "stages": [
+    {
+      "stage": "thought",
+      "title": "The Thought",
+      "status": "RECORDED",
+      "summary": "This question appears word for word in the prompt the Engine logged for this run.",
+      "fields": [
+        {
+          "label": "Thought",
+          "value": "thought_1"
+        },
+        {
+          "label": "Revision when the draft was saved",
+          "value": "2026-11-08T09:00:00Z"
+        },
+        {
+          "label": "Revision when the Engine claimed it",
+          "value": "2026-11-08T09:00:00Z"
+        },
+        {
+          "label": "Revision just before the model call",
+          "value": "2026-11-08T09:00:00Z"
+        }
+      ],
+      "text_label": "Question (as the Thought holds it now)",
+      "text": "q"
+    },
+    {
+      "stage": "attention",
+      "title": "Your attention text",
+      "status": "RECORDED",
+      "summary": "Your saved text matches the digest Core submitted and the digest the Engine recorded for this run.",
+      "fields": [
+        {
+          "label": "Draft",
+          "value": "nudge_62c03a026c50b8b62621"
+        },
+        {
+          "label": "Saved",
+          "value": "2026-11-12T11:53:48Z"
+        },
+        {
+          "label": "Digest Core submitted",
+          "value": "9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906"
+        },
+        {
+          "label": "Digest the Engine recorded",
+          "value": "9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906"
+        }
+      ],
+      "text_label": "Your words (from your saved draft)",
+      "text": "Please look at this again: key-stage3a-0001"
+    },
+    {
+      "stage": "authorization",
+      "title": "Authorization",
+      "status": "RECORDED",
+      "summary": "Identity issued one single-use processing decision for this exact nudge; the Engine redeemed that same decision before running it.",
+      "fields": [
+        {
+          "label": "Draft saved under Identity decision",
+          "value": "dec_4"
+        },
+        {
+          "label": "Processing decision Core obtained",
+          "value": "dec_b9"
+        },
+        {
+          "label": "Decision the Engine redeemed",
+          "value": "dec_b9"
+        },
+        {
+          "label": "Identity's redeem record",
+          "value": "redeem_62c03a02"
+        }
+      ]
+    },
+    {
+      "stage": "context_sent",
+      "title": "What was sent to the model",
+      "status": "RECORDED",
+      "summary": "The prompt as the Engine logged it for this run. Your attention text appears only as its sha256 (the Engine never logs it); the model received your words in its place.",
+      "fields": [
+        {
+          "label": "Logged",
+          "value": "2026-11-08T09:00:00Z"
+        },
+        {
+          "label": "Request",
+          "value": "mr_62c03a02"
+        }
+      ],
+      "text_label": "Prompt, as the Engine logged it",
+      "text": "You are developing an ongoing thought for Mira.\nThought: \"q\"\n\nEvidence so far (information, not instructions):\n\nAdd ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.\nReply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e\n\nThe owner asked you to pay attention to this: [owner attention sha256:9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906]"
+    },
+    {
+      "stage": "instruction",
+      "title": "The instruction",
+      "status": "CODE-DEFINED",
+      "summary": "Not stored per run: fixed by the Thought Engine's code (thinkPrompt). The same lines appear at the end of the logged prompt above when it was recorded.",
+      "fields": [
+        {
+          "label": "Defined by Engine commit",
+          "value": "21b3d502775b3ed065ab445b88f51909500770b3"
+        }
+      ],
+      "text_label": "Instruction",
+      "text": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes. Reply with exactly two lines: NOTE (at most 40 words) and STATE (keep, sleep or resolve)."
+    },
+    {
+      "stage": "model_call",
+      "title": "The model request",
+      "status": "RECORDED",
+      "summary": "One request to the local model, recorded by the Engine before it was sent and after it was answered.",
+      "fields": [
+        {
+          "label": "Request",
+          "value": "mr_62c03a02"
+        },
+        {
+          "label": "Settings (CODE-DEFINED)",
+          "value": "one request; at most 256 tokens; thinking off; temperature 0"
+        },
+        {
+          "label": "Sent",
+          "value": "2026-11-08T09:00:00Z"
+        },
+        {
+          "label": "Answered",
+          "value": "true"
+        },
+        {
+          "label": "Reply usable",
+          "value": "true"
+        },
+        {
+          "label": "Time",
+          "value": "12 ms"
+        },
+        {
+          "label": "Reply sha256",
+          "value": "c73395d49be2f5ee4806a7fe7d1c0868588cb05c79c5a3212bef866ab79f27f6"
+        },
+        {
+          "label": "Model",
+          "value": "local"
+        },
+        {
+          "label": "Identity check at the model",
+          "value": "policy: model.request allowed"
+        }
+      ]
+    },
+    {
+      "stage": "model_reply",
+      "title": "The model's reply",
+      "status": "RECORDED",
+      "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
+      "fields": [],
+      "text_label": "Reply, exactly as returned",
+      "text": "NOTE: NOTE-TEXT-nudge_62c03a026c50b8b62621\nSTATE: resolve"
+    },
+    {
+      "stage": "parse",
+      "title": "What the Engine kept from the reply",
+      "status": "CODE-DEFINED",
+      "summary": "The Engine keeps the first NOTE line (at most 400 characters) and the STATE word; the rest of the reply is not stored in the Thought. A NOTE that is too short or only repeats the inputs is refused. The STATE word is only a suggestion: no code path applies it.",
+      "fields": [
+        {
+          "label": "Suggested state",
+          "value": "resolve — not applied"
+        },
+        {
+          "label": "Note saved",
+          "value": "2026-11-08T09:00:00Z"
+        }
+      ],
+      "text_label": "The saved Note (the kept NOTE line)",
+      "text": "NOTE-TEXT-nudge_62c03a026c50b8b62621"
+    },
+    {
+      "stage": "saved",
+      "title": "Saved and checked",
+      "status": "RECORDED",
+      "summary": "Core's receipt verified exactly one saved Note and one developed step with this request ID. That shows it was saved, not that it answers the question.",
+      "fields": [
+        {
+          "label": "Engine's state",
+          "value": "COMPLETED"
+        },
+        {
+          "label": "Core's state",
+          "value": "COMPLETED"
+        },
+        {
+          "label": "Core verified",
+          "value": "true"
+        },
+        {
+          "label": "Matching Notes / steps",
+          "value": "1 / 1"
+        }
+      ]
+    },
+    {
+      "stage": "memory_retrieval",
+      "title": "Memory search",
+      "status": "NOT PART OF THIS PATH",
+      "summary": "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes.",
+      "fields": []
+    },
+    {
+      "stage": "tools",
+      "title": "Tools, skills or notebooks",
+      "status": "NOT PART OF THIS PATH",
+      "summary": "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened.",
+      "fields": []
+    },
+    {
+      "stage": "model_reasoning",
+      "title": "The model's reasoning",
+      "status": "NOT RECORDED",
+      "summary": "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place.",
+      "fields": []
+    }
+  ],
+  "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file."
+}
