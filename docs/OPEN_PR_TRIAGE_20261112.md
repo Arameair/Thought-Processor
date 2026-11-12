@@ -193,3 +193,31 @@ For each PR, assign one **verified** disposition: ACTIVE, REVIEW, READY, BLOCKED
 3. Prioritize old proposals and duplicated documentation for evidence-based disposition.
 4. Close only with a verified reason and links to the successor or archived decision; never merge an old PR solely to reduce open count.
 5. Recount open PRs and report measured change, reviewed versus unreviewed, and any new unresolved blockers.
+
+## Update: first evidence-based issue-vs-PR cleanup (2026-11-12)
+
+**Verified count after changes: 110 open PRs** (Thought-Processor 58, Thought-engine 12, identity 13, Development 6, TASS 14, Cognition 0, Avatar 7), down from 121. Eleven report-only or premature coordination PRs closed **without merging**; their descriptions, diffs, comments and branches are preserved. One coordination issue created, not eleven duplicate tickets.
+
+### Completed disposition (closed, not merged)
+
+| Original PR | Why not remain an open PR? | Existing/new tracking home |
+| --- | --- | --- |
+| Thought-Processor [#94](https://github.com/Arameair/Thought-Processor/pull/94) | Completed independent historical foundation audit; outcome partial | [Implementation #88](https://github.com/Arameair/Thought-Processor/pull/88) |
+| Thought-Processor [#99](https://github.com/Arameair/Thought-Processor/pull/99) | Completed draft-only manual nudge audit; Process still blocked | [Issue #96](https://github.com/Arameair/Thought-Processor/issues/96) |
+| Thought-Processor [#102](https://github.com/Arameair/Thought-Processor/pull/102), [#103](https://github.com/Arameair/Thought-Processor/pull/103) | Finished design reviews of older revisions; FAIL verdicts still documented | [Design #101](https://github.com/Arameair/Thought-Processor/pull/101), [Issue #100](https://github.com/Arameair/Thought-Processor/issues/100) |
+| Thought-Processor [#105](https://github.com/Arameair/Thought-Processor/pull/105) | Finished implementation audit and focused repair retest, not a code change | [Issue #100](https://github.com/Arameair/Thought-Processor/issues/100) |
+| Thought-Processor [#97](https://github.com/Arameair/Thought-Processor/pull/97) | Past implementation handoff, not runnable code; successor implementation exists | [Issue #96](https://github.com/Arameair/Thought-Processor/issues/96) |
+| Thought-Processor [#116](https://github.com/Arameair/Thought-Processor/pull/116) | Advisory owner UX recommendations, no separate implementation | [Issue #106](https://github.com/Arameair/Thought-Processor/issues/106) |
+| Identity [#44](https://github.com/Arameair/identity/pull/44), Engine [#22](https://github.com/Arameair/Thought-engine/pull/22), Development [#9](https://github.com/Arameair/Development/pull/9), TASS [#33](https://github.com/Arameair/TASS/pull/33) | Four premature policy link PRs before governance approval | **One [rollout issue #119](https://github.com/Arameair/Thought-Processor/issues/119)**, pending [policy PR #118](https://github.com/Arameair/Thought-Processor/pull/118) |
+
+**Interpretation caution:** Closing a historical audit does not prove the old product is fully fixed. Its original PASS/FAIL/NOT RUN claims stay intact. Any remaining defects belong in their original work tracker. Closing a draft link PR does not amend its repository's default branch README.
+
+### Reviewed; no close decision yet
+
+- **Issue-first planning/handoff candidates:** Thought-Processor #85 (cross-loop coordination), #91 (C1–C10 remediation plan), #101 (supervised nudge design), #107 (Cognition↔Development design review); Development #3; Thought-engine #16; identity #39; TASS #26. Some contain useful repository-specific design files; confirm how to preserve canonical content and whether the cited issue already tracks it before closing.
+- **Legitimate documentation PRs if kept current:** Thought-Processor #92; Development #4; Thought-engine #18; identity #41; TASS #27 — all actually change repo landing/current-state docs. Review their source branch and staleness before merging, not convert them to issues merely because they are docs-only.
+- **Protect as active stage dependency:** Thought-Processor #109, #112–#115, #117; Identity #42–#43; Engine #19–#20 until real source dependency and acceptance review. This is not a declaration that they are all still active; verify separately.
+
+### Future classifications
+
+**Use an issue** for a reported defect, proposed behavior, unresolved design question, work assignment, audit finding or decision needing follow-up. **Use a PR** when the branch contains a concrete intended repository change (code, tests, or approved documentation). Independent reviews generally belong on the implementation PR/issue unless there is a report artifact specifically intended to be merged. A document edit is a valid PR; a proposal to *write* a document is an issue. Do not reopen old PRs automatically or close others merely because their name starts with `Docs:`.
