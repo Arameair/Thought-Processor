@@ -106,3 +106,8 @@ Use [the stabilization checklist](POST_STAGE3_STABILIZATION_CHECKLIST.md) for th
 The owner has selected the target model of accepted source on `main` and an owner-used externally shareable release on `stable`. The revised [WORKFLOW.md](WORKFLOW.md) and [TASS release policy](TASS_REPOSITORY_RELEASE_POLICY.md) now describe the **same destination model inside governance draft PR #118**. The older live `main` workflow and branch refs remain legacy until this docs proposal is reviewed and any later code/default migration is independently approved. Do not present the future convention as the current deployed state. No implicit change to active Stage 2 / Stage 3 work bases.
 
 **Definition of success:** a new contributor can determine *what is the problem, who owns it, what commit is being verified, where the evidence is, what is installed, and what happens next* without reading 100 historical PRs.
+
+## Entity-assisted open contribution (future pilot)
+
+The owner selected an opt-in contributor-ready issue model in which a developer's own authorized entity may help read an issue, coordinate a claim, work in isolation and prepare a draft PR. See [entity contribution proposal](ENTITY_CONTRIBUTOR_WORKFLOW.md). A GitHub comment or assignee is **not** an exclusive lease or additional permission. Multiple PRs per repo may coexist; only one accountable implementation per focused issue unless team coordination is explicit. GitHub access, Identity capabilities, maintainer review, combined-SHA tests and owner release approval remain separate. **Do not implement a claim bot during Stage 3 or mistake this design for deployed capability.**
+
