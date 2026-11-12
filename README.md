@@ -45,3 +45,7 @@ Independent services often have separate identities, connection states, permissi
 Project direction and owner approval: [Arameair](https://github.com/Arameair). This is human-directed, AI-assisted engineering. Claude's experimental implementation, Grok's independent QA and other contributors' work are linked to their actual reports and commits; AI assistance does not imply that any AI vendor endorses this project. [Credits and external technology provenance](docs/CREDITS.md) · [AI collaboration policy](docs/AI_COLLABORATION.md).
 
 `alpha` is owner-controlled. All functional changes require an experimental branch, reproducible tests and an explicit owner **KEEP / REVISE / REJECT / promote** decision. No automated promotion to `alpha`, `stable`, or `main`; documentation-only improvements to `main` do not approve code or release binaries. [Workflow](docs/WORKFLOW.md).
+
+## Proposed cross-repository versioning convention
+
+We are gradually evaluating a simple shared convention: `main` = understandable project entry point and eventual accepted source baseline; `experiment/*` = unpromoted work; `stable` = owner-used release approved for others to try; a separate release record pins compatible component SHAs. **This is a target convention, not a claim that current refs meet it.** Existing `alpha`/`stable` meanings and installed revisions remain unchanged pending review. See [repository and release policy](docs/TASS_REPOSITORY_RELEASE_POLICY.md).
