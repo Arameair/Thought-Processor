@@ -28,6 +28,7 @@ main{padding:0 0 90px}.shelf{padding:13px 0 19px}.shelf-head{padding:0 4%;displa
 .dev .note.missing{color:var(--amber);font-size:14px}
 .dev .meta{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .dev .meaning{font-size:12px;color:var(--muted);margin-top:6px}
+.dev .action{font-size:13px;line-height:1.4;margin:0 0 6px;overflow-wrap:anywhere;color:var(--fg)}.dev .action.verified{color:var(--mint)}.dev .action.uncertain{color:var(--amber)}
 .sheet details{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}.sheet summary{cursor:pointer;color:var(--muted)}
 .readiness{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}.readiness.ready{border-color:#317261}
 .nudgebox.focus{border-color:var(--mint)!important;box-shadow:0 0 0 2px #76d3bd55}
@@ -483,11 +484,30 @@ function stepLabel(h){
   if(h.worker_request_id)ids.push("request "+h.worker_request_id);if(h.source_nudge_id)ids.push("nudge "+h.source_nudge_id);
   if(h.by)ids.push("by "+h.by);return ids.join(" · ");
 }
+// Stage 2 (plan PR #109 §5; owner wording 2026-11-12): a saved Note is not evidence that anything was
+// done. One line per development says only what Core's own receipt supports (nudgeReceipt() in
+// cognition_notes.go). A missing receipt is never read as "not executed"; an uncertain run keeps its
+// actual code; a verified nudge vouches for that nudge and this Note only, not for any tool or skill.
+function actionLine(d){
+  const nid=d.source_nudge_id||"",rc=d.nudge_receipt===undefined||d.nudge_receipt===null?"":String(d.nudge_receipt),none="No verified action recorded for this Note.";
+  if(!nid)return ["none",none+" A saved Note is not evidence that anything was done."];
+  if(rc==="COMPLETED_VERIFIED"&&d.request_id&&d.persistence!=="IDS_DISAGREE")
+    return ["verified","Verified by Core: the supervised nudge "+nid+(d.note?" completed and produced this Note (same request ID).":
+      " completed for this request ID; its Note is no longer stored.")+" This is not evidence that any tool, skill or other change ran."];
+  if(rc==="COMPLETED_VERIFIED")return ["uncertain",none+" Core verified nudge "+nid+", but the IDs recorded here do not match it to one Note, so it is not attributed to this Note."];
+  if(rc==="COMPLETED_NOT_VERIFIED")return ["uncertain","Unverified: Core recorded nudge "+nid+" as completed, but could not verify it against this Note's IDs."];
+  if(rc==="NO_CORE_RECEIPT")return ["uncertain",none+" Core has no outcome receipt for nudge "+nid+" (it may still be running, or no result was recorded). Whether it ran is not known."];
+  if(rc==="NOT_IN_THIS_OWNERS_JOURNAL")return ["none",none+" Nudge "+nid+" is not in this owner's nudge journal, so there is no Core receipt to check."];
+  if(rc==="RECOVERY_REQUIRED"||rc==="UNCERTAIN")return ["uncertain","Uncertain: Core's receipt for nudge "+nid+" is "+rc+". Whether it ran is not known; it is not shown as completed."];
+  if(rc==="FAILED"||rc==="NOT_DELIVERED")return ["none",none+" Core's receipt for nudge "+nid+" is "+rc+"."];
+  return ["uncertain","Uncertain: Core's receipt for nudge "+nid+" is not one this page knows ("+(rc||"empty")+"). It is not shown as verified."];
+}
 function devCard(d){
   const box=mk("div","dev");box.id="dev-"+(d.request_id||"none");box.tabIndex=-1;
   box.append(mk("div","eyebrow",stamp(d.at)+(d.note?.by?" · "+d.note.by:"")));
   if(d.note)box.append(mk("div","note",d.note.text));
   else box.append(mk("div","note missing","The Note for this step is no longer stored (or was never saved). Nothing is shown in its place."));
+  const [kind,said]=actionLine(d),act=mk("div","action "+kind,said);act.dataset.action=kind;box.append(act);
   const meta=[PERSIST[d.persistence]||d.persistence,"request "+(d.request_id||"NOT RECORDED")];
   if(d.source_nudge_id)meta.push("nudge "+d.source_nudge_id+(d.nudge_receipt?" ("+(RECEIPT[d.nudge_receipt]||("Core receipt: "+d.nudge_receipt))+")":""));
   if(d.note?.suggested_state)meta.push("suggested state: "+d.note.suggested_state+" — not applied");
