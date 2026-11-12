@@ -52,7 +52,7 @@ Issues may still be discussed and corrected when not ready; their contents are *
 - **No one-PR-per-repository limit.** Multiple focused PRs can be open simultaneously, even within the same repo, provided they name a unique task and avoid overlapping edits when practical.
 - Each developer/entity works in its **own branch or worktree**, separate build/test roots, nonconflicting ports and test data. Do not use the owner's live stack or shared private profiles for AI testing.
 - **One primary PR per focused implementation**, with issue link, ownership, base/head SHA, compatible component pins, tests and independent review. If a feature touches multiple services, create separate per-repo PRs under one coordinating issue.
-- Service maintainers review interface/contract changes. Changes to Identity/grants, real-model execution, persistent data, cross-entity access, network exposure and update/rollback require **additional security/integration review** and existing owner approvals.
+- Service maintainers review applicable interface/contract changes. **Routine R0/R1 work uses proportional review rather than a universal independent security audit**; R2/R3 changes to Identity/grants, real-model execution, persistent data, cross-entity access, network exposure and update/rollback require stronger security/integration evidence and existing owner approvals. See the risk-routing table below.
 - Codex, Claude, a human engineer or another entity may act as implementer **or** independent reviewer on different work. Never use the same exact actor to self-certify its own PR.
 - To integrate, serialize changes into the **accepted baseline** or reviewed merge queue; rebase/retarget **only with approval**, resolve conflicts and rerun affected tests on the **combined exact candidate SHA**. Independently green PRs do not establish system compatibility.
 - The release system uses a trusted, exact **Core + Engine + Identity (+ required feature) manifest** and an owner-approved apply gate; merging to `main` is not deploying or publishing `stable`. See [update/release workflow](UPDATE_RELEASE_WORKFLOW.md).
@@ -68,6 +68,37 @@ Issues may still be discussed and corrected when not ready; their contents are *
 | Merge into accepted branch; owner update; external release | Entity may summarize evidence or prepare a candidate | Authorized human/release process; no silent merge or deploy |
 
 Grant **least privilege** per GitHub repository and TASS capability. Start with read-only issue discovery; add draft-PR creation only for trusted test work. Access to private TASS repos must be granted independently in GitHub. A volunteer need not receive direct write access to protected code: use authorized forks/PRs where appropriate. Do not grant an AI agent an unrestricted owner token or unrestricted filesystem/network access.
+
+## Fast-flow review policy: parallel work, risk-based gates
+
+**Owner requirement:** Professional governance must **not** create a central approval bottleneck. This is a **proposed operating policy after Stage 3 and stabilization**, not a GitHub ruleset already configured. Distinguish **permission to propose**, **approval to integrate source**, **permission to execute a protected action**, and **authorization to install/release**. They are four different decisions.
+
+### Risk routing (highest applicable tier wins)
+
+| Tier and examples | Development/PR preparation | Review and acceptance before integration | Additional action gate |
+| --- | --- | --- | --- |
+| **R0 — documentation, comments, formatting, isolated test fixtures**, with no change to permissions, execution or secret exposure | Any authorized contributor may draft immediately; use ordinary GitHub PR checks | **One available maintainer or qualified peer** confirms scope and checks; no mandatory full native suite or formal independent adversarial audit | Merge only by an account with actual repository merge authorization; no install |
+| **R1 — ordinary local UI/bug fixes and bounded non-sensitive features**, with no cross-owner, persistence, auth, security or cross-service contract changes | Contributors work in parallel; an approved issue scope can be reused | **Service maintainer or delegated reviewer** reviews the diff and relevant automated tests; an independent *security* audit is not mandatory merely because code changed | Any user-facing installation remains separately owner-authorized |
+| **R2 — shared service contract, persistent data, migration, concurrency/recovery, execution semantics, or significant integration change** | Parallel draft PRs allowed; declare affected service owners and dependency pins | Affected **service maintainers** review, applicable end-to-end/regression/recovery evidence, independent technical review proportional to risk, final compatible SHA or release candidate check | Separate approval for migrations, model execution, production writes or other protected behavior |
+| **R3 — Identity/grants, secrets, cross-entity access/privacy, trust boundary, supply chain/release security or autonomous protected actions** | May prototype/test only in explicitly permitted isolation; no shared owner secrets/live data | **Independent adversarial/security audit of final SHAs**, negative tests (denial, collision, revocation, replay), relevant service-owner review and documented resolution of every blocker | **Owner or explicitly authorized security/release authority** for high-impact permissions, live changes and release; no implicit approval from CI or AI recommendation |
+
+**Escalate rather than dilute:** A supposedly routine UI or documentation PR becomes R3 if it exposes owner data, changes authorization claims or can execute privileged behavior. If the tier is uncertain, ask the relevant service maintainer to classify it before integration; drafting an isolated PR does not need to stop while the classification is pending. The audited Stage 3A cross-owner reply issue is an example of why security-sensitive views require the R3 gate.
+
+### Remove waiting, not safeguards
+
+- **Preapprove bounded work categories, not every task individually.** Maintainers can mark a group of routine issues contributor-ready under an owner-approved area, acceptance criteria and named service ownership. New product scope, security grants and release decisions still need explicit authorization. A contributor can propose a new issue/PR at any time; **contributor-ready** is an eligibility signal for coordinated/assisted work, not a prerequisite for human discussion or ordinary PR creation.
+- **Several PRs per repo and several contributors per service are normal.** Do not serialize all implementation through the owner, one AI, or a single PR. Coordinate overlapping files/contracts through linked issues and status notes, not by forbidding independent branches.
+- **Maintain a small reviewer pool with a backup.** Assign a reviewer by service/risk, not by personal access to the owner. If review stalls, reassign to another qualified, authorized maintainer; never waive mandatory R3 audits or untested cross-repo compatibility to clear the queue.
+- **Automate cheap, repeatable checks first:** formatting/lint, tests, static analysis, fixtures, source/revision checks, dependency and PR-template checks when tooling exists. Only run expensive native/release gates when the change's affected surfaces and risk justify them. Never claim that CI or branch protection is installed until verified per repository.
+- **Review deltas on the same PR.** Keep comments, regressions and repairs together. A changed final SHA may invalidate previous evidence; recheck the affected scope. No extra "audit PR" merely to report a verdict.
+- **Integrate selectively:** independent safe changes can merge as soon as their actual branch protections and risk gates allow. Serialize **conflicting shared-contract changes and compatible release manifests**, not unrelated work. Final combined verification is required when two individually passing changes interact.
+- **Do not create automatic merge/release authority as an optimization.** The current owner-install, model-use, Identity and stable-release restrictions remain until expressly changed by a separate policy/permissions rollout.
+
+### Pilot measurements and stop rules
+
+Track the queue by **R0/R1/R2/R3**, with: time waiting for first reviewer and disposition; number of PRs opened/merged/closed/superseded; rework and repeated audits; conflicts/failed integration; independently caught security issues; accepted capabilities on the installed system. A growing PR count alone is not success or failure. The key measures are **time to safe integration and correctness after acceptance**.
+
+During the post-Stage-3 pilot, test at least **two independent low-risk contributors in parallel**, plus a cross-service/high-risk example held behind stronger review. The owner should be consulted for product-scope and protected-operation decisions **rather than every typo or ordinary isolated UI adjustment**. If review delays grow, improve ownership/backup reviewers and CI before granting more autonomy or adding another coordination service.
 
 ## Start small after stabilization (future implementation phases)
 
