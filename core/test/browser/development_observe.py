@@ -304,7 +304,7 @@ with sync_playwright() as p:
                       and not [g for g in late if g.startswith("/api/development/")], (v["mode"], late))
 
                 check("O12 zero POSTs", not posts, posts)
-                allowed = ("/api/development/runs/", "/api/brain", "/api/status", "/api/cognition/library", "/api/cognition/thoughts/", "/api/cognition/pulse", "/api/nudges")
+                allowed = ("/api/development/runs/", "/api/development/experiments", "/api/brain", "/api/status", "/api/cognition/library", "/api/cognition/thoughts/", "/api/cognition/pulse", "/api/nudges")
                 check("O12 only expected GETs", all(g.startswith(allowed) for g in gets), sorted(set(gets)))
                 check("O12 no page errors", not errs, errs)
             except Exception as e:

@@ -31,9 +31,9 @@ here="$(pwd)"
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
 # engine: experiment/stage2-nudge-run-20261108 (durable nudge runs, Stop, verified development; Stage 2 + ST2-I01 repair)
-ENGINE_COMMIT_PIN="c54390df43edddc161c5853c35db64462c39d37f"
+ENGINE_COMMIT_PIN="3aeaff7a41a989414ee1cd0ec64afb51f27e9876"
 # identity: experiment/nudge-process-stop-20261108 (single-use bound decisions for nudge process / stop; Stage 2)
-IDENTITY_COMMIT_PIN="cfc4079b690e2f7dc57afb9f14c6832ae38fdf54"
+IDENTITY_COMMIT_PIN="ee7ba1b0f9cf894235be63071c493b74e2a0eef9"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"
@@ -345,8 +345,13 @@ restore_fence_write() { # $1 = staged data folder
   j="$core/nudges.jsonl"; fence="$core/restore-fence.json"; tmp="$core/.restore-fence.json.tmp"
   if [[ -f "$j" ]]; then bytes="$(stat -c %s "$j")"; hash="$(sha256_of "$j")"
   else bytes=0; hash="$(printf '' | sha256sum | cut -d' ' -f1)"; fi
-  (umask 077; printf '{"schema":"tass.restore-fence/2","restored_at":"%s","backup":"%s","journal_bytes":%s,"journal_sha256":"%s"}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$2")" "$bytes" "$hash" >"$tmp") || return 1
+  # Stage 3B: the same fence for saved experiment plans (experiments.jsonl): plans in the restored journal
+  # are PRE_RESTORE and can never run, because an arm may already have been sent in the history restored away.
+  local x="$core/experiments.jsonl" xbytes xhash
+  if [[ -f "$x" ]]; then xbytes="$(stat -c %s "$x")"; xhash="$(sha256_of "$x")"
+  else xbytes=0; xhash="$(printf '' | sha256sum | cut -d' ' -f1)"; fi
+  (umask 077; printf '{"schema":"tass.restore-fence/2","restored_at":"%s","backup":"%s","journal_bytes":%s,"journal_sha256":"%s","experiments_bytes":%s,"experiments_sha256":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$2")" "$bytes" "$hash" "$xbytes" "$xhash" >"$tmp") || return 1
   sync "$tmp" && mv -f -- "$tmp" "$fence" && sync "$fence" "$core"
 }
 

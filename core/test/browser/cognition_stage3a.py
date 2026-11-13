@@ -226,7 +226,7 @@ with sync_playwright() as p:
             check("H8 plain /dev has no run view", pg.evaluate(RUNPROBE) is None, "")
 
             check("H7 zero POSTs (Cognition, link, Development, refresh, Back/Forward, errors)", not posts, posts)
-            allowed = ("/api/development/runs/", "/api/brain", "/api/status", "/api/cognition/library", "/api/cognition/thoughts/", "/api/cognition/pulse", "/api/nudges")
+            allowed = ("/api/development/runs/", "/api/development/experiments", "/api/brain", "/api/status", "/api/cognition/library", "/api/cognition/thoughts/", "/api/cognition/pulse", "/api/nudges")
             check("H7 only expected GETs", all(g.startswith(allowed) for g in gets), sorted(set(gets)))
             check("no page errors", not errs, errs)
             ctx.close()

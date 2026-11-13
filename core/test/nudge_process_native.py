@@ -162,6 +162,8 @@ def start_proxy():
 
         def go(self):
             body = self.rfile.read(int(self.headers.get("Content-Length", "0") or 0))
+            if self.command == "POST" and "/experiments/" in self.path:  # Stage 3B: every experiment write Core sent
+                PROXIED.append(self.path)
             if self.command == "POST" and self.path.endswith("/nudge"):
                 PROXIED.append(self.path)
                 if DROP_NUDGE.is_set():

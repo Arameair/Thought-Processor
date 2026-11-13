@@ -95,6 +95,39 @@ body[data-mode=design] #runView{display:none!important}
 #techEvidence>summary{font-weight:600}
 @media (max-width:1000px){#runView .obs{grid-template-columns:minmax(0,1fr) minmax(230px,280px)}#runInsp{grid-column:1/-1}}
 @media (max-width:640px){#runView .obs{grid-template-columns:minmax(0,1fr)}#runModeHint{display:none}header{gap:6px 10px}}
+/* Stage 3B: one instruction change, planned from Observe. A plan runs nothing. */
+body[data-mode=design] #expView,body:not([data-exp]) #expView{display:none!important}
+body[data-exp] #runView{display:none!important}
+#expView{background:linear-gradient(180deg,#10162a,#0d1320 220px);padding:12px 16px 16px}
+#expView .wrapx{max-width:1040px}
+#expView h2{font-size:18px;letter-spacing:0;text-transform:none;color:var(--text);margin:2px 0 6px}
+#expView .kicker{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#b9a8f4}
+#expView .card{border:1px solid #2c3556;background:#131a2d;border-radius:11px;padding:10px 12px;margin:8px 0}
+#expView .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9aa6c8;margin-bottom:3px}
+#expView textarea{width:100%;min-height:70px;resize:vertical;background:#0f1526;border-color:#4b4290;font-size:14px}
+#expView pre{margin:2px 0 0;background:#0f1526;border-color:#2c3556;max-height:160px}
+#expView .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#expView .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#expView .col{border:1px solid #2c3556;border-radius:10px;background:#141b31;padding:9px 10px}
+#expView .col h4{margin:0 0 4px;font-size:13.5px}
+#expView .col.a{border-top:3px solid var(--blue)}#expView .col.b{border-top:3px solid var(--violet)}#expView .col.o{border-top:3px solid var(--teal)}
+#expView label.snap{display:block;margin:3px 0}#expView label.snap.off{color:var(--muted)}
+#expView ul{margin:2px 0 0 18px;padding:0}
+#expView .err{margin-top:6px}
+#expView .rcpt{border:1px solid #2f6b58;background:#10241f;border-radius:9px;padding:7px 10px;color:#bfeedd}
+#expView button.arm{margin:6px 6px 0 0}
+#expView .confirm{margin-top:8px;border:1px solid #6a58c8;background:#1d1a3d;border-radius:9px;padding:8px 10px}
+#expView .confirm button{margin:6px 6px 0 0}
+#expView dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:1px 10px;margin:6px 0;font-size:12.5px}
+#expView dt{color:var(--muted)}#expView dd{margin:0;overflow-wrap:anywhere}
+#expView .col[data-state=COMPLETED] .armstate{color:var(--teal)}#expView .col[data-state=FAILED] .armstate,#expView .col[data-state=UNCERTAIN] .armstate,#expView .col[data-state=RECOVERY_REQUIRED] .armstate,#expView .col[data-state=NOT_DELIVERED] .armstate{color:var(--red)}
+#expView .col[data-state=RUNNING] .armstate,#expView .col[data-state=SUBMITTED] .armstate{color:var(--amber)}
+#expView .chipS{font:11px ui-monospace,monospace;border:1px solid #3a4a70;border-radius:5px;padding:0 5px}
+#expSnapshot[data-status=FROZEN]{border-color:#2f6b58}#expSnapshot[data-status=UNVERIFIED]{border-color:var(--red)}
+#expView button:focus-visible,#expView a:focus-visible,#expView textarea:focus-visible,#expView input:focus-visible{outline:2px solid #d2c2ff;outline-offset:2px}
+#runView .saved{margin-top:6px;font-size:12.5px;color:#c7c2f3}#runView .saved a{color:#d2c2ff;margin-right:8px}
+#runView #expOpen{margin-top:8px;background:#2a2556;border-color:#6a58c8;color:#fff;font-weight:600}
+@media (max-width:760px){#expView .cols,#expView .grid2{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
@@ -120,6 +153,7 @@ body[data-mode=design] #runView{display:none!important}
   Editing or saving it does not change how any run happened, and nothing here runs TASS. <span id="designNoteRun"></span></div>
 <div id="cognitionProposal" class="design-only" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
 <section id="runView" hidden aria-labelledby="runTitle"></section>
+<section id="expView" hidden aria-labelledby="expTitle"></section>
 <section id="llab" class="design-only" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
   <div class="row"><b>Teach &amp; test one lesson</b>
     <span class="hint">Choose → Study → Inspect answer → Check grade → Approve → Test again → Evidence. <b>PASSED</b> (graded) ≠ <b>LEARNED</b> (you approved) ≠ <b>RETESTED</b> (applied on a new question) ≠ a <b>skill</b> (separate Identity grant + your approval + run receipt). Nothing here runs code.</span></div>
@@ -432,7 +466,12 @@ async function loadRun(id) {
   const back = el("a", "", "Back to this Note in Cognition");
   back.href = "/cognition#thought=" + encodeURIComponent(d.thought_id) + (d.request_id ? "&dev=" + encodeURIComponent(d.request_id) : "");
   next.append(el("b", "", "Next: "), back,
-    el("div", "hint", "Select a step or a connection on the map to see its evidence. Trying a changed instruction and comparing replies comes in a later step (Stage 3B); nothing on this page can run anything."));
+    el("div", "hint", "Select a step or a connection on the map to see its evidence; nothing on this page can run anything."));
+  // Stage 3B: plan one instruction change for this run. Opening and saving a plan makes no model call.
+  const tryBtn = el("button", "", "Try one change…"); tryBtn.id = "expOpen"; tryBtn.type = "button";
+  tryBtn.onclick = () => goExp("new", true);
+  const saved = el("div", "saved"); saved.id = "expSaved";
+  next.append(tryBtn, saved);
   const legend = el("details", "legend");
   legend.append(el("summary", "", "What the labels mean"));
   for (const [k, v] of Object.entries(STATUS_MEANS)) { const p = el("div"); p.append(el("b", "", k + " — "), document.createTextNode(v)); legend.append(p); }
@@ -497,6 +536,7 @@ async function loadRun(id) {
   const kick = el("div", "kicker", "Observe · what TASS actually did · read only");
   box.replaceChildren(kick, head, grid, tech);
   RUN = {d, blocks, links, blockBy, stageBy};
+  loadSavedPlans();
 }
 let RUN = null;
 // One stage, rendered literally (textContent only): used in technical evidence and in the inspector.
@@ -577,7 +617,255 @@ if (!runParam) { $("modeObserve").disabled = true; $("modeObserve").title = "Ope
 else $("designNoteRun").textContent = "To see what TASS actually did in run " + runParam + ", choose Observe.";
 $("modeObserve").onclick = () => { if (document.body.dataset.mode !== "observe") setMode("observe", true); };
 $("modeDesign").onclick = () => { if (document.body.dataset.mode !== "design") setMode("design", true); };
-window.addEventListener("popstate", () => setMode(modeFromURL(), false));
+window.addEventListener("popstate", () => { setMode(modeFromURL(), false); routeExp(); });
+// ---- Stage 3B (#120; design #107 §3.3, §6): one instruction change, planned as an isolated A/B experiment. ----
+// /dev?run=<nudge>&exp=new shows the plan form; &exp=exp_… shows a saved plan. Saving is ONE POST to
+// /api/development/experiments, a local write with zero model calls. No control here can run an arm:
+// that needs owner decisions D4–D7 and an Identity action and grant that do not exist yet.
+const EXP_ID = /^exp_[0-9a-f]{20}$/;
+let expOpts = null, expKey = "";
+function expHeaders(post) { const h = {"X-TASS-Token": TOKEN}; if (post) h["Content-Type"] = "application/json"; return h; }
+async function expGet(path) {
+  let r; try { r = await fetch(path, {method: "GET", cache: "no-store", headers: expHeaders(false)}); } catch (e) { r = null; }
+  if (!r) return {ok: false, status: 0, body: {}};
+  let b = {}; try { b = await r.json(); } catch (e) { b = {}; }
+  return {ok: r.ok, status: r.status, body: b};
+}
+function expWhy(r) {
+  if (r.body && r.body.code && r.body.error) return String(r.body.error) + "."; // Core's own specific refusal
+  return r.status === 0 ? "Core could not be reached." : r.status === 403 ? "Identity did not allow this (locked, or the Cognition read permission is off)." :
+    r.status === 404 ? "There is no such run or experiment for the Identity that is signed in now." :
+    (r.body && r.body.error) ? String(r.body.error) : "Not available right now (HTTP " + r.status + "). Nothing is shown in its place.";
+}
+function goExp(v, push) {
+  const u = new URLSearchParams(location.search);
+  if (v) u.set("exp", v); else u.delete("exp");
+  const url = location.pathname + "?" + u.toString();
+  if (push) history.pushState(null, "", url); else history.replaceState(null, "", url);
+  routeExp();
+}
+function expShell(kick, title) {
+  const v = $("expView"); v.hidden = false;
+  const w = el("div", "wrapx"), back = el("a", "", "← Back to the run");
+  back.href = "/dev?run=" + encodeURIComponent(runParam);
+  back.onclick = ev => { ev.preventDefault(); goExp("", true); };
+  const h = el("h2", "", title); h.id = "expTitle";
+  w.append(el("div", "kicker", kick), h, back);
+  v.replaceChildren(w);
+  return w;
+}
+async function routeExp() {
+  const exp = new URLSearchParams(location.search).get("exp") || "";
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = "";
+  if (!exp || !validRun || document.body.dataset.mode !== "observe") { delete document.body.dataset.exp; $("expView").hidden = true; return; }
+  document.body.dataset.exp = "1";
+  if (exp === "new") return expForm();
+  if (!EXP_ID.test(exp)) { const w = expShell("Observe · try one change", "Experiment"); w.append(el("div", "err", "That is not an experiment ID. Nothing is shown.")); return; }
+  const w = expShell("Observe · try one change", "Experiment plan"); w.append(el("div", "hint", "Reading the saved plan…"));
+  const r = await expGet("/api/development/experiments/" + encodeURIComponent(exp));
+  if (!r.ok || r.body.experiment_id !== exp || r.body.baseline_nudge_id !== runParam) {
+    const w2 = expShell("Observe · try one change", "Experiment plan");
+    w2.append(el("div", "err", r.ok ? "Core's answer is for another plan or run. Nothing is shown." : expWhy(r)));
+    return;
+  }
+  expPlan(r.body);
+}
+async function expForm() {
+  const w = expShell("Observe · try one change · nothing runs", "Try one change");
+  w.append(el("div", "hint", "Reading the current instruction…"));
+  if (!expOpts) {
+    const r = await expGet("/api/development/experiments?run=" + encodeURIComponent(runParam));
+    if (!r.ok || r.body.control === undefined) { const w2 = expShell("Observe · try one change", "Try one change"); w2.append(el("div", "err", expWhy(r))); return; }
+    expOpts = r.body;
+  }
+  const o = expOpts;
+  const rnd = new Uint8Array(8); crypto.getRandomValues(rnd);
+  expKey = "exp-" + Array.from(rnd, x => x.toString(16).padStart(2, "0")).join("");
+  const f = expShell("Observe · try one change · nothing runs", "Try one change");
+  const form = el("form"); form.id = "expForm"; form.noValidate = true;
+  const c1 = el("div", "card");
+  const lab = el("label", "lbl", "What to change: the instruction sentence (B). A keeps the current one."); lab.htmlFor = "expVariant";
+  const ta = el("textarea"); ta.id = "expVariant"; ta.maxLength = 2000; ta.value = o.control; ta.setAttribute("aria-describedby", "expCount expErr");
+  const cnt = el("div", "hint"); cnt.id = "expCount";
+  const upd = () => { cnt.textContent = [...ta.value.trim()].length + " / " + o.variant_max + " characters · one line"; };
+  ta.oninput = upd; upd();
+  const fixed = el("div", "lbl", "Fixed reply format (not editable, so the Engine's parser stays valid)");
+  const pre = el("pre", "", o.contract); pre.id = "expContract";
+  c1.append(lab, ta, cnt, fixed, pre);
+  const c2 = el("div", "card"); c2.append(el("div", "lbl", "Snapshot: the Thought A and B both see"));
+  for (const sn of o.snapshots || []) {
+    const l = el("label", "snap" + (sn.available ? "" : " off")); const i = el("input"); i.type = "radio"; i.name = "expSnap"; i.value = sn.id;
+    i.disabled = !sn.available; i.checked = sn.id === "AS_OF_NOW";
+    l.append(i, el("b", "", " " + sn.label + " — "), document.createTextNode(sn.why)); c2.append(l);
+  }
+  const g = el("div", "grid2");
+  const keep = el("div", "card"); keep.append(el("div", "lbl", "Held constant for A and B")); const ul1 = el("ul");
+  for (const x of o.held_constant || []) ul1.append(el("li", "", x)); keep.append(ul1);
+  const nochg = el("div", "card"); nochg.append(el("div", "lbl", "Won't change")); const ul2 = el("ul");
+  for (const x of o.unchanged || []) ul2.append(el("li", "", x)); nochg.append(ul2);
+  g.append(keep, nochg);
+  const cost = el("div", "card"); cost.append(el("div", "lbl", "Cost"), el("div", "", o.cost));
+  const err = el("div", "err"); err.id = "expErr"; err.setAttribute("role", "alert");
+  const save = el("button", "primary", "Save plan (0 model requests)"); save.id = "expSave"; save.type = "submit";
+  form.append(c1, save, err, c2, g, cost);
+  f.append(form);
+  form.onsubmit = async ev => {
+    ev.preventDefault();
+    if (save.disabled) return;
+    const v = ta.value.trim(), norm = v.split(/\s+/).join(" ");
+    const bad = !v ? "Write the changed instruction sentence." :
+      /[\r\n]/.test(v) ? "The instruction must be one line; the reply format lines are fixed." :
+      [...v].length > o.variant_max ? "The instruction is longer than " + o.variant_max + " characters." :
+      /\b(NOTE|STATE)\s*\**\s*[:=]/i.test(v) ? "The instruction may not contain NOTE: or STATE:; the reply format is fixed." :
+      norm === o.control ? "B must differ from A: change the instruction sentence." : "";
+    if (bad) { err.textContent = bad; return; }
+    err.textContent = ""; save.disabled = true; save.textContent = "Saving…";
+    let r;
+    try { r = await fetch("/api/development/experiments", {method: "POST", cache: "no-store", headers: expHeaders(true),
+      body: JSON.stringify({baseline_nudge_id: runParam, variant: v, snapshot: "AS_OF_NOW", idempotency_key: expKey})}); } catch (e) { r = null; }
+    let b = {}; if (r) { try { b = await r.json(); } catch (e) { b = {}; } }
+    save.disabled = false; save.textContent = "Save plan (0 model requests)";
+    if (!r || !r.ok || !EXP_ID.test(b.experiment_id || "") || b.baseline_nudge_id !== runParam) {
+      err.textContent = "Not saved: " + expWhy({status: r ? r.status : 0, body: b}); return;
+    }
+    expOpts = null;
+    history.replaceState(null, "", location.pathname + "?run=" + encodeURIComponent(runParam) + "&exp=" + b.experiment_id);
+    expPlan(b, true);
+    loadSavedPlans();
+  };
+  ta.focus();
+}
+// The plan view. Everything shown is Core's record: states, replies and digests are never made up here.
+// Running an arm is the owner's explicit, separate confirmation per arm (one POST each); the page then
+// only READS the plan until the arm is final. Nothing here retries, runs B by itself, or promotes.
+let expPoll = null, expShown = "";
+function expPlan(p, fresh) {
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = p.experiment_id;
+  const arms = p.arms || [], open = arms.some(a => a.state === "SUBMITTED" || a.state === "RUNNING");
+  const ran = arms.some(a => a.state !== "NOT RUN");
+  const w = expShell("Observe · try one change · " + (ran ? "isolated experiment" : "nothing has run"), "Experiment plan");
+  const box = el("div"); box.id = "expPlan";
+  const head = el("div", "card"); const idl = el("div"); idl.append(el("span", "lbl", "Plan "), el("b", "expid", p.experiment_id)); head.append(idl);
+  const st = el("div", "rcpt"); st.id = "expStatus"; st.setAttribute("role", "status");
+  st.textContent = (p.status || "") + " · model requests so far: " + (p.model_requests || 0) + " of at most 2 · saved into the Thought: nothing";
+  const rc = el("div", "hint", (fresh ? "Plan saved " : "Plan saved at ") + new Date(p.created_at).toLocaleString() + " · saving made 0 model requests · " +
+    (p.replayed ? "this plan already existed (same form submitted again)" : "stored on this computer only"));
+  head.append(st, rc,
+    el("div", "hint", "Instruction A " + (p.control_status === "CONFIRMED" ? "is CONFIRMED for the Engine revision of the original run." :
+      "is NOT CONFIRMED: the Engine revision of the original run is " + p.baseline_engine_revision + ", so it is not shown that the running Engine uses this sentence.")));
+  // The frozen snapshot: its status, capture time and reference. Never "the Thought as it is now" once frozen.
+  const f = p.frozen_snapshot || {status: "NOT CAPTURED", detail: ""};
+  const snap = el("div", "card"); snap.id = "expSnapshot"; snap.dataset.status = f.status;
+  const sh = el("div"); sh.append(el("span", "lbl", "Snapshot · the inputs A and B share "), el("b", "chipS", f.status)); snap.append(sh);
+  if (f.status !== "NOT CAPTURED" && f.sha256) {
+    const dl = el("dl");
+    for (const [k, v] of [["Reference", f.reference], ["Captured", f.captured_at ? new Date(f.captured_at).toLocaleString() + " (" + f.captured_at + ")" : "NOT RECORDED"],
+        ["sha256", f.sha256], ["Contains", f.evidence_lines + " evidence line(s), " + f.note_lines + " Note(s), your attention text, the reply format and the model settings"]])
+      dl.append(el("dt", "", k), el("dd", "", v || "NOT RECORDED"));
+    snap.append(dl);
+  }
+  snap.append(el("div", "hint", f.detail || ""));
+  const diff = el("div", "grid2");
+  const da = el("div", "card"); da.append(el("div", "lbl", "A · unchanged instruction"), el("pre", "", p.control));
+  const db = el("div", "card"); db.append(el("div", "lbl", "B · your instruction (the only difference)"), el("pre", "", p.variant));
+  diff.append(da, db);
+  const cols = el("div", "cols");
+  const o = el("div", "col o"); o.append(el("h4", "", "Original · the run you observed"));
+  if (p.original && p.original.text) o.append(el("pre", "", p.original.text)); else o.append(el("div", "hint", (p.original || {}).saved || "NOT RECORDED"));
+  o.append(el("div", "hint", "Request " + ((p.original || {}).request_id || "NOT RECORDED") + " · " + ((p.original || {}).state || "NOT RECORDED")),
+    el("div", "hint", "For reference only: it ran on the Thought as it was then, not on this snapshot."),
+    el("div", "", "Saved into the Thought: " + ((p.original || {}).text ? "yes" : (p.original || {}).saved || "NOT RECORDED")));
+  cols.append(o);
+  const err = el("p", "err"); err.id = "expRunErr"; err.setAttribute("role", "alert");
+  for (const a of arms) {
+    const c = el("div", "col " + a.arm.toLowerCase()); c.dataset.arm = a.arm; c.dataset.state = a.state;
+    const hd = el("h4", "", a.label); c.append(hd);
+    const sl = el("div"); sl.append(document.createTextNode("State: "), el("b", "armstate", a.state)); c.append(sl);
+    if (a.detail) c.append(el("div", "hint", a.detail));
+    if (a.state === "COMPLETED") {
+      c.append(el("div", "lbl", "Reply (recorded, not saved anywhere else)"), el("pre", "reply", a.reply || ""));
+      if (a.parsed) { c.append(el("div", "hint", "Read as NOTE: " + a.note), el("div", "hint", "Suggested state (never applied): " + (a.suggested_state || "none"))); }
+      else c.append(el("div", "hint", "The reply did not follow the NOTE / STATE format: " + (a.parse_error || "unreadable") + ". It is shown as it was returned."));
+    }
+    const dl = el("dl");
+    const rows = [["Model requests", String(a.model_requests)]];
+    if (a.request_id) rows.push(["Request", a.request_id]);
+    if (a.model_http) rows.push(["Model HTTP", a.model_http]);
+    if (a.identity_decision) rows.push(["Approval", a.identity_decision + " (single use)"]);
+    if (a.submitted_at) rows.push(["Confirmed", new Date(a.submitted_at).toLocaleString()]);
+    if (a.snapshot_sha256) rows.push(["Snapshot", "snap-" + a.snapshot_sha256.slice(0, 12)]);
+    if (a.reply_sha256) rows.push(["Reply sha256", a.reply_sha256.slice(0, 16) + "…"]);
+    if (a.elapsed_ms) rows.push(["Elapsed", a.elapsed_ms + " ms"]);
+    for (const [k, v] of rows) dl.append(el("dt", "", k), el("dd", "", v));
+    c.append(dl, el("div", "", "Saved into the Thought: no (experiments never write to it)"));
+    // Run: enabled only when Core says this arm can run now. One explicit confirmation per arm.
+    const run = el("button", "arm", a.arm === "A" ? "Run A (unchanged) once…" : "Run B (your change) once…"); run.type = "button"; run.dataset.arm = a.arm;
+    run.disabled = !a.runnable;
+    c.append(run);
+    if (!a.runnable && a.state === "NOT RUN") c.append(el("div", "why hint", a.why || "NOT AUTHORIZED."));
+    run.onclick = () => {
+      if (run.disabled || c.querySelector(".confirm")) return;
+      const cf = el("div", "confirm"); cf.setAttribute("role", "group"); cf.setAttribute("aria-label", "Confirm arm " + a.arm);
+      cf.append(el("div", "", "This sends ONE request to the local model for arm " + a.arm + (a.arm === "A" ?
+        " (the unchanged instruction). The snapshot is captured and frozen first." : " (your instruction), built from the same frozen snapshot as A.")),
+        el("div", "hint", "It is never retried, even if it fails or its result is uncertain. Nothing is saved into the Thought. " + (a.arm === "A" ? "B is a separate confirmation." : "")));
+      const yes = el("button", "primary", "Confirm: run " + a.arm + " once"), no = el("button", "", "Cancel"); yes.type = no.type = "button"; yes.dataset.confirm = a.arm;
+      no.onclick = () => { cf.remove(); run.focus(); };
+      yes.onclick = async () => {
+        if (yes.disabled) return;
+        yes.disabled = no.disabled = true; yes.textContent = "Sending the confirmation…";
+        for (const b of box.querySelectorAll("button.arm")) b.disabled = true;
+        let r; try { r = await fetch("/api/development/experiments/" + encodeURIComponent(p.experiment_id) + "/arms/" + a.arm, {method: "POST", cache: "no-store",
+          headers: expHeaders(true), body: JSON.stringify({body_digest: p.body_digest, confirm: a.confirm})}); } catch (e) { r = null; }
+        let b = {}; if (r) { try { b = await r.json(); } catch (e) { b = {}; } }
+        if (!r || !r.ok || b.experiment_id !== p.experiment_id) {
+          // Not accepted, or the answer was lost: say so and re-read the record. Never send it again from here.
+          const why = "Arm " + a.arm + " was not started by this click: " + expWhy({status: r ? r.status : 0, body: b}) + " Nothing is sent again automatically.";
+          await expRefresh(p.experiment_id); const e2 = $("expRunErr"); if (e2) e2.textContent = why;
+          return;
+        }
+        if (expShown === p.experiment_id) expPlan(b);
+      };
+      cf.append(yes, no); c.append(cf); yes.focus();
+    };
+    cols.append(c);
+  }
+  const cmp = el("div", "card"); cmp.id = "expCompare"; cmp.dataset.ready = String(!!(p.comparison || {}).ready);
+  cmp.append(el("div", "lbl", "A against B"), el("div", "", (p.comparison || {}).text || ""));
+  const act = el("div", "hint", "One request per arm, A before B, each with its own confirmation and single-use approval. There is no Promote: a better B becomes evidence for a reviewed Engine change, not a switch.");
+  const more = el("details"); more.append(el("summary", "", "What is held constant and what won't change"));
+  const l1 = el("ul"); for (const x of p.held_constant || []) l1.append(el("li", "", "Held: " + x));
+  for (const x of p.unchanged || []) l1.append(el("li", "", "Unchanged: " + x)); more.append(l1, el("div", "hint", p.cost || ""));
+  box.append(head, snap, diff, cols, err, cmp, act, more);
+  w.append(box);
+  if (open) expPoll = setTimeout(() => expRefresh(p.experiment_id), 1500);
+}
+// Re-read one plan (GET only) while it is the one on screen.
+async function expRefresh(id) {
+  const r = await expGet("/api/development/experiments/" + encodeURIComponent(id));
+  if (expShown !== id || new URLSearchParams(location.search).get("exp") !== id) return;
+  if (r.ok && r.body.experiment_id === id && r.body.baseline_nudge_id === runParam) expPlan(r.body);
+  else { const e2 = $("expRunErr"); if (e2) e2.textContent = "The plan could not be re-read: " + expWhy(r) + " What is shown may be out of date."; expPoll = setTimeout(() => expRefresh(id), 4000); }
+}
+async function loadSavedPlans() {
+  const box = $("expSaved"); if (!box || !validRun) return;
+  const r = await expGet("/api/development/experiments?run=" + encodeURIComponent(runParam));
+  if (!r.ok || !Array.isArray(r.body.experiments)) { box.textContent = ""; return; }
+  expOpts = r.body;
+  const n = r.body.experiments.length;
+  box.replaceChildren();
+  if (!n) return;
+  const list = el("span"); list.id = "runSavedList";
+  for (const e of r.body.experiments.slice(0, 5)) {
+    const a = el("a", "", e.experiment_id); a.href = "/dev?run=" + encodeURIComponent(runParam) + "&exp=" + e.experiment_id;
+    a.onclick = ev => { ev.preventDefault(); goExp(e.experiment_id, true); }; list.append(a);
+  }
+  const ranN = r.body.experiments.filter(e => (e.arms || []).some(a => a.state !== "NOT RUN")).length;
+  box.append(el("span", "", "Experiments for this run: " + n + " saved, " + (ranN ? ranN + " with an arm run" : "none run") + " — "), list);
+}
+
 // ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----
 let J = null;
 async function loadJ() {
@@ -726,6 +1014,7 @@ $("lRetest").onclick = () => {
 setInterval(() => { if (!$("llab").hidden && designLoaded) loadL(); }, 5000);
 if (new URLSearchParams(location.search).get("learn")) setTimeout(() => { $("llab").hidden = false; $("llabBtn").setAttribute("aria-expanded", "true"); loadL(new URLSearchParams(location.search).get("learn")); }, 200);
 setMode(modeFromURL(), false);
+routeExp();
 </script>
 </body>
 </html>

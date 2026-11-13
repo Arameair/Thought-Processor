@@ -23,6 +23,7 @@ type fakeIdentitySvc struct {
 	junctionGranted bool
 	nudgeGranted    bool              // cognition.nudge.draft: an owner grant, never a default
 	processGranted  bool              // Stage 2: cognition.nudge.process (bound decisions only)
+	expGranted      bool              // Stage 3B: cognition.experiment.run (bound decisions only; never a default)
 	revoked         []string          // Stage 3A: grants the owner has taken away (nil elsewhere)
 	bound           map[string]string // decision ID → binding (Stage 2)
 	entityID, name  string            // default ent_0123 / Mira
@@ -52,6 +53,9 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 		}
 		if f.processGranted {
 			grants = append(grants, "cognition.nudge.process")
+		}
+		if f.expGranted {
+			grants = append(grants, "cognition.experiment.run")
 		}
 		for _, g := range f.revoked {
 			for i := 0; i < len(grants); i++ {
@@ -110,11 +114,13 @@ func newFakeIdentitySvc() *fakeIdentitySvc {
 			if allow && strings.HasPrefix(in["action"], "skill.") && !f.skillGranted { // skills need their own grant (#72)
 				allow, reason = false, "the entity has no grant for "+in["action"]
 			}
-			if in["action"] == "cognition.nudge.process" || in["action"] == "cognition.nudge.stop" { // Stage 2: bound only
+			if in["action"] == "cognition.nudge.process" || in["action"] == "cognition.nudge.stop" || in["action"] == "cognition.experiment.run" { // bound only
 				if in["binding"] == "" || len(in["binding"]) != 64 {
 					allow, reason = false, "a binding is required"
 				} else if in["action"] == "cognition.nudge.process" && !f.processGranted {
 					allow, reason = false, "the entity has no grant for cognition.nudge.process"
+				} else if in["action"] == "cognition.experiment.run" && !f.expGranted {
+					allow, reason = false, "the entity has no grant for cognition.experiment.run"
 				}
 				id := fmt.Sprintf("dec_b%d", len(f.decisions))
 				if allow {
