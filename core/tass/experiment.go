@@ -162,7 +162,6 @@ var experimentSnapshots = []SnapshotOption{
 }
 
 func (d *ExperimentDraft) normalize() error {
-	d.Variant = strings.TrimSpace(d.Variant)
 	if !nudgeKeyRE.MatchString(d.IdempotencyKey) {
 		return fmt.Errorf("%w: idempotency_key must be 8-128 letters, digits or ._:-", ErrExperimentInvalid)
 	}
@@ -177,17 +176,14 @@ func (d *ExperimentDraft) normalize() error {
 	default:
 		return fmt.Errorf("%w: snapshot must be AS_OF_NOW", ErrExperimentInvalid)
 	}
-	v := d.Variant
-	if v == "" {
-		return fmt.Errorf("%w: write the changed instruction sentence", ErrExperimentInvalid)
-	}
-	if !utf8.ValidString(v) {
+	// Order matters. The instruction is validated RAW first: every rune the owner sent is checked before
+	// anything is removed, so a prohibited separator at the start or end cannot be trimmed away unseen.
+	// Only then are the permitted surrounding spaces trimmed, and length, markers and equality checked.
+	raw := d.Variant
+	if !utf8.ValidString(raw) {
 		return fmt.Errorf("%w: the instruction is not valid text", ErrExperimentInvalid)
 	}
-	if utf8.RuneCountInString(v) > experimentVariantMax {
-		return fmt.Errorf("%w: the instruction is longer than %d characters", ErrExperimentInvalid, experimentVariantMax)
-	}
-	for _, r := range v {
+	for _, r := range raw {
 		switch {
 		// Every line break Unicode knows: CR, LF, VT, FF, NEL (U+0085), LINE SEPARATOR (U+2028),
 		// PARAGRAPH SEPARATOR (U+2029).
@@ -200,6 +196,16 @@ func (d *ExperimentDraft) normalize() error {
 		case unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Co, r) || unicode.Is(unicode.Cs, r) || r == utf8.RuneError || !unicode.IsPrint(r) && !unicode.IsSpace(r):
 			return fmt.Errorf("%w: the instruction contains an invisible or unprintable character (U+%04X)", ErrExperimentInvalid, r)
 		}
+	}
+	// What can still surround the sentence here is spacing only (U+0020 and the other Unicode space
+	// separators): every line break, tab and other control was refused above.
+	v := strings.TrimSpace(raw)
+	d.Variant = v
+	if v == "" {
+		return fmt.Errorf("%w: write the changed instruction sentence", ErrExperimentInvalid)
+	}
+	if utf8.RuneCountInString(v) > experimentVariantMax {
+		return fmt.Errorf("%w: the instruction is longer than %d characters", ErrExperimentInvalid, experimentVariantMax)
 	}
 	if experimentHasContractMarker(v) {
 		return fmt.Errorf("%w: the instruction may not contain NOTE: or STATE: (in any script or look-alike punctuation); the reply format is fixed so the Engine's parser stays valid", ErrExperimentInvalid)

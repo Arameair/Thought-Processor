@@ -138,6 +138,16 @@ func TestExperimentRoutesFailClosedOnAnUnsafeJournal(t *testing.T) {
 			t.Errorf("variant %q: HTTP %d %s", v, r.Code, r.Body.String())
 		}
 	}
+	// Re-audit repair: a separator at the start or end of the raw instruction is refused too (JSON escapes,
+	// so the bytes reach the server exactly as written here).
+	for _, sep := range []string{`\r`, `\n`, `\u000b`, `\f`, `\u0085`, `\u2028`, `\u2029`} {
+		for _, v := range []string{sep + "Answer the question directly.", "Answer the question directly." + sep, "  " + sep + "Answer the question directly.", "Answer the question directly." + sep + "  "} {
+			body := strings.Replace(post, "Answer the question directly.", v, 1)
+			if r := env.post("/api/development/experiments", body, env.expectOf("A")); r.Code != http.StatusBadRequest || !strings.Contains(r.Body.String(), "one line") {
+				t.Errorf("variant %q: HTTP %d %s", v, r.Code, r.Body.String())
+			}
+		}
+	}
 	if now, _ := os.ReadFile(filepath.Join(env.dir, "experiments.jsonl")); !bytes.Equal(now, valid) {
 		t.Error("a refused variant changed the journal")
 	}
