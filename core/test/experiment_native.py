@@ -241,6 +241,56 @@ def run():
           and not arm_state(exp2, "B").get("runnable") and arm_state(exp2, "B").get("state") == "NOT RUN", f"{c} {r} {json.dumps(v2['frozen_snapshot'])[:200]}")
     open(snap2, "wb").write(good2)
 
+    # ---- F: the file boundary (Codex audit of f5c3b6d): each altered state refuses B with nothing sent; restored, B runs
+    def refused(label, want_view, engine_side=True):
+        base_f, sent_f = requests(), len(h.PROXIED)
+        c_f, r_f = arm(p2, "B")
+        v_f = view(exp2)
+        a_f, b_f = arm_state(exp2, "A"), arm_state(exp2, "B")
+        erec = http("GET", f"{h.ENG}/api/entities/{eid}/experiments/{exp2}", None, ek)[1].get("experiment", {})
+        ok = (c_f == 409 and requests() == base_f and not [p for p in h.PROXIED[sent_f:] if "/arms/" in p] and not b_f.get("runnable")
+              and b_f.get("state") != "COMPLETED" and not os.path.lexists(os.path.join(expdir, exp2, "B", "claim.json"))
+              and not os.path.lexists(f"{h.APP}/data/core/experiment-runs/{exp2}/B.submitted.json") and sha_file(tfile) == t_now)
+        if want_view == "UNVERIFIED":
+            # engine_side: the Engine's own record must stop vouching for its file; a Core-side receipt
+            # problem leaves the Engine's (untouched) snapshot verified, and Core alone refuses.
+            ok = ok and v_f["frozen_snapshot"]["status"] == "UNVERIFIED" and bool((erec.get("snapshot") or {}).get("verified")) == (not engine_side)
+        else:
+            ok = ok and a_f.get("state") == "RECOVERY_REQUIRED" and not a_f.get("reply") and a2.get("reply", "x") not in json.dumps(v_f)
+        check(f"F {label}: B refused (409), zero model requests, no B claim or submission, page says {want_view}, Thought unchanged", ok,
+              f"{c_f} {r_f} snap={json.dumps(v_f['frozen_snapshot'])[:160]} A={a_f.get('state')} engine={json.dumps(erec.get('snapshot'))[:160]}")
+
+    t_now = sha_file(tfile)
+    os.chmod(snap2, 0o644)
+    refused("Engine snapshot chmod 0644 (Codex 1)", "UNVERIFIED")
+    os.chmod(snap2, 0o600)
+    elsewhere = f"{h.APP}/elsewhere-snapshot.json"
+    open(elsewhere, "wb").write(good2); os.chmod(elsewhere, 0o600)
+    os.rename(snap2, snap2 + ".real"); os.symlink(elsewhere, snap2)
+    refused("Engine snapshot replaced by a symlink to identical bytes (Codex 2)", "UNVERIFIED")
+    os.remove(snap2); os.rename(snap2 + ".real", snap2)
+    open(snap2, "wb").write(good2.rstrip(b"\n"))
+    refused("Engine snapshot without its final newline (Codex 3)", "UNVERIFIED")
+    open(snap2, "wb").write(good2); os.chmod(snap2, 0o600)
+    os.chmod(os.path.join(expdir, exp2), 0o755)
+    refused("Engine experiment directory chmod 0755", "UNVERIFIED")
+    os.chmod(os.path.join(expdir, exp2), 0o700)
+    crec = f"{h.APP}/data/core/experiment-runs/{exp2}"
+    held = {f: open(os.path.join(crec, f), "rb").read() for f in os.listdir(crec)}
+    os.chmod(os.path.join(crec, "A.outcome.json"), 0o644)
+    refused("Core outcome receipt chmod 0644", "RECOVERY_REQUIRED")
+    os.chmod(os.path.join(crec, "A.outcome.json"), 0o600)
+    os.rename(os.path.join(crec, "snapshot.json"), os.path.join(crec, "snapshot.real")); os.symlink(os.path.join(crec, "snapshot.real"), os.path.join(crec, "snapshot.json"))
+    refused("Core snapshot receipt replaced by a symlink", "UNVERIFIED", engine_side=False)
+    os.remove(os.path.join(crec, "snapshot.json")); os.rename(os.path.join(crec, "snapshot.real"), os.path.join(crec, "snapshot.json"))
+    check("F nothing was repaired or rewritten: every Core receipt and the Engine snapshot are byte-identical after the refusals",
+          {f: open(os.path.join(crec, f), "rb").read() for f in os.listdir(crec)} == held and open(snap2, "rb").read() == good2, "")
+    base = requests()
+    c, r = arm(p2, "B")
+    b2 = wait_arm(exp2, "B")
+    check("F with the files as the Engine and Core wrote them, B runs: 202, COMPLETED, exactly one request, snapshot FROZEN",
+          c == 202 and b2.get("state") == "COMPLETED" and requests() == base + 1 and view(exp2)["frozen_snapshot"]["status"] == "FROZEN", f"{c} {r} {json.dumps(b2)[:200]}")
+
     # ---- C6 + C7: a slow arm (the baseline's attention makes the fixture model wait)
     sid, sres = nudge("Take it slow and look at the local project again.", "s3b-key-slow1")
     check("setup: a second baseline whose attention makes the fixture model slow", sres[2] == "COMPLETED", sres)

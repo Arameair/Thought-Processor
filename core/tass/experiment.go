@@ -463,15 +463,14 @@ func (c *Core) buildExperimentView(e Experiment, run DevelopmentRun, pre bool, r
 	v := ExperimentView{Experiment: e, Unchanged: experimentUnchanged, HeldConstant: experimentHeldConstant, PreRestore: pre, Readiness: ready,
 		Note: "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."}
 	// The frozen snapshot.
-	var snap expSnapshotRec
-	sex, sok := expReadOnce(c.expRunPath(e.ExperimentID, "snapshot.json"), &snap)
+	snap, sex, sok := c.trustedSnapshot(e)
 	snapOK := false
 	switch {
 	case !sex:
 		v.Frozen = ExperimentSnapshot{Status: "NOT CAPTURED", Detail: "No snapshot yet. It is captured once, stored and digested when you confirm A, before the model is asked."}
 		v.SnapshotLabel = "Not captured yet — one snapshot of the Thought is frozen when you confirm A; A and B both use exactly that stored snapshot."
-	case !sok || snap.ExperimentID != e.ExperimentID || snap.VariantSHA != e.VariantSHA || len(snap.SnapshotSHA) != 64:
-		v.Frozen = ExperimentSnapshot{Status: "UNVERIFIED", Detail: "The snapshot record on this computer is unreadable or is not this plan's. No arm can run."}
+	case !sok:
+		v.Frozen = ExperimentSnapshot{Status: "UNVERIFIED", Detail: "The snapshot record on this computer is unreadable, not private, or is not this plan's. No arm can run, and nothing is shown from it."}
 		v.SnapshotLabel = "Snapshot record unreadable — no arm can run."
 	default:
 		at := snap.CapturedAt
@@ -491,7 +490,7 @@ func (c *Core) buildExperimentView(e Experiment, run DevelopmentRun, pre bool, r
 		v.SnapshotLabel = "Frozen snapshot " + v.Frozen.Reference + ", captured " + snap.CapturedAt.UTC().Format("2006-01-02 15:04:05 UTC") + " — A and B both use exactly these stored inputs."
 	}
 	// The arms.
-	states := map[string]armState{"A": c.armView(e.ExperimentID, "A"), "B": c.armView(e.ExperimentID, "B")}
+	states := map[string]armState{"A": c.trustedArm(e, "A"), "B": c.trustedArm(e, "B")}
 	for _, d := range []struct{ arm, label, instruction string }{{"A", "A · unchanged instruction", e.Control}, {"B", "B · your instruction", e.Variant}} {
 		s := states[d.arm]
 		a := ExperimentArm{Arm: d.arm, Label: d.label, Instruction: d.instruction, State: s.State, Detail: s.Detail, Saved: "no",
@@ -513,8 +512,12 @@ func (c *Core) buildExperimentView(e Experiment, run DevelopmentRun, pre bool, r
 		v.ModelRequests += a.Requests
 		// Runnable only when every precondition is truly met; otherwise the first reason that applies.
 		switch {
+		case s.State == "RECOVERY_REQUIRED":
+			a.Why = "RECOVERY_REQUIRED: this arm's records on this computer can't be trusted. Nothing is sent again; save a new plan to try again."
 		case s.State != "NOT RUN":
 			a.Why = "This arm was already submitted (" + s.State + "). An arm is never sent twice; save a new plan to try again."
+		case sex && !sok:
+			a.Why = "The snapshot record on this computer can't be trusted, so no arm can run."
 		case pre:
 			a.Why = "PRE_RESTORE: this plan existed before a restore and an arm may already have been sent. Save a new plan."
 		case ready.Locked != "":

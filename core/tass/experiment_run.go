@@ -97,21 +97,6 @@ func (c *Core) expRunPath(exp, name string) string {
 	return filepath.Join(c.cfg.DataDir, experimentRunDir, exp, name)
 }
 
-func expReadOnce(path string, v any) (exists, ok bool) {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, false
-	}
-	if err != nil || len(strings.TrimSpace(string(b))) == 0 || json.Unmarshal(b, v) != nil {
-		return true, false
-	}
-	var s struct {
-		Schema string `json:"schema"`
-	}
-	json.Unmarshal(b, &s)
-	return true, s.Schema == experimentRunSchema
-}
-
 func expTerminal(state string) bool {
 	switch state {
 	case "COMPLETED", "FAILED", "UNCERTAIN", "NOT_DELIVERED", "RECOVERY_REQUIRED":
@@ -132,18 +117,18 @@ type armState struct {
 // sends anything. It may record what it observed (the outcome receipt).
 func (c *Core) armView(exp, arm string) armState {
 	var sub expSubmittedRec
-	sex, sok := expReadOnce(c.expRunPath(exp, arm+".submitted.json"), &sub)
+	sex, sok := c.expRead(exp, arm+".submitted.json", &sub)
 	if !sex {
 		return armState{State: "NOT RUN"}
 	}
 	if !sok || sub.ExperimentID != exp || sub.Arm != arm {
-		return armState{State: "RECOVERY_REQUIRED", Detail: "the submission record is unreadable; this arm will never be sent"}
+		return armState{State: "RECOVERY_REQUIRED", Detail: "this arm's submission record, or a directory above it, is unreadable, not private or not this arm's; the arm will never be sent"}
 	}
 	st := armState{Submitted: &sub}
 	var out expOutcomeRec
-	if oex, ook := expReadOnce(c.expRunPath(exp, arm+".outcome.json"), &out); oex {
+	if oex, ook := c.expRead(exp, arm+".outcome.json", &out); oex {
 		if !ook {
-			st.State, st.Detail = "RECOVERY_REQUIRED", "the outcome record is unreadable"
+			st.State, st.Detail = "RECOVERY_REQUIRED", "the outcome record is unreadable or not private; its reply is not shown"
 			return st
 		}
 		a := out.Arm
@@ -181,7 +166,61 @@ func (c *Core) armView(exp, arm string) armState {
 }
 
 func (c *Core) recordArmOutcome(exp, arm string, a engine.ExperimentArm, detail string) {
-	coreCreateOnce(c.expRunPath(exp, arm+".outcome.json"), expOutcomeRec{Schema: experimentRunSchema, Arm: a, Detail: detail, At: c.now().UTC()})
+	c.expCreate(exp, arm+".outcome.json", expOutcomeRec{Schema: experimentRunSchema, Arm: a, Detail: detail, At: c.now().UTC()})
+}
+
+// trustedSnapshot is Core's snapshot receipt for a plan, only if it is a private, bounded, well-formed file
+// AND names exactly this plan's experiment, owner, Engine entity, Thought and variant.
+func (c *Core) trustedSnapshot(plan Experiment) (rec expSnapshotRec, exists, ok bool) {
+	exists, ok = c.expRead(plan.ExperimentID, "snapshot.json", &rec)
+	if !exists || !ok {
+		return expSnapshotRec{}, exists, false
+	}
+	if rec.ExperimentID != plan.ExperimentID || rec.OwnerEntityID != plan.OwnerEntityID || rec.EngineEntityID != plan.EngineEntityID ||
+		rec.ThoughtID != plan.ThoughtID || rec.VariantSHA != plan.VariantSHA || !hex64RE.MatchString(rec.SnapshotSHA) {
+		return expSnapshotRec{}, true, false
+	}
+	return rec, true, true
+}
+
+// trustedArm is armView plus identity: a submission or outcome is used as evidence only if it belongs to
+// this plan (owner, Engine entity, Thought, variant, the exact bound tuple), was made on the plan's
+// recorded snapshot, and its outcome is this arm's, on that snapshot, under that approval, with a reply
+// that matches its own digest. Anything else is RECOVERY_REQUIRED and carries no reply.
+func (c *Core) trustedArm(plan Experiment, arm string) armState {
+	s := c.armView(plan.ExperimentID, arm)
+	if s.Submitted == nil {
+		return s
+	}
+	bad := func(why string) armState {
+		return armState{State: "RECOVERY_REQUIRED", Detail: why + "; nothing is shown from it and nothing is sent again"}
+	}
+	sub := s.Submitted
+	if sub.OwnerEntityID != plan.OwnerEntityID || sub.EngineEntityID != plan.EngineEntityID || sub.ThoughtID != plan.ThoughtID || sub.VariantSHA != plan.VariantSHA ||
+		sub.DecisionID == "" || sub.Binding != engine.Binding(engine.ExperimentBinding{Action: ActionExperimentRun, OwnerEntityID: plan.OwnerEntityID,
+		EngineEntityID: plan.EngineEntityID, ThoughtID: plan.ThoughtID, ExperimentID: plan.ExperimentID, Arm: arm, SnapshotSHA: sub.SnapshotSHA,
+		Variable: "instruction", VariantSHA: plan.VariantSHA}) {
+		return bad("this arm's submission record does not belong to this plan")
+	}
+	snap, sex, sok := c.trustedSnapshot(plan)
+	if !sex || !sok || sub.SnapshotSHA != snap.SnapshotSHA {
+		return bad("this arm's submission cannot be tied to this plan's recorded snapshot")
+	}
+	if a := s.Engine; a != nil {
+		switch {
+		case a.Arm != arm, a.SnapshotSHA != "" && a.SnapshotSHA != sub.SnapshotSHA, a.Authorize != "" && a.Authorize != sub.DecisionID:
+			return bad("the recorded outcome is not this arm's, or names another snapshot or approval")
+		case a.State == "COMPLETED" && a.Result == nil:
+			return bad("the recorded outcome says COMPLETED without a reply")
+		}
+		if r := a.Result; r != nil {
+			sum := sha256.Sum256([]byte(r.Reply))
+			if r.RequestID != a.RequestID || hex.EncodeToString(sum[:]) != r.ReplySHA256 {
+				return bad("the recorded reply does not match its digest or its request")
+			}
+		}
+	}
+	return s
 }
 
 // activeExperiment: "<exp>/<arm>" of an arm that is SUBMITTED or RUNNING, if any.
@@ -384,19 +423,24 @@ func (c *Core) RunExperimentArm(id, arm string, in ArmConfirm, rq ...*CognitionR
 	if pre[id] {
 		return ExperimentView{}, false, fmt.Errorf("%w: PRE_RESTORE: this plan existed before a restore and an arm may already have been sent; save a new plan", ErrExperimentConflict)
 	}
+	// The receipt directories must be real and private before anything is read from, or written beside,
+	// them (and before anything is captured at the Engine that Core could then not record).
+	if _, err := c.expTree(id, false); err != nil {
+		return ExperimentView{}, false, fmt.Errorf("%w: this experiment's receipts are not in private, real directories on this computer (%v); nothing was captured or sent", ErrExperimentRefused, err)
+	}
 	// X2: an arm that was ever submitted is only shown.
-	if s := c.armView(id, arm); s.State != "NOT RUN" {
+	if s := c.trustedArm(*plan, arm); s.State != "NOT RUN" {
 		return view(false)
 	}
 	// X3
 	if arm == "B" {
-		switch a := c.armView(id, "A"); {
+		switch a := c.trustedArm(*plan, "A"); {
 		case a.State == "NOT RUN":
 			return ExperimentView{}, false, fmt.Errorf("%w: run A first; B is compared with A", ErrExperimentRefused)
 		case !expTerminal(a.State):
 			return ExperimentView{}, false, fmt.Errorf("%w (experiment arm %s/A)", ErrProcessBusy, id)
 		case a.State != "COMPLETED":
-			return ExperimentView{}, false, fmt.Errorf("%w: A is %s, which is final; save a new plan to try again", ErrExperimentRefused, a.State)
+			return ExperimentView{}, false, fmt.Errorf("%w: A is %s, which is final; nothing was sent. Save a new plan to try again", ErrExperimentRefused, a.State)
 		}
 	}
 	// X4: before anything is captured or sent.
@@ -411,15 +455,17 @@ func (c *Core) RunExperimentArm(id, arm string, in ArmConfirm, rq ...*CognitionR
 		return ExperimentView{}, false, fmt.Errorf("%w (experiment arm %s)", ErrProcessBusy, other)
 	}
 	// X6: the one frozen snapshot.
-	var snap expSnapshotRec
-	sex, sok := expReadOnce(c.expRunPath(id, "snapshot.json"), &snap)
+	snap, sex, sok := c.trustedSnapshot(*plan)
 	switch {
-	case sex && (!sok || snap.ExperimentID != id || snap.OwnerEntityID != scope.identityID || snap.EngineEntityID != scope.engineID ||
-		snap.ThoughtID != plan.ThoughtID || snap.VariantSHA != plan.VariantSHA || len(snap.SnapshotSHA) != 64):
-		return ExperimentView{}, false, fmt.Errorf("%w: the snapshot record is unreadable or is not this plan's; nothing was sent", ErrExperimentRefused)
+	case sex && !sok:
+		return ExperimentView{}, false, fmt.Errorf("%w: the snapshot record is unreadable, not private or is not this plan's; nothing was sent", ErrExperimentRefused)
 	case !sex && arm == "B":
 		return ExperimentView{}, false, fmt.Errorf("%w: there is no snapshot record for this experiment; B never captures one. Nothing was sent", ErrExperimentRefused)
 	case !sex:
+		// Make the private receipt directories first: nothing is captured unless Core can record it.
+		if _, err := c.expTree(id, true); err != nil {
+			return ExperimentView{}, false, fmt.Errorf("%w: the receipt directory can't be made private (%v); nothing was captured or sent", ErrExperimentRefused, err)
+		}
 		attention, err := c.experimentAttention(*plan)
 		if err != nil {
 			return ExperimentView{}, false, err
@@ -436,7 +482,7 @@ func (c *Core) RunExperimentArm(id, arm string, in ArmConfirm, rq ...*CognitionR
 		snap = expSnapshotRec{Schema: experimentRunSchema, ExperimentID: id, OwnerEntityID: scope.identityID, EngineEntityID: scope.engineID,
 			ThoughtID: plan.ThoughtID, SnapshotSHA: info.SHA256, CapturedAt: info.CapturedAt, Evidence: info.Evidence, Notes: info.Notes,
 			ThoughtRev: info.ThoughtRevision, EngineCommit: info.EngineCommit, VariantSHA: plan.VariantSHA, At: c.now().UTC()}
-		if created, err := coreCreateOnce(c.expRunPath(id, "snapshot.json"), snap); err != nil || !created {
+		if created, err := c.expCreate(id, "snapshot.json", snap); err != nil || !created {
 			return ExperimentView{}, false, fmt.Errorf("%w: the snapshot's digest could not be recorded on this computer; nothing was sent", ErrExperimentWrite)
 		}
 	}
@@ -461,7 +507,7 @@ func (c *Core) RunExperimentArm(id, arm string, in ArmConfirm, rq ...*CognitionR
 	// X8
 	sub := expSubmittedRec{Schema: experimentRunSchema, ExperimentID: id, Arm: arm, OwnerEntityID: scope.identityID, EngineEntityID: scope.engineID,
 		ThoughtID: plan.ThoughtID, SnapshotSHA: snap.SnapshotSHA, VariantSHA: plan.VariantSHA, Binding: binding, DecisionID: dec.DecisionID, At: c.now().UTC()}
-	created, err := coreCreateOnce(c.expRunPath(id, arm+".submitted.json"), sub)
+	created, err := c.expCreate(id, arm+".submitted.json", sub)
 	switch {
 	case !created && err == nil:
 		return view(false)
