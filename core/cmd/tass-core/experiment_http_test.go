@@ -54,11 +54,29 @@ func TestExperimentPlanRoutesKeepTheCognitionBoundary(t *testing.T) {
 	if rec := env.get("/api/development/experiments?run=nudge_00000000000000000001", env.expectOf("A")); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown run list: HTTP %d", rec.Code)
 	}
-	// No route can run an arm.
-	for _, p := range []string{"/api/development/experiments/exp_00000000000000000000/arms/A", "/api/development/experiments/exp_00000000000000000000/run"} {
-		if rec := env.post(p, `{}`, env.expectOf("A")); rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("%s: HTTP %d (an arm route must not exist)", p, rec.Code)
+	// The arm route (Stage 3B runtime) keeps the same boundary: stale scope 412, wrong token refused, an
+	// unknown plan or arm 404, GET not allowed; none of them reaches the Engine with a write.
+	armPath := "/api/development/experiments/exp_00000000000000000000/arms/A"
+	confirm := `{"body_digest":"x","confirm":"RUN A exp_00000000000000000000"}`
+	if rec := env.post(armPath, confirm, env.expectOf("B")); rec.Code != http.StatusPreconditionFailed {
+		t.Errorf("arm with owner B's scope: HTTP %d", rec.Code)
+	}
+	if r := env.do("POST", armPath, confirm, map[string]string{"X-TASS-Token": "wrong"}); r.Code < 400 {
+		t.Errorf("arm with a wrong token: HTTP %d", r.Code)
+	}
+	for _, p := range []string{armPath, "/api/development/experiments/exp_00000000000000000000/arms/C", "/api/development/experiments/exp_../arms/A"} {
+		if rec := env.post(p, confirm, env.expectOf("A")); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: HTTP %d %s", p, rec.Code, rec.Body.String())
 		}
+	}
+	if rec := env.get(armPath, env.expectOf("A")); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Errorf("GET arm: HTTP %d", rec.Code)
+	}
+	if rec := env.post("/api/development/experiments/exp_00000000000000000000/run", `{}`, env.expectOf("A")); rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("run-all route: HTTP %d (there must be no route that runs both arms)", rec.Code)
+	}
+	if len(env.eng.nonGET) != 0 {
+		t.Errorf("Engine writes: %v", env.eng.nonGET)
 	}
 }
 

@@ -170,7 +170,7 @@ with sync_playwright() as p:
                     check("E5 saved into the Thought: original yes, A no, B no", "Saved into the Thought: yes" in cols[0]["t"] and "Saved into the Thought: no" in cols[1]["t"]
                           and "Saved into the Thought: no" in cols[2]["t"], [c["t"][-80:] for c in cols])
                 check("E5 Run A / Run B disabled", len(v["runBtns"]) == 2 and all(x["disabled"] for x in v["runBtns"]) and "Run A" in v["runBtns"][0]["t"], v["runBtns"])
-                check("E5 NOT AUTHORIZED is said", "NOT AUTHORIZED" in v["planText"] and "D4" in v["planText"], "")
+                check("E5 NOT AUTHORIZED is said, with the grant that is off by default", "NOT AUTHORIZED" in v["planText"] and "cognition.experiment-run" in v["planText"], "")
                 check("E5 no Promote control", v["promote"] == 0, v["promote"])
                 check("E8 hostile variant stays text", pg.evaluate("window.__xss") is None and pg.locator("#expPlan img").count() == 0, "")
                 check("E7 no sideways scrolling (plan)", v["overX"] <= 1, v["overX"])

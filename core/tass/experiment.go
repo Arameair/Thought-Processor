@@ -47,9 +47,6 @@ const (
 	// against the Engine source when ENGINE_SRC is set.
 	experimentControl  = "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes."
 	experimentContract = "Reply with exactly two lines and nothing else:\nNOTE: <at most 40 words>\nSTATE: <keep, sleep or resolve>"
-
-	experimentNotAuthorized = "NOT AUTHORIZED: running an arm needs your decisions D4–D7, Identity's cognition.experiment.run action, " +
-		"the cognition.experiment-run grant and the Engine experiment route. None exist yet, so nothing can run."
 )
 
 var (
@@ -95,28 +92,69 @@ type Experiment struct {
 	BodyDigest        string    `json:"body_digest"`
 }
 
-// ExperimentArm is the state of one arm. In this slice every arm is NOT RUN and not runnable.
+// ExperimentArm is one arm as the page shows it.
 type ExperimentArm struct {
-	Arm      string `json:"arm"` // A or B
-	Label    string `json:"label"`
-	State    string `json:"state"`
-	Runnable bool   `json:"runnable"`
-	Why      string `json:"why"`
-	Requests int    `json:"model_requests"`
+	Arm         string     `json:"arm"` // A or B
+	Label       string     `json:"label"`
+	Instruction string     `json:"instruction"` // the sentence this arm uses
+	State       string     `json:"state"`       // NOT RUN | SUBMITTED | RUNNING | COMPLETED | FAILED | UNCERTAIN | NOT_DELIVERED | RECOVERY_REQUIRED
+	Detail      string     `json:"detail,omitempty"`
+	Runnable    bool       `json:"runnable"`
+	Why         string     `json:"why"`     // why it can't be run now ("" when runnable)
+	Confirm     string     `json:"confirm"` // the exact phrase the page must send back with the owner's confirmation
+	Requests    int        `json:"model_requests"`
+	ModelHTTP   string     `json:"model_http,omitempty"`
+	RequestID   string     `json:"request_id,omitempty"`
+	DecisionID  string     `json:"identity_decision,omitempty"`
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+	SnapshotSHA string     `json:"snapshot_sha256,omitempty"`
+	Reply       string     `json:"reply,omitempty"`
+	ReplySHA    string     `json:"reply_sha256,omitempty"`
+	Parsed      bool       `json:"parsed"`
+	ParseError  string     `json:"parse_error,omitempty"`
+	Note        string     `json:"note,omitempty"`
+	Suggested   string     `json:"suggested_state,omitempty"`
+	Model       string     `json:"model,omitempty"`
+	ElapsedMS   int64      `json:"elapsed_ms,omitempty"`
+	Saved       string     `json:"saved_into_thought"` // always "no"
+}
+
+// ExperimentSnapshot is the frozen snapshot's identity as the page shows it (never its text).
+type ExperimentSnapshot struct {
+	Status     string     `json:"status"` // NOT CAPTURED | FROZEN | UNVERIFIED
+	Detail     string     `json:"detail"`
+	Reference  string     `json:"reference,omitempty"` // "snap-" + the first 12 hex digits of the digest
+	SHA256     string     `json:"sha256,omitempty"`
+	CapturedAt *time.Time `json:"captured_at,omitempty"`
+	Evidence   int        `json:"evidence_lines"`
+	Notes      int        `json:"note_lines"`
+	ThoughtRev string     `json:"thought_revision,omitempty"`
+}
+
+// ExperimentComparison says only what the records show about A against B.
+type ExperimentComparison struct {
+	Ready     bool   `json:"ready"`
+	SameReply bool   `json:"same_reply"`
+	Text      string `json:"text"`
 }
 
 // ExperimentView is a plan plus what the page needs to present it honestly.
 type ExperimentView struct {
 	Experiment
-	Replayed      bool            `json:"replayed,omitempty"`
-	SnapshotLabel string          `json:"snapshot_label"`
-	Unchanged     []string        `json:"unchanged"`
-	HeldConstant  []string        `json:"held_constant"`
-	Cost          string          `json:"cost"`
-	ModelRequests int             `json:"model_requests"` // made for this experiment so far
-	Arms          []ExperimentArm `json:"arms"`
-	Original      ExperimentNote  `json:"original"`
-	Note          string          `json:"note"`
+	Replayed      bool                 `json:"replayed,omitempty"`
+	SnapshotLabel string               `json:"snapshot_label"`
+	Frozen        ExperimentSnapshot   `json:"frozen_snapshot"`
+	Unchanged     []string             `json:"unchanged"`
+	HeldConstant  []string             `json:"held_constant"`
+	Cost          string               `json:"cost"`
+	ModelRequests int                  `json:"model_requests"` // made for this experiment so far
+	Status        string               `json:"status"`         // one plain line
+	PreRestore    bool                 `json:"pre_restore,omitempty"`
+	Readiness     experimentReadiness  `json:"readiness"`
+	Arms          []ExperimentArm      `json:"arms"`
+	Comparison    ExperimentComparison `json:"comparison"`
+	Original      ExperimentNote       `json:"original"`
+	Note          string               `json:"note"`
 }
 
 // ExperimentNote is the original run's outcome, for reference beside A and B.
@@ -155,8 +193,8 @@ var (
 )
 
 var experimentSnapshots = []SnapshotOption{
-	{"AS_OF_NOW", "As the Thought is now", true,
-		"A and B both use the Thought as it is when A runs. Not the original run's conditions: the original Note is shown for reference only."},
+	{"AS_OF_NOW", "One frozen snapshot, captured when you confirm A", true,
+		"The Thought's question, evidence and newest Notes are captured once, stored and digested before A runs. A and B both use exactly that stored snapshot, even if the Thought changes afterwards. Not the original run's conditions: the original Note is shown for reference only, and B is compared with A."},
 	{"AS_OF_BASELINE", "As it was at the original run", false,
 		"NOT AVAILABLE: rebuilding the original inputs and checking them against the logged prompt (VERIFIED / VERIFIED-PREFIX / NOT REPRODUCIBLE) needs an Engine snapshot check that does not exist yet."},
 }
@@ -288,50 +326,57 @@ func (c *Core) SaveExperimentDraft(d ExperimentDraft, rq ...*CognitionReq) (Expe
 	}
 	digest := d.digest()
 
-	c.expMu.Lock()
-	defer c.expMu.Unlock()
-	all, err := c.readExperiments()
+	// The journal is read and appended under one lock; the view is built after it is released.
+	saved, replayed, err := func() (Experiment, bool, error) {
+		c.expMu.Lock()
+		defer c.expMu.Unlock()
+		all, err := c.readExperiments()
+		if err != nil {
+			return Experiment{}, false, err
+		}
+		for _, e := range all {
+			if e.OwnerEntityID == scope.identityID && e.IdempotencyKey == d.IdempotencyKey {
+				if e.EngineEntityID != scope.engineID {
+					return Experiment{}, false, fmt.Errorf("%w: that key belongs to a different Engine link; use a new form", ErrExperimentConflict)
+				}
+				if e.BodyDigest != digest {
+					return Experiment{}, false, fmt.Errorf("%w: that key was already used for a different experiment", ErrExperimentConflict)
+				}
+				return e, true, nil
+			}
+		}
+		rnd := make([]byte, 10)
+		if _, err := rand.Read(rnd); err != nil {
+			return Experiment{}, false, err
+		}
+		vs := sha256.Sum256([]byte(d.Variant))
+		ctl := "NOT CONFIRMED"
+		if run.EngineRevision == "RECONCILED" {
+			ctl = "CONFIRMED"
+		}
+		e := Experiment{
+			Schema: experimentSchema, ExperimentID: "exp_" + hex.EncodeToString(rnd),
+			OwnerEntityID: scope.identityID, EngineEntityID: scope.engineID, ThoughtID: run.ThoughtID,
+			BaselineNudgeID: run.NudgeID, BaselineRequestID: run.RequestID, BaselineEngine: run.EngineRevision,
+			Snapshot: d.Snapshot, Variable: "instruction", Control: experimentControl, ControlStatus: ctl,
+			Variant: d.Variant, VariantSHA: hex.EncodeToString(vs[:]), Contract: experimentContract, Settings: nudgeModelSettings,
+			CreatedAt: c.now().UTC(), IdempotencyKey: d.IdempotencyKey, BodyDigest: digest,
+		}
+		if err := c.appendExperiment(e); err != nil {
+			if errors.Is(err, ErrExperimentInvalid) || errors.Is(err, ErrExperimentJournal) {
+				return Experiment{}, false, err
+			}
+			return Experiment{}, false, fmt.Errorf("%w: %v", ErrExperimentWrite, err)
+		}
+		c.event("sync", fmt.Sprintf("Saved experiment plan %s (instruction change; nothing ran: each arm needs your confirmation).", e.ExperimentID))
+		return e, false, nil
+	}()
 	if err != nil {
 		return ExperimentView{}, err
 	}
-	for _, e := range all {
-		if e.OwnerEntityID == scope.identityID && e.IdempotencyKey == d.IdempotencyKey {
-			if e.EngineEntityID != scope.engineID {
-				return ExperimentView{}, fmt.Errorf("%w: that key belongs to a different Engine link; use a new form", ErrExperimentConflict)
-			}
-			if e.BodyDigest != digest {
-				return ExperimentView{}, fmt.Errorf("%w: that key was already used for a different experiment", ErrExperimentConflict)
-			}
-			v := c.experimentView(e, run)
-			v.Replayed = true
-			return v, nil
-		}
-	}
-	rnd := make([]byte, 10)
-	if _, err := rand.Read(rnd); err != nil {
-		return ExperimentView{}, err
-	}
-	vs := sha256.Sum256([]byte(d.Variant))
-	ctl := "NOT CONFIRMED"
-	if run.EngineRevision == "RECONCILED" {
-		ctl = "CONFIRMED"
-	}
-	e := Experiment{
-		Schema: experimentSchema, ExperimentID: "exp_" + hex.EncodeToString(rnd),
-		OwnerEntityID: scope.identityID, EngineEntityID: scope.engineID, ThoughtID: run.ThoughtID,
-		BaselineNudgeID: run.NudgeID, BaselineRequestID: run.RequestID, BaselineEngine: run.EngineRevision,
-		Snapshot: d.Snapshot, Variable: "instruction", Control: experimentControl, ControlStatus: ctl,
-		Variant: d.Variant, VariantSHA: hex.EncodeToString(vs[:]), Contract: experimentContract, Settings: nudgeModelSettings,
-		CreatedAt: c.now().UTC(), IdempotencyKey: d.IdempotencyKey, BodyDigest: digest,
-	}
-	if err := c.appendExperiment(e); err != nil {
-		if errors.Is(err, ErrExperimentInvalid) || errors.Is(err, ErrExperimentJournal) {
-			return ExperimentView{}, err
-		}
-		return ExperimentView{}, fmt.Errorf("%w: %v", ErrExperimentWrite, err)
-	}
-	c.event("sync", fmt.Sprintf("Saved experiment plan %s (instruction change; not run: running needs separate owner decisions).", e.ExperimentID))
-	return c.experimentView(e, run), nil
+	v := c.experimentView(saved, run)
+	v.Replayed = replayed
+	return v, nil
 }
 
 // Experiments lists this owner's plans for one baseline run (newest first), with the form's options.
@@ -358,10 +403,13 @@ func (c *Core) Experiments(baselineNudgeID string, rq ...*CognitionReq) (Experim
 		Note: "Experiment plans are local to this computer and never synced to GitHub. Saving a plan makes no model call."}
 	out.Unchanged, out.HeldConstant = experimentUnchanged, experimentHeldConstant
 	out.Cost = "Saving this plan: 0 model requests. Running it later: 2 (A, then B), one at a time, each with its own confirmation."
+	pre, lock := c.experimentGuards()
+	ready := c.experimentReadiness(false)
+	ready.Locked = lock
 	for i := len(all) - 1; i >= 0 && len(out.Experiments) < experimentListMax; i-- {
 		e := all[i]
 		if e.OwnerEntityID == scope.identityID && e.EngineEntityID == scope.engineID && e.BaselineNudgeID == run.NudgeID {
-			out.Experiments = append(out.Experiments, c.experimentView(e, run))
+			out.Experiments = append(out.Experiments, c.buildExperimentView(e, run, pre[e.ExperimentID], ready, false))
 		}
 	}
 	return out, nil
@@ -388,23 +436,136 @@ func (c *Core) ExperimentByID(id string, rq ...*CognitionReq) (ExperimentView, e
 			if err != nil {
 				return ExperimentView{}, err
 			}
-			return c.experimentView(e, run), nil
+			return c.experimentViewLive(e, run), nil
 		}
 	}
 	return ExperimentView{}, ErrExperimentNotFound
 }
 
+// experimentView is the list form: Core's own records only (no Engine read unless an arm is open).
 func (c *Core) experimentView(e Experiment, run DevelopmentRun) ExperimentView {
-	v := ExperimentView{Experiment: e, Cost: "2 model requests when run: A (unchanged) then B (your change), one at a time, each with its own confirmation. Saving this plan made none.",
-		Unchanged: experimentUnchanged, HeldConstant: experimentHeldConstant,
-		Note: "Only the instruction sentence differs between A and B."}
-	for _, s := range experimentSnapshots {
-		if s.ID == e.Snapshot {
-			v.SnapshotLabel = s.Label + " — " + s.Why
+	pre, lock := c.experimentGuards()
+	r := c.experimentReadiness(false)
+	r.Locked = lock
+	return c.buildExperimentView(e, run, pre[e.ExperimentID], r, false)
+}
+
+// experimentViewLive is the single-plan form: it also asks the Engine whether the stored snapshot still
+// verifies, and uses the admission view of what is running.
+func (c *Core) experimentViewLive(e Experiment, run DevelopmentRun) ExperimentView {
+	pre, lock := c.experimentGuards()
+	r := c.experimentReadiness(true)
+	r.Locked = lock
+	return c.buildExperimentView(e, run, pre[e.ExperimentID], r, true)
+}
+
+func (c *Core) buildExperimentView(e Experiment, run DevelopmentRun, pre bool, ready experimentReadiness, live bool) ExperimentView {
+	v := ExperimentView{Experiment: e, Unchanged: experimentUnchanged, HeldConstant: experimentHeldConstant, PreRestore: pre, Readiness: ready,
+		Note: "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."}
+	// The frozen snapshot.
+	var snap expSnapshotRec
+	sex, sok := expReadOnce(c.expRunPath(e.ExperimentID, "snapshot.json"), &snap)
+	snapOK := false
+	switch {
+	case !sex:
+		v.Frozen = ExperimentSnapshot{Status: "NOT CAPTURED", Detail: "No snapshot yet. It is captured once, stored and digested when you confirm A, before the model is asked."}
+		v.SnapshotLabel = "Not captured yet — one snapshot of the Thought is frozen when you confirm A; A and B both use exactly that stored snapshot."
+	case !sok || snap.ExperimentID != e.ExperimentID || snap.VariantSHA != e.VariantSHA || len(snap.SnapshotSHA) != 64:
+		v.Frozen = ExperimentSnapshot{Status: "UNVERIFIED", Detail: "The snapshot record on this computer is unreadable or is not this plan's. No arm can run."}
+		v.SnapshotLabel = "Snapshot record unreadable — no arm can run."
+	default:
+		at := snap.CapturedAt
+		v.Frozen = ExperimentSnapshot{Status: "FROZEN", Reference: "snap-" + snap.SnapshotSHA[:12], SHA256: snap.SnapshotSHA, CapturedAt: &at,
+			Evidence: snap.Evidence, Notes: snap.Notes, ThoughtRev: snap.ThoughtRev,
+			Detail: "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later."}
+		snapOK = true
+		if live {
+			if rec, _, err := c.engine.ExperimentRecord(snap.EngineEntityID, e.ExperimentID); err != nil {
+				v.Frozen.Status, v.Frozen.Detail = "UNVERIFIED", "The Engine can't be read right now, so the stored snapshot could not be checked against its digest."
+				snapOK = false
+			} else if !rec.Snapshot.Present || !rec.Snapshot.Verified || rec.Snapshot.SHA256 != snap.SnapshotSHA {
+				v.Frozen.Status, v.Frozen.Detail = "UNVERIFIED", "The Engine's stored snapshot is missing, changed or not the recorded one. No further arm can run."
+				snapOK = false
+			}
 		}
+		v.SnapshotLabel = "Frozen snapshot " + v.Frozen.Reference + ", captured " + snap.CapturedAt.UTC().Format("2006-01-02 15:04:05 UTC") + " — A and B both use exactly these stored inputs."
 	}
-	for _, a := range []struct{ arm, label string }{{"A", "A · unchanged instruction"}, {"B", "B · your instruction"}} {
-		v.Arms = append(v.Arms, ExperimentArm{Arm: a.arm, Label: a.label, State: "NOT RUN", Runnable: false, Why: experimentNotAuthorized})
+	// The arms.
+	states := map[string]armState{"A": c.armView(e.ExperimentID, "A"), "B": c.armView(e.ExperimentID, "B")}
+	for _, d := range []struct{ arm, label, instruction string }{{"A", "A · unchanged instruction", e.Control}, {"B", "B · your instruction", e.Variant}} {
+		s := states[d.arm]
+		a := ExperimentArm{Arm: d.arm, Label: d.label, Instruction: d.instruction, State: s.State, Detail: s.Detail, Saved: "no",
+			Confirm: experimentConfirmPhrase(d.arm, e.ExperimentID)}
+		if s.Submitted != nil {
+			at := s.Submitted.At
+			a.SubmittedAt, a.DecisionID, a.SnapshotSHA = &at, s.Submitted.DecisionID, s.Submitted.SnapshotSHA
+		}
+		if s.Engine != nil {
+			a.ModelHTTP, a.RequestID = s.Engine.ModelHTTP, s.Engine.RequestID
+			if s.Engine.ModelHTTP == "responded" || s.Engine.ModelHTTP == "attempt_uncertain" {
+				a.Requests = 1
+			}
+			if r := s.Engine.Result; r != nil && s.State == "COMPLETED" {
+				a.Reply, a.ReplySHA, a.Parsed, a.ParseError, a.Note, a.Suggested, a.Model, a.ElapsedMS =
+					devClip(r.Reply), r.ReplySHA256, r.Parsed, r.ParseError, r.Note, r.State, r.Model, r.ElapsedMS
+			}
+		}
+		v.ModelRequests += a.Requests
+		// Runnable only when every precondition is truly met; otherwise the first reason that applies.
+		switch {
+		case s.State != "NOT RUN":
+			a.Why = "This arm was already submitted (" + s.State + "). An arm is never sent twice; save a new plan to try again."
+		case pre:
+			a.Why = "PRE_RESTORE: this plan existed before a restore and an arm may already have been sent. Save a new plan."
+		case ready.Locked != "":
+			a.Why = "Runs are locked: " + ready.Locked + "."
+		case d.arm == "B" && states["A"].State == "NOT RUN":
+			a.Why = "Run A first. B is compared with A."
+		case d.arm == "B" && !expTerminal(states["A"].State):
+			a.Why = "A is still " + states["A"].State + ". Wait for it."
+		case d.arm == "B" && states["A"].State != "COMPLETED":
+			a.Why = "A is " + states["A"].State + ", which is final. Save a new plan to try again."
+		case d.arm == "B" && !snapOK:
+			a.Why = "The frozen snapshot is not verified, so B can't be run on the same inputs as A."
+		case ready.Identity != "UNLOCKED":
+			a.Why = "NOT AUTHORIZED: Identity is " + strings.ToLower(ready.Identity) + ". Unlock it on Identity's page."
+		case ready.Grant != "ENABLED":
+			a.Why = "NOT AUTHORIZED: the owner grant cognition.experiment-run is not enabled on Identity's page. It is off by default; only you can enable it, with your passphrase."
+		case ready.Busy != "":
+			a.Why = "Busy: " + ready.Busy + " is using the one model slot. Wait for it to finish."
+		default:
+			a.Runnable = true
+		}
+		v.Arms = append(v.Arms, a)
+	}
+	sa, sb := states["A"], states["B"]
+	switch {
+	case sa.State == "NOT RUN":
+		v.Status = "Planned. Nothing has run."
+	case !expTerminal(sa.State):
+		v.Status = "A is " + sa.State + "."
+	case sa.State != "COMPLETED":
+		v.Status = "Ended: A is " + sa.State + ". B will not run. Save a new plan to try again."
+	case sb.State == "NOT RUN":
+		v.Status = "A completed. B has not run."
+	case !expTerminal(sb.State):
+		v.Status = "A completed. B is " + sb.State + "."
+	case sb.State != "COMPLETED":
+		v.Status = "Ended: A completed, B is " + sb.State + ". There is no B reply to compare."
+	default:
+		v.Status = "Both arms completed."
+	}
+	v.Cost = fmt.Sprintf("Model requests made for this experiment: %d of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.", v.ModelRequests)
+	if sa.State == "COMPLETED" && sb.State == "COMPLETED" && sa.Engine != nil && sb.Engine != nil && sa.Engine.Result != nil && sb.Engine.Result != nil {
+		v.Comparison.Ready = true
+		v.Comparison.SameReply = sa.Engine.Result.ReplySHA256 == sb.Engine.Result.ReplySHA256
+		if v.Comparison.SameReply {
+			v.Comparison.Text = "No difference: A and B returned the same reply (same sha256) from the same frozen snapshot."
+		} else {
+			v.Comparison.Text = "A and B returned different replies from the same frozen snapshot; the only input that differed is the instruction sentence. Whether B is better is yours to judge: this is one input, not evidence that TASS learned or that it generalises."
+		}
+	} else {
+		v.Comparison.Text = "Nothing to compare yet: a comparison needs both arms COMPLETED."
 	}
 	v.Original = ExperimentNote{Text: run.Note, RequestID: run.RequestID, State: orNR(run.RunState), Saved: "yes (the original run)"}
 	if run.Note == "" {
@@ -412,6 +573,13 @@ func (c *Core) experimentView(e Experiment, run DevelopmentRun) ExperimentView {
 		v.Original.Saved = "the original Note cannot be shown as this run's (see Observe)"
 	}
 	return v
+}
+
+func devClip(s string) string {
+	if r := []rune(s); len(r) > devRunTextMax {
+		return string(r[:devRunTextMax]) + "…"
+	}
+	return s
 }
 
 // ---------- journal ----------
@@ -460,22 +628,29 @@ func (c *Core) experimentJournalCheck() (size int64, exists bool, err error) {
 // experimentJournalLoad returns the valid plans and the length of the complete-record prefix (the offset
 // just after the last '\n'). Caller holds expMu.
 func (c *Core) experimentJournalLoad() (plans []Experiment, complete int64, size int64, err error) {
+	plans, _, _, complete, size, err = c.experimentJournalLoadRaw()
+	return
+}
+
+// experimentJournalLoadRaw also returns each plan's byte offset and the journal's complete-record bytes
+// (what the restore fence is checked against).
+func (c *Core) experimentJournalLoadRaw() (plans []Experiment, offsets []int64, prefix []byte, complete int64, size int64, err error) {
 	size, exists, err := c.experimentJournalCheck()
 	if err != nil || !exists {
-		return nil, 0, 0, err
+		return nil, nil, nil, 0, 0, err
 	}
 	f, err := experimentOpenRead(c.file(experimentFile))
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("%w (it cannot be opened)", ErrExperimentJournal)
+		return nil, nil, nil, 0, 0, fmt.Errorf("%w (it cannot be opened)", ErrExperimentJournal)
 	}
 	defer f.Close()
 	// Bounded: never more than the ceiling plus one byte, whatever the file became since the check.
 	b, err := io.ReadAll(io.LimitReader(f, experimentJournalMax+1))
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("%w (it cannot be read)", ErrExperimentJournal)
+		return nil, nil, nil, 0, 0, fmt.Errorf("%w (it cannot be read)", ErrExperimentJournal)
 	}
 	if len(b) > experimentJournalMax {
-		return nil, 0, 0, fmt.Errorf("%w (it grew past the limit of %d bytes)", ErrExperimentJournal, experimentJournalMax)
+		return nil, nil, nil, 0, 0, fmt.Errorf("%w (it grew past the limit of %d bytes)", ErrExperimentJournal, experimentJournalMax)
 	}
 	end := bytes.LastIndexByte(b, '\n') + 1 // 0 when there is no complete record
 	seen := map[string]bool{}
@@ -483,17 +658,19 @@ func (c *Core) experimentJournalLoad() (plans []Experiment, complete int64, size
 	for rest := b[:end]; len(rest) > 0; {
 		i := bytes.IndexByte(rest, '\n')
 		line := rest[:i]
+		off := int64(end - len(rest))
 		rest = rest[i+1:]
 		n++
 		var e Experiment
 		dec := json.NewDecoder(bytes.NewReader(line))
 		if dec.Decode(&e) != nil || dec.More() || e.Schema != experimentSchema || !experimentIDRE.MatchString(e.ExperimentID) || seen[e.ExperimentID] {
-			return nil, 0, 0, fmt.Errorf("%w (record %d is not a valid, unique plan)", ErrExperimentJournal, n)
+			return nil, nil, nil, 0, 0, fmt.Errorf("%w (record %d is not a valid, unique plan)", ErrExperimentJournal, n)
 		}
 		seen[e.ExperimentID] = true
 		plans = append(plans, e)
+		offsets = append(offsets, off)
 	}
-	return plans, int64(end), int64(len(b)), nil
+	return plans, offsets, b[:end], int64(end), int64(len(b)), nil
 }
 
 // experimentJournalSafe validates the whole journal and returns nothing from it.

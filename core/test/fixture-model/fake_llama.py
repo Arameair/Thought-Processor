@@ -13,6 +13,9 @@ count = 0
 # exactly what the Engine sent. Attention text containing "slow" waits FIXTURE_DELAY seconds.
 nudges = 0
 last_nudge = ""
+# Stage 3B: every "developing an ongoing thought" prompt, in order, so a test can compare exactly what an
+# experiment's arms sent. A prompt without the Engine's control sentence is a B arm and gets its own reply.
+thought_prompts = []
 
 # TEST FIXTURE answers for lesson checks, from a lookup table (a real model reads the lesson).
 # The first attempt at "attempts" is wrong on purpose, so the retry path is exercised.
@@ -72,6 +75,8 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/fixture/requests":
             return self.reply(200, {"requests": count, "nudges": nudges})
+        if self.path == "/fixture/thought-prompts":
+            return self.reply(200, {"prompts": thought_prompts})
         if self.path == "/fixture/last-nudge":
             return self.reply(200, {"prompt": last_nudge})
         self.reply(200, {"status": "ok"})
@@ -88,10 +93,13 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 nudges += 1
                 last_nudge = allm
+                thought_prompts.append(allm)
             if "slow" in allm.split("The owner asked you to pay attention", 1)[1]:
                 time.sleep(DELAY)
             text = ("NOTE: (TEST FIXTURE) Following the owner's pointer, check whether the pattern holds "
                     f"on the next session (nudge {nudges}).\nSTATE: keep")
+            if "Add ONE new idea, possible explanation, or thing to watch for next." not in allm:  # a changed instruction (arm B)
+                text = "NOTE: (TEST FIXTURE) variant reply: the evidence does not say why; the session times are missing.\nSTATE: keep"
         elif "OWNER-SUPERVISED LESSON ANSWERS" in allm:
             text = lesson_answers(allm)
         elif "IMPORTANCE: <a whole number" in allm:

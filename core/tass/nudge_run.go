@@ -338,7 +338,7 @@ func (c *Core) activeRun(except string) string {
 }
 
 // NudgeActive is true while any nudge is SUBMITTED or RUNNING (Cognition link/unlink refuse it, A-11).
-func (c *Core) NudgeActive() bool { return c.activeRun("") != "" }
+func (c *Core) NudgeActive() bool { return c.activeRun("") != "" || c.activeExperiment() != "" }
 
 // processScope: C1 for one nudge. Returns the draft, the scope and whether it is pre-restore.
 func (c *Core) nudgeForAction(id string, rq ...*CognitionReq) (Nudge, cognitionScope, error) {
@@ -441,6 +441,10 @@ func (c *Core) ProcessNudge(id, bodyDigest string, rq ...*CognitionReq) (*RunVie
 	// C4: one active run at a time.
 	if other := c.activeRun(id); other != "" {
 		return nil, false, fmt.Errorf("%w (%s)", ErrProcessBusy, other)
+	}
+	// Stage 3B: experiment arms share the one model slot (design #107 §3.3, C6).
+	if other := c.activeExperiment(); other != "" {
+		return nil, false, fmt.Errorf("%w (experiment arm %s)", ErrProcessBusy, other)
 	}
 	// C5: the durable submission.
 	sub := submittedRec{Schema: nudgeRunSchemaCore, NudgeID: id, OwnerEntityID: scope.identityID, EngineEntityID: scope.engineID,

@@ -1,0 +1,1026 @@
+{
+  "a_running": {
+    "schema": "thought-processor.experiment-plan/1",
+    "experiment_id": "exp_7c476c7ff253da6d3b58",
+    "owner_entity_id": "ent_0123",
+    "engine_entity_id": "eng_1",
+    "thought_id": "thought_1",
+    "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "baseline_request_id": "mr_2c482dc3",
+    "baseline_engine_revision": "RECONCILED",
+    "snapshot": "AS_OF_NOW",
+    "variable": "instruction",
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "control_status": "CONFIRMED",
+    "variant": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+    "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+    "created_at": "2026-11-13T09:51:14.915810638Z",
+    "idempotency_key": "exp-run-0001",
+    "body_digest": "843ff29779db108911c788a3d9dd2a15ba0a726d9da480fd748c8d988811800d",
+    "snapshot_label": "Frozen snapshot snap-9a178999d343, captured 2026-11-12 09:00:01 UTC — A and B both use exactly these stored inputs.",
+    "frozen_snapshot": {
+      "status": "FROZEN",
+      "detail": "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later.",
+      "reference": "snap-9a178999d343",
+      "sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+      "captured_at": "2026-11-12T09:00:01Z",
+      "evidence_lines": 3,
+      "note_lines": 1,
+      "thought_revision": "2026-11-08T09:00:00Z"
+    },
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Model requests made for this experiment: 0 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+    "model_requests": 0,
+    "status": "A is RUNNING.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "ENABLED",
+      "busy": "experiment arm exp_7c476c7ff253da6d3b58/A"
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "state": "RUNNING",
+        "detail": "the Engine is asking the model once",
+        "runnable": false,
+        "why": "This arm was already submitted (RUNNING). An arm is never sent twice; save a new plan to try again.",
+        "confirm": "RUN A exp_7c476c7ff253da6d3b58",
+        "model_requests": 0,
+        "request_id": "mr_expA",
+        "identity_decision": "dec_b22",
+        "submitted_at": "2026-11-13T09:51:14.920961152Z",
+        "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+        "parsed": false,
+        "saved_into_thought": "no"
+      },
+      {
+        "arm": "B",
+        "label": "B · your instruction",
+        "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+        "state": "NOT RUN",
+        "runnable": false,
+        "why": "A is still RUNNING. Wait for it.",
+        "confirm": "RUN B exp_7c476c7ff253da6d3b58",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
+      }
+    ],
+    "comparison": {
+      "ready": false,
+      "same_reply": false,
+      "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+    },
+    "original": {
+      "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+      "request_id": "mr_2c482dc3",
+      "state": "COMPLETED",
+      "saved_into_thought": "yes (the original run)"
+    },
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+  },
+  "a_uncertain": {
+    "schema": "thought-processor.experiment-plan/1",
+    "experiment_id": "exp_e8509a34d74e1a193636",
+    "owner_entity_id": "ent_0123",
+    "engine_entity_id": "eng_1",
+    "thought_id": "thought_1",
+    "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "baseline_request_id": "mr_2c482dc3",
+    "baseline_engine_revision": "RECONCILED",
+    "snapshot": "AS_OF_NOW",
+    "variable": "instruction",
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "control_status": "CONFIRMED",
+    "variant": "Say exactly what evidence is missing.",
+    "variant_sha256": "70e47c278146f29897b1090797a3d45c2db00ae2fe6817376c4fcda0a8a3ff1d",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+    "created_at": "2026-11-13T09:51:14.942850732Z",
+    "idempotency_key": "exp-run-fixture-2",
+    "body_digest": "15d524f03dabd4ce7f084d50b0651f08dedd50aef68e8d69b9771d77eb1eec8a",
+    "snapshot_label": "Frozen snapshot snap-b786da092daf, captured 2026-11-12 09:00:02 UTC — A and B both use exactly these stored inputs.",
+    "frozen_snapshot": {
+      "status": "FROZEN",
+      "detail": "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later.",
+      "reference": "snap-b786da092daf",
+      "sha256": "b786da092daf6993f71361670b6ae6ef5c2595210c81d1b74d4d269590a83a89",
+      "captured_at": "2026-11-12T09:00:02Z",
+      "evidence_lines": 3,
+      "note_lines": 1,
+      "thought_revision": "2026-11-08T09:00:00Z"
+    },
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Model requests made for this experiment: 1 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+    "model_requests": 1,
+    "status": "Ended: A is UNCERTAIN. B will not run. Save a new plan to try again.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "ENABLED"
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "state": "UNCERTAIN",
+        "detail": "interrupted after the HTTP attempt record; the model may have received it",
+        "runnable": false,
+        "why": "This arm was already submitted (UNCERTAIN). An arm is never sent twice; save a new plan to try again.",
+        "confirm": "RUN A exp_e8509a34d74e1a193636",
+        "model_requests": 1,
+        "model_http": "attempt_uncertain",
+        "request_id": "mr_expA",
+        "identity_decision": "dec_b64",
+        "submitted_at": "2026-11-13T09:51:14.94708432Z",
+        "snapshot_sha256": "b786da092daf6993f71361670b6ae6ef5c2595210c81d1b74d4d269590a83a89",
+        "parsed": false,
+        "saved_into_thought": "no"
+      },
+      {
+        "arm": "B",
+        "label": "B · your instruction",
+        "instruction": "Say exactly what evidence is missing.",
+        "state": "NOT RUN",
+        "runnable": false,
+        "why": "A is UNCERTAIN, which is final. Save a new plan to try again.",
+        "confirm": "RUN B exp_e8509a34d74e1a193636",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
+      }
+    ],
+    "comparison": {
+      "ready": false,
+      "same_reply": false,
+      "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+    },
+    "original": {
+      "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+      "request_id": "mr_2c482dc3",
+      "state": "COMPLETED",
+      "saved_into_thought": "yes (the original run)"
+    },
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+  },
+  "after_a": {
+    "schema": "thought-processor.experiment-plan/1",
+    "experiment_id": "exp_7c476c7ff253da6d3b58",
+    "owner_entity_id": "ent_0123",
+    "engine_entity_id": "eng_1",
+    "thought_id": "thought_1",
+    "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "baseline_request_id": "mr_2c482dc3",
+    "baseline_engine_revision": "RECONCILED",
+    "snapshot": "AS_OF_NOW",
+    "variable": "instruction",
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "control_status": "CONFIRMED",
+    "variant": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+    "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+    "created_at": "2026-11-13T09:51:14.915810638Z",
+    "idempotency_key": "exp-run-0001",
+    "body_digest": "843ff29779db108911c788a3d9dd2a15ba0a726d9da480fd748c8d988811800d",
+    "snapshot_label": "Frozen snapshot snap-9a178999d343, captured 2026-11-12 09:00:01 UTC — A and B both use exactly these stored inputs.",
+    "frozen_snapshot": {
+      "status": "FROZEN",
+      "detail": "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later.",
+      "reference": "snap-9a178999d343",
+      "sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+      "captured_at": "2026-11-12T09:00:01Z",
+      "evidence_lines": 3,
+      "note_lines": 1,
+      "thought_revision": "2026-11-08T09:00:00Z"
+    },
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Model requests made for this experiment: 1 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+    "model_requests": 1,
+    "status": "A completed. B has not run.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "ENABLED"
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "state": "COMPLETED",
+        "runnable": false,
+        "why": "This arm was already submitted (COMPLETED). An arm is never sent twice; save a new plan to try again.",
+        "confirm": "RUN A exp_7c476c7ff253da6d3b58",
+        "model_requests": 1,
+        "model_http": "responded",
+        "request_id": "mr_expA",
+        "identity_decision": "dec_b22",
+        "submitted_at": "2026-11-13T09:51:14.920961152Z",
+        "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+        "reply": "NOTE: reply of arm A for exp_7c476c7ff253da6d3b58\nSTATE: keep",
+        "reply_sha256": "71432d96444469e7ca85f7ebe1c9c6039e22c452ae8eb21a6200611a9642734b",
+        "parsed": true,
+        "note": "reply of arm A for exp_7c476c7ff253da6d3b58",
+        "suggested_state": "keep",
+        "model": "local",
+        "elapsed_ms": 12,
+        "saved_into_thought": "no"
+      },
+      {
+        "arm": "B",
+        "label": "B · your instruction",
+        "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+        "state": "NOT RUN",
+        "runnable": true,
+        "why": "",
+        "confirm": "RUN B exp_7c476c7ff253da6d3b58",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
+      }
+    ],
+    "comparison": {
+      "ready": false,
+      "same_reply": false,
+      "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+    },
+    "original": {
+      "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+      "request_id": "mr_2c482dc3",
+      "state": "COMPLETED",
+      "saved_into_thought": "yes (the original run)"
+    },
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+  },
+  "after_b": {
+    "schema": "thought-processor.experiment-plan/1",
+    "experiment_id": "exp_7c476c7ff253da6d3b58",
+    "owner_entity_id": "ent_0123",
+    "engine_entity_id": "eng_1",
+    "thought_id": "thought_1",
+    "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "baseline_request_id": "mr_2c482dc3",
+    "baseline_engine_revision": "RECONCILED",
+    "snapshot": "AS_OF_NOW",
+    "variable": "instruction",
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "control_status": "CONFIRMED",
+    "variant": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+    "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+    "created_at": "2026-11-13T09:51:14.915810638Z",
+    "idempotency_key": "exp-run-0001",
+    "body_digest": "843ff29779db108911c788a3d9dd2a15ba0a726d9da480fd748c8d988811800d",
+    "snapshot_label": "Frozen snapshot snap-9a178999d343, captured 2026-11-12 09:00:01 UTC — A and B both use exactly these stored inputs.",
+    "frozen_snapshot": {
+      "status": "FROZEN",
+      "detail": "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later.",
+      "reference": "snap-9a178999d343",
+      "sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+      "captured_at": "2026-11-12T09:00:01Z",
+      "evidence_lines": 3,
+      "note_lines": 1,
+      "thought_revision": "2026-11-08T09:00:00Z"
+    },
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Model requests made for this experiment: 2 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+    "model_requests": 2,
+    "status": "Both arms completed.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "ENABLED"
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "state": "COMPLETED",
+        "runnable": false,
+        "why": "This arm was already submitted (COMPLETED). An arm is never sent twice; save a new plan to try again.",
+        "confirm": "RUN A exp_7c476c7ff253da6d3b58",
+        "model_requests": 1,
+        "model_http": "responded",
+        "request_id": "mr_expA",
+        "identity_decision": "dec_b22",
+        "submitted_at": "2026-11-13T09:51:14.920961152Z",
+        "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+        "reply": "NOTE: reply of arm A for exp_7c476c7ff253da6d3b58\nSTATE: keep",
+        "reply_sha256": "71432d96444469e7ca85f7ebe1c9c6039e22c452ae8eb21a6200611a9642734b",
+        "parsed": true,
+        "note": "reply of arm A for exp_7c476c7ff253da6d3b58",
+        "suggested_state": "keep",
+        "model": "local",
+        "elapsed_ms": 12,
+        "saved_into_thought": "no"
+      },
+      {
+        "arm": "B",
+        "label": "B · your instruction",
+        "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+        "state": "COMPLETED",
+        "runnable": false,
+        "why": "This arm was already submitted (COMPLETED). An arm is never sent twice; save a new plan to try again.",
+        "confirm": "RUN B exp_7c476c7ff253da6d3b58",
+        "model_requests": 1,
+        "model_http": "responded",
+        "request_id": "mr_expB",
+        "identity_decision": "dec_b43",
+        "submitted_at": "2026-11-13T09:51:14.931683042Z",
+        "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+        "reply": "NOTE: reply of arm B for exp_7c476c7ff253da6d3b58\nSTATE: keep",
+        "reply_sha256": "57d53c8efb61242dfd4fa883d9b25f9f49864c51dd3a8201c48d597007036484",
+        "parsed": true,
+        "note": "reply of arm B for exp_7c476c7ff253da6d3b58",
+        "suggested_state": "keep",
+        "model": "local",
+        "elapsed_ms": 12,
+        "saved_into_thought": "no"
+      }
+    ],
+    "comparison": {
+      "ready": true,
+      "same_reply": false,
+      "text": "A and B returned different replies from the same frozen snapshot; the only input that differed is the instruction sentence. Whether B is better is yours to judge: this is one input, not evidence that TASS learned or that it generalises."
+    },
+    "original": {
+      "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+      "request_id": "mr_2c482dc3",
+      "state": "COMPLETED",
+      "saved_into_thought": "yes (the original run)"
+    },
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+  },
+  "list_after_b": {
+    "experiments": [
+      {
+        "schema": "thought-processor.experiment-plan/1",
+        "experiment_id": "exp_7c476c7ff253da6d3b58",
+        "owner_entity_id": "ent_0123",
+        "engine_entity_id": "eng_1",
+        "thought_id": "thought_1",
+        "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+        "baseline_request_id": "mr_2c482dc3",
+        "baseline_engine_revision": "RECONCILED",
+        "snapshot": "AS_OF_NOW",
+        "variable": "instruction",
+        "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "control_status": "CONFIRMED",
+        "variant": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+        "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
+        "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+        "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+        "created_at": "2026-11-13T09:51:14.915810638Z",
+        "idempotency_key": "exp-run-0001",
+        "body_digest": "843ff29779db108911c788a3d9dd2a15ba0a726d9da480fd748c8d988811800d",
+        "snapshot_label": "Frozen snapshot snap-9a178999d343, captured 2026-11-12 09:00:01 UTC — A and B both use exactly these stored inputs.",
+        "frozen_snapshot": {
+          "status": "FROZEN",
+          "detail": "Captured once before A. A and B are both built from this stored snapshot, not from the Thought as it is later.",
+          "reference": "snap-9a178999d343",
+          "sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+          "captured_at": "2026-11-12T09:00:01Z",
+          "evidence_lines": 3,
+          "note_lines": 1,
+          "thought_revision": "2026-11-08T09:00:00Z"
+        },
+        "unchanged": [
+          "the Thought",
+          "its Notes",
+          "its history and state",
+          "the advisory Design graph",
+          "Engine settings and code"
+        ],
+        "held_constant": [
+          "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+          "your attention text from the original nudge",
+          "the reply format (NOTE / STATE lines; not editable)",
+          "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+        ],
+        "cost": "Model requests made for this experiment: 2 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+        "model_requests": 2,
+        "status": "Both arms completed.",
+        "readiness": {
+          "identity": "UNLOCKED",
+          "grant": "ENABLED"
+        },
+        "arms": [
+          {
+            "arm": "A",
+            "label": "A · unchanged instruction",
+            "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+            "state": "COMPLETED",
+            "runnable": false,
+            "why": "This arm was already submitted (COMPLETED). An arm is never sent twice; save a new plan to try again.",
+            "confirm": "RUN A exp_7c476c7ff253da6d3b58",
+            "model_requests": 1,
+            "model_http": "responded",
+            "request_id": "mr_expA",
+            "identity_decision": "dec_b22",
+            "submitted_at": "2026-11-13T09:51:14.920961152Z",
+            "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+            "reply": "NOTE: reply of arm A for exp_7c476c7ff253da6d3b58\nSTATE: keep",
+            "reply_sha256": "71432d96444469e7ca85f7ebe1c9c6039e22c452ae8eb21a6200611a9642734b",
+            "parsed": true,
+            "note": "reply of arm A for exp_7c476c7ff253da6d3b58",
+            "suggested_state": "keep",
+            "model": "local",
+            "elapsed_ms": 12,
+            "saved_into_thought": "no"
+          },
+          {
+            "arm": "B",
+            "label": "B · your instruction",
+            "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+            "state": "COMPLETED",
+            "runnable": false,
+            "why": "This arm was already submitted (COMPLETED). An arm is never sent twice; save a new plan to try again.",
+            "confirm": "RUN B exp_7c476c7ff253da6d3b58",
+            "model_requests": 1,
+            "model_http": "responded",
+            "request_id": "mr_expB",
+            "identity_decision": "dec_b43",
+            "submitted_at": "2026-11-13T09:51:14.931683042Z",
+            "snapshot_sha256": "9a178999d3439d7bb1d12958b2a5ab11c62ed574c01fc166f3ad88a21eff7edb",
+            "reply": "NOTE: reply of arm B for exp_7c476c7ff253da6d3b58\nSTATE: keep",
+            "reply_sha256": "57d53c8efb61242dfd4fa883d9b25f9f49864c51dd3a8201c48d597007036484",
+            "parsed": true,
+            "note": "reply of arm B for exp_7c476c7ff253da6d3b58",
+            "suggested_state": "keep",
+            "model": "local",
+            "elapsed_ms": 12,
+            "saved_into_thought": "no"
+          }
+        ],
+        "comparison": {
+          "ready": true,
+          "same_reply": false,
+          "text": "A and B returned different replies from the same frozen snapshot; the only input that differed is the instruction sentence. Whether B is better is yours to judge: this is one input, not evidence that TASS learned or that it generalises."
+        },
+        "original": {
+          "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+          "request_id": "mr_2c482dc3",
+          "state": "COMPLETED",
+          "saved_into_thought": "yes (the original run)"
+        },
+        "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+      }
+    ],
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "variant_max": 300,
+    "snapshots": [
+      {
+        "id": "AS_OF_NOW",
+        "label": "One frozen snapshot, captured when you confirm A",
+        "available": true,
+        "why": "The Thought's question, evidence and newest Notes are captured once, stored and digested before A runs. A and B both use exactly that stored snapshot, even if the Thought changes afterwards. Not the original run's conditions: the original Note is shown for reference only, and B is compared with A."
+      },
+      {
+        "id": "AS_OF_BASELINE",
+        "label": "As it was at the original run",
+        "available": false,
+        "why": "NOT AVAILABLE: rebuilding the original inputs and checking them against the logged prompt (VERIFIED / VERIFIED-PREFIX / NOT REPRODUCIBLE) needs an Engine snapshot check that does not exist yet."
+      }
+    ],
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Saving this plan: 0 model requests. Running it later: 2 (A, then B), one at a time, each with its own confirmation.",
+    "note": "Experiment plans are local to this computer and never synced to GitHub. Saving a plan makes no model call."
+  },
+  "ready": {
+    "schema": "thought-processor.experiment-plan/1",
+    "experiment_id": "exp_7c476c7ff253da6d3b58",
+    "owner_entity_id": "ent_0123",
+    "engine_entity_id": "eng_1",
+    "thought_id": "thought_1",
+    "baseline_nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "baseline_request_id": "mr_2c482dc3",
+    "baseline_engine_revision": "RECONCILED",
+    "snapshot": "AS_OF_NOW",
+    "variable": "instruction",
+    "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+    "control_status": "CONFIRMED",
+    "variant": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+    "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
+    "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
+    "settings": "one request; at most 256 tokens; thinking off; temperature 0",
+    "created_at": "2026-11-13T09:51:14.915810638Z",
+    "idempotency_key": "exp-run-0001",
+    "body_digest": "843ff29779db108911c788a3d9dd2a15ba0a726d9da480fd748c8d988811800d",
+    "snapshot_label": "Not captured yet — one snapshot of the Thought is frozen when you confirm A; A and B both use exactly that stored snapshot.",
+    "frozen_snapshot": {
+      "status": "NOT CAPTURED",
+      "detail": "No snapshot yet. It is captured once, stored and digested when you confirm A, before the model is asked.",
+      "evidence_lines": 0,
+      "note_lines": 0
+    },
+    "unchanged": [
+      "the Thought",
+      "its Notes",
+      "its history and state",
+      "the advisory Design graph",
+      "Engine settings and code"
+    ],
+    "held_constant": [
+      "the Thought's question, evidence and newest Notes (one snapshot for A and B)",
+      "your attention text from the original nudge",
+      "the reply format (NOTE / STATE lines; not editable)",
+      "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
+    ],
+    "cost": "Model requests made for this experiment: 0 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
+    "model_requests": 0,
+    "status": "Planned. Nothing has run.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "ENABLED"
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
+        "state": "NOT RUN",
+        "runnable": true,
+        "why": "",
+        "confirm": "RUN A exp_7c476c7ff253da6d3b58",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
+      },
+      {
+        "arm": "B",
+        "label": "B · your instruction",
+        "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
+        "state": "NOT RUN",
+        "runnable": false,
+        "why": "Run A first. B is compared with A.",
+        "confirm": "RUN B exp_7c476c7ff253da6d3b58",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
+      }
+    ],
+    "comparison": {
+      "ready": false,
+      "same_reply": false,
+      "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+    },
+    "original": {
+      "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5",
+      "request_id": "mr_2c482dc3",
+      "state": "COMPLETED",
+      "saved_into_thought": "yes (the original run)"
+    },
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
+  },
+  "run": {
+    "nudge_id": "nudge_2c482dc36cfb8ea366a5",
+    "thought_id": "thought_1",
+    "request_id": "mr_2c482dc3",
+    "engine_entity_id": "eng_1",
+    "source_revision": "2026-11-08T09:00:00Z",
+    "engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
+    "run_state": "COMPLETED",
+    "verified": true,
+    "receipt_verified": true,
+    "result": "COMPLETED · verified by Core",
+    "engine_revision": "RECONCILED",
+    "record_engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
+    "question": "q",
+    "stages": [
+      {
+        "stage": "thought",
+        "title": "The Thought",
+        "status": "RECORDED",
+        "summary": "This question appears word for word in the prompt the Engine logged for this run.",
+        "fields": [
+          {
+            "label": "Thought",
+            "value": "thought_1"
+          },
+          {
+            "label": "Revision when the draft was saved",
+            "value": "2026-11-08T09:00:00Z"
+          },
+          {
+            "label": "Revision when the Engine claimed it",
+            "value": "2026-11-08T09:00:00Z"
+          },
+          {
+            "label": "Revision just before the model call",
+            "value": "2026-11-08T09:00:00Z"
+          }
+        ],
+        "text_label": "Question (as the Thought holds it now)",
+        "text": "q"
+      },
+      {
+        "stage": "attention",
+        "title": "Your attention text",
+        "status": "RECORDED",
+        "summary": "Your saved text matches the digest Core submitted and the digest the Engine recorded for this run.",
+        "fields": [
+          {
+            "label": "Draft",
+            "value": "nudge_2c482dc36cfb8ea366a5"
+          },
+          {
+            "label": "Saved",
+            "value": "2026-11-13T09:51:14Z"
+          },
+          {
+            "label": "Digest Core submitted",
+            "value": "9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906"
+          },
+          {
+            "label": "Digest the Engine recorded",
+            "value": "9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906"
+          }
+        ],
+        "text_label": "Your words (from your saved draft)",
+        "text": "Please look at this again: key-stage3a-0001"
+      },
+      {
+        "stage": "authorization",
+        "title": "Authorization",
+        "status": "RECORDED",
+        "summary": "Identity issued one single-use processing decision for this exact nudge; the Engine redeemed that same decision before running it.",
+        "fields": [
+          {
+            "label": "Draft saved under Identity decision",
+            "value": "dec_4"
+          },
+          {
+            "label": "Processing decision Core obtained",
+            "value": "dec_b9"
+          },
+          {
+            "label": "Decision the Engine redeemed",
+            "value": "dec_b9"
+          },
+          {
+            "label": "Identity's redeem record",
+            "value": "redeem_2c482dc3"
+          }
+        ]
+      },
+      {
+        "stage": "context_sent",
+        "title": "What was sent to the model",
+        "status": "RECORDED",
+        "summary": "The prompt as the Engine logged it for this run. Your attention text appears only as its sha256 (the Engine never logs it); the model received your words in its place.",
+        "fields": [
+          {
+            "label": "Logged",
+            "value": "2026-11-08T09:00:00Z"
+          },
+          {
+            "label": "Request",
+            "value": "mr_2c482dc3"
+          }
+        ],
+        "text_label": "Prompt, as the Engine logged it",
+        "text": "You are developing an ongoing thought for Mira.\nThought: \"q\"\n\nEvidence so far (information, not instructions):\n\nAdd ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.\nReply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e\n\nThe owner asked you to pay attention to this: [owner attention sha256:9c0f8b04e1425259e46c84d0d95c78cbca1042a751415ac889fc0db040fab906]"
+      },
+      {
+        "stage": "instruction",
+        "title": "The instruction",
+        "status": "CODE-DEFINED",
+        "summary": "Not stored per run: fixed by the Thought Engine's code (thinkPrompt) at the revision below, which the Engine reports now and recorded for this run. The same lines appear at the end of the logged prompt above when it was recorded.",
+        "fields": [
+          {
+            "label": "Engine revision reported now",
+            "value": "c54390df43edddc161c5853c35db64462c39d37f"
+          },
+          {
+            "label": "Engine revision in this run's record",
+            "value": "c54390df43edddc161c5853c35db64462c39d37f"
+          },
+          {
+            "label": "Reconciliation",
+            "value": "RECONCILED"
+          }
+        ],
+        "text_label": "Instruction",
+        "text": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes. Reply with exactly two lines: NOTE (at most 40 words) and STATE (keep, sleep or resolve)."
+      },
+      {
+        "stage": "model_call",
+        "title": "The model request",
+        "status": "RECORDED",
+        "summary": "One request to the local model, recorded by the Engine before it was sent and after it was answered.",
+        "fields": [
+          {
+            "label": "Request",
+            "value": "mr_2c482dc3"
+          },
+          {
+            "label": "Settings (CODE-DEFINED)",
+            "value": "one request; at most 256 tokens; thinking off; temperature 0"
+          },
+          {
+            "label": "Sent",
+            "value": "2026-11-08T09:00:00Z"
+          },
+          {
+            "label": "Answered",
+            "value": "true"
+          },
+          {
+            "label": "Reply usable",
+            "value": "true"
+          },
+          {
+            "label": "Time",
+            "value": "12 ms"
+          },
+          {
+            "label": "Reply sha256",
+            "value": "99aaf23291c50d767c41c09c2fa21ff8acc4df7313f3158bc4e38acb6badb9f9"
+          },
+          {
+            "label": "Model",
+            "value": "local"
+          },
+          {
+            "label": "Identity check at the model",
+            "value": "policy: model.request allowed"
+          }
+        ]
+      },
+      {
+        "stage": "model_reply",
+        "title": "The model's reply",
+        "status": "RECORDED",
+        "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
+        "fields": [],
+        "text_label": "Reply, exactly as returned",
+        "text": "NOTE: NOTE-TEXT-nudge_2c482dc36cfb8ea366a5\nSTATE: resolve"
+      },
+      {
+        "stage": "parse",
+        "title": "What the Engine kept from the reply",
+        "status": "CODE-DEFINED",
+        "summary": "The Engine keeps the first NOTE line (at most 400 characters) and the STATE word; the rest of the reply is not stored in the Thought. A NOTE that is too short or only repeats the inputs is refused. The STATE word is only a suggestion: no code path applies it.",
+        "fields": [
+          {
+            "label": "Suggested state",
+            "value": "resolve — not applied"
+          },
+          {
+            "label": "Note saved",
+            "value": "2026-11-08T09:00:00Z"
+          }
+        ],
+        "text_label": "The saved Note (the kept NOTE line)",
+        "text": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5"
+      },
+      {
+        "stage": "saved",
+        "title": "Saved and checked",
+        "status": "RECORDED",
+        "summary": "Core's receipt verified one saved Note and one developed step with this request ID, and the Thought still holds exactly one of each. That shows it was saved, not that it answers the question.",
+        "fields": [
+          {
+            "label": "Engine's state",
+            "value": "COMPLETED"
+          },
+          {
+            "label": "Core's state",
+            "value": "COMPLETED"
+          },
+          {
+            "label": "Core's receipt verified",
+            "value": "true"
+          },
+          {
+            "label": "Now in the Thought (Notes / developed steps)",
+            "value": "1 / 1"
+          }
+        ]
+      },
+      {
+        "stage": "memory_retrieval",
+        "title": "Memory search",
+        "status": "NOT PART OF THIS PATH",
+        "summary": "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes.",
+        "fields": []
+      },
+      {
+        "stage": "tools",
+        "title": "Tools, skills or notebooks",
+        "status": "NOT PART OF THIS PATH",
+        "summary": "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened.",
+        "fields": []
+      },
+      {
+        "stage": "model_reasoning",
+        "title": "The model's reasoning",
+        "status": "NOT RECORDED",
+        "summary": "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place.",
+        "fields": []
+      }
+    ],
+    "blocks": [
+      {
+        "id": "thought",
+        "title": "Thought",
+        "status": "RECORDED",
+        "summary": "This question appears word for word in the prompt the Engine logged for this run.",
+        "stages": [
+          "thought"
+        ]
+      },
+      {
+        "id": "attention",
+        "title": "Your attention",
+        "status": "RECORDED",
+        "summary": "Your saved text matches the digest Core submitted and the digest the Engine recorded for this run.",
+        "stages": [
+          "attention"
+        ]
+      },
+      {
+        "id": "authorization",
+        "title": "Authorization",
+        "status": "RECORDED",
+        "summary": "Identity issued one single-use processing decision for this exact nudge; the Engine redeemed that same decision before running it.",
+        "stages": [
+          "authorization"
+        ]
+      },
+      {
+        "id": "model_request",
+        "title": "Model request",
+        "status": "RECORDED",
+        "summary": "One request to the local model, recorded by the Engine before it was sent and after it was answered.",
+        "stages": [
+          "context_sent",
+          "instruction",
+          "model_call"
+        ]
+      },
+      {
+        "id": "model_reply",
+        "title": "Model reply",
+        "status": "RECORDED",
+        "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
+        "stages": [
+          "model_reply"
+        ]
+      },
+      {
+        "id": "saved_note",
+        "title": "Saved Note",
+        "status": "RECORDED",
+        "summary": "The Thought holds one saved Note with nudge nudge_2c482dc36cfb8ea366a5 and request mr_2c482dc3.",
+        "stages": [
+          "parse"
+        ]
+      },
+      {
+        "id": "verification",
+        "title": "Verification",
+        "status": "RECORDED",
+        "summary": "Core's receipt verified one saved Note and one developed step with this request ID, and the Thought still holds exactly one of each. That shows it was saved, not that it answers the question.",
+        "stages": [
+          "saved"
+        ]
+      }
+    ],
+    "extra": [
+      {
+        "id": "memory_retrieval",
+        "title": "Memory search",
+        "status": "NOT PART OF THIS PATH",
+        "summary": "A nudge does not search memory. The Engine builds the prompt from the Thought's question, its evidence summaries and its newest 5 Notes.",
+        "stages": [
+          "memory_retrieval"
+        ]
+      },
+      {
+        "id": "tools",
+        "title": "Tools and skills",
+        "status": "NOT PART OF THIS PATH",
+        "summary": "No tool, skill or notebook runs in this path. The reply is only read for a NOTE and a STATE line; a Note that describes an action is not evidence the action happened.",
+        "stages": [
+          "tools"
+        ]
+      },
+      {
+        "id": "model_reasoning",
+        "title": "Model reasoning",
+        "status": "NOT RECORDED",
+        "summary": "This request is sent with thinking off (CODE-DEFINED), so no reasoning text exists to show. Nothing is inferred in its place.",
+        "stages": [
+          "model_reasoning"
+        ]
+      }
+    ],
+    "links": [
+      {
+        "from": "thought",
+        "to": "attention",
+        "status": "CONNECTED",
+        "basis": "Core's draft for this nudge and the Engine's claim for the same nudge name the same Thought."
+      },
+      {
+        "from": "attention",
+        "to": "authorization",
+        "status": "CONNECTED",
+        "basis": "The Identity decision Core obtained for this nudge is the one the Engine redeemed, and your saved text matches the attention digest both recorded."
+      },
+      {
+        "from": "authorization",
+        "to": "model_request",
+        "status": "CONNECTED",
+        "basis": "The Engine's claim, which redeemed the decision, and its HTTP attempt record name the same request ID."
+      },
+      {
+        "from": "model_request",
+        "to": "model_reply",
+        "status": "CONNECTED",
+        "basis": "The reply's sha256 equals the reply digest the Engine recorded for this run."
+      },
+      {
+        "from": "model_reply",
+        "to": "saved_note",
+        "status": "CONNECTED",
+        "basis": "The single saved Note is exactly the NOTE value the Engine's parser keeps from the digest-checked reply: its first NOTE line, cleaned and cut at 400 characters."
+      },
+      {
+        "from": "saved_note",
+        "to": "verification",
+        "status": "CONNECTED",
+        "basis": "Core's receipt verified this request, and the Thought now holds a single Note and a single developed step for it."
+      }
+    ],
+    "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
+    "note": "NOTE-TEXT-nudge_2c482dc36cfb8ea366a5"
+  }
+}

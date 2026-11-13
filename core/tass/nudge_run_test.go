@@ -45,6 +45,7 @@ type runEngine struct {
 	hideNotes                  bool
 	hideNotesExceptExtra       bool         // Stage 3A repair: serve only extraNotes (the Note under test)
 	nonGet                     atomic.Int64 // Stage 3B: every non-GET request the Engine received
+	fx                         fakeExperiments
 	srv                        *httptest.Server
 }
 
@@ -112,6 +113,9 @@ func newRunEngine(t *testing.T) *runEngine {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if e.experimentHandle(w, r) { // Stage 3B stand-in routes (experiment_run_test.go)
+			return
+		}
 		p := r.URL.Path
 		runJSON := func(nid string) map[string]any {
 			e.mu.Lock()

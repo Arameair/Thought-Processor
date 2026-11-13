@@ -43,7 +43,7 @@ func TestExperimentPlanSaveMakesNoModelCallAndChangesNothingElse(t *testing.T) {
 		}
 	}
 	ids.mu.Unlock()
-	if v.ModelRequests != 0 || !strings.Contains(v.Cost, "Saving this plan made none") {
+	if v.ModelRequests != 0 || !strings.Contains(v.Cost, "Saving the plan made none") {
 		t.Errorf("cost/model requests: %d %q", v.ModelRequests, v.Cost)
 	}
 	if after := thoughtJSON(t, c); after != thoughtBefore {
@@ -73,7 +73,8 @@ func TestExperimentPlanSaveMakesNoModelCallAndChangesNothingElse(t *testing.T) {
 		t.Fatalf("arms: %+v", v.Arms)
 	}
 	for _, a := range v.Arms {
-		if a.Runnable || a.State != "NOT RUN" || !strings.Contains(a.Why, "NOT AUTHORIZED") || a.Requests != 0 {
+		// The experiment grant is off by default, so nothing is runnable after saving.
+		if a.Runnable || a.State != "NOT RUN" || a.Why == "" || a.Requests != 0 || a.Saved != "no" || (a.Arm == "A" && !strings.Contains(a.Why, "NOT AUTHORIZED")) {
 			t.Errorf("arm %s: %+v", a.Arm, a)
 		}
 	}

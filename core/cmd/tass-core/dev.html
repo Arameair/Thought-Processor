@@ -116,6 +116,14 @@ body[data-exp] #runView{display:none!important}
 #expView .err{margin-top:6px}
 #expView .rcpt{border:1px solid #2f6b58;background:#10241f;border-radius:9px;padding:7px 10px;color:#bfeedd}
 #expView button.arm{margin:6px 6px 0 0}
+#expView .confirm{margin-top:8px;border:1px solid #6a58c8;background:#1d1a3d;border-radius:9px;padding:8px 10px}
+#expView .confirm button{margin:6px 6px 0 0}
+#expView dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:1px 10px;margin:6px 0;font-size:12.5px}
+#expView dt{color:var(--muted)}#expView dd{margin:0;overflow-wrap:anywhere}
+#expView .col[data-state=COMPLETED] .armstate{color:var(--teal)}#expView .col[data-state=FAILED] .armstate,#expView .col[data-state=UNCERTAIN] .armstate,#expView .col[data-state=RECOVERY_REQUIRED] .armstate,#expView .col[data-state=NOT_DELIVERED] .armstate{color:var(--red)}
+#expView .col[data-state=RUNNING] .armstate,#expView .col[data-state=SUBMITTED] .armstate{color:var(--amber)}
+#expView .chipS{font:11px ui-monospace,monospace;border:1px solid #3a4a70;border-radius:5px;padding:0 5px}
+#expSnapshot[data-status=FROZEN]{border-color:#2f6b58}#expSnapshot[data-status=UNVERIFIED]{border-color:var(--red)}
 #expView button:focus-visible,#expView a:focus-visible,#expView textarea:focus-visible,#expView input:focus-visible{outline:2px solid #d2c2ff;outline-offset:2px}
 #runView .saved{margin-top:6px;font-size:12.5px;color:#c7c2f3}#runView .saved a{color:#d2c2ff;margin-right:8px}
 #runView #expOpen{margin-top:8px;background:#2a2556;border-color:#6a58c8;color:#fff;font-weight:600}
@@ -624,6 +632,7 @@ async function expGet(path) {
   return {ok: r.ok, status: r.status, body: b};
 }
 function expWhy(r) {
+  if (r.body && r.body.code && r.body.error) return String(r.body.error) + "."; // Core's own specific refusal
   return r.status === 0 ? "Core could not be reached." : r.status === 403 ? "Identity did not allow this (locked, or the Cognition read permission is off)." :
     r.status === 404 ? "There is no such run or experiment for the Identity that is signed in now." :
     (r.body && r.body.error) ? String(r.body.error) : "Not available right now (HTTP " + r.status + "). Nothing is shown in its place.";
@@ -647,6 +656,8 @@ function expShell(kick, title) {
 }
 async function routeExp() {
   const exp = new URLSearchParams(location.search).get("exp") || "";
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = "";
   if (!exp || !validRun || document.body.dataset.mode !== "observe") { delete document.body.dataset.exp; $("expView").hidden = true; return; }
   document.body.dataset.exp = "1";
   if (exp === "new") return expForm();
@@ -725,15 +736,37 @@ async function expForm() {
   };
   ta.focus();
 }
+// The plan view. Everything shown is Core's record: states, replies and digests are never made up here.
+// Running an arm is the owner's explicit, separate confirmation per arm (one POST each); the page then
+// only READS the plan until the arm is final. Nothing here retries, runs B by itself, or promotes.
+let expPoll = null, expShown = "";
 function expPlan(p, fresh) {
-  const w = expShell("Observe · try one change · nothing has run", "Experiment plan");
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = p.experiment_id;
+  const arms = p.arms || [], open = arms.some(a => a.state === "SUBMITTED" || a.state === "RUNNING");
+  const ran = arms.some(a => a.state !== "NOT RUN");
+  const w = expShell("Observe · try one change · " + (ran ? "isolated experiment" : "nothing has run"), "Experiment plan");
   const box = el("div"); box.id = "expPlan";
   const head = el("div", "card"); const idl = el("div"); idl.append(el("span", "lbl", "Plan "), el("b", "expid", p.experiment_id)); head.append(idl);
-  const rc = el("div", "rcpt", (fresh ? "Saved " : "Saved at ") + new Date(p.created_at).toLocaleString() + " · 0 model requests · nothing ran · " +
+  const st = el("div", "rcpt"); st.id = "expStatus"; st.setAttribute("role", "status");
+  st.textContent = (p.status || "") + " · model requests so far: " + (p.model_requests || 0) + " of at most 2 · saved into the Thought: nothing";
+  const rc = el("div", "hint", (fresh ? "Plan saved " : "Plan saved at ") + new Date(p.created_at).toLocaleString() + " · saving made 0 model requests · " +
     (p.replayed ? "this plan already existed (same form submitted again)" : "stored on this computer only"));
-  head.append(rc, el("div", "hint", "Snapshot: " + p.snapshot_label),
+  head.append(st, rc,
     el("div", "hint", "Instruction A " + (p.control_status === "CONFIRMED" ? "is CONFIRMED for the Engine revision of the original run." :
       "is NOT CONFIRMED: the Engine revision of the original run is " + p.baseline_engine_revision + ", so it is not shown that the running Engine uses this sentence.")));
+  // The frozen snapshot: its status, capture time and reference. Never "the Thought as it is now" once frozen.
+  const f = p.frozen_snapshot || {status: "NOT CAPTURED", detail: ""};
+  const snap = el("div", "card"); snap.id = "expSnapshot"; snap.dataset.status = f.status;
+  const sh = el("div"); sh.append(el("span", "lbl", "Snapshot · the inputs A and B share "), el("b", "chipS", f.status)); snap.append(sh);
+  if (f.status !== "NOT CAPTURED" && f.sha256) {
+    const dl = el("dl");
+    for (const [k, v] of [["Reference", f.reference], ["Captured", f.captured_at ? new Date(f.captured_at).toLocaleString() + " (" + f.captured_at + ")" : "NOT RECORDED"],
+        ["sha256", f.sha256], ["Contains", f.evidence_lines + " evidence line(s), " + f.note_lines + " Note(s), your attention text, the reply format and the model settings"]])
+      dl.append(el("dt", "", k), el("dd", "", v || "NOT RECORDED"));
+    snap.append(dl);
+  }
+  snap.append(el("div", "hint", f.detail || ""));
   const diff = el("div", "grid2");
   const da = el("div", "card"); da.append(el("div", "lbl", "A · unchanged instruction"), el("pre", "", p.control));
   const db = el("div", "card"); db.append(el("div", "lbl", "B · your instruction (the only difference)"), el("pre", "", p.variant));
@@ -742,24 +775,79 @@ function expPlan(p, fresh) {
   const o = el("div", "col o"); o.append(el("h4", "", "Original · the run you observed"));
   if (p.original && p.original.text) o.append(el("pre", "", p.original.text)); else o.append(el("div", "hint", (p.original || {}).saved || "NOT RECORDED"));
   o.append(el("div", "hint", "Request " + ((p.original || {}).request_id || "NOT RECORDED") + " · " + ((p.original || {}).state || "NOT RECORDED")),
+    el("div", "hint", "For reference only: it ran on the Thought as it was then, not on this snapshot."),
     el("div", "", "Saved into the Thought: " + ((p.original || {}).text ? "yes" : (p.original || {}).saved || "NOT RECORDED")));
   cols.append(o);
-  for (const a of p.arms || []) {
-    const c = el("div", "col " + a.arm.toLowerCase()); c.append(el("h4", "", a.label), el("div", "", "State: " + a.state),
-      el("div", "hint", "Model requests: " + a.model_requests), el("div", "", "Saved into the Thought: no (experiments never write to it)"));
+  const err = el("p", "err"); err.id = "expRunErr"; err.setAttribute("role", "alert");
+  for (const a of arms) {
+    const c = el("div", "col " + a.arm.toLowerCase()); c.dataset.arm = a.arm; c.dataset.state = a.state;
+    const hd = el("h4", "", a.label); c.append(hd);
+    const sl = el("div"); sl.append(document.createTextNode("State: "), el("b", "armstate", a.state)); c.append(sl);
+    if (a.detail) c.append(el("div", "hint", a.detail));
+    if (a.state === "COMPLETED") {
+      c.append(el("div", "lbl", "Reply (recorded, not saved anywhere else)"), el("pre", "reply", a.reply || ""));
+      if (a.parsed) { c.append(el("div", "hint", "Read as NOTE: " + a.note), el("div", "hint", "Suggested state (never applied): " + (a.suggested_state || "none"))); }
+      else c.append(el("div", "hint", "The reply did not follow the NOTE / STATE format: " + (a.parse_error || "unreadable") + ". It is shown as it was returned."));
+    }
+    const dl = el("dl");
+    const rows = [["Model requests", String(a.model_requests)]];
+    if (a.request_id) rows.push(["Request", a.request_id]);
+    if (a.model_http) rows.push(["Model HTTP", a.model_http]);
+    if (a.identity_decision) rows.push(["Approval", a.identity_decision + " (single use)"]);
+    if (a.submitted_at) rows.push(["Confirmed", new Date(a.submitted_at).toLocaleString()]);
+    if (a.snapshot_sha256) rows.push(["Snapshot", "snap-" + a.snapshot_sha256.slice(0, 12)]);
+    if (a.reply_sha256) rows.push(["Reply sha256", a.reply_sha256.slice(0, 16) + "…"]);
+    if (a.elapsed_ms) rows.push(["Elapsed", a.elapsed_ms + " ms"]);
+    for (const [k, v] of rows) dl.append(el("dt", "", k), el("dd", "", v));
+    c.append(dl, el("div", "", "Saved into the Thought: no (experiments never write to it)"));
+    // Run: enabled only when Core says this arm can run now. One explicit confirmation per arm.
+    const run = el("button", "arm", a.arm === "A" ? "Run A (unchanged) once…" : "Run B (your change) once…"); run.type = "button"; run.dataset.arm = a.arm;
+    run.disabled = !a.runnable;
+    c.append(run);
+    if (!a.runnable && a.state === "NOT RUN") c.append(el("div", "why hint", a.why || "NOT AUTHORIZED."));
+    run.onclick = () => {
+      if (run.disabled || c.querySelector(".confirm")) return;
+      const cf = el("div", "confirm"); cf.setAttribute("role", "group"); cf.setAttribute("aria-label", "Confirm arm " + a.arm);
+      cf.append(el("div", "", "This sends ONE request to the local model for arm " + a.arm + (a.arm === "A" ?
+        " (the unchanged instruction). The snapshot is captured and frozen first." : " (your instruction), built from the same frozen snapshot as A.")),
+        el("div", "hint", "It is never retried, even if it fails or its result is uncertain. Nothing is saved into the Thought. " + (a.arm === "A" ? "B is a separate confirmation." : "")));
+      const yes = el("button", "primary", "Confirm: run " + a.arm + " once"), no = el("button", "", "Cancel"); yes.type = no.type = "button"; yes.dataset.confirm = a.arm;
+      no.onclick = () => { cf.remove(); run.focus(); };
+      yes.onclick = async () => {
+        if (yes.disabled) return;
+        yes.disabled = no.disabled = true; yes.textContent = "Sending the confirmation…";
+        for (const b of box.querySelectorAll("button.arm")) b.disabled = true;
+        let r; try { r = await fetch("/api/development/experiments/" + encodeURIComponent(p.experiment_id) + "/arms/" + a.arm, {method: "POST", cache: "no-store",
+          headers: expHeaders(true), body: JSON.stringify({body_digest: p.body_digest, confirm: a.confirm})}); } catch (e) { r = null; }
+        let b = {}; if (r) { try { b = await r.json(); } catch (e) { b = {}; } }
+        if (!r || !r.ok || b.experiment_id !== p.experiment_id) {
+          // Not accepted, or the answer was lost: say so and re-read the record. Never send it again from here.
+          const why = "Arm " + a.arm + " was not started by this click: " + expWhy({status: r ? r.status : 0, body: b}) + " Nothing is sent again automatically.";
+          await expRefresh(p.experiment_id); const e2 = $("expRunErr"); if (e2) e2.textContent = why;
+          return;
+        }
+        if (expShown === p.experiment_id) expPlan(b);
+      };
+      cf.append(yes, no); c.append(cf); yes.focus();
+    };
     cols.append(c);
   }
-  const act = el("div", "card");
-  const ra = el("button", "arm", "Run A (unchanged) once…"), rb = el("button", "arm", "Run B (your change) once…");
-  ra.disabled = true; rb.disabled = true;
-  const why = ((p.arms || [])[0] || {}).why || "NOT AUTHORIZED.";
-  act.append(el("div", "lbl", "Run (one request per arm, A before B, each with its own confirmation)"), ra, rb, el("p", "err", why),
-    el("div", "hint", "There is no Promote: a better B becomes evidence for a reviewed Engine change, not a switch."));
+  const cmp = el("div", "card"); cmp.id = "expCompare"; cmp.dataset.ready = String(!!(p.comparison || {}).ready);
+  cmp.append(el("div", "lbl", "A against B"), el("div", "", (p.comparison || {}).text || ""));
+  const act = el("div", "hint", "One request per arm, A before B, each with its own confirmation and single-use approval. There is no Promote: a better B becomes evidence for a reviewed Engine change, not a switch.");
   const more = el("details"); more.append(el("summary", "", "What is held constant and what won't change"));
   const l1 = el("ul"); for (const x of p.held_constant || []) l1.append(el("li", "", "Held: " + x));
   for (const x of p.unchanged || []) l1.append(el("li", "", "Unchanged: " + x)); more.append(l1, el("div", "hint", p.cost || ""));
-  box.append(head, diff, cols, act, more);
+  box.append(head, snap, diff, cols, err, cmp, act, more);
   w.append(box);
+  if (open) expPoll = setTimeout(() => expRefresh(p.experiment_id), 1500);
+}
+// Re-read one plan (GET only) while it is the one on screen.
+async function expRefresh(id) {
+  const r = await expGet("/api/development/experiments/" + encodeURIComponent(id));
+  if (expShown !== id || new URLSearchParams(location.search).get("exp") !== id) return;
+  if (r.ok && r.body.experiment_id === id && r.body.baseline_nudge_id === runParam) expPlan(r.body);
+  else { const e2 = $("expRunErr"); if (e2) e2.textContent = "The plan could not be re-read: " + expWhy(r) + " What is shown may be out of date."; expPoll = setTimeout(() => expRefresh(id), 4000); }
 }
 async function loadSavedPlans() {
   const box = $("expSaved"); if (!box || !validRun) return;
@@ -774,7 +862,8 @@ async function loadSavedPlans() {
     const a = el("a", "", e.experiment_id); a.href = "/dev?run=" + encodeURIComponent(runParam) + "&exp=" + e.experiment_id;
     a.onclick = ev => { ev.preventDefault(); goExp(e.experiment_id, true); }; list.append(a);
   }
-  box.append(el("span", "", "Experiments for this run: " + n + " saved, none run — "), list);
+  const ranN = r.body.experiments.filter(e => (e.arms || []).some(a => a.state !== "NOT RUN")).length;
+  box.append(el("span", "", "Experiments for this run: " + n + " saved, " + (ranN ? ranN + " with an arm run" : "none run") + " — "), list);
 }
 
 // ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----

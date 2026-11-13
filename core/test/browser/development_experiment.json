@@ -3,12 +3,12 @@
     "experiments": [
       {
         "schema": "thought-processor.experiment-plan/1",
-        "experiment_id": "exp_a4f44a80fc4f1c8f9b22",
+        "experiment_id": "exp_045872d11964ad4ac029",
         "owner_entity_id": "ent_0123",
         "engine_entity_id": "eng_1",
         "thought_id": "thought_1",
-        "baseline_nudge_id": "nudge_82fd2b69122b498e5591",
-        "baseline_request_id": "mr_82fd2b69",
+        "baseline_nudge_id": "nudge_21cfb782ed6d2399d600",
+        "baseline_request_id": "mr_21cfb782",
         "baseline_engine_revision": "RECONCILED",
         "snapshot": "AS_OF_NOW",
         "variable": "instruction",
@@ -18,10 +18,16 @@
         "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
         "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
         "settings": "one request; at most 256 tokens; thinking off; temperature 0",
-        "created_at": "2026-11-12T22:30:42.398533487Z",
+        "created_at": "2026-11-13T09:51:14.995077006Z",
         "idempotency_key": "exp-fixture-0001",
-        "body_digest": "680078ddca45897d95ca3b8ab90e904c78e3e4fa9383049208668fb2d92166c6",
-        "snapshot_label": "As the Thought is now — A and B both use the Thought as it is when A runs. Not the original run's conditions: the original Note is shown for reference only.",
+        "body_digest": "06772ff395d83839354ea37b0497df1159e782573ff322814f902d95373169e9",
+        "snapshot_label": "Not captured yet — one snapshot of the Thought is frozen when you confirm A; A and B both use exactly that stored snapshot.",
+        "frozen_snapshot": {
+          "status": "NOT CAPTURED",
+          "detail": "No snapshot yet. It is captured once, stored and digested when you confirm A, before the model is asked.",
+          "evidence_lines": 0,
+          "note_lines": 0
+        },
         "unchanged": [
           "the Thought",
           "its Notes",
@@ -35,33 +41,51 @@
           "the reply format (NOTE / STATE lines; not editable)",
           "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
         ],
-        "cost": "2 model requests when run: A (unchanged) then B (your change), one at a time, each with its own confirmation. Saving this plan made none.",
+        "cost": "Model requests made for this experiment: 0 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
         "model_requests": 0,
+        "status": "Planned. Nothing has run.",
+        "readiness": {
+          "identity": "UNLOCKED",
+          "grant": "NOT_ENABLED"
+        },
         "arms": [
           {
             "arm": "A",
             "label": "A · unchanged instruction",
+            "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
             "state": "NOT RUN",
             "runnable": false,
-            "why": "NOT AUTHORIZED: running an arm needs your decisions D4–D7, Identity's cognition.experiment.run action, the cognition.experiment-run grant and the Engine experiment route. None exist yet, so nothing can run.",
-            "model_requests": 0
+            "why": "NOT AUTHORIZED: the owner grant cognition.experiment-run is not enabled on Identity's page. It is off by default; only you can enable it, with your passphrase.",
+            "confirm": "RUN A exp_045872d11964ad4ac029",
+            "model_requests": 0,
+            "parsed": false,
+            "saved_into_thought": "no"
           },
           {
             "arm": "B",
             "label": "B · your instruction",
+            "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
             "state": "NOT RUN",
             "runnable": false,
-            "why": "NOT AUTHORIZED: running an arm needs your decisions D4–D7, Identity's cognition.experiment.run action, the cognition.experiment-run grant and the Engine experiment route. None exist yet, so nothing can run.",
-            "model_requests": 0
+            "why": "Run A first. B is compared with A.",
+            "confirm": "RUN B exp_045872d11964ad4ac029",
+            "model_requests": 0,
+            "parsed": false,
+            "saved_into_thought": "no"
           }
         ],
+        "comparison": {
+          "ready": false,
+          "same_reply": false,
+          "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+        },
         "original": {
-          "text": "NOTE-TEXT-nudge_82fd2b69122b498e5591",
-          "request_id": "mr_82fd2b69",
+          "text": "NOTE-TEXT-nudge_21cfb782ed6d2399d600",
+          "request_id": "mr_21cfb782",
           "state": "COMPLETED",
           "saved_into_thought": "yes (the original run)"
         },
-        "note": "Only the instruction sentence differs between A and B."
+        "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
       }
     ],
     "control": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
@@ -70,9 +94,9 @@
     "snapshots": [
       {
         "id": "AS_OF_NOW",
-        "label": "As the Thought is now",
+        "label": "One frozen snapshot, captured when you confirm A",
         "available": true,
-        "why": "A and B both use the Thought as it is when A runs. Not the original run's conditions: the original Note is shown for reference only."
+        "why": "The Thought's question, evidence and newest Notes are captured once, stored and digested before A runs. A and B both use exactly that stored snapshot, even if the Thought changes afterwards. Not the original run's conditions: the original Note is shown for reference only, and B is compared with A."
       },
       {
         "id": "AS_OF_BASELINE",
@@ -105,9 +129,9 @@
     "snapshots": [
       {
         "id": "AS_OF_NOW",
-        "label": "As the Thought is now",
+        "label": "One frozen snapshot, captured when you confirm A",
         "available": true,
-        "why": "A and B both use the Thought as it is when A runs. Not the original run's conditions: the original Note is shown for reference only."
+        "why": "The Thought's question, evidence and newest Notes are captured once, stored and digested before A runs. A and B both use exactly that stored snapshot, even if the Thought changes afterwards. Not the original run's conditions: the original Note is shown for reference only, and B is compared with A."
       },
       {
         "id": "AS_OF_BASELINE",
@@ -134,12 +158,12 @@
   },
   "plan": {
     "schema": "thought-processor.experiment-plan/1",
-    "experiment_id": "exp_a4f44a80fc4f1c8f9b22",
+    "experiment_id": "exp_045872d11964ad4ac029",
     "owner_entity_id": "ent_0123",
     "engine_entity_id": "eng_1",
     "thought_id": "thought_1",
-    "baseline_nudge_id": "nudge_82fd2b69122b498e5591",
-    "baseline_request_id": "mr_82fd2b69",
+    "baseline_nudge_id": "nudge_21cfb782ed6d2399d600",
+    "baseline_request_id": "mr_21cfb782",
     "baseline_engine_revision": "RECONCILED",
     "snapshot": "AS_OF_NOW",
     "variable": "instruction",
@@ -149,10 +173,16 @@
     "variant_sha256": "b75d1253274f74b2efd5336ad534b41e143d0f9623edfdacfd6b669c0487dfdb",
     "contract": "Reply with exactly two lines and nothing else:\nNOTE: \u003cat most 40 words\u003e\nSTATE: \u003ckeep, sleep or resolve\u003e",
     "settings": "one request; at most 256 tokens; thinking off; temperature 0",
-    "created_at": "2026-11-12T22:30:42.398533487Z",
+    "created_at": "2026-11-13T09:51:14.995077006Z",
     "idempotency_key": "exp-fixture-0001",
-    "body_digest": "680078ddca45897d95ca3b8ab90e904c78e3e4fa9383049208668fb2d92166c6",
-    "snapshot_label": "As the Thought is now — A and B both use the Thought as it is when A runs. Not the original run's conditions: the original Note is shown for reference only.",
+    "body_digest": "06772ff395d83839354ea37b0497df1159e782573ff322814f902d95373169e9",
+    "snapshot_label": "Not captured yet — one snapshot of the Thought is frozen when you confirm A; A and B both use exactly that stored snapshot.",
+    "frozen_snapshot": {
+      "status": "NOT CAPTURED",
+      "detail": "No snapshot yet. It is captured once, stored and digested when you confirm A, before the model is asked.",
+      "evidence_lines": 0,
+      "note_lines": 0
+    },
     "unchanged": [
       "the Thought",
       "its Notes",
@@ -166,38 +196,56 @@
       "the reply format (NOTE / STATE lines; not editable)",
       "the model settings: one request; at most 256 tokens; thinking off; temperature 0"
     ],
-    "cost": "2 model requests when run: A (unchanged) then B (your change), one at a time, each with its own confirmation. Saving this plan made none.",
+    "cost": "Model requests made for this experiment: 0 of at most 2 (A, then B; one each, each with its own confirmation; never retried). Saving the plan made none.",
     "model_requests": 0,
+    "status": "Planned. Nothing has run.",
+    "readiness": {
+      "identity": "UNLOCKED",
+      "grant": "NOT_ENABLED"
+    },
     "arms": [
       {
         "arm": "A",
         "label": "A · unchanged instruction",
+        "instruction": "Add ONE new idea, possible explanation, or thing to watch for next. Do not repeat the evidence or earlier notes.",
         "state": "NOT RUN",
         "runnable": false,
-        "why": "NOT AUTHORIZED: running an arm needs your decisions D4–D7, Identity's cognition.experiment.run action, the cognition.experiment-run grant and the Engine experiment route. None exist yet, so nothing can run.",
-        "model_requests": 0
+        "why": "NOT AUTHORIZED: the owner grant cognition.experiment-run is not enabled on Identity's page. It is off by default; only you can enable it, with your passphrase.",
+        "confirm": "RUN A exp_045872d11964ad4ac029",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
       },
       {
         "arm": "B",
         "label": "B · your instruction",
+        "instruction": "Answer the Thought's question directly from the evidence; if the evidence doesn't contain the answer, say exactly what is missing.",
         "state": "NOT RUN",
         "runnable": false,
-        "why": "NOT AUTHORIZED: running an arm needs your decisions D4–D7, Identity's cognition.experiment.run action, the cognition.experiment-run grant and the Engine experiment route. None exist yet, so nothing can run.",
-        "model_requests": 0
+        "why": "Run A first. B is compared with A.",
+        "confirm": "RUN B exp_045872d11964ad4ac029",
+        "model_requests": 0,
+        "parsed": false,
+        "saved_into_thought": "no"
       }
     ],
+    "comparison": {
+      "ready": false,
+      "same_reply": false,
+      "text": "Nothing to compare yet: a comparison needs both arms COMPLETED."
+    },
     "original": {
-      "text": "NOTE-TEXT-nudge_82fd2b69122b498e5591",
-      "request_id": "mr_82fd2b69",
+      "text": "NOTE-TEXT-nudge_21cfb782ed6d2399d600",
+      "request_id": "mr_21cfb782",
       "state": "COMPLETED",
       "saved_into_thought": "yes (the original run)"
     },
-    "note": "Only the instruction sentence differs between A and B."
+    "note": "Only the instruction sentence differs between A and B. Nothing is saved into the Thought, and nothing is promoted: a better B is evidence for a reviewed change, not a switch."
   },
   "run": {
-    "nudge_id": "nudge_82fd2b69122b498e5591",
+    "nudge_id": "nudge_21cfb782ed6d2399d600",
     "thought_id": "thought_1",
-    "request_id": "mr_82fd2b69",
+    "request_id": "mr_21cfb782",
     "engine_entity_id": "eng_1",
     "source_revision": "2026-11-08T09:00:00Z",
     "engine_commit": "c54390df43edddc161c5853c35db64462c39d37f",
@@ -243,11 +291,11 @@
         "fields": [
           {
             "label": "Draft",
-            "value": "nudge_82fd2b69122b498e5591"
+            "value": "nudge_21cfb782ed6d2399d600"
           },
           {
             "label": "Saved",
-            "value": "2026-11-12T22:30:42Z"
+            "value": "2026-11-13T09:51:14Z"
           },
           {
             "label": "Digest Core submitted",
@@ -281,7 +329,7 @@
           },
           {
             "label": "Identity's redeem record",
-            "value": "redeem_82fd2b69"
+            "value": "redeem_21cfb782"
           }
         ]
       },
@@ -297,7 +345,7 @@
           },
           {
             "label": "Request",
-            "value": "mr_82fd2b69"
+            "value": "mr_21cfb782"
           }
         ],
         "text_label": "Prompt, as the Engine logged it",
@@ -333,7 +381,7 @@
         "fields": [
           {
             "label": "Request",
-            "value": "mr_82fd2b69"
+            "value": "mr_21cfb782"
           },
           {
             "label": "Settings (CODE-DEFINED)",
@@ -357,7 +405,7 @@
           },
           {
             "label": "Reply sha256",
-            "value": "1f682d4561f1695bc1b3a23eba1bb76155523ca1bca4d0eb4b2f69f232c701e4"
+            "value": "9f7537fdb4d015cfed8b8d30d916d5598f8347cac5189ec89861026bfae3b23b"
           },
           {
             "label": "Model",
@@ -376,7 +424,7 @@
         "summary": "The full reply. Its sha256 matches the reply digest the Engine recorded for this run.",
         "fields": [],
         "text_label": "Reply, exactly as returned",
-        "text": "NOTE: NOTE-TEXT-nudge_82fd2b69122b498e5591\nSTATE: resolve"
+        "text": "NOTE: NOTE-TEXT-nudge_21cfb782ed6d2399d600\nSTATE: resolve"
       },
       {
         "stage": "parse",
@@ -394,7 +442,7 @@
           }
         ],
         "text_label": "The saved Note (the kept NOTE line)",
-        "text": "NOTE-TEXT-nudge_82fd2b69122b498e5591"
+        "text": "NOTE-TEXT-nudge_21cfb782ed6d2399d600"
       },
       {
         "stage": "saved",
@@ -494,7 +542,7 @@
         "id": "saved_note",
         "title": "Saved Note",
         "status": "RECORDED",
-        "summary": "The Thought holds one saved Note with nudge nudge_82fd2b69122b498e5591 and request mr_82fd2b69.",
+        "summary": "The Thought holds one saved Note with nudge nudge_21cfb782ed6d2399d600 and request mr_21cfb782.",
         "stages": [
           "parse"
         ]
@@ -577,6 +625,6 @@
       }
     ],
     "read_only": "Read only: this view called no model, made no Identity decision beyond reading, and changed no Thought, Note or file.",
-    "note": "NOTE-TEXT-nudge_82fd2b69122b498e5591"
+    "note": "NOTE-TEXT-nudge_21cfb782ed6d2399d600"
   }
 }
