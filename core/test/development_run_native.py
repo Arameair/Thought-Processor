@@ -193,8 +193,14 @@ def run():
     check("R8 the only Core data written is the experiment journal", not core8 and any(p.endswith("experiments.jsonl") for p in after8), core8[:5])
     check("R8 Identity was asked only for the Cognition read grants (no model, nudge or experiment action)",
           set(acts) <= {"conversation", "thought.process"}, acts)
+    # Stage 3B runtime: the arm route exists, but without the owner's confirmation, or without the
+    # experiment grant (off by default; this test never enables it), it sends nothing.
+    sent8, req8 = len(h.PROXIED), h.fixture()["requests"]
     c4, _ = http("POST", h.CORE + f"/api/development/experiments/{p1.get('experiment_id')}/arms/A", {}, {"X-TASS-Token": tok})
-    check("R8 no arm route exists (404/405)", c4 in (404, 405), str(c4))
+    c4b, r4b = http("POST", h.CORE + f"/api/development/experiments/{p1.get('experiment_id')}/arms/A",
+                    {"body_digest": p1.get("body_digest"), "confirm": "RUN A " + str(p1.get("experiment_id"))}, {"X-TASS-Token": tok})
+    check("R8 an arm without confirmation is refused (409) and, confirmed, without the grant (403); nothing sent, zero requests",
+          c4 == 409 and c4b == 403 and r4b.get("code") == "EXPERIMENT_NOT_GRANTED" and len(h.PROXIED) == sent8 and h.fixture()["requests"] == req8, f"{c4} {c4b} {r4b}")
 
     # R9 (slice-1 audit repair): on the real stack an unsafe journal refuses reads and writes, exposes no
     # plan, and is left unchanged; made safe again, the saved plan is back.

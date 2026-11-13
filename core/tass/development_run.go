@@ -45,6 +45,7 @@ var nudgeInstructionEngineCommits = []string{
 	"40d4e91e3b04196fa4e4f55a92b25789b82d8675", // installed Stage 2 Engine
 	"b594357c021db3a5164f321ec2b66b21198a8455", // + the read-only run record (prompts unchanged)
 	"c54390df43edddc161c5853c35db64462c39d37f", // + model-log binding repair (prompts unchanged)
+	"8804d3074981a74f5a616db8b187ed036f524c44", // + Stage 3B experiment routes (new files only; prompts.go and nudge.go unchanged)
 }
 
 const (

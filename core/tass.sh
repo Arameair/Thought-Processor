@@ -31,9 +31,9 @@ here="$(pwd)"
 # Pinned versions of the other two Go services for THIS version of the core
 # (an update changes these lines, never a branch head).
 # engine: experiment/stage2-nudge-run-20261108 (durable nudge runs, Stop, verified development; Stage 2 + ST2-I01 repair)
-ENGINE_COMMIT_PIN="c54390df43edddc161c5853c35db64462c39d37f"
+ENGINE_COMMIT_PIN="8804d3074981a74f5a616db8b187ed036f524c44"
 # identity: experiment/nudge-process-stop-20261108 (single-use bound decisions for nudge process / stop; Stage 2)
-IDENTITY_COMMIT_PIN="cfc4079b690e2f7dc57afb9f14c6832ae38fdf54"
+IDENTITY_COMMIT_PIN="ee7ba1b0f9cf894235be63071c493b74e2a0eef9"
 
 APP_HOME="${APP_HOME:-$HOME/.tass-app}"
 APP_DATA="$APP_HOME/data"
