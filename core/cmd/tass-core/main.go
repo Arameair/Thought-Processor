@@ -696,6 +696,10 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
             reply(w,http.StatusConflict,map[string]string{"error":err.Error(),"code":"REFUSED"})
         case errors.Is(err,tass.ErrCognitionDenied):
             reply(w,http.StatusForbidden,map[string]string{"error":"Identity denied this: unlock Identity first"})
+        case errors.Is(err,tass.ErrExperimentFeedbackIncomplete):
+            reply(w,http.StatusConflict,map[string]string{"error":err.Error(),"code":"EVIDENCE_NOT_VERIFIED"})
+        case errors.Is(err,tass.ErrExperimentFeedbackUnsafe):
+            reply(w,http.StatusServiceUnavailable,map[string]string{"error":tass.ErrExperimentFeedbackUnsafe.Error(),"code":"FEEDBACK_UNSAFE"})
         case errors.Is(err,tass.ErrExperimentJournal):
             // Fail closed: the fixed sentence only (never the file's content or which record is bad).
             reply(w,http.StatusServiceUnavailable,map[string]string{"error":tass.ErrExperimentJournal.Error(),"code":"EXPERIMENT_JOURNAL_UNSAFE"})
@@ -733,6 +737,21 @@ func handler(core *tass.Core, pageToken, apiKey string) http.Handler {
         switch {
         case err==nil && v.Replayed: reply(w,http.StatusOK,v)
         case err==nil: reply(w,http.StatusCreated,v)
+        default: expErr(w,err)
+        }
+    })
+    // Stage 3C: one private, write-once human judgment. Reuses the same page, Origin,
+    // Identity and Cognition scope boundary as the experiment routes. No model calls.
+    mux.HandleFunc("POST /api/development/experiments/{id}/feedback",func(w http.ResponseWriter,r *http.Request){
+        var body tass.ExperimentFeedbackInput
+        if !pagePost(w,r,&body){return}
+        w.Header().Set("Cache-Control","no-store")
+        rq,ok:=cognitionExpect(w,r);if !ok{return}
+        f,created,err:=core.SaveExperimentFeedback(r.PathValue("id"),body,rq)
+        if scopeErr(w,err){return}
+        switch {
+        case err==nil && created: reply(w,http.StatusCreated,f)
+        case err==nil: reply(w,http.StatusOK,f)
         default: expErr(w,err)
         }
     })
