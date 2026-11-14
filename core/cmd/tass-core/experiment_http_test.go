@@ -179,3 +179,28 @@ func scopeCode2(body string) string {
 	rest := body[i+8:]
 	return rest[:strings.Index(rest, `"`)]
 }
+
+func TestOwnerFeedbackHTTPBoundaryRefusesUnauthorizedWrites(t *testing.T) {
+	env := scopeServer(t)
+	path := "/api/development/experiments/exp_00000000000000000000/feedback"
+	body := `{"verdict":"SAME","correction":"No observed improvement."}`
+	if rec := env.post(path, body, env.expectOf("B")); rec.Code != http.StatusPreconditionFailed {
+		t.Fatalf("wrong scope: HTTP %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := env.do("POST", path, body, map[string]string{"X-TASS-Token":"wrong"}); rec.Code < 400 {
+		t.Fatalf("wrong page token: HTTP %d", rec.Code)
+	}
+	if rec := env.post(path, body, env.expectOf("A")); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown owner plan: HTTP %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := env.post(path, `{"verdict":"AUTOMATIC","correction":""}`, env.expectOf("A")); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid verdict: HTTP %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := env.get(path, env.expectOf("A")); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Fatalf("feedback POST route readable with GET: HTTP %d", rec.Code)
+	}
+	if len(env.eng.nonGET) != 0 { t.Fatalf("feedback refusal wrote to Engine: %v", env.eng.nonGET) }
+	if _,err:=os.Stat(filepath.Join(env.dir,"experiment-runs")); !os.IsNotExist(err) {
+		t.Fatalf("refused feedback created a storage tree: %v",err)
+	}
+}
