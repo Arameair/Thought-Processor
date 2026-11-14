@@ -1,7 +1,7 @@
 # Thought Processor — options for the first Alpha-candidate design
 
-**Prepared:** October 26, 2026  
-**Status:** DISCUSSION MATERIAL — all options and preferences in this file are proposals, NOT owner-approved UI/API/build requirements.  
+**Prepared:** October 26, 2026<br>
+**Status:** DISCUSSION MATERIAL — all options and preferences in this file are proposals, NOT owner-approved UI/API/build requirements.<br>
 **Companion:** [14-question design agenda](ALPHA_CANDIDATE_DESIGN_AGENDA_2026-10-26.md) · [Owner-confirmed cross-repo decisions](CROSS_REPO_DECISIONS_2026-10-26.md) · [Discussion issue #15](https://github.com/Arameair/Thought-Processor/issues/15).
 
 This document deliberately offers **alternatives**. It is meant to help the owner react, disagree, choose, and discard ideas one question at a time—not to settle the design by author preference or start implementation.
@@ -34,8 +34,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Establish trust:** “Connect Processor to my actual Identity installation once and prove the trusted relationship survives restart.” **Pro:** essential integration milestone. **Con:** pairing by itself is not feature access or a complete user experience.
 - **C — Act once:** “Choose an identity, perform one permissioned feature operation, and show Identity's decision and the receiving feature's actual result.” **Pro:** strong product proof. **Con:** most backend dependencies.
 
-**[INFER] Starting hypothesis:** B plus A may be enough for a *foundation* candidate; C would make it a *management* candidate. Don't call B a feature grant.  
-**Question for owner:** When you say “base idea running,” is **verified identity + feature visibility** enough for the first home test, or must it **change something real**?  
+**[INFER] Starting hypothesis:** B plus A may be enough for a *foundation* candidate; C would make it a *management* candidate. Don't call B a feature grant.<br>
+**Question for owner:** When you say “base idea running,” is **verified identity + feature visibility** enough for the first home test, or must it **change something real**?<br>
 **Acceptance discriminator:** User states the action; we identify the authoritative result and can independently verify it after restart.
 
 ### Q2. Who gets the first test and what exists beforehand?
@@ -44,8 +44,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Fresh Windows operator:** Processor and Identity are separately launched on a new profile, with no Project Controller. **Pro:** proves portability. **Con:** setup friction can overwhelm evaluating the first UI.
 - **C — Two-pass trial:** First A to learn quickly, then B as a separate acceptance gate. **Pro:** balances velocity and repeatability. **Con:** requires two clearly labelled verdicts.
 
-**[INFER] Lean: C.** First passes should never be presented as clean-machine passes.  
-**Question for owner:** Do we optimize the very first run for **your own computer**, then ask another person to test, or make clean-machine setup a day-one gate?  
+**[INFER] Lean: C.** First passes should never be presented as clean-machine passes.<br>
+**Question for owner:** Do we optimize the very first run for **your own computer**, then ask another person to test, or make clean-machine setup a day-one gate?<br>
 **Evidence:** list prerequisites, OS, Identity build, GitHub account requirement (or none), and which portion is genuinely self-contained.
 
 ### Q3. Which first screen and navigation model?
@@ -54,8 +54,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — System overview first:** Status of Identity and available services, then choose an identity. **Pro:** helpful when setup or connection is broken. **Con:** could regress into a developer dashboard.
 - **C — Contextual home:** Show “Connect Identity” until trusted, then show last selected profile and its relevant feature cards; System view is secondary. **Pro:** clear first-run and return-visit paths. **Con:** introduces distinct UI states to test.
 
-**[INFER] Lean: C, with an always-visible selected-identity indicator.** The existing “Profiles → Catalog → Collections” is a working hypothesis, not approved page order.  
-**Question for owner:** Would you rather land on **your selected identity** or **a system overview** during an ordinary visit?  
+**[INFER] Lean: C, with an always-visible selected-identity indicator.** The existing “Profiles → Catalog → Collections” is a working hypothesis, not approved page order.<br>
+**Question for owner:** Would you rather land on **your selected identity** or **a system overview** during an ordinary visit?<br>
 **Evidence:** sketch three screens—brand new, authenticated with no profiles, returning with a selected profile. No simulated activity.
 
 ### Q4. How do identities appear and how does switching work?
@@ -64,8 +64,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Create/manage via Identity:** Processor offers a form, Identity alone creates/updates the record and returns its canonical ID. **Pro:** proper end-user flow. **Con:** requires authenticated write APIs, validation and permissions.
 - **C — Identity-specific workspace tabs:** Open two authorized profiles side by side. **Pro:** good comparison. **Con:** increases the risk of displaying or submitting data under the wrong identity.
 
-**[INFER] Lean: A for first read-path proof, then B once Identity exposes safe writes. Defer C.**  
-**Question for owner:** Should the first candidate let you **create a new identity**, or is selecting an existing one enough to evaluate the interface?  
+**[INFER] Lean: A for first read-path proof, then B once Identity exposes safe writes. Defer C.**<br>
+**Question for owner:** Should the first candidate let you **create a new identity**, or is selecting an existing one enough to evaluate the interface?<br>
 **Evidence:** profile IDs originate in Identity, switching invalidates the previous identity's displayed permissions/data, and an unavailable Identity never causes Processor to invent IDs.
 
 ### Q5. What belongs on the first feature card?
@@ -74,8 +74,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — State-rich:** Name, acquired/installed, paired, identity-authorized, allowed source count, running state, last verified timestamp. **Pro:** strong auditability. **Con:** visually dense and can confuse product users.
 - **C — Adaptive card:** Minimal main card; open one inspector for accurate state breakdown, permissions, logs and actions. **Pro:** calm interface plus evidence on demand. **Con:** extra click to diagnose.
 
-**[INFER] Lean: C.** Distinguish “available to install” from “approved for this identity,” “source authorized,” and “running.” A visible repository is **not** entitlement to access personal data.  
-**Question for owner:** Which **one fact** must be visible before you click on a card?  
+**[INFER] Lean: C.** Distinguish “available to install” from “approved for this identity,” “source authorized,” and “running.” A visible repository is **not** entitlement to access personal data.<br>
+**Question for owner:** Which **one fact** must be visible before you click on a card?<br>
 **Evidence:** design examples for installed-but-stopped, no source grants, revoked, unpaired and actually ready.
 
 ### Q6. What is the first genuinely functional button?
@@ -84,8 +84,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Pair / Unpair a service:** One operator-approved pairing and later secure reconnection, with a real revoke. **Pro:** demonstrates a consequential control. **Con:** pairing does not mean data authorization; abuse and recovery cases matter.
 - **C — Request a narrow grant and verify enforcement:** Identity records an authorized change and another feature demonstrably accepts or rejects a protected operation. **Pro:** most credible functionality. **Con:** depends on both sides of a security-critical contract.
 
-**[INFER] Lean: B if properly authenticated and revocable; otherwise A with a forthright “navigation prototype” label. C belongs in the first management prototype, not a fake local toggle.**  
-**Question for owner:** Which action would make you say, “This is more than the shell we already built”?  
+**[INFER] Lean: B if properly authenticated and revocable; otherwise A with a forthright “navigation prototype” label. C belongs in the first management prototype, not a fake local toggle.**<br>
+**Question for owner:** Which action would make you say, “This is more than the shell we already built”?<br>
 **Evidence:** request → authoritative accepted/refused receipt → independently observed effect → negative test. If unavailable, disable the button and label the blocker.
 
 ---
@@ -98,8 +98,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Local discovery + explicit verification:** Processor suggests found Identity instances; owner verifies and pairs the intended one. **Pro:** lower setup friction. **Con:** discovered services are untrusted until proven otherwise.
 - **C — Small managed launcher:** User starts a local workspace and it starts both independent executables. **Pro:** easy ordinary startup. **Con:** requires process ownership, duplicate handling and recovery before it is safe.
 
-**[INFER] Lean: B with A as fallback. C may be discussed alongside Q9, not treated as required.** Either underlying app may start first; they must converge to the same authenticated state.  
-**Question for owner:** Are you comfortable selecting a **found local Identity instance and approving it once**?  
+**[INFER] Lean: B with A as fallback. C may be discussed alongside Q9, not treated as required.** Either underlying app may start first; they must converge to the same authenticated state.<br>
+**Question for owner:** Are you comfortable selecting a **found local Identity instance and approving it once**?<br>
 **Evidence:** wrong-service/changed-installation rejection, cold-start both orders, restart/reconnect, Identity-down display. **Unknown API detail:** verify which Identity endpoints can authenticate and return profiles/feature states; do not presume they already exist.
 
 ### Q8. How do pairing and permissions appear in the UX?
@@ -108,8 +108,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Separate Connection and Permissions pages:** Pairing lives under connection; grants under selected identity. **Pro:** clearer authority. **Con:** more navigation.
 - **C — Contextual requests on cards:** Feature card explains missing trust vs missing grant and opens a narrowly scoped approval flow. **Pro:** action follows need. **Con:** requires precise identity/scope context.
 
-**[INFER] Lean: C, backed by separate audit/detail views as in B.** Do not put a universal “Allow everything” switch in the design. No source is granted automatically.  
-**Question for owner:** Do you want access requests **in context of a feature** or in **one central permissions area**?  
+**[INFER] Lean: C, backed by separate audit/detail views as in B.** Do not put a universal “Allow everything” switch in the design. No source is granted automatically.<br>
+**Question for owner:** Do you want access requests **in context of a feature** or in **one central permissions area**?<br>
 **Evidence:** pair accepted, peer revoked, GitHub install eligibility but runtime denied, one source permitted while another denied, Identity offline blocks protected operations.
 
 ### Q9. Who manages processes and what does exit mean?
@@ -118,8 +118,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Minimal supervised workspace:** An approved runner launches known owned children, shows PIDs/status, and offers orderly shutdown. **Pro:** directly prevents invisible leftover processes. **Con:** adds a lifecycle component that could itself fail.
 - **C — Full background service manager:** Installs services/daemon startup and handles auto-restart. **Pro:** eventual convenience. **Con:** contrary to our minimal initial scope and harder to inspect or shut down.
 
-**[INFER] Lean: A for earliest UI test, B before claiming a smooth managed workspace. Defer C.** Regardless of A/B, **explicit Processor-app exit** offers “Shut down managed workspace” (default selected) or “Keep services running.” A browser-tab close is not explicit app exit; do not kill services on tab-close heuristics.  
-**Question for owner:** Must the **very first** Alpha candidate start Identity for you, or is it acceptable to start both executables manually for one prototype?  
+**[INFER] Lean: A for earliest UI test, B before claiming a smooth managed workspace. Defer C.** Regardless of A/B, **explicit Processor-app exit** offers “Shut down managed workspace” (default selected) or “Keep services running.” A browser-tab close is not explicit app exit; do not kill services on tab-close heuristics.<br>
+**Question for owner:** Must the **very first** Alpha candidate start Identity for you, or is it acceptable to start both executables manually for one prototype?<br>
 **Evidence:** inventory owned vs external processes, graceful stop and verified descendants, clear leftover warning, no duplicate on restart, independent processes untouched without authority, recovery after unexpected crash.
 
 ### Q10. How should unavailable / denied / broken states work?
@@ -128,8 +128,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Diagnostic-first dashboard:** Logs, ports and exceptions exposed by default. **Pro:** easy engineering troubleshooting. **Con:** bad everyday experience.
 - **C — Plain-language recovery first, technical evidence second:** Specific state and next action; click through for redacted logs, version, timestamp and full failure detail. **Pro:** both user-friendly and auditable. **Con:** state mapping needs careful implementation.
 
-**[INFER] Lean: C.** Use distinct states: missing, discovered-unverified, needs-pairing, authenticated-but-not-authorized, denied, authority-unavailable, stopped, running-but-not-ready, ready, stale/unknown. Do not equate HTTP 200 with trust.  
-**Question for owner:** When a connection fails, would you rather see **what to do next** or **raw diagnostics immediately**?  
+**[INFER] Lean: C.** Use distinct states: missing, discovered-unverified, needs-pairing, authenticated-but-not-authorized, denied, authority-unavailable, stopped, running-but-not-ready, ready, stale/unknown. Do not equate HTTP 200 with trust.<br>
+**Question for owner:** When a connection fails, would you rather see **what to do next** or **raw diagnostics immediately**?<br>
 **Evidence:** stopped Identity, wrong Identity, denied grant, revoked peer, busy feature, stale status. Unauthorized work must remain blocked until verified.
 
 ### Q11. Where do original feature views, collections and diagnostics live?
@@ -138,8 +138,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Embed one original feature view:** Expand a verified feature card to show its real UI. **Pro:** unified workspace. **Con:** embeddings can be technically incompatible or unsafe; authentication can fail.
 - **C — Native Processor summary and read-only collection:** Show only authorized data actually returned from a feature's supported API, with “Open original” for deep work. **Pro:** consistent browsing. **Con:** demands data-view contracts and could accidentally copy feature-owned storage.
 
-**[INFER] Lean: A first, explore B/C after contracts support them.** Treat Collections as optional/empty in P0; don't add fake Thoughts, duplicate databases or “Memory” under another name. Keep Logs / Flow / Metrics / Copy Context in one inspector, hidden by default.  
-**Question for owner:** Would you rather **stay inside Processor** while inspecting a feature, even if some need to open their own UI?  
+**[INFER] Lean: A first, explore B/C after contracts support them.** Treat Collections as optional/empty in P0; don't add fake Thoughts, duplicate databases or “Memory” under another name. Keep Logs / Flow / Metrics / Copy Context in one inspector, hidden by default.<br>
+**Question for owner:** Would you rather **stay inside Processor** while inspecting a feature, even if some need to open their own UI?<br>
 **Evidence:** feature view belongs to verified service, one live preview at a time if used, redacted copy actions and truthful zero/empty results.
 
 ---
@@ -152,8 +152,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — P0+: one controlled operation:** A plus an actual supported pair/unpair or another narrowly scoped verifiable operation. **Pro:** stronger evaluation. **Con:** depends on Identity trust and real API contracts.
 - **C — P1: full feature grant proof:** B plus real approve/deny/revoke and independent receiving-feature enforcement. **Pro:** validates a central product promise. **Con:** likely cross-repo development and security testing, not merely UI work.
 
-**[INFER] Lean: aim at B, allow A as a clearly labelled early trial if cross-repo blockers remain; reserve C for explicit design approval.**  
-**Question for owner:** Which features are **non-negotiable for “candidate”**, and which can wait until the next iteration?  
+**[INFER] Lean: aim at B, allow A as a clearly labelled early trial if cross-repo blockers remain; reserve C for explicit design approval.**<br>
+**Question for owner:** Which features are **non-negotiable for “candidate”**, and which can wait until the next iteration?<br>
 **Evidence:** one IN/OUT table, explicit owners for each required API, no fake future feature cards presented as installed. **OUT by default:** Memory, Attention/Decay, Thought algorithms, multiple model providers, auto-log ingestion, publisher marketplace, multi-host administration, autonomous modifications.
 
 ### Q13. How should we test and learn from the candidate?
@@ -162,8 +162,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Scripted functional checks:** Same start/stop, pairing, profile, denied access and restart scenarios each time. **Pro:** reproducible. **Con:** passing tests may not tell us whether the interface feels right.
 - **C — Combined evaluation:** Small fixed script **plus** qualitative KEEP / REVISE / REJECT on navigation, clarity, trust and perceived usefulness. **Pro:** separates correct operation from user satisfaction. **Con:** slight evidence-collection overhead.
 
-**[INFER] Lean: C.** Have a second clean-Windows/operator gate after the owner-run trial if portability matters.  
-**Question for owner:** Would you prefer to **use it naturally first** and then run the checklist, or **follow the checklist on first launch**?  
+**[INFER] Lean: C.** Have a second clean-Windows/operator gate after the owner-run trial if portability matters.<br>
+**Question for owner:** Would you prefer to **use it naturally first** and then run the checklist, or **follow the checklist on first launch**?<br>
 **Evidence:** exact branch/full SHA, OS and real-vs-fixture dependencies, actual status/receipt, duration, failures, no orphaned processes, redacted logs. A passed fixture test does not prove real GitHub/Identity/Windows behavior.
 
 ### Q14. What makes the design ready for someone to build?
@@ -172,8 +172,8 @@ This document deliberately offers **alternatives**. It is meant to help the owne
 - **B — Contract-first approval:** Agree endpoints, auth and states before doing screens. **Pro:** clear technical feasibility. **Con:** can spend weeks designing an interface users dislike.
 - **C — Thin vertical-slice approval:** Approve one user outcome, three representative screens, one actual service contract, failure/denial behavior, and a compact test script together. **Pro:** balances experience and feasibility. **Con:** depends on selecting one truly narrow action.
 
-**[INFER] Lean: C.** The owner then gives separate authorization for a new implementation branch **from current alpha**. Design agreement is not code approval, test PASS or promotion.  
-**Question for owner:** What would make you confident enough to say **“Build exactly this small slice and let me try it”**?  
+**[INFER] Lean: C.** The owner then gives separate authorization for a new implementation branch **from current alpha**. Design agreement is not code approval, test PASS or promotion.<br>
+**Question for owner:** What would make you confident enough to say **“Build exactly this small slice and let me try it”**?<br>
 **Evidence:** short design brief, option decision record, explicit exclusions, dependency map, negative tests, provenance, rollback, named owner approval. Candidate may be kept/revised/rejected; Alpha is not updated automatically.
 
 ---

@@ -1,7 +1,7 @@
 # Identity–Experience Hypothesis: design review and test plan
 
-**Research note · 24 October 2026 · Not proven or implemented**  
-**Companion architecture:** [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md)  
+**Research note · 24 October 2026 · Not proven or implemented**<br>
+**Companion architecture:** [Identity-first model](https://github.com/Arameair/identity/blob/main/docs/IDENTITY_FIRST_MODEL.md)<br>
 **Discussion:** [Architecture review open to Grok and other critical perspectives](https://github.com/Arameair/Thought-Processor/issues/7)
 
 ## The proposed theory

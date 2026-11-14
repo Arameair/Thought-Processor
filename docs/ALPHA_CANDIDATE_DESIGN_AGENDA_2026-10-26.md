@@ -1,6 +1,6 @@
 # Thought Processor — design discussion agenda for the first Alpha candidate
 
-**Prepared:** October 26, 2026  
+**Prepared:** October 26, 2026<br>
 **Status:** **DISCUSSION CHECKLIST — NOT A BUILD ORDER OR APPROVED SPECIFICATION**. This is the list of questions to settle *before* approving the first system-wide Thought Processor prototype design. No source code, API, experiment, release, or Alpha promotion is authorized by this document. Decisions and their rationale belong in [design issue #15](https://github.com/Arameair/Thought-Processor/issues/15).
 
 **[Companion: options, trade-offs and suggested test paths for all 14 questions](ALPHA_CANDIDATE_DESIGN_OPTIONS_2026-10-26.md).** Every option remains OPEN until the owner explicitly chooses it. Suggested directions are hypotheses, not decisions.
@@ -111,13 +111,13 @@ Work through **one question at a time**. An item counts as resolved only when th
 
 ### Decision record template (fill one at a time)
 
-> **Question number:**  
-> **Owner's decision and date:**  
-> **Alternatives considered / deferred:**  
-> **Why this choice:**  
-> **What the user will actually see or do:**  
-> **Dependent Identity / Processor / feature contract:**  
-> **Smallest test with observed PASS / FAIL / BLOCKED:**  
+> **Question number:**<br>
+> **Owner's decision and date:**<br>
+> **Alternatives considered / deferred:**<br>
+> **Why this choice:**<br>
+> **What the user will actually see or do:**<br>
+> **Dependent Identity / Processor / feature contract:**<br>
+> **Smallest test with observed PASS / FAIL / BLOCKED:**<br>
 > **Remaining uncertainty:**
 
 ## Practical milestone
