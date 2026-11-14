@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -130,10 +129,12 @@ func (c *Core) SaveExperimentFeedback(id string, in ExperimentFeedbackInput, rq 
 	expected, err := feedbackEvidence(v)
 	if err != nil { return ExperimentFeedback{}, false, err }
 	// A Cognition response may have been authorized earlier; check Identity again before saving.
-	if err := c.CognitionRevalidate(CognitionScope{Identity:v.OwnerEntityID, Engine:v.EngineEntityID, Link:func() string {
-		if len(rq) > 0 && rq[0] != nil { return rq[0].Got.Link }
-		return ""
-	}()}); err != nil { return ExperimentFeedback{}, false, err }
+	scope, err := c.cognitionAccess(rq...)
+	if err != nil { return ExperimentFeedback{}, false, err }
+	if scope.identityID != v.OwnerEntityID || scope.engineID != v.EngineEntityID {
+		return ExperimentFeedback{}, false, ErrExperimentNotFound
+	}
+	if err := c.CognitionRevalidate(scope.attested()); err != nil { return ExperimentFeedback{}, false, err }
 	c.expMu.Lock()
 	defer c.expMu.Unlock()
 	old, err := c.readExperimentFeedback(v)
@@ -163,5 +164,3 @@ func (c *Core) experimentFeedbackForView(v *ExperimentView) error {
 	return nil
 }
 
-// Keep os imported for tooling parity of file-boundary packages.
-var _ = os.ErrNotExist
