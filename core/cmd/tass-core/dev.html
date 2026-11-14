@@ -834,11 +834,60 @@ function expPlan(p, fresh) {
   }
   const cmp = el("div", "card"); cmp.id = "expCompare"; cmp.dataset.ready = String(!!(p.comparison || {}).ready);
   cmp.append(el("div", "lbl", "A against B"), el("div", "", (p.comparison || {}).text || ""));
+  // Stage 3C: owner judgment is evidence only. The page never infers or pre-selects a verdict.
+  const feedback = el("section", "card"); feedback.id = "expFeedback";
+  feedback.append(el("h3", "", "Owner assessment · B compared with A"),
+    el("div", "hint", "Your judgment, not a model verdict. Saving cannot change TASS's instructions, Thought, Notes, grants or runtime behavior."));
+  if (p.owner_feedback) {
+    const f = p.owner_feedback; feedback.dataset.saved = "true";
+    feedback.append(el("div", "rcpt", "Saved owner verdict: " + f.verdict),
+      el("div", "hint", "Saved " + new Date(f.saved_at).toLocaleString() + " · frozen snapshot " + f.snapshot_sha256.slice(0,12) +
+      " · A request " + f.a_request_id + " · B request " + f.b_request_id),
+      el("div", "lbl", "Your explanation / correction"),
+      el("div", "feedbackCorrection", f.correction || "(No explanation recorded)"),
+      el("div", "hint", "Write-once assessment. Reopening does not run either arm. There is no automatic learning or promotion."));
+  } else {
+    const eligible = !!(p.comparison || {}).ready && f.status === "FROZEN" && arms.length === 2 &&
+      arms.every(a => a.state === "COMPLETED" && a.request_id && a.reply_sha256 && a.snapshot_sha256 === f.sha256);
+    if (!eligible) {
+      feedback.append(el("div", "hint", "Assessment unavailable: both A and B and their shared frozen snapshot must be verified before recording a verdict. Nothing is inferred or saved."));
+    } else {
+      const choices = el("div", "feedbackChoices"); choices.setAttribute("role", "group"); choices.setAttribute("aria-label", "Verdict for B compared with A");
+      let choice = "";
+      for (const val of ["BETTER", "SAME", "WORSE", "INCONCLUSIVE"]) {
+        const label = el("label", ""); const radio = document.createElement("input");
+        radio.type = "radio"; radio.name = "experiment-feedback"; radio.value = val;
+        radio.onchange = () => { choice = val; };
+        label.append(radio, document.createTextNode(" " + val)); choices.append(label);
+      }
+      const explanation = document.createElement("textarea"); explanation.id = "expFeedbackCorrection";
+      explanation.maxLength = 500; explanation.rows = 3;
+      explanation.placeholder = "Optional: why, a correction, or the next instruction to test (up to 500 characters)";
+      const save = el("button", "primary", "Save owner assessment"); save.type = "button"; save.id = "expFeedbackSave";
+      const error = el("div", "err"); error.id = "expFeedbackError"; error.setAttribute("role","alert");
+      save.onclick = async () => {
+        if (!choice || save.disabled) { error.textContent = "Choose a verdict before saving."; return; }
+        save.disabled = true; error.textContent = "";
+        let r; try { r = await fetch("/api/development/experiments/" + encodeURIComponent(p.experiment_id) + "/feedback",
+          {method:"POST",cache:"no-store",headers:expHeaders(true),body:JSON.stringify({verdict:choice, correction:explanation.value})}); }
+        catch(e) { r = null; }
+        let body = {}; if (r) { try { body = await r.json(); } catch(e) {} }
+        if (!r || !r.ok) {
+          error.textContent = "Assessment not confirmed: " + expWhy({status:r ? r.status : 0,body}) + " Reload the experiment before trying again.";
+          return;
+        }
+        // Re-read through the same authenticated GET; never issue a second save or an arm request.
+        await expRefresh(p.experiment_id);
+      };
+      feedback.append(choices, el("label", "lbl", "Optional correction / rationale"), explanation, save, error,
+        el("div", "hint", "This is a single permanent assessment of this experiment. An identical retry is idempotent; changing it requires a separately reviewed amendment feature."));
+    }
+  }
   const act = el("div", "hint", "One request per arm, A before B, each with its own confirmation and single-use approval. There is no Promote: a better B becomes evidence for a reviewed Engine change, not a switch.");
   const more = el("details"); more.append(el("summary", "", "What is held constant and what won't change"));
   const l1 = el("ul"); for (const x of p.held_constant || []) l1.append(el("li", "", "Held: " + x));
   for (const x of p.unchanged || []) l1.append(el("li", "", "Unchanged: " + x)); more.append(l1, el("div", "hint", p.cost || ""));
-  box.append(head, snap, diff, cols, err, cmp, act, more);
+  box.append(head, snap, diff, cols, err, cmp, feedback, act, more);
   w.append(box);
   if (open) expPoll = setTimeout(() => expRefresh(p.experiment_id), 1500);
 }
