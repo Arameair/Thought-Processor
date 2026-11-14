@@ -141,6 +141,7 @@ type ExperimentComparison struct {
 // ExperimentView is a plan plus what the page needs to present it honestly.
 type ExperimentView struct {
 	Experiment
+	Feedback      *ExperimentFeedback `json:"owner_feedback,omitempty"`
 	Replayed      bool                 `json:"replayed,omitempty"`
 	SnapshotLabel string               `json:"snapshot_label"`
 	Frozen        ExperimentSnapshot   `json:"frozen_snapshot"`
@@ -409,7 +410,11 @@ func (c *Core) Experiments(baselineNudgeID string, rq ...*CognitionReq) (Experim
 	for i := len(all) - 1; i >= 0 && len(out.Experiments) < experimentListMax; i-- {
 		e := all[i]
 		if e.OwnerEntityID == scope.identityID && e.EngineEntityID == scope.engineID && e.BaselineNudgeID == run.NudgeID {
-			out.Experiments = append(out.Experiments, c.buildExperimentView(e, run, pre[e.ExperimentID], ready, false))
+			v := c.buildExperimentView(e, run, pre[e.ExperimentID], ready, false)
+			if err := c.experimentFeedbackForView(&v); err != nil {
+				return ExperimentList{}, err
+			}
+			out.Experiments = append(out.Experiments, v)
 		}
 	}
 	return out, nil
@@ -436,7 +441,11 @@ func (c *Core) ExperimentByID(id string, rq ...*CognitionReq) (ExperimentView, e
 			if err != nil {
 				return ExperimentView{}, err
 			}
-			return c.experimentViewLive(e, run), nil
+			v := c.experimentViewLive(e, run)
+			if err := c.experimentFeedbackForView(&v); err != nil {
+				return ExperimentView{}, err
+			}
+			return v, nil
 		}
 	}
 	return ExperimentView{}, ErrExperimentNotFound
