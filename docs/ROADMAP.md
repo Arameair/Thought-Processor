@@ -1,4 +1,10 @@
-# Roadmap — prove one real feature end-to-end
+> **Historical roadmap clarification (2026-10-27):** This roadmap was written for proving the early Identity-to-Engine authorization and thinking pipeline, not for designing Processor's **first usable system-wide operator workspace**. The new immediate UX design discussion is [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15) and [Design readiness](DESIGN_READINESS_2026-10-26.md). Security enforcement remains mandatory before any real permission-management claim; newer priorities do not mean this older research has been completed.
+
+**October 27 status correction:** The owner has since promoted a runnable P0 Alpha, and the P1 cleanup experiment reports a real-process fixture grant workflow. The older gate table below is **historical**, not today's test ledger. The **next gate** is the owner's P1 test, followed by real Worker/Engine Identity authorization. See [status](STATUS.md), [P1 START HERE](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/START_HERE.md), and [voice architecture decisions](https://github.com/Arameair/Thought-Processor/issues/20).
+
+---
+
+# Historical roadmap — prove one real feature end-to-end
 
 Each gate is independent, should leave existing applications usable, and has an explicit **pass condition**. The dates below are not release promises.
 
@@ -11,6 +17,23 @@ Each gate is independent, should leave existing applications usable, and has an 
 | 4 | Replaceable intelligence | Engine asks for *capability*, not "Chat-Jimmy"; adapter health, one call, metrics, error classification, no duplicate uncertain sends; provider swap without data migration | Not implemented |
 | 5 | Operations / fault recovery | Thought Processor can pause/resume, process one, inspect/retry eligible jobs, show evidence pipeline and diagnostics; survives restart | Not implemented |
 | 6 | Owner-approved Alpha, Stable and release | Owner Project Controller tests with exact SHA and logs, then manual promotion only | Not implemented |
+
+## Owner-selected integration plan — Thought Processor as test hub (2026-10-24)
+
+**[Read the focused authorization integration plan](INTEGRATION_AUTHORIZATION_PLAN.md)** · [Tracking issue #8](https://github.com/Arameair/Thought-Processor/issues/8).
+
+**Identity decides; Thought Engine enforces; Thought Processor connects, tests, and explains.** Processor is the owner-facing location for the first Identity↔Engine integration test, but is **not** a mandatory observation proxy, grant issuer or provider of fabricated state. Backend checks must work and remain secure even when Processor is closed.
+
+Before building an extensive Processor dashboard, prove **one Engine, one entity, one authenticated source, one Identity grant**. The current Gate 2 vs Gate 3 order above is a long-term roadmap: **the first security test should prove real authorization at intake BEFORE calling any end-to-end event path "authorized."** No fixture grant is a release authorization.
+
+| Mini-gate | Required proof | Status |
+| --- | --- | --- |
+| A — Design and choose test Engine | Authenticated caller contract, one Identity-owned grant and failure behavior; [canonical Engine issue #2](https://github.com/Arameair/Thought-Processor/issues/2) scoped to the experiment | **OPEN** |
+| B — Identity/Engine backend proof | Real source allow/deny, revoked next POST, queued event recheck, Identity outage fail-closed | **NOT RUN** |
+| C — Processor-driven test and diagnostics | Real grant requests via Identity; a test actor sends one event; correlated Identity and Engine receipts, no spoofed source | **NOT IMPLEMENTED** |
+| D — Independent operation and review | Shut Processor; eligible direct connections continue; compare measured time and call counts; owner verdict | **NOT RUN** |
+
+This sequence intentionally excludes model-wave changes, OAuth, Memory, auto-feeds, broad catalog and an offline authorization cache. Existing aspirational broad gates still apply afterward.
 
 ## Thin first vertical slice
 

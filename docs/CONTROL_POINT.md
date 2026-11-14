@@ -1,3 +1,7 @@
+> **Earlier wireframe — not the current first-screen specification (historical October 26 design).** P0 is now runnable Alpha and P1 has an unpromoted deterministic-fixture implementation; this remains a conceptual wireframe, not live functionality. See [current status](STATUS.md). This page illustrates the diagnostic/Engine-specific controls considered before the owner's system-wide Processor direction. The starting UX is being reviewed at [Issue #15](https://github.com/Arameair/Thought-Processor/issues/15); see [Design readiness](DESIGN_READINESS_2026-10-26.md). All numbers in the old wireframe are placeholders.
+
+---
+
 # Thought Processor — operator control surface
 
 **Wireframe and acceptance requirements — not a implemented UI.**
@@ -21,6 +25,16 @@
 ```
 
 The above values are illustrative **design placeholders**, not metrics or screenshots of real software. Production UI must read actual values.
+
+## First real operator test (owner-selected next integration)
+
+Before expanding this illustrative wireframe into a full application, implement the smallest **Identity + Engine authorization test through Processor**, as planned in [INTEGRATION_AUTHORIZATION_PLAN.md](INTEGRATION_AUTHORIZATION_PLAN.md) and [issue #8](https://github.com/Arameair/Thought-Processor/issues/8).
+
+The operator should see: authenticated Identity service; authenticated Engine service; selected entity and explicitly identified test source; an administrator-authenticated request to Identity to grant/revoke one operation; a deliberately submitted test observation; and actual Identity decision + Engine receipt side by side, with a shared correlation ID. **A GUI checkbox must never set an Engine-local "authorized" flag and imply Identity approval.** Controls stay unavailable until both authoritative services implement the needed endpoints. Do not impersonate TASS using a JSON source field.
+
+For this first integration, show **AUTHORITY UNAVAILABLE** on Identity outage and verify the Engine fails closed without a new model call. Recheck queued events at worker dispatch. Already-sent model data cannot be retrospectively removed after a grant is revoked.
+
+This is a **historical proposed UI slice**. The owner has since promoted runnable Processor P0 Alpha, and an unpromoted P1 fixture demonstrates limited Identity grants. Actual Identity↔Thought Engine enforcement is still unproven; do not treat this drawing as a live UI or its placeholder values as evidence.
 
 ## Required panels
 
