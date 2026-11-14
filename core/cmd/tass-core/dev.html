@@ -908,7 +908,7 @@ async function loadSavedPlans() {
   if (!n) return;
   const list = el("span"); list.id = "runSavedList";
   for (const e of r.body.experiments.slice(0, 5)) {
-    const a = el("a", "", e.experiment_id); a.href = "/dev?run=" + encodeURIComponent(runParam) + "&exp=" + e.experiment_id;
+    const a = el("a", "", e.experiment_id + (e.owner_feedback ? " · owner assessment saved" : "")); a.href = "/dev?run=" + encodeURIComponent(runParam) + "&exp=" + e.experiment_id;
     a.onclick = ev => { ev.preventDefault(); goExp(e.experiment_id, true); }; list.append(a);
   }
   const ranN = r.body.experiments.filter(e => (e.arms || []).some(a => a.state !== "NOT RUN")).length;
