@@ -164,6 +164,11 @@ func (c *Core) SaveExperimentFeedback(id string, in ExperimentFeedbackInput, rq 
 
 // Avoid returning disk contents when the private file or its evidence cannot be trusted.
 func (c *Core) experimentFeedbackForView(v *ExperimentView) error {
+	// Preserve Stage 3B's read-only UNVERIFIED / RECOVERY_REQUIRED diagnostics.
+	// No assessment is trusted or displayed unless the underlying evidence is verified.
+	if _, err := feedbackEvidence(*v); err != nil {
+		return nil
+	}
 	f, err := c.readExperimentFeedback(*v)
 	if err != nil { return err }
 	v.Feedback = f
