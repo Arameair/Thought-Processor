@@ -92,6 +92,30 @@ func TestOwnerFeedbackFailsClosedOnCorruptOrUnsafeFile(t *testing.T) {
 	}
 }
 
+func TestOwnerFeedbackRejectsOtherOwnerAndUnknownExperiment(t *testing.T) {
+	c, ids, re, v := feedbackReady(t)
+	before := re.nonGet.Load()
+	ids.mu.Lock()
+	ids.entityID = "ent_other"
+	ids.mu.Unlock()
+	if _,_,err:=c.SaveExperimentFeedback(v.ExperimentID,ExperimentFeedbackInput{Verdict:"SAME"});err==nil {
+		t.Fatal("another owner saved an evaluation using a direct experiment ID")
+	}
+	if _,err:=c.ExperimentByID(v.ExperimentID);err==nil {
+		t.Fatal("another owner reopened private feedback")
+	}
+	ids.mu.Lock()
+	ids.entityID = "ent_0123"
+	ids.mu.Unlock()
+	if _,_,err:=c.SaveExperimentFeedback("exp_00000000000000000000",ExperimentFeedbackInput{Verdict:"SAME"});!errors.Is(err,ErrExperimentNotFound) {
+		t.Fatalf("unknown experiment: %v",err)
+	}
+	if _,err:=os.Stat(c.expRunPath(v.ExperimentID,experimentFeedbackFile));!os.IsNotExist(err) {
+		t.Fatalf("refused access wrote feedback: %v",err)
+	}
+	if re.nonGet.Load()!=before { t.Fatal("a refused feedback request wrote to Engine") }
+}
+
 func TestOwnerFeedbackConcurrentSingleWriter(t *testing.T) {
 	c,_,_,v:=feedbackReady(t)
 	type outcome struct{ created bool; err error }
