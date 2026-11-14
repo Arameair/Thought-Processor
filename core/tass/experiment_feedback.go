@@ -108,6 +108,12 @@ func (c *Core) readExperimentFeedback(v ExperimentView) (*ExperimentFeedback, er
 	if json.Unmarshal(b[:len(b)-1], &f) != nil || f.Schema != experimentFeedbackSchema || (ExperimentFeedbackInput{f.Verdict, f.Correction}).validate() != nil || f.SavedAt.IsZero() {
 		return nil, ErrExperimentFeedbackUnsafe
 	}
+	// The writer uses json.Marshal + newline. Reject extra, duplicate or unknown keys,
+	// altered representation, appended JSON and partial records rather than normalizing them.
+	canonical, err := json.Marshal(f)
+	if err != nil || !bytes.Equal(b, append(canonical, '\n')) {
+		return nil, ErrExperimentFeedbackUnsafe
+	}
 	want, e := feedbackEvidence(v)
 	if e != nil || f.ExperimentID != want.ExperimentID || f.OwnerEntityID != want.OwnerEntityID ||
 		f.EngineEntityID != want.EngineEntityID || f.ThoughtID != want.ThoughtID ||
