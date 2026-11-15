@@ -525,7 +525,7 @@ cmd_check_update() {
   say "Candidate: core $cand · engine $(pin_of "$cand" ENGINE_COMMIT_PIN) · identity $(pin_of "$cand" IDENTITY_COMMIT_PIN) ($ref)"
   if [[ "$cand" == "$CORE_SHA" ]]; then say "Up to date."; return 0; fi
   say; say "Changes in core/ (newest first):"
-  git -C "$REPO" log --oneline "$CORE_SHA..$cand" -- core | sed 's/^/  /' | head -30
+  git -C "$REPO" log -n 30 --oneline "$CORE_SHA..$cand" -- core | sed 's/^/  /'
   git -C "$REPO" diff --stat "$CORE_SHA" "$cand" -- core | tail -1 | sed 's/^/  /'
   say; say "Apply with: ./tass.sh update $cand"
 }

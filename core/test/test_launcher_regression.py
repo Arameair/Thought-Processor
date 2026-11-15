@@ -36,7 +36,8 @@ class LauncherSafety(unittest.TestCase):
         self.env = {**os.environ, "APP_HOME": str(self.app), "HOME": str(self.root),
                     "PATH": str(self.bin) + ":" + os.environ["PATH"],
                     "TEST_LOG": str(self.dockerlog), "TEST_FORCE_SUDO": "0",
-                    "TEST_FAIL_CLONE": "0", "TEST_FAIL_BUILD": "", "TEST_IMAGE_MISSING": "0"}
+                    "TEST_FAIL_CLONE": "0", "TEST_FAIL_BUILD": "", "TEST_IMAGE_MISSING": "0",
+                    "TEST_LONG_LOG": "0"}
         self.exe("docker", r"""
             #!/usr/bin/env bash
             set -euo pipefail
@@ -82,6 +83,17 @@ class LauncherSafety(unittest.TestCase):
               [[ "${TEST_FAIL_CLONE:-0}" != 1 ]] || exit 72
               dest="${@: -1}"
               mkdir -p "$dest/.git"
+              exit 0
+            fi
+            if [[ "${TEST_LONG_LOG:-0}" == 1 && "${1:-}" == -C && "${3:-}" == log ]]; then
+              args=("$@")
+              count=4096
+              for ((i=0; i < ${#args[@]} - 1; i++)); do
+                [[ "${args[$i]}" != -n ]] || count="${args[$((i + 1))]}"
+              done
+              for ((i=1; i <= count; i++)); do
+                printf '%07x long-core-history-%04d %080d\n' "$i" "$i" "$i"
+              done
               exit 0
             fi
             if [[ "${1:-}" == -C && "${2:-}" == "$APP_HOME"/deploy/src/engine-* ]]; then
@@ -172,6 +184,31 @@ class LauncherSafety(unittest.TestCase):
         self.assertEqual(events.count(" up -d --force-recreate"), 1, events)
         self.assertEqual(events.count(" down"), 1, events)
         # The previous unguarded Core must NOT be started as rollback.
+        self.assertTrue((self.app / "deploy" / "history.log").is_file())
+
+    def test_long_history_does_not_abort_fail_closed_recovery(self):
+        cur = self.deployed()
+        marker = self.app / "data" / "core" / "preserve.txt"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("preserve owner data\n")
+        oldsha = call(["/usr/bin/git", "rev-parse", "HEAD~1"], cwd=ROOT).stdout.strip()
+        self.assertEqual(len(oldsha), 40)
+        old = cur.read_text().replace(self.sha, oldsha)
+        cur.write_text(old)
+
+        p = self.run_script("update", self.sha, "--yes", TEST_FORCE_SUDO=1,
+                            TEST_LONG_LOG=1)
+
+        self.assertNotEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("remains stopped", p.stdout)
+        history = [line for line in p.stdout.splitlines() if "long-core-history-" in line]
+        self.assertEqual(len(history), 30, p.stdout)
+        self.assertIn("long-core-history-0030", history[-1])
+        self.assertEqual(cur.read_text(), old)
+        self.assertEqual(marker.read_text(), "preserve owner data\n")
+        events = self.dockerlog.read_text()
+        self.assertEqual(events.count(" up -d --force-recreate"), 1, events)
+        self.assertEqual(events.count(" down"), 1, events)
         self.assertTrue((self.app / "deploy" / "history.log").is_file())
 
     def test_each_failed_image_build_keeps_old_deployment_unchanged(self):
