@@ -1,0 +1,21 @@
+# No NVIDIA GPU:  ./run.sh --cpu
+services:
+  model:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - --model
+      - /models/${TASS_MODEL_FILE:-NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf}
+      - --alias
+      - nemotron-3-nano-4b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - --ctx-size
+      - "${TASS_CTX:-16384}"
+      - --parallel
+      - "1"
+      - --jinja
+      - --reasoning-format
+      - deepseek
+    deploy: !reset {}

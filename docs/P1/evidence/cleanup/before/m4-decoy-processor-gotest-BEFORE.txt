@@ -1,0 +1,9 @@
+--- FAIL: TestProtectedActionsFailClosedWithoutIdentity (0.04s)
+    app_test.go:114: state 200 map[candidates:[map[api:identity/2-alpha base_url:http://127.0.0.1:7790 compatible:true version:0.0.0-DECOY]] chosen: code_expires:0001-01-01T00:00:00Z detail:Identity is running but this Processor isn't connected to it yet. last_ok:0001-01-01T00:00:00Z since:2026-10-26T13:19:07.474809615-05:00 state:FOUND_NOT_CONNECTED]
+FAIL
+FAIL	github.com/Arameair/Thought-Processor/processor/internal/app	0.076s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/featpkg	1.051s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/idclient	1.045s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/install	1.025s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/supervisor	17.593s
+FAIL

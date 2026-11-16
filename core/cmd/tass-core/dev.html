@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TASS · Development</title>
+<style>
+:root{color-scheme:dark;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#0b1119;--panel:#121b27;--line:#283648;--text:#e8eef6;--muted:#8fa0b6;--teal:#5cc2b2;--blue:#7ea6ec;--amber:#e7b26f;--red:#ec8a83;--violet:#b49af0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}
+button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointer;border:1px solid #34445a;background:#1a283a;border-radius:7px;padding:6px 10px}button:hover{background:#243649}button.primary{background:#5f9fbe;color:#08131d;font-weight:700;border-color:#7cc0e2}button:disabled{opacity:.45;cursor:default}
+input,select,textarea{background:#0e1622;border:1px solid var(--line);border-radius:7px;padding:6px 8px}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:#0e1520;flex-wrap:wrap}
+header h1{font-size:17px;margin:0 8px 0 0}header h1 small{color:var(--muted);font-weight:400}
+.sp{flex:1}.chip{font-size:12px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted)}.chip.dirty{color:var(--amber);border-color:#6b5432}
+.shell{display:grid;grid-template-columns:270px 1fr 320px;height:calc(100vh - 56px - 210px);min-height:420px}
+aside{background:var(--panel);overflow:auto;padding:12px}aside.lib{border-right:1px solid var(--line)}aside.insp{border-left:1px solid var(--line)}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 8px}
+.item{border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin:6px 0;background:#0f1824}.item .t{font-weight:600}.item .p{color:var(--muted);font-size:12px;margin:2px 0 4px}
+.tag{display:inline-block;font:11px ui-monospace,monospace;border:1px solid #3a4a60;border-radius:5px;padding:0 5px;margin-right:4px;color:#b8c6d8}
+.tag.good{border-color:#2f6b58;color:#8fe0c4}.tag.bad{border-color:#7a3a36;color:#f2aaa3}.tag.warn{border-color:#6b5432;color:#f0c78f}
+.k-lesson{border-left:4px solid var(--teal)}.k-code-cell,.k-text-cell{border-left:4px solid var(--blue)}.k-skill{border-left:4px solid var(--violet)}.k-note{border-left:4px solid var(--amber)}
+.wrap{position:relative;overflow:auto;background:radial-gradient(#1a2433 1px,transparent 1px) 0 0/22px 22px}
+#canvas{position:relative;width:4000px;height:4000px}svg#links{position:absolute;inset:0;width:4000px;height:4000px}
+.node{position:absolute;width:220px;background:#142031;border:1px solid #33465e;border-radius:10px;padding:8px 9px;cursor:grab;user-select:none;box-shadow:0 4px 14px #0006}
+.node.sel{outline:2px solid #9fd2ff}.node.src{outline:2px dashed var(--amber)}.node .t{font-weight:650;font-size:13px}.node .p{font-size:11.5px;color:var(--muted);margin-top:3px}.node .f{margin-top:5px}
+.node.dim{opacity:.18}
+path.edge{fill:none;stroke-width:2.4;cursor:pointer}path.edge.sel{stroke-width:4.5}path.hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+text.el{fill:#c9d6e6;font-size:11px;paint-order:stroke;stroke:#0b1119;stroke-width:3px}
+.kv{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px}.vv{white-space:pre-wrap;word-break:break-word}
+pre{white-space:pre-wrap;background:#0d151f;border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12px;max-height:220px;overflow:auto}
+.bottom{height:210px;border-top:1px solid var(--line);display:grid;grid-template-columns:1.1fr 1fr 1.3fr;background:var(--panel)}
+.bottom>div{padding:10px 12px;overflow:auto;border-right:1px solid var(--line)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}.muted{color:var(--muted)}.err{color:var(--red)}.ok{color:#8fe0c4}
+.hint{color:var(--muted);font-size:12px}.ev{margin:4px 0;font-size:12.5px}.ev b{color:#9fd2ff}
+/* Stage 3A: how one processed nudge's Note was produced (read only) */
+#runView{padding:14px 16px 16px;border-bottom:1px solid var(--line);background:#0f1722}
+#runView h2.rv{font-size:18px;letter-spacing:0;text-transform:none;color:var(--text);margin:0 0 4px}
+#runView .ids{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin:6px 0 10px}#runView .ids b{color:var(--text);font-weight:600;overflow-wrap:anywhere}
+#runView .next{border:1px solid #3b6079;background:#132637;border-radius:10px;padding:10px 12px;margin:10px 0 12px;max-width:980px}
+#runView .next a{color:#9fd2ff;font-weight:600}
+#runView details.legend{font-size:12.5px;color:var(--muted);margin:0 0 10px;max-width:980px}#runView details.legend summary{cursor:pointer;color:#c7e4f3}
+#runView ol{list-style:none;margin:0;padding:0;max-width:980px}
+#runView li.st{border:1px solid var(--line);border-left:4px solid #3b6079;border-radius:9px;background:#121b27;padding:10px 12px;margin:8px 0}
+#runView li.st.RECORDED{border-left-color:var(--teal)}#runView li.st.PARTIAL{border-left-color:var(--amber)}#runView li.st.NOT-RECORDED{border-left-color:var(--red)}
+#runView li.st.CODE-DEFINED{border-left-color:var(--blue)}#runView li.st.NOT-PART-OF-THIS-PATH{border-left-color:#4a5568}
+#runView .sh{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}#runView .sh b{font-size:15px}
+#runView .status{font:12px ui-monospace,monospace;border:1px solid #3a4a60;border-radius:5px;padding:0 6px;color:#c7d3e2}
+#runView .sum{margin:5px 0 4px;overflow-wrap:anywhere}
+#runView dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:2px 12px;margin:6px 0 0;font-size:12.5px}#runView dt{color:var(--muted)}#runView dd{margin:0;overflow-wrap:anywhere}
+#runView .tl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px}
+#runView pre.rt{max-height:340px;margin:4px 0 0;overflow-wrap:anywhere;word-break:break-word}
+#runView .ro{font-size:12px;color:var(--muted);margin-top:10px}
+@media (max-width:700px){#runView dl{grid-template-columns:1fr}#runView dt{margin-top:4px}}
+/* Stage 3A UX repair: one workspace, two modes. Observe = what TASS actually did (read only);
+   Design = the existing Brain Builder (advisory). Nothing from one mode is drawn under the other. */
+#modeBar{display:inline-flex;border:1px solid #3a3f6b;border-radius:9px;overflow:hidden;margin-left:6px}
+#modeBar button{border:0;border-radius:0;background:#141a2e;color:#c9cff0;padding:5px 14px;font-weight:600}
+#modeBar button+button{border-left:1px solid #3a3f6b}
+#modeBar button[aria-pressed=true]{background:#3b2f6e;color:#fff;box-shadow:inset 0 -2px 0 var(--violet)}
+#modeBar button:disabled{opacity:.5}
+body[data-mode=observe] .design-only{display:none!important}
+body[data-mode=design] #runView{display:none!important}
+#designNote{padding:8px 16px;background:#1a1733;border-bottom:1px solid #3a3f6b;color:#d6cff6;font-size:13px}
+#runView button:focus-visible,#modeBar button:focus-visible,#runView a:focus-visible,#runView summary:focus-visible{outline:2px solid #d2c2ff;outline-offset:2px}
+#runView{background:linear-gradient(180deg,#10162a,#0d1320 220px);padding:12px 16px 14px}
+#runView .kicker{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#b9a8f4;margin-bottom:2px}
+#runView .obs{display:grid;grid-template-columns:minmax(250px,1fr) minmax(250px,290px) minmax(270px,340px);gap:14px;align-items:start;margin-top:8px}
+#runView .card{border:1px solid #2c3556;background:#131a2d;border-radius:11px;padding:10px 12px}
+#runView .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9aa6c8;margin-bottom:3px}
+#runQuestion .val{font-size:16px;font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}
+#runStory{margin:8px 0;color:#d5dcf0;overflow-wrap:anywhere}
+#runOutcome{margin-top:8px}#runOutcome pre{margin:2px 0 0;max-height:120px;background:#0f1526;border-color:#2c3556;font-size:13px;color:#eef2ff}
+#runView .lead #runNext{margin:10px 0 0;max-width:none;background:#171d3a;border-color:#4b4290}
+#runMap{list-style:none;margin:0;padding:0}
+#runMap li{margin:0}
+#runView .blk{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#161e35;border:1px solid #33406a;border-left:4px solid #3b6079;border-radius:9px;padding:6px 9px;color:var(--text)}
+#runView .blk b{flex:1;font-weight:600}
+#runView .blk .status,#runView .chipS{font:11px ui-monospace,monospace;border:1px solid #3a4a70;border-radius:5px;padding:0 5px;color:#c7d3e2;white-space:nowrap}
+#runView .blk[data-status=RECORDED]{border-left-color:var(--teal)}#runView .blk[data-status=PARTIAL]{border-left-color:var(--amber)}
+#runView .blk[data-status="NOT RECORDED"]{border-left-color:var(--red)}#runView .blk[data-status="CODE-DEFINED"]{border-left-color:var(--blue)}
+#runView .blk[data-status="NOT PART OF THIS PATH"]{border-left-color:#4a5568}
+#runView .lnk{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-radius:6px;padding:1px 9px 1px 18px;color:#8fe0c4;font-size:12px;text-align:left}
+#runView .lnk .ln{display:inline-block;width:2px;height:16px;background:currentColor;margin-right:4px}
+#runView .lnk.gap{color:var(--amber)}#runView .lnk.gap .ln{background:repeating-linear-gradient(currentColor 0 3px,transparent 3px 6px)}
+#runView .lnk[data-status="NOT ESTABLISHED"]{color:var(--red)}
+#runView .blk:hover,#runView .lnk:hover{background:#1f2950}
+#runView .blk[aria-pressed=true]{border-color:var(--violet);background:#2a2556;box-shadow:0 0 0 1px var(--violet)}
+#runView .lnk[aria-pressed=true]{background:#2a2556;box-shadow:0 0 0 1px var(--violet)}
+#runExtra{margin-top:8px;font-size:12px;color:var(--muted)}#runExtra .blk{display:inline-flex;width:auto;margin:3px 4px 0 0;padding:2px 7px;font-size:12px}
+#runView .key{font-size:11.5px;color:var(--muted);margin:0 0 6px}#runView .key span{margin-right:10px}
+#runInsp{min-height:120px}#runInsp h3{margin:0 0 6px;font-size:15px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+#runInsp p{margin:5px 0;overflow-wrap:anywhere}#runInsp .lbl{margin-top:8px}
+#runInsp details{margin-top:8px}#runInsp summary,#techEvidence>summary{cursor:pointer;color:#c7c2f3}
+#runInsp h4{margin:8px 0 2px;font-size:13px}
+#techEvidence{margin-top:12px;border-top:1px solid #2c3556;padding-top:8px}
+#techEvidence>summary{font-weight:600}
+@media (max-width:1000px){#runView .obs{grid-template-columns:minmax(0,1fr) minmax(230px,280px)}#runInsp{grid-column:1/-1}}
+@media (max-width:640px){#runView .obs{grid-template-columns:minmax(0,1fr)}#runModeHint{display:none}header{gap:6px 10px}}
+/* Stage 3B: one instruction change, planned from Observe. A plan runs nothing. */
+body[data-mode=design] #expView,body:not([data-exp]) #expView{display:none!important}
+body[data-exp] #runView{display:none!important}
+#expView{background:linear-gradient(180deg,#10162a,#0d1320 220px);padding:12px 16px 16px}
+#expView .wrapx{max-width:1040px}
+#expView h2{font-size:18px;letter-spacing:0;text-transform:none;color:var(--text);margin:2px 0 6px}
+#expView .kicker{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#b9a8f4}
+#expView .card{border:1px solid #2c3556;background:#131a2d;border-radius:11px;padding:10px 12px;margin:8px 0}
+#expView .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9aa6c8;margin-bottom:3px}
+#expView textarea{width:100%;min-height:70px;resize:vertical;background:#0f1526;border-color:#4b4290;font-size:14px}
+#expView pre{margin:2px 0 0;background:#0f1526;border-color:#2c3556;max-height:160px}
+#expView .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#expView .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#expView .col{border:1px solid #2c3556;border-radius:10px;background:#141b31;padding:9px 10px}
+#expView .col h4{margin:0 0 4px;font-size:13.5px}
+#expView .col.a{border-top:3px solid var(--blue)}#expView .col.b{border-top:3px solid var(--violet)}#expView .col.o{border-top:3px solid var(--teal)}
+#expView label.snap{display:block;margin:3px 0}#expView label.snap.off{color:var(--muted)}
+#expView ul{margin:2px 0 0 18px;padding:0}
+#expView .err{margin-top:6px}
+#expView .rcpt{border:1px solid #2f6b58;background:#10241f;border-radius:9px;padding:7px 10px;color:#bfeedd}
+#expView button.arm{margin:6px 6px 0 0}
+#expView .confirm{margin-top:8px;border:1px solid #6a58c8;background:#1d1a3d;border-radius:9px;padding:8px 10px}
+#expView .confirm button{margin:6px 6px 0 0}
+#expView dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:1px 10px;margin:6px 0;font-size:12.5px}
+#expView dt{color:var(--muted)}#expView dd{margin:0;overflow-wrap:anywhere}
+#expView .col[data-state=COMPLETED] .armstate{color:var(--teal)}#expView .col[data-state=FAILED] .armstate,#expView .col[data-state=UNCERTAIN] .armstate,#expView .col[data-state=RECOVERY_REQUIRED] .armstate,#expView .col[data-state=NOT_DELIVERED] .armstate{color:var(--red)}
+#expView .col[data-state=RUNNING] .armstate,#expView .col[data-state=SUBMITTED] .armstate{color:var(--amber)}
+#expView .chipS{font:11px ui-monospace,monospace;border:1px solid #3a4a70;border-radius:5px;padding:0 5px}
+#expSnapshot[data-status=FROZEN]{border-color:#2f6b58}#expSnapshot[data-status=UNVERIFIED]{border-color:var(--red)}
+#expView button:focus-visible,#expView a:focus-visible,#expView textarea:focus-visible,#expView input:focus-visible{outline:2px solid #d2c2ff;outline-offset:2px}
+#runView .saved{margin-top:6px;font-size:12.5px;color:#c7c2f3}#runView .saved a{color:#d2c2ff;margin-right:8px}
+#runView #expOpen{margin-top:8px;background:#2a2556;border-color:#6a58c8;color:#fff;font-weight:600}
+@media (max-width:760px){#expView .cols,#expView .grid2{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>TASS <small>· Development</small></h1>
+  <a href="/" style="color:#9fd2ff">← Talk / Core</a>
+  <a href="/cognition" style="color:#9fd2ff">Cognition →</a>
+  <nav id="modeBar" aria-label="Development mode">
+    <button id="modeObserve" aria-pressed="false" title="What TASS actually did in one run. Read only.">Observe</button>
+    <button id="modeDesign" aria-pressed="false" title="The Brain Builder: your advisory map of how TASS could be organised.">Design</button>
+  </nav>
+  <span id="rev" class="chip design-only">revision —</span><span id="dirty" class="chip design-only">saved</span>
+  <span class="sp"></span>
+  <label class="hint design-only"><input type="checkbox" id="focusMode"> Brain view (focus selected)</label>
+  <button id="llabBtn" class="design-only" aria-expanded="false">Teach &amp; test</button>
+  <button id="jlabBtn" class="design-only" aria-expanded="false">Junction lab</button>
+  <button id="undo" class="design-only" disabled>Undo</button>
+  <button id="check" class="design-only">Check</button>
+  <input id="change" class="design-only" placeholder="what changed (optional)" style="width:180px">
+  <button id="save" class="primary design-only">Save revision</button>
+</header>
+<div id="designNote" class="design-only" role="note"><b>DESIGN · advisory.</b> This brain map is your proposal for how TASS could be organised.
+  Editing or saving it does not change how any run happened, and nothing here runs TASS. <span id="designNoteRun"></span></div>
+<div id="cognitionProposal" class="design-only" hidden role="status" style="padding:10px 16px;background:#173147;border-bottom:1px solid #3b6079;color:#c7e4f3"></div>
+<section id="runView" hidden aria-labelledby="runTitle"></section>
+<section id="expView" hidden aria-labelledby="expTitle"></section>
+<section id="llab" class="design-only" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:62vh;overflow:auto">
+  <div class="row"><b>Teach &amp; test one lesson</b>
+    <span class="hint">Choose → Study → Inspect answer → Check grade → Approve → Test again → Evidence. <b>PASSED</b> (graded) ≠ <b>LEARNED</b> (you approved) ≠ <b>RETESTED</b> (applied on a new question) ≠ a <b>skill</b> (separate Identity grant + your approval + run receipt). Nothing here runs code.</span></div>
+  <div class="row"><span class="kv">1 · Choose</span><select id="lPick" style="min-width:320px"></select><button id="lReload">Reload</button><span id="lPulse" class="hint"></span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:14px">
+    <div><h2>2 · Study &nbsp;·&nbsp; 3 · Inspect answer</h2><div id="lCard" class="hint"></div>
+      <div class="row"><button id="lStudy" class="primary">Study (one pulse step)</button><button id="lRetry">Retry</button></div>
+      <div class="kv">TASS's answer (raw, from the Engine job)</div><pre id="lReply">—</pre></div>
+    <div><h2>4 · Check grade &nbsp;·&nbsp; 5 · Approve</h2><div id="lGrade" class="hint">Not graded yet.</div>
+      <div class="row"><button id="lApprove">Approve (counts as LEARNED)</button></div>
+      <h2 style="margin-top:12px">6 · Test again on a new question</h2>
+      <div class="hint">After approval. TASS gets only what he has learned, never the lesson text. One per line: <code>question =&gt; expected answer</code> (empty: use the lesson's own <code>## Retest</code> sections).</div>
+      <textarea id="lQs" style="width:100%;height:70px" placeholder="If the pulse has ticked three times, how many seconds have passed? => 60"></textarea>
+      <div class="row"><button id="lRetest">Test again</button></div><div id="lRetestOut" class="hint"></div></div>
+    <div><h2>7 · Evidence</h2><div id="lEvidence" class="hint"></div></div>
+  </div>
+  <div id="lMsg" class="hint" role="status"></div>
+</section>
+<section id="jlab" class="design-only" hidden style="padding:12px 16px;border-bottom:1px solid var(--line);background:#0f1722;max-height:46vh;overflow:auto">
+  <div class="row"><b>Junction lab · lesson metadata</b><span class="hint">A cell describes what the fixed Go handler <code>lesson-metadata.v1</code> returns. Nothing in a cell runs. Proposals are never activated here.</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px">
+    <div><h2>Active cell</h2><div id="jActive" class="hint"></div><pre id="jActiveText"></pre>
+      <div class="row"><select id="jLesson"></select><button id="jRequest">Request through the junction</button></div>
+      <div class="hint">Read by the Core's next 20 s tick if Identity grants <code>junction.read:lesson-metadata</code>; TASS gets it in his next conversation.</div></div>
+    <div><h2>Propose an alternative cell</h2><textarea id="jProp" style="width:100%;height:150px"></textarea>
+      <input id="jNote" placeholder="why this alternative?" style="width:100%;margin-top:4px"><div class="row"><button id="jSave">Save proposal (not activated)</button></div>
+      <div id="jProps"></div></div>
+    <div><h2>Receipts &amp; comparisons</h2><div id="jReceipts"></div><div id="jCmp"></div></div>
+  </div>
+</section>
+<div class="shell design-only">
+  <aside class="lib">
+    <h2>Find / add</h2>
+    <input id="q" placeholder="search lessons, cells, skills, notes" style="width:100%">
+    <div class="row"><select id="kind"><option value="">all kinds</option><option>lesson</option><option>code-cell</option><option>text-cell</option><option>skill</option><option>note</option></select>
+    <button id="newNote">+ Note</button></div>
+    <div id="noteForm" hidden class="item k-note"><input id="noteTitle" placeholder="note title" style="width:100%"><textarea id="noteText" placeholder="an idea, a thought, a question for TASS…" style="width:100%;height:60px;margin-top:4px"></textarea><div class="row"><button id="noteAdd">Add note</button><button id="noteCancel">Cancel</button></div></div>
+    <div id="lib"></div>
+    <p class="hint">Blocks come from TASS's real lessons, notebook cells and skills. Adding one places a reference; it changes nothing in the source and runs nothing.</p>
+  </aside>
+  <div class="wrap" id="wrap"><div id="canvas"><svg id="links"></svg></div></div>
+  <aside class="insp">
+    <h2>Inspector</h2>
+    <div id="insp" class="hint">Select a block or a connection.</div>
+  </aside>
+</div>
+<div class="bottom design-only">
+  <div><h2>Check</h2><div id="report" class="hint">Not checked yet. Checks never run anything.</div></div>
+  <div><h2>History</h2><div id="hist" class="hint">No saved revisions yet.</div></div>
+  <div><h2>Ask TASS using this brain</h2>
+    <div class="row"><input id="ask" placeholder="e.g. Which block should you use first to find a lesson, and why?" style="flex:1"><button id="askBtn">Ask</button></div>
+    <div class="hint">TASS gets the last <b>saved</b> revision, read-only, for this one message. His reply also appears in Talk. He may disagree with the map.</div>
+    <div id="replies"></div></div>
+</div>
+<script>
+"use strict";
+const TOKEN = "__PAGE_TOKEN__";
+const $ = id => document.getElementById(id);
+let blocks = [], graph = {revision: 0, nodes: [], edges: [], notes: []}, saved = "", sel = null, connectFrom = null, undo = [], relations = {}, askedAt = 0;
+const W = 220, H = 92;
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function tag(text) { const good = /^(LEARNED|PASSED|GRANTED|PASS|DONE|NOTE)$/.test(text), bad = /(FAIL|DENIED|MISSING|NOT GRANTED|STUCK|MODEL_FAILED)/.test(text), warn = /(STALE|RETRY|QUEUED|DISCOVERED|NEW|WARN)/.test(text); return el("span", "tag" + (good ? " good" : bad ? " bad" : warn ? " warn" : ""), text); }
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers: Object.assign({"X-TASS-Token": TOKEN}, body ? {"Content-Type": "application/json"} : {}), body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  return {ok: r.ok, status: r.status, body: data};
+}
+const blockById = id => blocks.find(b => b.id === id);
+const nodeById = id => graph.nodes.find(n => n.id === id);
+const rid = p => p + Math.random().toString(16).slice(2, 12);
+function snapshot() { undo.push(JSON.stringify(graph)); if (undo.length > 60) undo.shift(); $("undo").disabled = false; }
+function changed() { const d = JSON.stringify(graph) !== saved; $("dirty").textContent = d ? "unsaved changes" : "saved"; $("dirty").className = "chip" + (d ? " dirty" : ""); }
+function isStale(n) { const b = blockById(n.block_id); return b && n.pinned !== b.revision; }
+
+async function load() {
+  const r = await api("GET", "/api/brain");
+  if (!r.ok) { $("report").textContent = "Couldn't load (HTTP " + r.status + "). Reload this page from TASS's Core page."; return; }
+  blocks = r.body.blocks || []; relations = r.body.relations || {};
+  graph = r.body.graph || graph; graph.nodes ||= []; graph.edges ||= []; graph.notes ||= [];
+  saved = JSON.stringify(graph); undo = []; $("undo").disabled = true;
+  $("rev").textContent = "revision " + graph.revision + (graph.revision ? " · " + (graph.actor || "") + " · " + new Date(graph.saved_at).toLocaleString() : " · not saved yet");
+  showReport(r.body.report); showHistory(r.body.history || []); drawLib(); render(); changed();
+}
+function drawLib() {
+  const q = $("q").value.toLowerCase(), k = $("kind").value, lib = $("lib"); lib.replaceChildren();
+  const list = blocks.filter(b => (!k || b.kind === k) && (b.title + " " + b.purpose + " " + b.source).toLowerCase().includes(q));
+  for (const b of list) {
+    const c = el("div", "item k-" + b.kind); c.append(el("div", "t", b.title));
+    const m = el("div"); m.append(tag(b.kind.toUpperCase()), tag(b.status)); c.append(m);
+    c.append(el("div", "p", (b.purpose || "").slice(0, 140)));
+    const onCanvas = graph.nodes.filter(n => n.block_id === b.id).length;
+    const add = el("button", "", onCanvas ? "+ Add again (" + onCanvas + " on canvas)" : "+ Add to brain"); add.onclick = () => addNode(b); c.append(add);
+    lib.append(c);
+  }
+  if (!list.length) lib.append(el("p", "hint", blocks.length ? "Nothing matches." : "No blocks yet: press Find lessons on the Core page first."));
+}
+function addNode(b) {
+  if (graph.nodes.length >= 150) return msg("At most 150 blocks.", true);
+  snapshot();
+  const wrap = $("wrap"), n = {id: rid("n"), block_id: b.id, pinned: b.revision, x: Math.round(wrap.scrollLeft + 40 + (graph.nodes.length % 3) * 250), y: Math.round(wrap.scrollTop + 30 + (Math.floor(graph.nodes.length / 3) % 4) * 125)};
+  graph.nodes.push(n); sel = {node: n.id}; render(); drawLib(); changed();
+}
+function center(n) { return [n.x + W / 2, n.y + H / 2]; }
+function neighbors(id) { const s = new Set([id]); for (const e of graph.edges) { if (e.from === id) s.add(e.to); if (e.to === id) s.add(e.from); } return s; }
+function focusSet() { return $("focusMode").checked && sel && sel.node ? neighbors(sel.node) : null; }
+function render() { drawEdges(); drawNodes(); inspect(); }
+function drawEdges() {
+  const svg = $("links"); svg.replaceChildren();
+  const focus = focusSet();
+  const color = {next: "#5cc2b2", supports: "#7ea6ec", alternative: "#e7b26f", requires: "#ec8a83", uses: "#b49af0"};
+  for (const e of graph.edges) {
+    const a = nodeById(e.from), b = nodeById(e.to); if (!a || !b) continue;
+    if (focus && !(focus.has(a.id) && focus.has(b.id))) continue;
+    const [ax, ay] = center(a), [bx, by] = center(b), mx = (ax + bx) / 2;
+    const d = `M ${ax} ${ay} C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`;
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "path"); hit.setAttribute("d", d); hit.setAttribute("class", "hit");
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d);
+    p.setAttribute("class", "edge" + (sel && sel.edge === e.id ? " sel" : "")); p.setAttribute("stroke", color[e.relation] || "#999");
+    if (e.relation !== "next" && e.relation !== "requires") p.setAttribute("stroke-dasharray", "7 6");
+    if (e.creator === "TASS") p.setAttribute("stroke-dasharray", "2 5");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text"); t.setAttribute("x", mx); t.setAttribute("y", (ay + by) / 2 - 4); t.setAttribute("class", "el"); t.setAttribute("text-anchor", "middle");
+    t.textContent = e.relation + (e.creator === "TASS" ? " · TASS" : "");
+    const pick = ev => { ev.stopPropagation(); sel = {edge: e.id}; connectFrom = null; render(); };
+    hit.onclick = pick; p.onclick = pick; t.onclick = pick;
+    svg.append(p, hit, t);
+  }
+}
+function drawNodes() {
+  const canvas = $("canvas"); canvas.querySelectorAll(".node").forEach(x => x.remove());
+  const focus = focusSet();
+  for (const n of graph.nodes) {
+    const b = blockById(n.block_id), c = el("div", "node k-" + (b ? b.kind : "missing"));
+    if (focus && !focus.has(n.id)) c.classList.add("dim");
+    if (sel && sel.node === n.id) c.classList.add("sel"); if (connectFrom === n.id) c.classList.add("src");
+    c.style.left = n.x + "px"; c.style.top = n.y + "px"; c.tabIndex = 0;
+    c.append(el("div", "t", b ? b.title : "MISSING source"), el("div", "p", b ? (b.purpose || "").slice(0, 90) : n.block_id));
+    const f = el("div", "f"); f.append(tag(b ? b.kind.toUpperCase() : "MISSING")); if (b) f.append(tag(b.status)); if (isStale(n)) f.append(tag("STALE")); c.append(f);
+    c.addEventListener("pointerdown", ev => drag(ev, n, c));
+    c.addEventListener("keydown", ev => { const step = ev.shiftKey ? 40 : 10, mv = {ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step]}[ev.key]; if (mv) { ev.preventDefault(); snapshot(); n.x = Math.max(0, n.x + mv[0]); n.y = Math.max(0, n.y + mv[1]); render(); changed(); c.focus(); } });
+    $("canvas").append(c);
+  }
+}
+function drag(ev, n, c) {
+  if (ev.button !== 0) return;
+  const ox = ev.clientX, oy = ev.clientY, sx = n.x, sy = n.y; let moved = false, snapped = false;
+  c.setPointerCapture(ev.pointerId);
+  const move = e => { const dx = e.clientX - ox, dy = e.clientY - oy; if (Math.abs(dx) + Math.abs(dy) > 4) { if (!snapped) { snapshot(); snapped = true; } moved = true; n.x = Math.max(0, Math.min(3770, Math.round(sx + dx))); n.y = Math.max(0, Math.min(3900, Math.round(sy + dy))); c.style.left = n.x + "px"; c.style.top = n.y + "px"; redrawEdges(); } };
+  const up = e => { c.removeEventListener("pointermove", move); c.removeEventListener("pointerup", up); if (moved) { changed(); } else clickNode(n.id); };
+  c.addEventListener("pointermove", move); c.addEventListener("pointerup", up);
+}
+let redrawPending = false;
+function redrawEdges() { if (redrawPending) return; redrawPending = true; requestAnimationFrame(() => { redrawPending = false; drawEdges(); }); }
+function clickNode(id) {
+  if (connectFrom && connectFrom !== id) { addEdge(connectFrom, id, $("cRel") ? $("cRel").value : "supports", $("cWhy") ? $("cWhy").value : ""); connectFrom = null; return; }
+  sel = {node: id}; render();
+}
+// Issue #78: the same rules the server's ValidateBrain applies, checked BEFORE the graph changes, so an
+// invalid connection is refused with its reason instead of sitting unsaved on the canvas.
+function edgeProblem(from, to, relation, ignoreId) {
+  if (from === to) return "A block can't connect to itself.";
+  if (!(relation in relations)) return "Unknown relation: " + relation;
+  if (graph.edges.some(e => e.id !== ignoreId && e.from === from && e.to === to && e.relation === relation)) return "That connection already exists.";
+  if (relation === "uses" && !String((nodeById(to) || {}).block_id || "").startsWith("skill:"))
+    return "Refused: \"uses\" must point to a skill (" + ((blockById((nodeById(to) || {}).block_id) || {}).title || "this block") + " is not a skill).";
+  if (relation === "next") {
+    const nx = {};
+    for (const e of graph.edges) if (e.relation === "next" && e.id !== ignoreId) (nx[e.from] = nx[e.from] || []).push(e.to);
+    const seen = new Set(), stack = [to];              // adding from→to closes a circle if `from` is reachable from `to`
+    while (stack.length) { const x = stack.pop(); if (x === from) return "Refused: this NEXT step would make the NEXT steps go in a circle."; if (seen.has(x)) continue; seen.add(x); stack.push(...(nx[x] || [])); }
+  }
+  return "";
+}
+function addEdge(from, to, relation, reason) {
+  const bad = edgeProblem(from, to, relation, null);
+  if (bad) return msg(bad + " Nothing was added.", true);
+  snapshot();
+  const e = {id: rid("e"), from, to, relation, reason: (reason || "").trim(), creator: "owner"};
+  graph.edges.push(e); sel = {edge: e.id}; render(); changed();
+  msg("Connection added (" + relation + "). Save to keep it. Nothing ran.");
+}
+function kv(box, k, v, pre) { box.append(el("div", "kv", k)); box.append(el(pre ? "pre" : "div", pre ? "" : "vv", v || "—")); }
+function relSelect(id, value) { const s = el("select"); s.id = id; for (const r of Object.keys(relations)) { const o = el("option", "", r); o.value = r; o.title = relations[r]; if (r === value) o.selected = true; s.append(o); } return s; }
+function inspect() {
+  const box = $("insp"); box.replaceChildren(); box.className = "";
+  if (sel && sel.edge) {
+    const e = graph.edges.find(x => x.id === sel.edge); if (!e) { sel = null; return inspect(); }
+    const a = blockById((nodeById(e.from) || {}).block_id) || {}, b = blockById((nodeById(e.to) || {}).block_id) || {};
+    box.append(el("div", "t", "Connection"));
+    kv(box, "From → to", (a.title || "?") + "  →  " + (b.title || "?"));
+    kv(box, "Made by", e.creator);
+    box.append(el("div", "kv", "Relation")); const rs = relSelect("eRel", e.relation); box.append(rs);
+    const meaning = el("div", "hint", relations[e.relation] || ""); box.append(meaning);
+    rs.onchange = () => {
+      const bad = edgeProblem(e.from, e.to, rs.value, e.id);
+      if (bad) { rs.value = e.relation; return msg(bad + " The connection was not changed.", true); }
+      snapshot(); e.relation = rs.value; meaning.textContent = relations[e.relation]; render(); changed();
+    };
+    box.append(el("div", "kv", "Why does this connection help?")); const why = el("textarea"); why.style.width = "100%"; why.style.height = "70px"; why.value = e.reason || "";
+    why.onchange = () => { snapshot(); e.reason = why.value.trim(); changed(); }; box.append(why);
+    const un = el("button", "", "Unlink"); un.onclick = () => { snapshot(); graph.edges = graph.edges.filter(x => x.id !== e.id); sel = null; render(); changed(); msg("Unlinked. Saved revisions keep their history."); };
+    box.append(el("div", "row")); box.lastChild.append(un);
+    box.append(el("p", "hint", "A connection is advice for TASS. It grants no permission and runs nothing."));
+    return;
+  }
+  if (!sel || !sel.node) { box.className = "hint"; box.textContent = "Select a block or a connection. Arrow keys move a selected block (Shift = faster)."; return; }
+  const n = nodeById(sel.node); if (!n) { sel = null; return inspect(); }
+  const b = blockById(n.block_id);
+  if (!b) { kv(box, "Missing", "This block's source no longer exists: " + n.block_id); }
+  else {
+    box.append(el("div", "t", b.title)); const st = el("div"); st.append(tag(b.kind.toUpperCase()), tag(b.status)); if (isStale(n)) st.append(tag("STALE")); box.append(st);
+    kv(box, "Why use it", b.purpose); kv(box, "Expected", b.expect);
+    kv(box, "Source", b.source + (b.cell_id ? " · cell " + b.cell_id : ""));
+    kv(box, "Pinned revision", n.pinned + (isStale(n) ? "  (now " + b.revision + ")" : "  (current)"));
+    if (isStale(n)) { const rp = el("button", "", "Re-pin to current source"); rp.onclick = () => { snapshot(); n.pinned = b.revision; render(); changed(); }; box.append(rp); box.append(el("div", "hint", "The source changed after this block was placed. Check it before re-pinning.")); }
+    kv(box, "What can run it", b.runnable); if (b.last) kv(box, "Last real record", b.last);
+    if (b.kind === "skill") { const r = el("button", "", "Request a run (you approve on the Core page)"); r.onclick = async () => { const x = await api("POST", "/api/skills/request", {skill: b.id.slice(6), text: "requested from the Development brain"}); msg(x.ok ? "Receipt " + x.body.receipt.receipt_id + ": " + x.body.receipt.state + ". Approve it in Workspace on the Core page." : "Refused: " + (x.body.error || x.status), !x.ok); }; box.append(el("div", "row")); box.lastChild.append(r); }
+    if (b.kind === "note") { const note = graph.notes.find(x => "note:" + x.id === b.id); if (note) { box.append(el("div", "kv", "Edit note")); const t = el("textarea"); t.style.width = "100%"; t.style.height = "70px"; t.value = note.text; t.onchange = () => { snapshot(); note.text = t.value; changed(); }; box.append(t); } }
+    if (b.preview) kv(box, "Source preview (read-only)", b.preview, true);
+  }
+  box.append(el("div", "kv", "Connect this block to…"));
+  const row = el("div", "row"), target = el("select"); target.id = "cTo";
+  for (const m of graph.nodes) if (m.id !== n.id) { const o = el("option", "", (blockById(m.block_id) || {}).title || m.block_id); o.value = m.id; target.append(o); }
+  row.append(relSelect("cRel", "supports"), target); box.append(row);
+  const why = el("input"); why.id = "cWhy"; why.placeholder = "why does this help? (recommended)"; why.style.width = "100%"; box.append(why);
+  const r2 = el("div", "row"), go = el("button", "", "Connect"), pick = el("button", "", "…or click a block on the canvas"), rm = el("button", "", "Remove from canvas");
+  go.disabled = !target.options.length; go.onclick = () => addEdge(n.id, target.value, $("cRel").value, $("cWhy").value);
+  pick.onclick = () => { connectFrom = n.id; render(); msg("Now click the block to connect to."); };
+  rm.onclick = () => { snapshot(); graph.edges = graph.edges.filter(e => e.from !== n.id && e.to !== n.id); graph.nodes = graph.nodes.filter(x => x.id !== n.id); if (b && b.kind === "note" && !graph.nodes.some(x => x.block_id === b.id)) graph.notes = graph.notes.filter(x => "note:" + x.id !== b.id); sel = null; render(); drawLib(); changed(); msg("Removed from the canvas. The source is unchanged."); };
+  r2.append(go, pick, rm); box.append(r2);
+}
+function msg(t, bad) { const r = $("report"); r.replaceChildren(el("div", bad ? "err" : "ok", t)); }
+function showReport(rep) {
+  if (!rep) return; const r = $("report"); r.replaceChildren();
+  const h = el("div"); h.append(tag(rep.status), el("span", "", " " + rep.summary)); r.append(h); r.append(el("div", "hint", rep.execution));
+  for (const c of rep.checks || []) { const d = el("div", "ev"); d.append(tag(c.severity), el("span", "", " " + c.text)); r.append(d); }
+}
+function showHistory(h) {
+  const box = $("hist"); box.replaceChildren(); box.className = "";
+  if (!h.length) { box.className = "hint"; box.textContent = "No saved revisions yet."; return; }
+  for (const x of h) {
+    const d = el("div", "ev"); d.append(el("b", "", "rev " + x.revision), el("span", "", " · " + new Date(x.saved_at).toLocaleString() + " · " + x.actor + " · " + x.nodes + " blocks, " + x.edges + " connections" + (x.change ? " · " + x.change : "")));
+    if (x.revision !== graph.revision) { const b = el("button", "", "Restore"); b.style.marginLeft = "6px"; b.onclick = async () => { if (JSON.stringify(graph) !== saved && !confirmLose()) return; const r = await api("POST", "/api/brain/restore", {revision: x.revision, based_on: graph.revision}); if (!r.ok) return msg("Not restored: " + (r.body.error || r.status), true); await load(); msg("Restored revision " + x.revision + " as new revision " + r.body.graph.revision + ". History is unchanged."); }; d.append(b); }
+    box.append(d);
+  }
+}
+function confirmLose() { msg("You have unsaved changes. Save or Undo them first.", true); return false; }
+// Cognition navigation supplies a reference only. It does not create a graph
+// edge, call a model, trigger a skill, or save an experiment.
+const fromCognition = new URLSearchParams(location.search);
+const cognitionRef = fromCognition.get("cognition_ref") || "";
+const cognitionRev = fromCognition.get("brain_revision") || "";
+if (/^(thought|cycle|junction):[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(cognitionRef) &&
+    /^\d{1,9}$/.test(cognitionRev)) {
+    const banner = document.getElementById("cognitionProposal");
+    banner.hidden = false;
+    banner.textContent = "UNEXECUTED DEVELOPMENT PROPOSAL · Cognition reference " + cognitionRef +
+      " · source Brain revision " + cognitionRev +
+      ". Review the record, then manually add an owner note or propose a change. No graph, settings, skill or file was changed.";
+}
+// ---- Stage 3A (#120; design #107 §3.2): how one processed nudge's Note was produced. ----
+// /dev?run=nudge_… shows what Core and the Engine RECORDED about that run, stage by stage, from one
+// owner-scoped GET. Read only: it sends no POST, calls no model and changes no Thought, Note or graph.
+// Every value is set with textContent. Nothing is shown from a failed or refused read.
+const STATUS_MEANS = {
+  "RECORDED": "Read from a record of this run, and consistent with the other records.",
+  "PARTIAL": "Recorded, but clipped, incomplete or not fully confirmed. The line says which.",
+  "CODE-DEFINED": "Not stored for each run; fixed by the Thought Engine's code at the commit shown.",
+  "NOT RECORDED": "No record of it exists, or none could be found. The line says which.",
+  "NOT PART OF THIS PATH": "This kind of processing does not happen when TASS develops a Thought from a nudge."
+};
+const runParam = new URLSearchParams(location.search).get("run") || "";
+async function loadRun(id) {
+  const box = $("runView");
+  box.hidden = false;
+  box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "hint", "Reading the recorded run…"));
+  box.querySelector("h2").id = "runTitle";
+  let r;
+  try { r = await fetch("/api/development/runs/" + encodeURIComponent(id), {method: "GET", cache: "no-store", headers: {"X-TASS-Token": TOKEN}}); }
+  catch (e) { r = null; }
+  if (!r || !r.ok) {
+    const why = !r ? "Core could not be reached." :
+      r.status === 404 ? "There is no processed nudge " + id + " for the Identity that is signed in now." :
+      r.status === 403 ? "Identity did not allow this read (locked, or the Cognition read permission is off)." :
+      r.status === 401 ? "This page is not signed in. Open Development from TASS's Core page." :
+      "The run record is not available right now (HTTP " + r.status + "). Nothing is shown in its place.";
+    box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", why),
+      el("div", "ro", "Nothing was run or changed."));
+    box.querySelector("h2").id = "runTitle";
+    return;
+  }
+  let d;
+  try { d = await r.json(); } catch (e) { d = null; }
+  if (!d || d.nudge_id !== id || !Array.isArray(d.stages)) {
+    box.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "Core's answer could not be read. Nothing is shown in its place."));
+    return;
+  }
+  const head = el("h2", "rv", "How this Note was produced"); head.id = "runTitle";
+  const ids = el("div", "ids");
+  // Stage 3A repair: Core decides the result line (a historical receipt is not current attribution) and
+  // whether the Engine revision is reconciled; when it is not, both reported revisions are shown.
+  const short = x => /^[0-9a-f]{40}$/.test(x || "") ? x.slice(0, 12) : (x || "NOT RECORDED");
+  const engine = d.engine_revision === "RECONCILED" ? short(d.engine_commit) :
+    (d.engine_revision || "NOT REPORTED") + " — now " + short(d.engine_commit) + " · run record " + short(d.record_engine_commit);
+  for (const [k, v] of [["Thought", d.thought_id], ["Nudge", d.nudge_id], ["Request", d.request_id || "NOT RECORDED"],
+      ["Thought revision when drafted", d.source_revision], ["Engine", engine], ["Result", d.result || d.run_state || "NOT RECORDED"]]) {
+    const s = el("span", "", k + " "); s.append(el("b", "", v)); ids.append(s);
+  }
+  const next = el("div", "next");
+  next.id = "runNext";
+  const back = el("a", "", "Back to this Note in Cognition");
+  back.href = "/cognition#thought=" + encodeURIComponent(d.thought_id) + (d.request_id ? "&dev=" + encodeURIComponent(d.request_id) : "");
+  next.append(el("b", "", "Next: "), back,
+    el("div", "hint", "Select a step or a connection on the map to see its evidence; nothing on this page can run anything."));
+  // Stage 3B: plan one instruction change for this run. Opening and saving a plan makes no model call.
+  const tryBtn = el("button", "", "Try one change…"); tryBtn.id = "expOpen"; tryBtn.type = "button";
+  tryBtn.onclick = () => goExp("new", true);
+  const saved = el("div", "saved"); saved.id = "expSaved";
+  next.append(tryBtn, saved);
+  const legend = el("details", "legend");
+  legend.append(el("summary", "", "What the labels mean"));
+  for (const [k, v] of Object.entries(STATUS_MEANS)) { const p = el("div"); p.append(el("b", "", k + " — "), document.createTextNode(v)); legend.append(p); }
+  const list = el("ol");
+  for (const s of d.stages) list.append(stageItem(s, "li", "stage-" + s.stage));
+  // Technical evidence: the twelve original stages, IDs, revisions, prompt, reply and receipts. Collapsed.
+  const tech = el("details"); tech.id = "techEvidence";
+  tech.append(el("summary", "", "Technical evidence · 12 stages, IDs, revisions, prompt, reply and receipts"), ids, legend, list, el("div", "ro", d.read_only || "Read only."));
+  // Observe: the question, a plain summary, the outcome, the map and the inspector. Connections come
+  // only from Core's links (recorded correlations); the page never joins two blocks on its own.
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [], links = Array.isArray(d.links) ? d.links : [], extra = Array.isArray(d.extra) ? d.extra : [];
+  const stageBy = Object.fromEntries(d.stages.map(s => [s.stage, s]));
+  const blockBy = Object.fromEntries(blocks.concat(extra).map(b => [b.id, b]));
+  const q = el("section", "card"); q.id = "runQuestion";
+  q.append(el("div", "lbl", "Thought · the question TASS was developing"), el("div", "val", d.question || "NOT RECORDED"));
+  const rec = blocks.filter(b => b.status === "RECORDED").length, con = links.filter(l => l.status === "CONNECTED").length;
+  const story = el("p"); story.id = "runStory";
+  story.textContent = "One run of TASS developing this Thought from your attention. Result: " + (d.result || d.run_state || "NOT RECORDED") + ". " +
+    rec + " of " + blocks.length + " steps fully recorded; " + con + " of " + links.length + " connections established" +
+    (con < links.length || rec < blocks.length ? " — the gaps are marked on the map." : ".");
+  const out = el("section", "card"); out.id = "runOutcome";
+  out.append(el("div", "lbl", "Saved Note · the outcome"));
+  if (d.note) out.append(el("pre", "", d.note));
+  else out.append(el("div", "hint", (blockBy.saved_note || {}).summary || "NOT RECORDED"));
+  const lead = el("div", "lead"); lead.append(q, story, out, next);
+  const mapCol = el("div", "mapcol card");
+  const key = el("div", "key"); key.append(el("span", "", "│ connected"), el("span", "", "┊ partial / not established"));
+  const map = el("ol"); map.id = "runMap"; map.setAttribute("aria-label", "Processing map");
+  const mapBtns = [];
+  const pick = (kind, id) => { selectRun(kind, id); };
+  const mkBlock = b => {
+    const bt = el("button", "blk"); bt.type = "button"; bt.dataset.block = b.id; bt.dataset.status = b.status || "NOT RECORDED";
+    bt.setAttribute("aria-pressed", "false"); bt.setAttribute("aria-label", b.title + ": " + (b.status || "NOT RECORDED"));
+    bt.append(el("b", "", b.title), el("span", "status", b.status || "NOT RECORDED"));
+    bt.onclick = () => pick("block", b.id); return bt;
+  };
+  const LINKWORD = {"CONNECTED": "connected", "PARTIAL": "partial link", "NOT ESTABLISHED": "not established"};
+  blocks.forEach((b, i) => {
+    const li = el("li"); const bt = mkBlock(b); li.append(bt); map.append(li); mapBtns.push(bt);
+    const l = links[i];
+    if (l && l.from === b.id) {
+      const li2 = el("li"); const lb = el("button", "lnk" + (l.status === "CONNECTED" ? "" : " gap")); lb.type = "button";
+      lb.dataset.from = l.from; lb.dataset.to = l.to; lb.dataset.status = l.status;
+      lb.setAttribute("aria-pressed", "false");
+      lb.setAttribute("aria-label", "Connection " + b.title + " to " + ((blockBy[l.to] || {}).title || l.to) + ": " + (LINKWORD[l.status] || l.status));
+      lb.append(el("span", "ln"), el("span", "", LINKWORD[l.status] || String(l.status).toLowerCase()));
+      lb.onclick = () => pick("link", i);
+      li2.append(lb); map.append(li2); mapBtns.push(lb);
+    }
+  });
+  map.addEventListener("keydown", ev => {
+    const i = mapBtns.indexOf(document.activeElement); if (i < 0) return;
+    const j = {ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: mapBtns.length - 1}[ev.key];
+    if (j === undefined) return; ev.preventDefault(); mapBtns[Math.max(0, Math.min(mapBtns.length - 1, j))].focus();
+  });
+  const ex = el("div"); ex.id = "runExtra"; ex.append(el("span", "", "Also looked for: "));
+  for (const b of extra) ex.append(mkBlock(b));
+  mapCol.append(el("div", "lbl", "Processing map · what happened, in order"), key, map, ex);
+  const insp = el("aside", "card"); insp.id = "runInsp"; insp.setAttribute("aria-label", "Inspector"); insp.setAttribute("aria-live", "polite");
+  insp.append(el("div", "lbl", "Inspector"), el("p", "hint", "Select a step or a connection to see what happened, how sure the record is, and what is missing."));
+  const grid = el("div", "obs"); grid.append(lead, mapCol, insp);
+  const kick = el("div", "kicker", "Observe · what TASS actually did · read only");
+  box.replaceChildren(kick, head, grid, tech);
+  RUN = {d, blocks, links, blockBy, stageBy};
+  loadSavedPlans();
+}
+let RUN = null;
+// One stage, rendered literally (textContent only): used in technical evidence and in the inspector.
+function stageItem(s, tagName, id) {
+  const li = el(tagName, "st " + String(s.status || "").replace(/ /g, "-"));
+  if (id) li.id = id;
+  li.dataset.status = s.status || "";
+  const sh = el("div", "sh");
+  sh.append(el("b", "", s.title || s.stage), el("span", "status", s.status || "NOT RECORDED"));
+  li.append(sh, el("div", "sum", s.summary || ""));
+  if ((s.fields || []).length) {
+    const dl = el("dl");
+    for (const f of s.fields) dl.append(el("dt", "", f.label), el("dd", "", f.value));
+    li.append(dl);
+  }
+  if (s.text) li.append(el("div", "tl", s.text_label || "Text"), el("pre", "rt", s.text));
+  return li;
+}
+function selectRun(kind, id) {
+  if (!RUN) return;
+  const insp = $("runInsp"); if (!insp) return;
+  for (const b of document.querySelectorAll("#runView .blk")) b.setAttribute("aria-pressed", String(kind === "block" && b.dataset.block === id));
+  for (const b of document.querySelectorAll("#runMap .lnk")) b.setAttribute("aria-pressed", String(kind === "link" && RUN.links[id] && b.dataset.from === RUN.links[id].from));
+  const h = el("h3"), body = [];
+  const means = st => { const p = el("p"); p.append(el("b", "", "Evidence: " + st + " — "), document.createTextNode(STATUS_MEANS[st] || "")); return p; };
+  const tech = el("details"); tech.append(el("summary", "", "Technical details"));
+  if (kind === "block") {
+    const b = RUN.blockBy[id]; if (!b) return;
+    h.append(el("span", "", b.title), el("span", "chipS", b.status));
+    body.push(el("div", "lbl", "What happened"), el("p", "", b.summary || "NOT RECORDED"), means(b.status));
+    const rel = RUN.links.filter(l => l.from === id || l.to === id);
+    if (rel.length) {
+      body.push(el("div", "lbl", "Connections"));
+      for (const l of rel) {
+        const other = RUN.blockBy[l.from === id ? l.to : l.from] || {};
+        body.push(el("p", "", (l.from === id ? "To " : "From ") + (other.title || "?") + ": " + l.status));
+      }
+    }
+    for (const sid of b.stages || []) if (RUN.stageBy[sid]) tech.append(stageItem(RUN.stageBy[sid], "div"));
+  } else {
+    const l = RUN.links[id]; if (!l) return;
+    const f = RUN.blockBy[l.from] || {}, t = RUN.blockBy[l.to] || {};
+    h.append(el("span", "", (f.title || l.from) + " → " + (t.title || l.to)), el("span", "chipS", l.status));
+    body.push(el("div", "lbl", "What this connection means"),
+      el("p", "", "Whether the record ties “" + (f.title || l.from) + "” to “" + (t.title || l.to) + "” in this run. Status: " + l.status + "."),
+      el("div", "lbl", l.status === "CONNECTED" ? "Established by" : "Would be established by"), el("p", "", l.basis || ""));
+    if (l.status !== "CONNECTED") body.push(el("div", "lbl", "Missing"), el("p", "", l.missing || "NOT RECORDED"));
+    const dl = el("dl");
+    for (const [k, v] of [[f.title || l.from, f.status], [t.title || l.to, t.status], ["Nudge", RUN.d.nudge_id], ["Request", RUN.d.request_id || "NOT RECORDED"]]) dl.append(el("dt", "", k), el("dd", "", v || "NOT RECORDED"));
+    tech.append(dl);
+  }
+  insp.replaceChildren(el("div", "lbl", "Inspector"), h, ...body, tech);
+  if (window.innerWidth <= 1000) insp.scrollIntoView({block: "nearest"});
+}
+// ---- Observe / Design: one Development workspace, two modes, one URL each. ----
+// /dev?run=<nudge> opens Observe; &mode=design (or plain /dev) opens the existing Brain Builder. The
+// Brain Builder is read only when Design is first shown, so Observe never loads or draws it.
+const validRun = /^nudge_[0-9a-f]{20}$/.test(runParam);
+let designLoaded = false, runLoaded = false;
+function modeFromURL() { const u = new URLSearchParams(location.search); return (u.get("mode") === "design" || !runParam) ? "design" : "observe"; }
+function setMode(m, push) {
+  document.body.dataset.mode = m;
+  $("modeObserve").setAttribute("aria-pressed", String(m === "observe"));
+  $("modeDesign").setAttribute("aria-pressed", String(m === "design"));
+  if (push) {
+    const u = new URLSearchParams(location.search);
+    if (m === "design") u.set("mode", "design"); else u.delete("mode");
+    history.pushState(null, "", location.pathname + "?" + u.toString());
+  }
+  if (m === "design" && !designLoaded) { designLoaded = true; load(); }
+  if (m === "observe" && !runLoaded) {
+    runLoaded = true; $("cognitionProposal").hidden = true;
+    if (validRun) loadRun(runParam);
+    else { const b = $("runView"); b.hidden = false; b.replaceChildren(el("h2", "rv", "How this Note was produced"), el("div", "err", "That is not a nudge ID. Nothing is shown.")); }
+  }
+}
+if (!runParam) { $("modeObserve").disabled = true; $("modeObserve").title = "Open a Note in Cognition and choose “How this Note was produced” to observe a run."; }
+else $("designNoteRun").textContent = "To see what TASS actually did in run " + runParam + ", choose Observe.";
+$("modeObserve").onclick = () => { if (document.body.dataset.mode !== "observe") setMode("observe", true); };
+$("modeDesign").onclick = () => { if (document.body.dataset.mode !== "design") setMode("design", true); };
+window.addEventListener("popstate", () => { setMode(modeFromURL(), false); routeExp(); });
+// ---- Stage 3B (#120; design #107 §3.3, §6): one instruction change, planned as an isolated A/B experiment. ----
+// /dev?run=<nudge>&exp=new shows the plan form; &exp=exp_… shows a saved plan. Saving is ONE POST to
+// /api/development/experiments, a local write with zero model calls. No control here can run an arm:
+// that needs owner decisions D4–D7 and an Identity action and grant that do not exist yet.
+const EXP_ID = /^exp_[0-9a-f]{20}$/;
+let expOpts = null, expKey = "";
+function expHeaders(post) { const h = {"X-TASS-Token": TOKEN}; if (post) h["Content-Type"] = "application/json"; return h; }
+async function expGet(path) {
+  let r; try { r = await fetch(path, {method: "GET", cache: "no-store", headers: expHeaders(false)}); } catch (e) { r = null; }
+  if (!r) return {ok: false, status: 0, body: {}};
+  let b = {}; try { b = await r.json(); } catch (e) { b = {}; }
+  return {ok: r.ok, status: r.status, body: b};
+}
+function expWhy(r) {
+  if (r.body && r.body.code && r.body.error) return String(r.body.error) + "."; // Core's own specific refusal
+  return r.status === 0 ? "Core could not be reached." : r.status === 403 ? "Identity did not allow this (locked, or the Cognition read permission is off)." :
+    r.status === 404 ? "There is no such run or experiment for the Identity that is signed in now." :
+    (r.body && r.body.error) ? String(r.body.error) : "Not available right now (HTTP " + r.status + "). Nothing is shown in its place.";
+}
+function goExp(v, push) {
+  const u = new URLSearchParams(location.search);
+  if (v) u.set("exp", v); else u.delete("exp");
+  const url = location.pathname + "?" + u.toString();
+  if (push) history.pushState(null, "", url); else history.replaceState(null, "", url);
+  routeExp();
+}
+function expShell(kick, title) {
+  const v = $("expView"); v.hidden = false;
+  const w = el("div", "wrapx"), back = el("a", "", "← Back to the run");
+  back.href = "/dev?run=" + encodeURIComponent(runParam);
+  back.onclick = ev => { ev.preventDefault(); goExp("", true); };
+  const h = el("h2", "", title); h.id = "expTitle";
+  w.append(el("div", "kicker", kick), h, back);
+  v.replaceChildren(w);
+  return w;
+}
+async function routeExp() {
+  const exp = new URLSearchParams(location.search).get("exp") || "";
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = "";
+  if (!exp || !validRun || document.body.dataset.mode !== "observe") { delete document.body.dataset.exp; $("expView").hidden = true; return; }
+  document.body.dataset.exp = "1";
+  if (exp === "new") return expForm();
+  if (!EXP_ID.test(exp)) { const w = expShell("Observe · try one change", "Experiment"); w.append(el("div", "err", "That is not an experiment ID. Nothing is shown.")); return; }
+  const w = expShell("Observe · try one change", "Experiment plan"); w.append(el("div", "hint", "Reading the saved plan…"));
+  const r = await expGet("/api/development/experiments/" + encodeURIComponent(exp));
+  if (!r.ok || r.body.experiment_id !== exp || r.body.baseline_nudge_id !== runParam) {
+    const w2 = expShell("Observe · try one change", "Experiment plan");
+    w2.append(el("div", "err", r.ok ? "Core's answer is for another plan or run. Nothing is shown." : expWhy(r)));
+    return;
+  }
+  expPlan(r.body);
+}
+async function expForm() {
+  const w = expShell("Observe · try one change · nothing runs", "Try one change");
+  w.append(el("div", "hint", "Reading the current instruction…"));
+  if (!expOpts) {
+    const r = await expGet("/api/development/experiments?run=" + encodeURIComponent(runParam));
+    if (!r.ok || r.body.control === undefined) { const w2 = expShell("Observe · try one change", "Try one change"); w2.append(el("div", "err", expWhy(r))); return; }
+    expOpts = r.body;
+  }
+  const o = expOpts;
+  const rnd = new Uint8Array(8); crypto.getRandomValues(rnd);
+  expKey = "exp-" + Array.from(rnd, x => x.toString(16).padStart(2, "0")).join("");
+  const f = expShell("Observe · try one change · nothing runs", "Try one change");
+  const form = el("form"); form.id = "expForm"; form.noValidate = true;
+  const c1 = el("div", "card");
+  const lab = el("label", "lbl", "What to change: the instruction sentence (B). A keeps the current one."); lab.htmlFor = "expVariant";
+  const ta = el("textarea"); ta.id = "expVariant"; ta.maxLength = 2000; ta.value = o.control; ta.setAttribute("aria-describedby", "expCount expErr");
+  const cnt = el("div", "hint"); cnt.id = "expCount";
+  const upd = () => { cnt.textContent = [...ta.value.trim()].length + " / " + o.variant_max + " characters · one line"; };
+  ta.oninput = upd; upd();
+  const fixed = el("div", "lbl", "Fixed reply format (not editable, so the Engine's parser stays valid)");
+  const pre = el("pre", "", o.contract); pre.id = "expContract";
+  c1.append(lab, ta, cnt, fixed, pre);
+  const c2 = el("div", "card"); c2.append(el("div", "lbl", "Snapshot: the Thought A and B both see"));
+  for (const sn of o.snapshots || []) {
+    const l = el("label", "snap" + (sn.available ? "" : " off")); const i = el("input"); i.type = "radio"; i.name = "expSnap"; i.value = sn.id;
+    i.disabled = !sn.available; i.checked = sn.id === "AS_OF_NOW";
+    l.append(i, el("b", "", " " + sn.label + " — "), document.createTextNode(sn.why)); c2.append(l);
+  }
+  const g = el("div", "grid2");
+  const keep = el("div", "card"); keep.append(el("div", "lbl", "Held constant for A and B")); const ul1 = el("ul");
+  for (const x of o.held_constant || []) ul1.append(el("li", "", x)); keep.append(ul1);
+  const nochg = el("div", "card"); nochg.append(el("div", "lbl", "Won't change")); const ul2 = el("ul");
+  for (const x of o.unchanged || []) ul2.append(el("li", "", x)); nochg.append(ul2);
+  g.append(keep, nochg);
+  const cost = el("div", "card"); cost.append(el("div", "lbl", "Cost"), el("div", "", o.cost));
+  const err = el("div", "err"); err.id = "expErr"; err.setAttribute("role", "alert");
+  const save = el("button", "primary", "Save plan (0 model requests)"); save.id = "expSave"; save.type = "submit";
+  form.append(c1, save, err, c2, g, cost);
+  f.append(form);
+  form.onsubmit = async ev => {
+    ev.preventDefault();
+    if (save.disabled) return;
+    const v = ta.value.trim(), norm = v.split(/\s+/).join(" ");
+    const bad = !v ? "Write the changed instruction sentence." :
+      /[\r\n]/.test(v) ? "The instruction must be one line; the reply format lines are fixed." :
+      [...v].length > o.variant_max ? "The instruction is longer than " + o.variant_max + " characters." :
+      /\b(NOTE|STATE)\s*\**\s*[:=]/i.test(v) ? "The instruction may not contain NOTE: or STATE:; the reply format is fixed." :
+      norm === o.control ? "B must differ from A: change the instruction sentence." : "";
+    if (bad) { err.textContent = bad; return; }
+    err.textContent = ""; save.disabled = true; save.textContent = "Saving…";
+    let r;
+    try { r = await fetch("/api/development/experiments", {method: "POST", cache: "no-store", headers: expHeaders(true),
+      body: JSON.stringify({baseline_nudge_id: runParam, variant: v, snapshot: "AS_OF_NOW", idempotency_key: expKey})}); } catch (e) { r = null; }
+    let b = {}; if (r) { try { b = await r.json(); } catch (e) { b = {}; } }
+    save.disabled = false; save.textContent = "Save plan (0 model requests)";
+    if (!r || !r.ok || !EXP_ID.test(b.experiment_id || "") || b.baseline_nudge_id !== runParam) {
+      err.textContent = "Not saved: " + expWhy({status: r ? r.status : 0, body: b}); return;
+    }
+    expOpts = null;
+    history.replaceState(null, "", location.pathname + "?run=" + encodeURIComponent(runParam) + "&exp=" + b.experiment_id);
+    expPlan(b, true);
+    loadSavedPlans();
+  };
+  ta.focus();
+}
+// The plan view. Everything shown is Core's record: states, replies and digests are never made up here.
+// Running an arm is the owner's explicit, separate confirmation per arm (one POST each); the page then
+// only READS the plan until the arm is final. Nothing here retries, runs B by itself, or promotes.
+let expPoll = null, expShown = "";
+function expPlan(p, fresh) {
+  if (expPoll) { clearTimeout(expPoll); expPoll = null; }
+  expShown = p.experiment_id;
+  const arms = p.arms || [], open = arms.some(a => a.state === "SUBMITTED" || a.state === "RUNNING");
+  const ran = arms.some(a => a.state !== "NOT RUN");
+  const w = expShell("Observe · try one change · " + (ran ? "isolated experiment" : "nothing has run"), "Experiment plan");
+  const box = el("div"); box.id = "expPlan";
+  const head = el("div", "card"); const idl = el("div"); idl.append(el("span", "lbl", "Plan "), el("b", "expid", p.experiment_id)); head.append(idl);
+  const st = el("div", "rcpt"); st.id = "expStatus"; st.setAttribute("role", "status");
+  st.textContent = (p.status || "") + " · model requests so far: " + (p.model_requests || 0) + " of at most 2 · saved into the Thought: nothing";
+  const rc = el("div", "hint", (fresh ? "Plan saved " : "Plan saved at ") + new Date(p.created_at).toLocaleString() + " · saving made 0 model requests · " +
+    (p.replayed ? "this plan already existed (same form submitted again)" : "stored on this computer only"));
+  head.append(st, rc,
+    el("div", "hint", "Instruction A " + (p.control_status === "CONFIRMED" ? "is CONFIRMED for the Engine revision of the original run." :
+      "is NOT CONFIRMED: the Engine revision of the original run is " + p.baseline_engine_revision + ", so it is not shown that the running Engine uses this sentence.")));
+  // The frozen snapshot: its status, capture time and reference. Never "the Thought as it is now" once frozen.
+  const f = p.frozen_snapshot || {status: "NOT CAPTURED", detail: ""};
+  const snap = el("div", "card"); snap.id = "expSnapshot"; snap.dataset.status = f.status;
+  const sh = el("div"); sh.append(el("span", "lbl", "Snapshot · the inputs A and B share "), el("b", "chipS", f.status)); snap.append(sh);
+  if (f.status !== "NOT CAPTURED" && f.sha256) {
+    const dl = el("dl");
+    for (const [k, v] of [["Reference", f.reference], ["Captured", f.captured_at ? new Date(f.captured_at).toLocaleString() + " (" + f.captured_at + ")" : "NOT RECORDED"],
+        ["sha256", f.sha256], ["Contains", f.evidence_lines + " evidence line(s), " + f.note_lines + " Note(s), your attention text, the reply format and the model settings"]])
+      dl.append(el("dt", "", k), el("dd", "", v || "NOT RECORDED"));
+    snap.append(dl);
+  }
+  snap.append(el("div", "hint", f.detail || ""));
+  const diff = el("div", "grid2");
+  const da = el("div", "card"); da.append(el("div", "lbl", "A · unchanged instruction"), el("pre", "", p.control));
+  const db = el("div", "card"); db.append(el("div", "lbl", "B · your instruction (the only difference)"), el("pre", "", p.variant));
+  diff.append(da, db);
+  const cols = el("div", "cols");
+  const o = el("div", "col o"); o.append(el("h4", "", "Original · the run you observed"));
+  if (p.original && p.original.text) o.append(el("pre", "", p.original.text)); else o.append(el("div", "hint", (p.original || {}).saved || "NOT RECORDED"));
+  o.append(el("div", "hint", "Request " + ((p.original || {}).request_id || "NOT RECORDED") + " · " + ((p.original || {}).state || "NOT RECORDED")),
+    el("div", "hint", "For reference only: it ran on the Thought as it was then, not on this snapshot."),
+    el("div", "", "Saved into the Thought: " + ((p.original || {}).text ? "yes" : (p.original || {}).saved || "NOT RECORDED")));
+  cols.append(o);
+  const err = el("p", "err"); err.id = "expRunErr"; err.setAttribute("role", "alert");
+  for (const a of arms) {
+    const c = el("div", "col " + a.arm.toLowerCase()); c.dataset.arm = a.arm; c.dataset.state = a.state;
+    const hd = el("h4", "", a.label); c.append(hd);
+    const sl = el("div"); sl.append(document.createTextNode("State: "), el("b", "armstate", a.state)); c.append(sl);
+    if (a.detail) c.append(el("div", "hint", a.detail));
+    if (a.state === "COMPLETED") {
+      c.append(el("div", "lbl", "Reply (recorded, not saved anywhere else)"), el("pre", "reply", a.reply || ""));
+      if (a.parsed) { c.append(el("div", "hint", "Read as NOTE: " + a.note), el("div", "hint", "Suggested state (never applied): " + (a.suggested_state || "none"))); }
+      else c.append(el("div", "hint", "The reply did not follow the NOTE / STATE format: " + (a.parse_error || "unreadable") + ". It is shown as it was returned."));
+    }
+    const dl = el("dl");
+    const rows = [["Model requests", String(a.model_requests)]];
+    if (a.request_id) rows.push(["Request", a.request_id]);
+    if (a.model_http) rows.push(["Model HTTP", a.model_http]);
+    if (a.identity_decision) rows.push(["Approval", a.identity_decision + " (single use)"]);
+    if (a.submitted_at) rows.push(["Confirmed", new Date(a.submitted_at).toLocaleString()]);
+    if (a.snapshot_sha256) rows.push(["Snapshot", "snap-" + a.snapshot_sha256.slice(0, 12)]);
+    if (a.reply_sha256) rows.push(["Reply sha256", a.reply_sha256.slice(0, 16) + "…"]);
+    if (a.elapsed_ms) rows.push(["Elapsed", a.elapsed_ms + " ms"]);
+    for (const [k, v] of rows) dl.append(el("dt", "", k), el("dd", "", v));
+    c.append(dl, el("div", "", "Saved into the Thought: no (experiments never write to it)"));
+    // Run: enabled only when Core says this arm can run now. One explicit confirmation per arm.
+    const run = el("button", "arm", a.arm === "A" ? "Run A (unchanged) once…" : "Run B (your change) once…"); run.type = "button"; run.dataset.arm = a.arm;
+    run.disabled = !a.runnable;
+    c.append(run);
+    if (!a.runnable && a.state === "NOT RUN") c.append(el("div", "why hint", a.why || "NOT AUTHORIZED."));
+    run.onclick = () => {
+      if (run.disabled || c.querySelector(".confirm")) return;
+      const cf = el("div", "confirm"); cf.setAttribute("role", "group"); cf.setAttribute("aria-label", "Confirm arm " + a.arm);
+      cf.append(el("div", "", "This sends ONE request to the local model for arm " + a.arm + (a.arm === "A" ?
+        " (the unchanged instruction). The snapshot is captured and frozen first." : " (your instruction), built from the same frozen snapshot as A.")),
+        el("div", "hint", "It is never retried, even if it fails or its result is uncertain. Nothing is saved into the Thought. " + (a.arm === "A" ? "B is a separate confirmation." : "")));
+      const yes = el("button", "primary", "Confirm: run " + a.arm + " once"), no = el("button", "", "Cancel"); yes.type = no.type = "button"; yes.dataset.confirm = a.arm;
+      no.onclick = () => { cf.remove(); run.focus(); };
+      yes.onclick = async () => {
+        if (yes.disabled) return;
+        yes.disabled = no.disabled = true; yes.textContent = "Sending the confirmation…";
+        for (const b of box.querySelectorAll("button.arm")) b.disabled = true;
+        let r; try { r = await fetch("/api/development/experiments/" + encodeURIComponent(p.experiment_id) + "/arms/" + a.arm, {method: "POST", cache: "no-store",
+          headers: expHeaders(true), body: JSON.stringify({body_digest: p.body_digest, confirm: a.confirm})}); } catch (e) { r = null; }
+        let b = {}; if (r) { try { b = await r.json(); } catch (e) { b = {}; } }
+        if (!r || !r.ok || b.experiment_id !== p.experiment_id) {
+          // Not accepted, or the answer was lost: say so and re-read the record. Never send it again from here.
+          const why = "Arm " + a.arm + " was not started by this click: " + expWhy({status: r ? r.status : 0, body: b}) + " Nothing is sent again automatically.";
+          await expRefresh(p.experiment_id); const e2 = $("expRunErr"); if (e2) e2.textContent = why;
+          return;
+        }
+        if (expShown === p.experiment_id) expPlan(b);
+      };
+      cf.append(yes, no); c.append(cf); yes.focus();
+    };
+    cols.append(c);
+  }
+  const cmp = el("div", "card"); cmp.id = "expCompare"; cmp.dataset.ready = String(!!(p.comparison || {}).ready);
+  cmp.append(el("div", "lbl", "A against B"), el("div", "", (p.comparison || {}).text || ""));
+  // Stage 3C: owner judgment is evidence only. The page never infers or pre-selects a verdict.
+  const feedback = el("section", "card"); feedback.id = "expFeedback";
+  feedback.append(el("h3", "", "Owner assessment · B compared with A"),
+    el("div", "hint", "Your judgment, not a model verdict. Saving cannot change TASS's instructions, Thought, Notes, grants or runtime behavior."));
+  if (p.owner_feedback) {
+    const f = p.owner_feedback; feedback.dataset.saved = "true";
+    feedback.append(el("div", "rcpt", "Saved owner verdict: " + f.verdict),
+      el("div", "hint", "Saved " + new Date(f.saved_at).toLocaleString() + " · frozen snapshot " + f.snapshot_sha256.slice(0,12) +
+      " · A request " + f.a_request_id + " · B request " + f.b_request_id),
+      el("div", "lbl", "Your explanation / correction"),
+      el("div", "feedbackCorrection", f.correction || "(No explanation recorded)"),
+      el("div", "hint", "Write-once assessment. Reopening does not run either arm. There is no automatic learning or promotion."));
+  } else {
+    const eligible = !!(p.comparison || {}).ready && f.status === "FROZEN" && arms.length === 2 &&
+      arms.every(a => a.state === "COMPLETED" && a.request_id && a.reply_sha256 && a.snapshot_sha256 === f.sha256);
+    if (!eligible) {
+      feedback.append(el("div", "hint", "Assessment unavailable: both A and B and their shared frozen snapshot must be verified before recording a verdict. Nothing is inferred or saved."));
+    } else {
+      const choices = el("div", "feedbackChoices"); choices.setAttribute("role", "group"); choices.setAttribute("aria-label", "Verdict for B compared with A");
+      let choice = "";
+      for (const val of ["BETTER", "SAME", "WORSE", "INCONCLUSIVE"]) {
+        const label = el("label", ""); const radio = document.createElement("input");
+        radio.type = "radio"; radio.name = "experiment-feedback"; radio.value = val;
+        radio.onchange = () => { choice = val; };
+        label.append(radio, document.createTextNode(" " + val)); choices.append(label);
+      }
+      const explanation = document.createElement("textarea"); explanation.id = "expFeedbackCorrection";
+      explanation.maxLength = 500; explanation.rows = 3;
+      explanation.placeholder = "Optional: why, a correction, or the next instruction to test (up to 500 characters)";
+      const save = el("button", "primary", "Save owner assessment"); save.type = "button"; save.id = "expFeedbackSave";
+      const error = el("div", "err"); error.id = "expFeedbackError"; error.setAttribute("role","alert");
+      save.onclick = async () => {
+        if (!choice || save.disabled) { error.textContent = "Choose a verdict before saving."; return; }
+        save.disabled = true; error.textContent = "";
+        let r; try { r = await fetch("/api/development/experiments/" + encodeURIComponent(p.experiment_id) + "/feedback",
+          {method:"POST",cache:"no-store",headers:expHeaders(true),body:JSON.stringify({verdict:choice, correction:explanation.value})}); }
+        catch(e) { r = null; }
+        let body = {}; if (r) { try { body = await r.json(); } catch(e) {} }
+        if (!r || !r.ok) {
+          error.textContent = "Assessment not confirmed: " + expWhy({status:r ? r.status : 0,body}) + " Reload the experiment before trying again.";
+          return;
+        }
+        // Re-read through the same authenticated GET; never issue a second save or an arm request.
+        await expRefresh(p.experiment_id);
+      };
+      feedback.append(choices, el("label", "lbl", "Optional correction / rationale"), explanation, save, error,
+        el("div", "hint", "This is a single permanent assessment of this experiment. An identical retry is idempotent; changing it requires a separately reviewed amendment feature."));
+    }
+  }
+  const act = el("div", "hint", "One request per arm, A before B, each with its own confirmation and single-use approval. There is no Promote: a better B becomes evidence for a reviewed Engine change, not a switch.");
+  const more = el("details"); more.append(el("summary", "", "What is held constant and what won't change"));
+  const l1 = el("ul"); for (const x of p.held_constant || []) l1.append(el("li", "", "Held: " + x));
+  for (const x of p.unchanged || []) l1.append(el("li", "", "Unchanged: " + x)); more.append(l1, el("div", "hint", p.cost || ""));
+  box.append(head, snap, diff, cols, err, cmp, feedback, act, more);
+  w.append(box);
+  if (open) expPoll = setTimeout(() => expRefresh(p.experiment_id), 1500);
+}
+// Re-read one plan (GET only) while it is the one on screen.
+async function expRefresh(id) {
+  const r = await expGet("/api/development/experiments/" + encodeURIComponent(id));
+  if (expShown !== id || new URLSearchParams(location.search).get("exp") !== id) return;
+  if (r.ok && r.body.experiment_id === id && r.body.baseline_nudge_id === runParam) expPlan(r.body);
+  else { const e2 = $("expRunErr"); if (e2) e2.textContent = "The plan could not be re-read: " + expWhy(r) + " What is shown may be out of date."; expPoll = setTimeout(() => expRefresh(id), 4000); }
+}
+async function loadSavedPlans() {
+  const box = $("expSaved"); if (!box || !validRun) return;
+  const r = await expGet("/api/development/experiments?run=" + encodeURIComponent(runParam));
+  if (!r.ok || !Array.isArray(r.body.experiments)) { box.textContent = ""; return; }
+  expOpts = r.body;
+  const n = r.body.experiments.length;
+  box.replaceChildren();
+  if (!n) return;
+  const list = el("span"); list.id = "runSavedList";
+  for (const e of r.body.experiments.slice(0, 5)) {
+    const a = el("a", "", e.experiment_id + (e.owner_feedback ? " · owner assessment saved" : "")); a.href = "/dev?run=" + encodeURIComponent(runParam) + "&exp=" + e.experiment_id;
+    a.onclick = ev => { ev.preventDefault(); goExp(e.experiment_id, true); }; list.append(a);
+  }
+  const ranN = r.body.experiments.filter(e => (e.arms || []).some(a => a.state !== "NOT RUN")).length;
+  box.append(el("span", "", "Experiments for this run: " + n + " saved, " + (ranN ? ranN + " with an arm run" : "none run") + " — "), list);
+}
+
+// ---- Junction lab (#82 P2/P3): request, propose, compare. Never activates a proposal. ----
+let J = null;
+async function loadJ() {
+  const r = await api("GET", "/api/junctions"); if (!r.ok) { $("jActive").textContent = "Unavailable (HTTP " + r.status + ")"; return; }
+  J = r.body; const a = J.active_cell;
+  $("jActive").replaceChildren(el("span", "", "ACTIVE · " + a.id + " v" + a.version + " · handler " + a.handler + " · fields " + a.fields.join(", ") + " · Identity "), tag(J.granted ? "GRANTED" : "NOT GRANTED"));
+  $("jActiveText").textContent = a.text; if (!$("jProp").value) $("jProp").value = a.text;
+  const lessons = blocks.filter(b => b.kind === "lesson"); const cur = $("jLesson").value; $("jLesson").replaceChildren();
+  for (const b of lessons) { const o = el("option", "", b.title + " (" + b.source + ")"); o.value = b.source; $("jLesson").append(o); } if (cur) $("jLesson").value = cur;
+  const rs = $("jReceipts"); rs.replaceChildren();
+  const focusID = cognitionRef.startsWith("junction:") ? cognitionRef.slice(9) : "";
+  for (const x of J.receipts.slice(0, 15)) {
+    const d = el("div", "item"); if (x.junction_id === focusID) d.style.outline = "2px solid #9fd2ff";
+    const h = el("div"); h.append(tag(x.status), el("b", "", " " + x.junction_id), el("span", "hint", " · " + x.input + " · " + x.origin + (x.origin_cycle_id ? " (cycle " + x.origin_cycle_id + ")" : ""))); d.append(h);
+    d.append(el("div", "hint", "cell v" + x.cell_version + " · decision " + (x.identity_decision || "NOT RECORDED") + " · " + (x.why || "") ));
+    if (x.data) d.append(el("pre", "", x.data));
+    d.append(el("div", "hint", x.consumed_at ? "consumed by cycle " + x.consumed_by_cycle : (x.not_consumed || "not consumed yet") + " · " + x.effect));
+    rs.append(d);
+  }
+  if (!J.receipts.length) rs.append(el("p", "hint", "No junction receipts yet."));
+  const ps = $("jProps"); ps.replaceChildren();
+  for (const p of J.proposals) {
+    const d = el("div", "item"); d.append(tag(p.state), el("b", "", " " + p.proposal_id), el("span", "hint", " v" + p.cell_version + " · " + (p.note || "")));
+    const b = el("button", "", "Compare with active on selected lesson"); b.onclick = async () => {
+      const r = await api("POST", "/api/junctions/compare", {proposal_id: p.proposal_id, path: $("jLesson").value});
+      if (!r.ok) return msg("Compare refused: " + (r.body.error || r.status), true); showCmp(r.body); loadJ(); };
+    d.append(el("div", "row")); d.lastChild.append(b); ps.append(d);
+  }
+  if (J.comparisons.length) showCmp(J.comparisons[0]);
+}
+function showCmp(c) {
+  const box = $("jCmp"); box.replaceChildren(el("h2", "", "Latest comparison · " + c.comparison_id));
+  box.append(el("div", "hint", c.input + " · lesson revision " + (c.source_sha || "?").slice(0, 12) + " · " + c.identity_decision));
+  for (const [k, v] of [["ACTIVE", c.active], ["PROPOSAL", c.proposal]]) { const d = el("div", "item"); d.append(el("b", "", k + " v" + v.cell_version + " · " + v.fields + " · " + v.status + " · " + v.bytes + " bytes")); d.append(el("pre", "", v.output)); box.append(d); }
+  box.append(el("div", c.same_output ? "hint" : "ok", c.same_output ? "Same output." : "Different output."), el("div", "hint", c.effect));
+}
+$("jlabBtn").onclick = () => { const open = $("jlab").hidden; $("jlab").hidden = !open; $("jlabBtn").setAttribute("aria-expanded", String(open)); if (open) loadJ(); };
+$("jRequest").onclick = async () => { const r = await api("POST", "/api/junctions/request", {path: $("jLesson").value}); msg(r.ok ? "Junction " + r.body.junction_id + ": " + r.body.status + ". The Core's next 20 s tick reads it if Identity allows." : "Refused: " + (r.body.error || r.status), !r.ok); loadJ(); };
+$("jSave").onclick = async () => { const r = await api("POST", "/api/junctions/propose", {text: $("jProp").value, note: $("jNote").value}); msg(r.ok ? "Saved proposal " + r.body.proposal_id + " (v" + r.body.cell_version + "). It is NOT active." : "Not saved: " + (r.body.error || r.status), !r.ok); loadJ(); };
+if (cognitionRef.startsWith("junction:")) setTimeout(() => { $("jlab").hidden = false; $("jlabBtn").setAttribute("aria-expanded", "true"); loadJ(); }, 300);
+$("q").oninput = drawLib; $("kind").onchange = drawLib; $("focusMode").onchange = render;
+$("wrap").addEventListener("click", ev => { if (ev.target.id === "canvas" || ev.target.id === "links" || ev.target.id === "wrap") { sel = null; connectFrom = null; render(); } });
+$("undo").onclick = () => { if (!undo.length) return; graph = JSON.parse(undo.pop()); $("undo").disabled = !undo.length; sel = null; render(); drawLib(); changed(); };
+$("check").onclick = async () => { const r = await api("POST", "/api/brain/check", {graph}); if (r.ok) showReport(r.body); else msg("Check failed: HTTP " + r.status, true); };
+$("save").onclick = async () => {
+  const r = await api("POST", "/api/brain/save", {graph, change: $("change").value});
+  if (r.status === 409) return msg("Not saved: " + r.body.error, true);
+  if (!r.ok) { if (r.body.report) showReport(r.body.report); return msg("Not saved: " + (r.body.error || r.status), true); }
+  $("change").value = ""; await load(); showReport(r.body.report); msg("Saved as revision " + r.body.graph.revision + ".");
+};
+$("newNote").onclick = () => { $("noteForm").hidden = false; $("noteTitle").focus(); };
+$("noteCancel").onclick = () => { $("noteForm").hidden = true; };
+$("noteAdd").onclick = () => {
+  const title = $("noteTitle").value.trim(), text = $("noteText").value.trim(); if (!title) return msg("A note needs a title.", true);
+  snapshot(); const note = {id: rid(""), title, text}; graph.notes.push(note);
+  const b = {id: "note:" + note.id, kind: "note", title, source: "owner note", revision: "note", purpose: text, status: "NOTE", runnable: "a note: nothing to run"};
+  blocks.push(b); $("noteTitle").value = ""; $("noteText").value = ""; $("noteForm").hidden = true;
+  graph.nodes.push({id: rid("n"), block_id: b.id, pinned: "note", x: Math.round($("wrap").scrollLeft + 60), y: Math.round($("wrap").scrollTop + 60)});
+  render(); drawLib(); changed(); msg("Note added. Save to keep it.");
+};
+$("askBtn").onclick = async () => {
+  const text = $("ask").value.trim(); if (!text) return;
+  if (JSON.stringify(graph) !== saved) msg("Note: TASS sees the last SAVED revision (" + graph.revision + "), not your unsaved changes.");
+  const r = await api("POST", "/api/brain/ask", {text});
+  if (!r.ok) return msg("Not sent: " + (r.body.error || r.status), true);
+  $("ask").value = ""; askedAt = Date.now() - 2000;
+  const d = el("div", "ev"); d.append(el("b", "", "You (brain rev " + r.body.revision + "): "), el("span", "", text)); $("replies").prepend(d);
+};
+async function pollReplies() {
+  if (!askedAt) return;
+  const r = await fetch("/api/status", {headers: {"X-TASS-Token": TOKEN}}); if (!r.ok) return; const st = await r.json();
+  for (const e of (st.events || [])) {
+    const at = new Date(e.at).getTime(); if (at < askedAt || (e.kind !== "tass" && e.kind !== "problem")) continue;
+    const d = el("div", "ev"); d.append(el("b", "", e.kind === "tass" ? "TASS: " : "Problem: "), el("span", "", e.text)); $("replies").prepend(d); askedAt = at + 1;
+  }
+}
+setInterval(pollReplies, 1500);
+// ---------------------------------------------------------------- Teach & test (learning lab)
+let lStatus = null;
+const NR = "NOT RECORDED";
+function lMsg(t, bad) { $("lMsg").replaceChildren(el("div", bad ? "err" : "ok", t)); }
+async function loadL(keep) {
+  const r = await api("GET", "/api/status");
+  if (!r.ok) return lMsg("Couldn't load status (HTTP " + r.status + ").", true);
+  lStatus = r.body;
+  const ls = ((lStatus.learning || {}).lessons || []), pick = $("lPick"), was = keep || pick.value;
+  pick.replaceChildren();
+  for (const l of ls) { const o = el("option", "", l.title + " · " + l.status + " · " + l.path); o.value = l.path; if (l.path === was) o.selected = true; pick.append(o); }
+  if (!ls.length) pick.append(el("option", "", "No lessons yet: Find lessons on the Core page"));
+  const p = lStatus.pulse || {};
+  $("lPulse").textContent = "Engine work pulse: " + (p.control || p.state || "unknown") + " (Study and Test again need it PAUSED; this never starts it) · Core sync is separate";
+  showL();
+}
+function lCur() { return (((lStatus || {}).learning || {}).lessons || []).find(l => l.path === $("lPick").value); }
+function showL() {
+  const l = lCur(); const card = $("lCard"), g = $("lGrade"), ev = $("lEvidence"); card.replaceChildren(); g.replaceChildren(); ev.replaceChildren();
+  if (!l) return;
+  const m = el("div"); m.append(tag(l.status)); if (l.retests && l.retests.length) m.append(tag(l.retests[l.retests.length - 1].outcome === "RETEST_PASSED" ? "RETESTED" : "RETEST_FAILED"));
+  card.append(m);
+  kv(card, "Source", l.path + " @ " + (l.sha || NR).slice(0, 12) + " (Git blob) · " + l.checks + " checks");
+  kv(card, "Current job / cycle", (l.job_id || "—") + " / " + (l.cycle_id || NR));
+  if (l.note) kv(card, "Note", l.note);
+  $("lReply").textContent = l.reply || "—";
+  $("lStudy").disabled = !/^(NEW|RETRY|MODEL_FAILED|QUEUED)$/.test(l.status);
+  $("lRetry").disabled = /^(QUEUED|LEARNED|NEEDS_WORKSPACE|NO_CHECKS|GONE)$/.test(l.status);
+  $("lApprove").disabled = l.status !== "PASSED";
+  $("lRetest").disabled = l.status !== "LEARNED";
+  if (l.results && l.results.length) {
+    g.append(el("div", "", "Graded by Core: " + l.right + "/" + l.checks + (l.status === "PASSED" ? " — PASSED, waiting for your approval (not learned yet)" : l.status === "LEARNED" ? " — LEARNED (approved " + new Date(l.learned_at).toLocaleString() + ")" : " — " + l.status)));
+    for (const x of l.results) g.append(el("div", "ev", (x.right ? "✔ " : "✘ ") + "Check " + x.n + ": " + x.check + " → \"" + (x.given || "") + "\" (" + x.reason + ")"));
+  } else g.append(el("div", "hint", l.status === "MODEL_FAILED" ? "NOT GRADED: the model/Engine failed (" + (l.note || "") + ")" : "Not graded yet."));
+  const rp = l.retest_pending;
+  $("lRetestOut").textContent = rp ? "Retest " + rp.job_id + " QUEUED (" + rp.questions.length + " new questions). Press Test again to step the pulse, or wait for the Core's next sync to collect it." : "";
+  // evidence: attempts, approval, retests, skills
+  ev.append(el("div", "kv", "Attempts (every study job, never deleted)"));
+  for (const h of (l.history || [])) ev.append(el("div", "ev", new Date(h.at).toLocaleString() + " · job " + h.job_id + " · cycle " + (h.cycle_id || NR) + " · " + h.state + " → " + (h.outcome || "—") + (h.checks ? " " + h.right + "/" + h.checks : "") + " · " + h.source));
+  if (!(l.history || []).length) ev.append(el("div", "hint", NR));
+  ev.append(el("div", "kv", "Owner approval"));
+  ev.append(el("div", "ev", l.learned_at ? "Approved " + new Date(l.learned_at).toLocaleString() + " (written to tass.md ## Learned)" : "Not approved"));
+  ev.append(el("div", "kv", "Fresh-task retests"));
+  for (const r of (l.retests || [])) {
+    ev.append(el("div", "ev", new Date(r.at).toLocaleString() + " · job " + r.job_id + " · cycle " + (r.cycle_id || NR) + " · " + r.outcome + " " + r.right + "/" + r.checks + " · " + r.context));
+    for (const x of (r.results || [])) ev.append(el("div", "ev", "  " + (x.right ? "✔ " : "✘ ") + x.check + " → \"" + (x.given || "") + "\""));
+  }
+  if (!(l.retests || []).length) ev.append(el("div", "hint", "None yet"));
+  ev.append(el("div", "kv", "Skill receipts (separate from learning)"));
+  const recs = (((lStatus.skills || {}).receipts) || []).slice(-5);
+  for (const r of recs) ev.append(el("div", "ev", r.receipt_id + " · @" + r.skill + " · " + r.state + " · executed " + (r.executed ? "yes" : "no")));
+  if (!recs.length) ev.append(el("div", "hint", "No skill runs. Learning a lesson never grants or runs a skill."));
+}
+async function lPost(action, body) {
+  const l = lCur(); if (!l) return;
+  const r = await api("POST", "/api/lessons/" + action, Object.assign({path: l.path}, body || {}));
+  if (!r.ok) lMsg(action + " refused: " + (r.body.error || "HTTP " + r.status), true);
+  else lMsg(action + " OK" + (r.body.receipt ? " · job " + r.body.receipt : "") + ". Nothing was executed.");
+  await loadL(l.path);
+}
+$("llabBtn").onclick = () => { const open = $("llab").hidden; $("llab").hidden = !open; $("llabBtn").setAttribute("aria-expanded", String(open)); if (open) loadL(); };
+$("lPick").onchange = showL; $("lReload").onclick = () => loadL();
+$("lStudy").onclick = () => lPost("study"); $("lRetry").onclick = () => lPost("retry"); $("lApprove").onclick = () => lPost("approve");
+$("lRetest").onclick = () => {
+  const qs = [];
+  for (const line of $("lQs").value.split("\n")) { const i = line.indexOf("=>"); if (line.trim() === "") continue; if (i < 0) return lMsg("Each line needs: question => expected answer", true); qs.push({n: qs.length + 1, ask: line.slice(0, i).trim(), answer: line.slice(i + 2).trim(), from: "owner"}); }
+  lPost("retest", {questions: qs});
+};
+setInterval(() => { if (!$("llab").hidden && designLoaded) loadL(); }, 5000);
+if (new URLSearchParams(location.search).get("learn")) setTimeout(() => { $("llab").hidden = false; $("llabBtn").setAttribute("aria-expanded", "true"); loadL(new URLSearchParams(location.search).get("learn")); }, 200);
+setMode(modeFromURL(), false);
+routeExp();
+</script>
+</body>
+</html>

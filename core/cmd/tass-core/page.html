@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TASS · core</title>
+<style>
+  :root { --bg:#0f1316; --panel:#161c21; --line:#27323b; --text:#e9e4dc; --dim:#8f9ba5; --you:#6cb4ff; --tass:#8fd3b6;
+          --think:#b892ff; --sync:#f2b866; --bad:#ff8a80; --mono: ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; gap:10px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { font:500 22px Georgia, serif; margin:0 8px 0 0; } h1 small { color:var(--dim); font:12px system-ui; margin-left:8px; }
+  h2 { font:500 17px Georgia, serif; margin:0 0 8px; } h2 small { color:var(--dim); font:12px system-ui; margin-left:6px; }
+  .chip { font-size:12px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim); }
+  .chip.ok::before, .chip.off::before, .chip.unk::before { content:"● "; } .chip.ok::before { color:var(--tass); }
+  .chip.off::before { color:var(--bad); } .chip.unk::before { color:var(--dim); }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:16px 20px; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  #log { height:44vh; overflow-y:auto; }
+  .ev { margin:0 0 10px; white-space:pre-wrap; }
+  .ev .w { font-size:12px; color:var(--dim); }
+  .ev.you .w { color:var(--you); } .ev.tass .w { color:var(--tass); }
+  .ev.thought { color:#cdbdf2; font:12.5px/1.5 var(--mono); background:#15111d; padding:8px 10px; border-radius:8px; max-height:140px; overflow:auto; }
+  .ev.sync, .ev.github { color:var(--sync); font-size:13px; } .ev.problem { color:var(--bad); font-size:13px; }
+  form { display:flex; gap:8px; margin-top:10px; }
+  textarea { flex:1; height:56px; resize:none; font:inherit; color:var(--text); background:#0f1418; border:1px solid var(--line); border-radius:9px; padding:8px 10px; }
+  button { font:inherit; color:var(--text); background:#1d252d; border:1px solid var(--line); border-radius:9px; padding:0 16px; cursor:pointer; }
+  pre { white-space:pre-wrap; font:12.5px/1.5 var(--mono); margin:0; max-height:34vh; overflow:auto; }
+  .dim { color:var(--dim); font-size:12.5px; }
+  .cycle { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:0 0 10px; background:#12181d; }
+  .cycle .head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; font-size:13px; color:var(--dim); }
+  .cycle .head b { color:var(--text); font-weight:500; }
+  .steps { display:grid; grid-template-columns: 150px 1fr; gap:3px 10px; margin-top:8px; font-size:13px; }
+  .steps .k { color:var(--dim); }
+  .tag { font:11.5px var(--mono); padding:1px 7px; border-radius:6px; border:1px solid var(--line); }
+  .tag.good { color:var(--tass); border-color:#2e5a49; } .tag.bad { color:var(--bad); border-color:#5a2e2e; } .tag.unk { color:var(--dim); }
+  #idbar { display:none; margin:12px 20px 0; padding:10px 14px; border-radius:10px; border:1px solid #5a2e2e; background:#1d1414; }
+  #idbar a { color:var(--you); }
+  .ctl { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 10px; } .ctl button { padding:4px 12px; }
+  table.ticks { width:100%; border-collapse:collapse; font:12px/1.45 var(--mono); } .ticks td { border-top:1px solid var(--line); padding:3px 6px 3px 0; vertical-align:top; }
+  .switch { display:flex; gap:10px; align-items:center; margin:4px 0; cursor:pointer; }
+  .switch input { width:18px; height:18px; }
+  .lesson { border-top:1px solid var(--line); padding:8px 0; font-size:13.5px; }
+  .lesson .t { font-weight:500; } .lesson .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .lesson button { padding:2px 10px; font-size:12.5px; }
+  .topbtn { padding:6px 14px; border-radius:999px; font-weight:500; }
+  .topbtn.on { background:#1f3b30; border-color:#2e5a49; color:var(--tass); }
+  .topbtn.off { background:#2a1b1b; border-color:#5a2e2e; color:#f2b3ad; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span id="name">TASS</span> <small>core · thinks on this computer</small></h1>
+  <a href="/dev" class="chip ok" style="text-decoration:none" title="Arrange lessons, skills and notes with TASS">Development →</a>
+  <a href="/cognition" class="chip ok" style="text-decoration:none" title="Browse recorded thoughts, lessons, cells and outcomes">Cognition →</a>
+  <span id="engine" class="chip unk">Thought Engine</span><span id="model" class="chip unk">Nemotron</span>
+  <span id="pulse" class="chip unk">pulse</span><span id="gh" class="chip unk">GitHub</span><span id="busy" class="chip">listening</span>
+  <span style="flex:1"></span>
+  <span id="workchip" class="chip unk" title="the 20-second work pulse">work pulse UNKNOWN</span>
+  <button id="btnPulse" class="topbtn">Pulse: …</button>
+  <button id="btnAuto" class="topbtn">Autonomous: …</button>
+</header>
+<div id="idbar"></div>
+<main>
+  <section class="card" id="wsCard">
+    <h2>Workspace <small>TASS and this project: identity, repository, skills, receipts, files</small></h2>
+    <div id="wsInfo" class="dim">loading…</div>
+    <h3 style="margin:12px 0 4px">Skills <small class="dim">fixed operations built into the Core · each run needs Identity's grant and your approval</small></h3>
+    <div id="wsSkills" class="dim"></div>
+    <div id="wsSkillMsg" aria-live="polite"></div>
+    <div id="wsReceipts"></div>
+    <h3 style="margin:12px 0 4px">Project file <small class="dim">read-only · from TASS's local copy of the repository</small></h3>
+    <div class="ctl"><select id="wsFile"></select> <button id="wsView">View</button></div>
+    <div id="wsFileHead" class="dim"></div>
+    <pre id="wsFileText" style="max-height:300px;overflow:auto;white-space:pre-wrap" hidden></pre>
+    <form id="wsAsk" hidden><textarea id="wsQ" style="height:40px" placeholder="Ask TASS about this file (he gets it read-only, for this one message)"></textarea><button>Ask TASS</button></form>
+    <div class="dim" style="margin-top:8px"><span class="tag unk">NOT IMPLEMENTED</span> editing files, proposed changes, running tests, notebook cells.</div>
+  </section>
+  <section class="card">
+    <h2>Talk <small>local conversation; lesson requests use authorized GitHub access</small></h2>
+    <div class="ctl">
+      <button id="talkFind">Find lessons</button>
+      <button id="talkTest">Run one lesson test</button>
+      <button id="talkNew" title="Clears only the chat history TASS sees; his document, journal, lessons and receipts stay">New conversation</button>
+      <span id="talkLessonNotice" class="dim" aria-live="polite">Autonomous OFF: test one lesson, then review before approval.</span>
+    </div>
+    <label class="switch"><input type="checkbox" id="setRelay"> <b>Talk on GitHub</b> <span class="dim">(issue #24 only, ChatGPT: comments from an allowed GitHub account; never executes tools or lesson commands)</span></label>
+    <div id="relayState" class="dim" role="status" aria-live="polite">GitHub issue relay: checking local configuration…</div>
+    <div id="log"></div>
+    <form id="f"><textarea id="t" placeholder="Talk to TASS… (Enter to send). Try: how many sections does your tass.md have?"></textarea><button>Send</button></form>
+  </section>
+  <section class="card">
+    <h2>Thought cycles <small>event → Spark → Trace/Thought → proposal → locked prediction → authorization → result → evaluation</small></h2>
+    <div id="cycles"><div class="dim">No cycles yet. Say something to TASS.</div></div>
+  </section>
+  <section class="card">
+    <h2>Learning <small>Manual: Find → Study → Review → Approve · Autonomous: scheduled and auto-approved</small></h2>
+    <label class="switch"><input type="checkbox" id="setAuto"> <b>Autonomous</b> <span class="dim">(OFF: manual lesson control and approval. ON: scheduled pulse and auto-approval of passed lessons)</span></label>
+    <label class="switch"><input type="checkbox" id="setPulse"> Work pulse every 20 seconds <span class="dim">(stays on after restarts)</span></label>
+    <label class="switch"><input type="checkbox" id="setLearn"> Learn new lessons from GitHub on each pulse</label>
+    <div class="ctl"><button id="findLessons">Find lessons (manual)</button><span class="dim">Autonomous OFF: choose Study on a lesson, review the answers, then Approve</span></div>
+    <div id="lessonMessage" aria-live="polite"></div>
+    <div id="lessonHint" class="dim"></div>
+    <div id="ghinfo" class="dim" style="margin:6px 0 4px"></div>
+    <div id="lessons" class="dim">(no lessons yet)</div>
+  </section>
+  <section class="card">
+    <h2>Work pulse <small>every 20 s: observe → decide → start/continue → observe result → report</small></h2>
+    <div class="ctl"><span id="pstate" class="tag unk">UNKNOWN</span>
+      <button data-a="start">Start</button><button data-a="pause">Pause</button><button data-a="resume">Resume</button><button data-a="step">Step once</button></div>
+    <form id="tf" style="margin:0 0 10px"><textarea id="tt" style="height:40px" placeholder="Give a task for the pulse (it starts on the next tick). Try: count your sections"></textarea><button>Queue</button></form>
+    <div id="pmsg" class="dim"></div>
+    <div id="jobs" class="dim"></div>
+    <table class="ticks"><tbody id="ticks"></tbody></table>
+  </section>
+  <section class="card">
+    <h2>Identity <small>decides before anything runs</small></h2>
+    <div id="policy" class="dim"></div>
+    <h2 style="margin-top:14px">Memory journal <small>local, with where each line came from</small></h2>
+    <div id="mem" class="dim">(none yet)</div>
+  </section>
+  <section class="card">
+    <h2>tass.md <small id="where">local copy TASS runs on · GitHub keeps the reviewed record</small></h2>
+    <pre id="md"></pre>
+  </section>
+</main>
+<script>
+let CUR = {};
+const TOKEN = "__PAGE_TOKEN__";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const who = {you: "You", tass: "TASS"};
+let shown = -1, shownCycles = "";
+function ago(t) { if (!t || t.startsWith("0001")) return "never"; const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 60 ? s + " s ago" : Math.round(s / 60) + " min ago"; }
+const U = v => (v === undefined || v === null || v === "") ? '<span class="tag unk">UNKNOWN</span>' : esc(v);
+function tag(v) {
+  if (!v) return '<span class="tag unk">UNKNOWN</span>';
+  const good = /CORRECT$|MET$|^EXECUTED$|^done$|^LOCKED$|^LEARNED$|^PASSED$|^UNLOCKED$/.test(v) && !/INCORRECT|UNMET/.test(v);
+  const bad = /INCORRECT|UNMET|FAILED|NOT_AUTHORIZED|denied|failed|STUCK/.test(v);
+  return `<span class="tag ${good ? "good" : bad ? "bad" : "unk"}">${esc(v)}</span>`;
+}
+function cycleHTML(c) {
+  const p = c.proposal, o = c.outcome, e = c.evaluation, s = c.spark || {};
+  const auth = Object.entries(c.authorization || {}).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join("<br>");
+  const spark = s.status ? `${tag(s.status)} importance ${s.rating}/10 · topic ${U(s.topic)} · ${esc(s.outcome || "")}${s.trace_id ? " · Trace " + esc(s.trace_id.slice(0, 8)) : ""}${s.thought_id ? " · Thought " + esc(s.thought_id.slice(0, 8)) : ""}${s.reason ? `<div class="dim">${esc(s.reason)}</div>` : ""}` : U();
+  return `<div class="cycle"><div class="head"><b>${esc(c.cycle_id)}</b> · ${new Date(c.received_at).toLocaleTimeString()} · ${tag(c.state)}${c.problem ? ` <span style="color:var(--bad)">${esc(c.problem)}</span>` : ""}</div>
+  <div class="steps">
+    <span class="k">Event</span><span>${esc(c.request)}</span>
+    <span class="k">Authorization</span><span class="dim">${auth || '<span class="tag unk">UNKNOWN</span>'}</span>
+    <span class="k">Spark → Trace/Thought</span><span>${spark}</span>
+    <span class="k">Reply</span><span>${p ? esc(p.reply) : U()}${p && p.format === "UNREADABLE" ? ' <span class="tag bad">format UNREADABLE</span>' : ""}</span>
+    <span class="k">Proposed action</span><span>${p ? esc(p.action) + (p.action_note ? ` <span class="dim">(${esc(p.action_note)})</span>` : "") : U()}${p && p.why ? `<div class="dim">why: ${esc(p.why)}</div>` : ""}</span>
+    <span class="k">Prediction</span><span>${p ? `${tag(p.prediction.state)} ${esc(p.prediction.value ?? p.prediction.text ?? "")} <span class="dim">locked ${p.prediction.locked_at && !p.prediction.locked_at.startsWith("0001") ? new Date(p.prediction.locked_at).toLocaleTimeString() + "." + String(new Date(p.prediction.locked_at).getMilliseconds()).padStart(3, "0") : "—"} · sha ${esc((p.prediction.sha256 || "").slice(0, 12))}</span>` : U()}</span>
+    <span class="k">Action result</span><span>${o ? `${tag(o.status)} ${o.value ?? ""} <span class="dim">${esc(o.detail || "")}${o.executed_at && !o.executed_at.startsWith("0001") ? " · ran " + new Date(o.executed_at).toLocaleTimeString() + "." + String(new Date(o.executed_at).getMilliseconds()).padStart(3, "0") : ""}</span>` : U()}</span>
+    <span class="k">Evaluation</span><span>${e ? `${tag(e.forecast)} ${tag(e.goal)}<div>${esc(e.explanation)}</div><div class="dim">${esc(e.evaluator)}</div>` : U()}</span>
+    <span class="k">Timing</span><span class="dim">Spark ${s.elapsed_ms ?? "?"} ms · plan ${p ? p.elapsed_ms : "?"} ms · model requests ${esc([...(s.model_request_ids || []), p ? p.model_request_id : ""].filter(Boolean).join(", ")) || "—"}</span>
+  </div></div>`;
+}
+let LAST_LESSONS = [];
+let renderedLessons = null;
+async function refresh() {
+  let st;
+  try {
+    const r = await fetch("/api/status", {headers: {"X-TASS-Token": TOKEN}});
+    if (r.status === 401) { $("busy").textContent = "this page is from before a restart: reload it"; return; }
+    st = await r.json();
+  } catch { $("engine").className = "chip off"; $("engine").textContent = "tass-core not reachable"; return; }
+  try { renderWorkspace(st); } catch (err) { $("wsInfo").textContent = "workspace view error: " + err.message; }
+  const e = st.engine || {}, p = e.last_pulse;
+  $("engine").className = "chip " + (e.reachable ? "ok" : "off"); $("engine").textContent = e.reachable ? "Thought Engine" : "Thought Engine not running";
+  $("model").className = "chip " + (p ? (p.model_ok ? "ok" : "off") : "unk");
+  $("model").textContent = p ? (p.model_ok ? "Nemotron ready" : "Nemotron not ready") : "Nemotron UNKNOWN"; $("model").title = (p && p.error) || "";
+  $("pulse").className = "chip " + (p ? "ok" : "unk"); $("pulse").textContent = p ? "model checked " + ago(p.at) : "pulse UNKNOWN";
+  $("gh").className = "chip " + (st.github_online ? "ok" : "off");
+  $("gh").textContent = st.github_online ? "GitHub synced " + ago(st.last_sync) + (st.github_messages ? "" : " · messages paused") : "GitHub not syncing: TASS runs locally";
+  $("gh").title = st.sync_problem || "";
+  // This flag reports THIS Go Core's issue-message reader, not any older Identity Liaison.
+  $("relayState").textContent = st.github_messages
+    ? "GitHub issue relay ON (pilot): Arameair/TASS #24 / " + (st.relay_label || "tass-core") +
+      " / allowed: " + (st.relay_authors || []).join(", ") +
+      ". " + (st.relay_hold ? "ON HOLD: " + st.relay_hold :
+          "Replies require a real GitHub output ID, Identity authorization and Engine cycle evidence.")
+    : "GitHub issue relay OFF in this Go Core. An older Liaison may post to GitHub; its reply does not prove this Core received the message.";
+  $("busy").textContent = st.busy ? "thinking…" : (st.replies_waiting ? st.replies_waiting + " reply(s) waiting for GitHub" : "listening");
+  $("policy").innerHTML = `${st.policy_valid_now ? '<span class="tag good">valid now</span>' : '<span class="tag bad">not valid now</span>'} ${esc(st.policy)}`;
+  const id = st.identity;
+  if (id) {
+    if (id.entity && id.entity.name) { $("name").textContent = id.entity.name; document.title = id.entity.name + " · core"; }
+    const bad = id.state !== "UNLOCKED";
+    $("idbar").style.display = bad ? "block" : "none";
+    $("idbar").innerHTML = bad ? `<b>${esc(id.state)}</b>: ${esc(id.reason)} · nothing runs until Identity allows it. Open <a href="http://127.0.0.1:8796/" target="_blank">Identity (127.0.0.1:8796)</a> to ${id.state === "NO_ENTITY" ? "create your own entity" : "unlock"}.` : "";
+    who.tass = (id.entity && id.entity.name) || "TASS";
+  }
+  const pu = st.pulse;
+  if (pu) {
+    const lt = (pu.ticks || [])[0];
+    $("workchip").className = "chip " + (pu.control === "RUNNING" ? "ok" : "off");
+    $("workchip").textContent = pu.control === "RUNNING" ? `working · ${pu.state} · tick ${lt ? ago(lt.at) : "soon"}` : "work pulse paused";
+    $("pstate").className = "tag " + (pu.state === "BLOCKED" ? "bad" : pu.state === "READY" || pu.state === "WORKING" ? "good" : "unk");
+    $("pstate").textContent = (pu.control || "?") + " · " + (pu.state || "UNKNOWN");
+    $("jobs").innerHTML = (pu.jobs || []).slice(0, 6).map(j => `<div>${tag(j.state)} <b>${esc(j.job_id)}</b> ${esc(j.request)} ${j.result ? "→ " + esc(j.result) : ""} <span class="dim">${j.cycle_id ? esc(j.cycle_id) : ""}</span></div>`).join("") || "(no tasks yet)";
+    $("ticks").innerHTML = (pu.ticks || []).slice(0, 10).map(t => `<tr><td>${esc(t.pulse_id)}</td><td>${tag(t.state)}</td><td>${esc(t.decision)}${t.job_id ? " " + esc(t.job_id) : ""}</td><td class="dim">${esc(t.observed)}${t.outcome ? " · " + esc(t.outcome) : ""}${t.authorization ? " · " + esc(t.authorization) : ""}</td></tr>`).join("");
+  } else { $("pstate").textContent = "pulse UNKNOWN (engine not answering)"; }
+  const L = st.learning;
+  if (L) {
+    CUR = L.settings;
+    if (document.activeElement !== $("setAuto")) $("setAuto").checked = !!L.settings.autonomous;
+    if (document.activeElement !== $("setPulse")) $("setPulse").checked = !!L.settings.pulse;
+    $("btnAuto").textContent = "Autonomous: " + (L.settings.autonomous ? "ON" : "off (manual)");
+    $("btnAuto").className = "topbtn " + (L.settings.autonomous ? "on" : "off");
+    const pon = L.settings.pulse && L.settings.autonomous;
+    $("btnPulse").textContent = "Pulse: " + (pon ? "ON" : "off");
+    $("btnPulse").className = "topbtn " + (pon ? "on" : "off");
+    if (document.activeElement !== $("setLearn")) $("setLearn").checked = !!L.settings.learn;
+    if (document.activeElement !== $("setRelay")) $("setRelay").checked = !!L.settings.relay;
+    $("ghinfo").innerHTML = L.repo
+      ? `GitHub: <b>${esc(L.repo)}</b> @ ${esc(L.branch)} · lessons in <code>${esc(L.dir)}/</code> · ${st.github_online ? "synced " + ago(st.last_sync) : '<span style="color:var(--bad)">not syncing</span>'}${st.sync_hold ? " · on hold: " + esc(st.sync_hold) : ""}${st.sync_problem ? " · " + esc(st.sync_problem) : ""} · last look ${ago(L.last_look)}${L.last_note ? " · " + esc(L.last_note) : ""}`
+      : "No GitHub repository set for this installation (GITHUB_REPO in ~/.tass-app/app.env).";
+    $("lessonHint").innerHTML = (st.sync_hold || L.last_note || "").includes("no grant")
+      ? '<a style="color:var(--you)" href="http://127.0.0.1:8796/" target="_blank" rel="noopener">Identity hasn\'t granted learning yet (github.sync, lesson.learn). Open Identity and use "Enable learning".</a>'
+      : "";
+    const ls = L.lessons || [];
+    LAST_LESSONS = ls;
+    // Do not rebuild stable lesson cards every second: an open details element
+    // stays in place so text selection, scrolling and copying are undisturbed.
+    const lessonSignature = JSON.stringify([ls, !!L.settings.autonomous]);
+    if (lessonSignature !== renderedLessons) {
+    // Preserve expanded details when data actually changes.
+    // Refresh replaces the lesson markup every second. Preserve the expanded
+    // model answer for each lesson so the owner can actually read/copy it.
+    const openAnswers = new Set(Array.from($("lessons").querySelectorAll("details[data-lesson-path][open]"), d => d.dataset.lessonPath));
+    const openHistory = new Set(Array.from($("lessons").querySelectorAll("details[data-history-path][open]"), d => d.dataset.historyPath));
+    $("lessons").innerHTML = ls.length ? ls.map(l => `<div class="lesson"><div class="row">${tag(l.status === "LEARNED" || l.status === "PASSED" ? l.status + "" : l.status)}
+      <span class="t">${esc(l.title)}</span> <span class="dim">${esc(l.path)}${l.by ? " · by " + esc(l.by) : ""}</span>
+      ${l.checks ? `<span class="dim">${[ "NEW", "QUEUED", "MODEL_FAILED" ].includes(l.status) ? (l.status === "MODEL_FAILED" ? "NOT GRADED · " : "") : l.right + "/" + l.checks + " right · "}attempt ${l.attempts}</span>` : ""}
+      ${!L.settings.autonomous && (l.status === "NEW" || l.status === "RETRY" || l.status === "QUEUED" || l.status === "MODEL_FAILED") ? `<button data-study="${esc(l.path)}">${l.status === "QUEUED" ? "Step again" : l.status === "MODEL_FAILED" ? "Study again" : "Study (manual)"}</button>` : ""}
+      ${l.status === "PASSED" ? `<button data-approve="${esc(l.path)}">Approve: it learned this</button>` : ""}
+      ${l.status === "STUCK" || l.status === "RETRY" || l.status === "PASSED" || l.status === "MODEL_FAILED" ? `<button data-retry="${esc(l.path)}">Retry</button>` : ""}</div>
+      ${l.goal ? `<div class="dim">${esc(l.goal)}</div>` : ""}
+      ${(l.results || []).map(r => `<div class="dim">${r.right ? "✓" : "✗"} ${esc(r.check)} → <i>${esc(r.given || "(no answer)")}</i></div>`).join("")}
+      ${l.status === "MODEL_FAILED" ? `<div class="tag bad">Model/Engine failure — NOT GRADED. This is not 0/${l.checks} incorrect answers.</div>` : ""}
+      ${l.status === "QUEUED" ? `<div class="dim">Studying now (job ${esc(l.job_id)}). Results appear here when the model has answered.</div>` : ""}
+      ${l.status === "PASSED" ? `<div><b>Every check was right. Waiting for you:</b> Approve to record it as learned, or Retry.</div>` : ""}
+      ${l.remember ? `<div>Proposed note (not proof of learning): ${esc(l.remember)}</div>` : ""}
+      ${l.reply ? `<details data-lesson-path="${esc(l.path)}" ${openAnswers.has(l.path) ? "open" : ""}><summary class="dim">${l.status === "MODEL_FAILED" ? "Engine error details (not an answer)" : "His full answer"}${l.job_id ? " · job " + esc(l.job_id) : ""}${l.cycle_id ? " · " + esc(l.cycle_id) : ""}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(l.reply)}</pre><button data-copy-lesson="${esc(l.path)}">Copy full text</button></details>` : ""}
+      ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ""}
+      ${(l.history || []).length ? `<details data-history-path="${esc(l.path)}" ${openHistory.has(l.path) ? "open" : ""}><summary class="dim">Attempt history (${l.history.length}, kept permanently${l.job_seq ? " · last job no. " + l.job_seq : ""})</summary>${l.history.slice().reverse().map(h => `<div class="dim" style="margin:3px 0">• ${new Date(h.at).toLocaleString()} · job ${esc(h.job_id)} · Engine ${esc(h.state)}${h.outcome ? " · " + esc(h.outcome === "MODEL_FAILED" || h.outcome === "NOT_COLLECTED" ? h.outcome + " (not graded)" : h.outcome + (h.checks ? " " + h.right + "/" + h.checks : "")) : ""} · ${esc(h.source)}${h.note ? " · " + esc(h.note) : ""}${h.reply ? `<pre style="white-space:pre-wrap;margin:2px 0 2px 12px">${esc(h.reply)}</pre>` : ""}</div>`).join("")}</details>` : ""}</div>`).join("") : "(no lessons yet: they appear here when a pulse finds them on GitHub)";
+    renderedLessons = lessonSignature;
+    }
+  }
+  $("mem").innerHTML = (st.memories || []).length ? st.memories.slice().reverse().map(m => `<div>• ${esc(m.text)} <span class="dim">(${esc(m.cycle_id)}, ${new Date(m.at).toLocaleDateString()})</span></div>`).join("") : "(none yet)";
+  $("md").textContent = st.tass_md || "(not here yet: it comes from GitHub on the first sync)";
+  const cj = JSON.stringify(st.cycles || []);
+  if (cj !== shownCycles) { shownCycles = cj; if ((st.cycles || []).length) $("cycles").innerHTML = st.cycles.map(cycleHTML).join(""); }
+  const evs = st.events || [];
+  if (evs.length !== shown) {
+    const keep = $("log").scrollTop + $("log").clientHeight >= $("log").scrollHeight - 30;
+    $("log").innerHTML = evs.map(e => `<div class="ev ${e.kind}">${who[e.kind] ? `<div class="w">${who[e.kind]} · ${new Date(e.at).toLocaleTimeString()}</div>` : ""}${esc(e.text)}</div>`).join("");
+    shown = evs.length;
+    if (keep) $("log").scrollTop = 1e9;
+  }
+}
+// ---- Workspace (#31) and @ skills (#72) ----
+let wsSig = "", wsFilesSig = "";
+function stTag(v) {
+  const cls = /^(DONE|GRANTED|MET|UNLOCKED)$/.test(v) ? "good" : /^(DENIED|FAILED|INTERRUPTED|NOT GRANTED|NOT MET|LOCKED)$/.test(v) ? "bad" : "unk";
+  return `<span class="tag ${cls}">${esc(v)}</span>`;
+}
+function renderWorkspace(st) {
+  const w = st.workspace, ids = st.identity || {}, sk = st.skills || {registry: [], grants: {}, receipts: []};
+  if (!w) { $("wsInfo").innerHTML = '<span class="tag unk">NOT CONNECTED</span> no Identity service on this installation.'; return; }
+  const ent = ids.entity ? `${esc(ids.entity.name)} <span class="dim">${esc(ids.entity.entity_id)}</span>` : "no entity";
+  $("wsInfo").innerHTML = `Identity: ${ent} ${stTag(ids.state || "UNKNOWN")} · Project: <b>${esc(w.repo || "(no repository set)")}</b> @ <b>${esc(w.branch || "")}</b> · Core <code>${esc((w.core_version || "dev").slice(0, 12))}</code> · ${esc(w.doc)} blob <code>${esc((w.doc_blob_sha || "none").slice(0, 12))}</code>`;
+  const sig = JSON.stringify([sk, ids.state]);
+  if (sig !== wsSig) {
+    const open = new Set(Array.from($("wsReceipts").querySelectorAll("details[open]"), d => d.dataset.r));
+    $("wsSkills").innerHTML = sk.registry.map(d => `<div style="margin:4px 0"><code>@${esc(d.id)}</code> v${esc(d.version)} — ${esc(d.purpose)}<br>
+      Identity <code>skill.run:${esc(d.id)}</code>: ${stTag(sk.grants[d.id] || "UNKNOWN")} <button data-skill-request="${esc(d.id)}">Request a run</button>
+      <details><summary class="dim">descriptor</summary><div class="dim">inputs: ${d.inputs.length ? esc(d.inputs.join(", ")) : "none"} · result: ${esc(d.result)}<br>restrictions: ${d.restrictions.map(esc).join(" · ")}<br>expectation: ${esc(d.expect)}</div></details></div>`).join("")
+      + (sk.registry.length ? `<div class="dim">In Talk, try: <i>Find lessons using @</i>. ${Object.values(sk.grants).includes("GRANTED") ? "" : "Grant it first on Identity's page (Skills TASS may run)."}</div>` : "");
+    $("wsReceipts").innerHTML = (sk.receipts || []).length ? sk.receipts.map(r => `<div class="lesson"><div class="row">${stTag(r.state)} <b>@${esc(r.skill)}</b> <span class="dim">receipt ${esc(r.receipt_id)} · ${new Date(r.created_at).toLocaleString()} · executed: ${r.executed ? "yes, once" : "no"}</span>
+      ${r.state === "AWAITING_APPROVAL" ? `<button data-skill-approve="${esc(r.receipt_id)}">Approve run</button><button data-skill-cancel="${esc(r.receipt_id)}">Cancel</button>` : ""}</div>
+      <div class="dim">Selected by ${esc(r.selected_by)}: ${esc(r.why)}</div>
+      ${r.discover_decision ? `<div class="dim">discover: ${esc(r.discover_decision)}</div>` : ""}${r.run_decision ? `<div class="dim">run: ${esc(r.run_decision)}</div>` : ""}
+      ${r.error ? `<div style="color:var(--bad)">${esc(r.error)}</div>` : ""}
+      ${r.observed ? `<div>Expected: ${esc(r.expected)}<br>Observed: ${esc(r.observed)} → ${stTag(r.expectation_met ? "MET" : "NOT MET")}</div>` : ""}
+      ${r.output ? `<details data-r="${esc(r.receipt_id)}" ${open.has(r.receipt_id) ? "open" : ""}><summary class="dim">Real output · exit ${r.exit_code} · ${r.items} item(s) · ${r.elapsed_ms} ms · sha256 ${esc(r.output_sha256.slice(0, 16))}… · skill v${esc(r.skill_version)} · core ${esc(r.core_version.slice(0, 12))}</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(r.output)}</pre></details>` : ""}</div>`).join("") : '<div class="dim">No skill receipts yet.</div>';
+    wsSig = sig;
+  }
+  const fsig = JSON.stringify(w.files);
+  if (fsig !== wsFilesSig) {
+    const cur = $("wsFile").value;
+    $("wsFile").innerHTML = (w.files || []).map(f => `<option value="${esc(f.path)}">${esc(f.path)} (${esc(f.kind)})</option>`).join("");
+    if (cur) $("wsFile").value = cur;
+    wsFilesSig = fsig;
+  }
+}
+function wsMsg(ok, text) { $("wsSkillMsg").style.color = ok ? "" : "var(--bad)"; $("wsSkillMsg").textContent = text; }
+$("wsCard").addEventListener("click", async ev => {
+  const req = ev.target.dataset.skillRequest, ap = ev.target.dataset.skillApprove, cn = ev.target.dataset.skillCancel;
+  if (!req && !ap && !cn) return;
+  ev.target.disabled = true;
+  const r = await post("/api/skills/" + (req ? "request" : ap ? "approve" : "cancel"), req ? {skill: req} : {receipt: ap || cn});
+  const rc = (r.body && r.body.receipt) || {};
+  wsMsg(r.ok && rc.state !== "DENIED" && rc.state !== "FAILED", r.ok ? `Receipt ${rc.receipt_id}: ${rc.state}${rc.error ? " — " + rc.error : ""}` : "Refused (HTTP " + r.status + "): " + (r.body.error || ""));
+  wsSig = ""; refresh();
+});
+$("wsView").onclick = async () => {
+  const r = await post("/api/workspace/file", {path: $("wsFile").value});
+  if (!r.ok) { $("wsFileHead").textContent = "Refused: " + (r.body.error || r.status); $("wsFileText").hidden = $("wsAsk").hidden = true; return; }
+  const f = r.body;
+  $("wsFileHead").innerHTML = `<b>${esc(f.repo)}@${esc(f.branch)}:${esc(f.path)}</b> · local blob <code>${esc(f.local_blob_sha.slice(0, 12))}</code>${f.github_sha ? ` · GitHub blob <code>${esc(f.github_sha.slice(0, 12))}</code> ${stTag(f.matches_github ? "MET" : "NOT MET")}` : ""} · read-only · ${esc(f.source_note)}${f.truncated ? " · TRUNCATED" : ""}`;
+  $("wsFileText").textContent = f.text; $("wsFileText").hidden = false; $("wsAsk").hidden = false;
+};
+$("wsAsk").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("wsQ").value.trim(); if (!text) return;
+  const r = await post("/api/workspace/ask", {path: $("wsFile").value, text});
+  wsMsg(r.ok, r.ok ? "Asked TASS with " + $("wsFile").value + " as read-only context (" + r.body.receipt + "). His answer appears in Talk." : "Not sent: " + (r.body.error || r.status));
+  if (r.ok) $("wsQ").value = "";
+};
+const post = (path, body) => fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-TASS-Token": TOKEN}, body: JSON.stringify(body)})
+  .then(async r => ({ok: r.ok, status: r.status, body: await r.json().catch(() => ({}))}));
+function alertLine(t) { $("pmsg").textContent = t; }
+$("f").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("t").value.trim(); if (!text) return;
+  const r = await post("/api/say", {text});
+  if (r.ok) $("t").value = ""; else alertLine(r.body.error || "not accepted (" + r.status + ")");
+  refresh();
+};
+// Explicit controls reuse the exact supervised Learning APIs; never fabricate model results.
+$("talkFind").onclick = async () => {
+  const b = $("talkFind"); b.disabled = true;
+  $("talkLessonNotice").textContent = "Checking the configured GitHub lessons folder…";
+  try {
+    const r = await post("/api/lessons/discover", {});
+    $("talkLessonNotice").textContent = r.ok
+      ? "Found " + ((r.body.learning && r.body.learning.lessons) || []).length + " lesson(s). Review their real states in Learning."
+      : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason provided");
+    refresh();
+  } catch (err) { $("talkLessonNotice").textContent = "Lesson search did not reach Core: " + String(err); }
+  finally { b.disabled = false; }
+};
+$("talkNew").onclick = async () => {
+  const r = await post("/api/conversation/new", {});
+  $("talkLessonNotice").textContent = r.ok ? "New conversation: TASS's chat history was cleared; his document, journal, lessons and receipts are kept." : "Not cleared: " + (r.body.error || r.status);
+  refresh();
+};
+$("talkTest").onclick = async () => {
+  const b = $("talkTest"); b.disabled = true;
+  try {
+    if (CUR.autonomous) {
+      $("talkLessonNotice").textContent = "Switch Autonomous OFF before supervised testing; approval must remain manual.";
+      return;
+    }
+    const found = await post("/api/lessons/discover", {});
+    if (!found.ok) {
+      $("talkLessonNotice").textContent = "Refused (HTTP " + found.status + "): " + (found.body.error || "Identity or GitHub refused discovery");
+      return;
+    }
+    const lessons = ((found.body.learning && found.body.learning.lessons) || [])
+      .filter(l => l.status === "NEW" || l.status === "RETRY");
+    if (!lessons.length) {
+      $("talkLessonNotice").textContent = "No eligible Markdown lesson. Review existing states under Learning.";
+      refresh();
+      return;
+    }
+    const chosen = lessons[0]; // Core returns lessons sorted by path; notebooks cannot be NEW.
+    const sent = await post("/api/lessons/study", {path: chosen.path});
+    $("talkLessonNotice").textContent = sent.ok
+      ? "Submitted " + chosen.title + " · real Engine job " + (sent.body.receipt || "UNKNOWN") + ". Review answers and grade under Learning. NOT approved."
+      : "Study refused (HTTP " + sent.status + "): " + (sent.body.error || "no reason provided");
+    refresh();
+  } catch (err) { $("talkLessonNotice").textContent = "Lesson test did not reach Core: " + String(err); }
+  finally { b.disabled = false; }
+};
+$("tf").onsubmit = async ev => {
+  ev.preventDefault(); const text = $("tt").value.trim(); if (!text) return;
+  const r = await post("/api/tasks", {text});
+  alertLine(r.ok ? "Queued " + r.body.job_id + ": it starts on a pulse tick." : (r.body.error || "not queued"));
+  if (r.ok) $("tt").value = "";
+  refresh();
+};
+async function saveSettings() {
+  const r = await post("/api/settings", {autonomous: $("setAuto").checked, pulse: $("setPulse").checked, learn: $("setLearn").checked, relay: $("setRelay").checked});
+  alertLine(r.ok ? "Settings saved." : (r.body.error || "not saved")); refresh();
+}
+$("setAuto").onchange = () => { if ($("setAuto").checked) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnAuto").onclick = () => { const on = !CUR.autonomous; $("setAuto").checked = on; if (on) { $("setPulse").checked = true; $("setLearn").checked = true; } saveSettings(); };
+$("btnPulse").onclick = () => { $("setPulse").checked = !CUR.pulse; saveSettings(); };
+$("setPulse").onchange = saveSettings; $("setLearn").onchange = saveSettings; $("setRelay").onchange = saveSettings;
+function lessonResult(ok, text) { $("lessonMessage").style.color = ok ? "" : "var(--bad)"; $("lessonMessage").textContent = text; }
+$("findLessons").onclick = async () => {
+  const b = $("findLessons"); b.disabled = true; lessonResult(true, "Looking for lessons on GitHub…");
+  const r = await post("/api/lessons/discover", {});
+  b.disabled = false;
+  const n = r.ok ? (r.body.learning.lessons || []).length : 0;
+  lessonResult(r.ok, r.ok ? `Found ${n} lesson(s). Choose Study on a NEW lesson.` : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason given"));
+  refresh();
+};
+$("lessons").onclick = async ev => {
+  const copy = ev.target.dataset.copyLesson;
+  if (copy) {
+    const lesson = LAST_LESSONS.find(l => l.path === copy);
+    if (!lesson || !lesson.reply) { lessonResult(false, "No answer text available to copy."); return; }
+    try { await navigator.clipboard.writeText(lesson.reply); lessonResult(true, "Copied complete lesson text."); }
+    catch { lessonResult(false, "Clipboard unavailable. Select the visible answer text to copy."); }
+    return;
+  }
+  const a = ev.target.dataset.approve, t = ev.target.dataset.retry, study = ev.target.dataset.study;
+  if (!a && !t && !study) return;
+  const mode = study ? "study" : a ? "approve" : "retry";
+  ev.target.disabled = true;
+  const r = await post("/api/lessons/" + mode, {path: study || a || t});
+  lessonResult(r.ok, r.ok ? (mode === "study"
+    ? "Study started: job " + (r.body.receipt || "") + ". His answers and results appear on the lesson when he's done."
+    : mode === "approve" ? "You approved it: LEARNED, and added to the Learned section of his document." : "Ready to study again: press Study.")
+    : "Refused (HTTP " + r.status + "): " + (r.body.error || "no reason given"));
+  refresh();
+};
+document.querySelectorAll(".ctl button[data-a]").forEach(b => b.onclick = async () => {
+  const r = await post("/api/pulse", {action: b.dataset.a});
+  alertLine(r.ok ? b.textContent + ": ok" : (r.body.error || "refused"));
+  refresh();
+});
+$("t").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("f").requestSubmit(); } };
+refresh(); setInterval(refresh, 1000);
+</script>
+</body>
+</html>

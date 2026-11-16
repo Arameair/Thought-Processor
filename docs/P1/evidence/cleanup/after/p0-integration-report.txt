@@ -1,0 +1,32 @@
+P0 INTEGRATION REPORT 2026-10-26T13:50:16-0500
+Real Thought Processor + real Identity processes; GitHub = TEST FIXTURE; Linux developer machine.
+
+PASS  Processor alone shows 'Start Identity'  — IDENTITY_NOT_FOUND
+PASS  Identity started later is found via its locator  — 1 candidate(s)
+PASS  paired: signed status from Identity  — idn_d268672758d90d1fb7e3d673
+PASS  pairing token stored sealed, not as a plain field  — file-permissions-0600
+PASS  identity created in Identity, selected, starts with no access  — ent_819585fb0ea050216869
+PASS  private Thought Engine hidden before sign-in  — Some features are only shown to approved accounts. Sign in t
+PASS  after sign-in Thought Engine appears, eligible to install  — install
+PASS  eligible to install is not permission to run or read sources  — NOT_GRANTED
+PASS  release uploaded by a person is refused  — This release doesn't come from the approved source, so it won't be ins
+PASS  no published release reported honestly  — Thought Engine has no published version yet. Arameair needs to publish
+PASS  tamper download: CHECKSUM_MISMATCH, nothing installed, no leftover file  — The downloaded file doesn't match the approved SHA-256. It was deleted
+PASS  cut download: DOWNLOAD_INTERRUPTED, nothing installed, no leftover file  — The download stopped after 410000 of 820000 bytes. The unfinished file
+PASS  approved install: file on disk matches approved SHA-256  — engine-v0.1.0-fixture
+PASS  install record keeps where it came from  — Arameair/Thought-engine
+PASS  Exit → Keep running: Processor stops, Identity stays up
+PASS  Processor restart: reconnected with no code, install re-verified  — INSTALLED
+PASS  Identity down: protected actions blocked (503), installed feature still shown  — plan 503, create 503
+PASS  impostor on Identity's port is not trusted; actions refused  — WRONG_SERVICE
+PASS  the pairing secret never reached the impostor  — 5 requests inspected
+PASS  other Identity on the same port is not trusted  — WRONG_SERVICE
+PASS  paired Identity found again on a new port (locator)  — http://127.0.0.1:36661
+PASS  after Identity restart (GitHub signed out) the private feature is hidden; install still shown as installed  — Installed earlier. Identity isn't confirming this feature ri
+PASS  account without access never sees the private feature from Identity
+PASS  changed installed file detected  — FILES_CHANGED
+PASS  Developer Mode shows details and grants nothing
+PASS  Exit → Shut down + stop Identity: both stopped, verified  — stopped (verified: no longer answering)
+PASS  Identity's locator removed on clean stop
+
+RESULT: PASS (27/27)

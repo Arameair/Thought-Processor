@@ -1,9 +1,9 @@
 # Thought Processor Product Designer — Role and Responsibilities
 
-**Status:** Proposed role charter; appointment and delegated authority are not yet confirmed.  
-**Prepared:** October 30, 2026  
-**Role holder:** Unassigned  
-**Project:** Thought Processor  
+**Status:** Proposed role charter; appointment and delegated authority are not yet confirmed.<br>
+**Prepared:** October 30, 2026<br>
+**Role holder:** Unassigned<br>
+**Project:** Thought Processor<br>
 **Project direction and approval:** Arameair
 
 ## Purpose

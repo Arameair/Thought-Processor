@@ -1,29 +1,16 @@
-# Thought Processor documentation
+# Thought Processor documentation map
 
-**Start here for the project's architecture, current code/evidence, portfolio story, and ongoing design.** Thought Processor is the human/admin workspace; [Identity](https://github.com/Arameair/identity) is the authority. P0 Alpha is runnable, P1 is an unpromoted experiment, and the initial diagnostic shell/Engine-specific views are historical trials. [Current ledger](STATUS.md).
+## Current coordination sources
 
-| Read first | Purpose |
-| --- | --- |
-| **[First Alpha-candidate design agenda](ALPHA_CANDIDATE_DESIGN_AGENDA_2026-10-26.md)** | Ordered questions and tests to settle before approving the first design; work through one at a time. |
-| **[Options for all 14 Alpha design questions](ALPHA_CANDIDATE_DESIGN_OPTIONS_2026-10-26.md)** | Alternatives, risks, tentative preferences and real acceptance checks; **nothing pre-approved**. |
-| [Current design readiness](DESIGN_READINESS_2026-10-26.md) | What's settled, what conflicts, and what must be decided before a prototype build |
-| [First experience workshop](https://github.com/Arameair/Thought-Processor/blob/experiment/processor-experience-design-20261026/docs/PROCESSOR_FOUNDATION_DESIGN_2026-10-26.md) | Proposed Profiles → Catalog → Collections journey, constraints, smallest test and owner acceptance |
-| [Design discussion #15](https://github.com/Arameair/Thought-Processor/issues/15) | Central place for decisions, alternatives and owner review |
-| [Backlog](BACKLOG.md) | Current tracking issues, historical work and pointers |
-| [Verified status](STATUS.md) | What P0 Alpha and the P1 experiment contain, what's actually tested, and what's not accepted |
-| [Engineering case study](PROJECT_JOURNEY.md) | Portfolio narrative, tested milestones, trade-offs and remaining security work |
-| [Credits and acknowledgments](CREDITS.md) | Project ownership, Claude/Grok reports, related vendors and non-affiliation |
+- Issue #119: preservation-first repository workflow and stabilization decisions.
+- Issue #120: accepted Stage 3 design, audits, installation, and owner acceptance.
+- Issue #111: delta-focused independent testing policy.
+- PR #123 and its ancestors: accepted Core source stack through Stage 3C.
 
-## Reference — use for trade-offs, not competing policy
+## Historical documentation imported from the old default branch
 
-[Architecture](ARCHITECTURE.md) · [Decisions / historical notes](DECISIONS.md) · [Identity authorization integration](INTEGRATION_AUTHORIZATION_PLAN.md) · [Interface proposals](INTERFACES.md) · [Operations theory](OPERATIONAL_SETUP_THEORY.md) · [Roadmap](ROADMAP.md)
+This tree preserves unique design, architecture, research, decision, and project-history documents from the earlier documentation-only `main` history. Most were written in October 2026 before the accepted Go Stage 3 runtime.
 
-## History and deeper research
+Unless a document explicitly cites the accepted Stage 3 revisions and the current Issue #119 workflow, treat its branch names, release status, current-version claims, and next steps as historical context—not current operational instructions or merge policy. Git history remains the authoritative source for its original context.
 
-[Original control-point concept](CONTROL_POINT.md) · [Original Engine-focused vision](VISION.md) · [Independent user critique](END_USER_DESIGN_NOTES.md) · [Identity/experience hypothesis](IDENTITY_EXPERIENCE_RESEARCH.md) · [Grant-path notes](GRANT_PATH_NOTE.md). These preserve earlier ideas; **the main README and October 26 design readiness page clarify which parts have been superseded**.
-
-## Engineering discipline
-
-[Matched P1 trial runbook](https://github.com/Arameair/Thought-Processor/blob/experiment/p1-cleanup-claude-20261026/docs/P1/START_HERE.md) · [Experiment workflow](WORKFLOW.md) · [Experiment test/report template](EXPERIMENT_TEMPLATE.md) · [AI collaboration and provenance](AI_COLLABORATION.md)
-
-**Never infer authorization from discovery or GitHub repository visibility.** No source is approved for a new identity merely because its feature is installed. No experimental candidate is promoted automatically.
+Current entry points are [STATUS.md](STATUS.md) and [WORKFLOW.md](WORKFLOW.md). Security-sensitive runtime behavior must be established from accepted source, exact-SHA tests, and independent audit evidence rather than generalized historical prose.

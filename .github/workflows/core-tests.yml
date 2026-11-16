@@ -1,0 +1,66 @@
+name: core-tests
+on:
+  push:
+    paths: ["core/**", ".github/workflows/core-tests.yml"]
+  pull_request:
+    paths: ["core/**"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Vet and test (race detector)
+        working-directory: core
+        run: |
+          go vet ./...
+          go test -race ./...
+      - name: Owner Learning page JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('core/cmd/tass-core/page.html').read_text()
+          assert html.count('<script>') == 1 and html.count('</script>') == 1
+          Path('/tmp/tass-learning-page.js').write_text(html.split('<script>', 1)[1].split('</script>', 1)[0])
+          PY
+          node --check /tmp/tass-learning-page.js
+      - name: Cognition embedded JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('core/cmd/tass-core/cognition.html').read_text()
+          assert html.count('<script>')==1 and html.count('</script>')==1
+          Path('/tmp/tass-cognition.js').write_text(html.split('<script>')[1].split('</script>')[0])
+          PY
+          node --check /tmp/tass-cognition.js
+      - name: Cognition Chromium playback fixture (not owner machine)
+        run: |
+          python3 -m pip install --quiet playwright
+          python3 -m playwright install chromium
+          python3 core/test/browser/cognition_go.py
+          python3 core/test/browser/cognition_nudge.py
+      - name: Build
+        working-directory: core
+        run: go build -o /tmp/tass-core ./cmd/tass-core && bash -n start.sh
+      - name: Core image builds (real golang:1.24-alpine / alpine:3.20 bases)
+        working-directory: core
+        run: |
+          docker build --build-arg VERSION=${{ github.sha }} -f docker/core.Dockerfile -t tass-core:ci .
+          docker run --rm --entrypoint /usr/local/bin/tass-core tass-core:ci -healthcheck || test $? -eq 1   # binary runs; nothing to check yet
+          docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }} user={{ .Config.User }}' tass-core:ci
+      - name: Compose file is valid (engine image is private, so it isn't built here)
+        working-directory: core
+        run: |
+          docker network create tass-workspace_default
+          # This workflow predates PR #53's one-app Compose fields; validate the
+          # actual external-model configuration without starting any containers.
+          CORE_IMAGE=tass-core:ci ENGINE_IMAGE=tass-engine:ci IDENTITY_IMAGE=tass-identity:ci \
+          APP_UID=1000 APP_GID=1000 APP_DATA=/tmp/t APP_SECRETS=/tmp/s MODEL_ARGS=unused \
+          MODEL_NETWORK=tass-workspace_default MODEL_URL=http://model:8081 \
+          docker compose -p tass-core -f compose.yaml -f compose.external-model.yaml config -q && echo compose-ok
+      - name: Management script syntax
+        working-directory: core
+        run: bash -n tass.sh && bash -n start.sh
+

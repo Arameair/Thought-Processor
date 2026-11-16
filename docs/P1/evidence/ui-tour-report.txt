@@ -1,0 +1,13 @@
+PASS connected to Identity by typing the code from Identity's window
+PASS GitHub sign-in (TEST FIXTURE) verified from Processor's Admin page
+PASS Admin Identity established in Identity's page and shown in Processor
+PASS installed feature shown as an identity: INSTALLED, 0 grants
+PASS started from the Runtime tab; standalone self-test PASS shown
+PASS synthetic request before any grant: DENIED BY IDENTITY
+PASS after Admin approval: COMPLETED with SYNTHETIC TEST DATA
+PASS after Revoke in the UI: next request denied
+PASS Logs tab shows Identity decisions, the feature's own view and its log
+PASS Identity stopped: banner + AUTHORITY UNAVAILABLE (not DENIED)
+PASS no JavaScript errors on the page
+
+RESULT: PASS (11 checks, 0 failed)

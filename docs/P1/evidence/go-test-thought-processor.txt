@@ -1,0 +1,14 @@
+repo: thought-processor  HEAD 13ed2093b10b415af26f8eb41852b75a65a56f0f  go version go1.24.7 linux/amd64  Linux 6.18.44-fc-v153 x86_64
+$ gofmt -l .
+$ go vet ./...
+vet: ok
+$ GOOS=windows go vet ./... && GOOS=windows go build ./...
+windows cross-build: ok (NOT run on Windows)
+$ go test -race -count=1 ./...
+?   	github.com/Arameair/Thought-Processor/processor	[no test files]
+ok  	github.com/Arameair/Thought-Processor/processor/internal/app	1.050s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/featpkg	1.066s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/idclient	1.030s
+ok  	github.com/Arameair/Thought-Processor/processor/internal/install	1.040s
+?   	github.com/Arameair/Thought-Processor/processor/internal/store	[no test files]
+ok  	github.com/Arameair/Thought-Processor/processor/internal/supervisor	17.622s

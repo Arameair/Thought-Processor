@@ -1,0 +1,31 @@
+name: workspace-tests
+on:
+  push:
+    paths: ["workspace/**", ".github/workflows/workspace-tests.yml"]
+  pull_request:
+    paths: ["workspace/**", ".github/workflows/workspace-tests.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r workspace/requirements.txt
+      - name: Tests (fake model + real Jupyter kernel)
+        working-directory: workspace
+        run: python -m unittest discover -s tests -v
+      - name: Workspace image builds and starts
+        working-directory: workspace
+        run: |
+          docker build -t tass-workspace:ci .
+          docker run --rm --entrypoint python3 tass-workspace:ci -c "import tass_workspace.server, zmq, jupyterlab; print('ok')"
+      - name: Compose files are valid
+        working-directory: workspace
+        run: |
+          mkdir -p secrets config && touch secrets/github_token
+          docker compose -f compose.yaml config -q && docker compose -f compose.yaml -f compose.cpu.yaml config -q && echo compose-ok

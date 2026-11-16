@@ -1,0 +1,13 @@
+identity c8c0a54ab333077ccbfbd86c5952fb8a00b55dc1 SECURITY: identity/2 — pairing secret never sent; signed requests, separate response key
+ok  	github.com/Arameair/identity	1.018s
+?   	github.com/Arameair/identity/cmd/identity-probe	[no test files]
+ok  	github.com/Arameair/identity/internal/app	2.576s
+ok  	github.com/Arameair/identity/internal/discovery	1.024s
+ok  	github.com/Arameair/identity/internal/entities	1.019s
+ok  	github.com/Arameair/identity/internal/features	1.023s
+ok  	github.com/Arameair/identity/internal/github	1.232s
+ok  	github.com/Arameair/identity/internal/logbook	49.061s
+ok  	github.com/Arameair/identity/internal/pairing	1.024s
+ok  	github.com/Arameair/identity/internal/profile	1.024s
+?   	github.com/Arameair/identity/internal/publisher	[no test files]
+ok  	github.com/Arameair/identity/internal/redact	1.028s

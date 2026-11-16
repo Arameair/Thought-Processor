@@ -1,0 +1,142 @@
+Docker core: sandbox evidence, 2026-11-04 (Claude)
+Environment: Linux sandbox, Docker 29.9.2, compose 5.6.1. STAND-IN base images (Docker Hub isn't reachable here):
+GO_IMAGE=go-standin:local (Go 1.24.7), RUN_IMAGE=liaison-testbase:local. The workspace stack was SIMULATED:
+a "tass-workspace-model-1" container on network tass-workspace_default serving a TEST FIXTURE llama.cpp API,
+and an idle "tass-workspace-liaison-1" container. GitHub reads went through a local forwarding proxy
+(stopped to simulate an outage). No real Nemotron, GPU or Windows/WSL Docker was involved.
+
+### 1. check-update (current vs candidate; applies nothing)
+Current:   core 351263b8d11bfa8667af0d971b69ee23aac1c1c0 · engine dee1f5332a072f662defc23440e7b5ebe7034684
+Candidate: core 346d716ca4f66dac226f33dda4835dfb5fdca07c · engine dee1f5332a072f662defc23440e7b5ebe7034684 (346d716ca4f66dac226f33dda4835dfb5fdca07c)
+
+Changes in core/ (newest first):
+  346d716 Docker core: owner guide, data/secret map, evidence table, acceptance steps
+   1 file changed, 120 insertions(+)
+
+Apply with: ./tass.sh update 346d716ca4f66dac226f33dda4835dfb5fdca07c
+
+### 2. update to the good candidate
+Current:   core 351263b8d11bfa8667af0d971b69ee23aac1c1c0 · engine dee1f5332a072f662defc23440e7b5ebe7034684
+Candidate: core 346d716ca4f66dac226f33dda4835dfb5fdca07c · engine dee1f5332a072f662defc23440e7b5ebe7034684 (346d716ca4f66dac226f33dda4835dfb5fdca07c)
+
+Changes in core/ (newest first):
+  346d716 Docker core: owner guide, data/secret map, evidence table, acceptance steps
+   1 file changed, 120 insertions(+)
+
+Apply with: ./tass.sh update 346d716ca4f66dac226f33dda4835dfb5fdca07c
+Building tass-core:346d716ca4f6 and tass-engine:dee1f5332a07…
+Backup: /tmp/dk/deploy/backups/20261104T142154Z-before-346d716ca4f6.tgz
+Validating core 346d716ca4f6 / engine dee1f5332a07…
+  PASS: both healthy · version 346d716ca4f6 · state READY (before: READY) · no records lost
+UPDATED to core 346d716ca4f6. Previous version kept for ./tass.sh rollback.
+
+### status
+Deployed: core 346d716ca4f6 · engine dee1f5332a07 · since 2026-11-04T14:21:54Z
+tass-core-core-1: Up 6 seconds (healthy)
+tass-core-engine-1: Up 12 seconds (healthy)
+TASS: READY  
+
+### 3. data before the broken update
+   3 /tmp/dk/tass/conversation.jsonl
+   1 /tmp/dk/tass/memory.jsonl
+  18 /tmp/dk/engine/cycles.jsonl
+b47196c52f3ef5eefc5abccd99976637  /tmp/dk/tass/tass.md
+
+### 4. update to a DELIBERATELY BROKEN candidate (274981fcaf57cf8add480c617a2a1f208d067c1e, local test branch, never pushed)
+Current:   core 346d716ca4f66dac226f33dda4835dfb5fdca07c · engine dee1f5332a072f662defc23440e7b5ebe7034684
+Candidate: core 274981fcaf57cf8add480c617a2a1f208d067c1e · engine dee1f5332a072f662defc23440e7b5ebe7034684 (274981fcaf57cf8add480c617a2a1f208d067c1e)
+
+Changes in core/ (newest first):
+  274981f TEST ONLY: deliberately broken candidate (never pushed)
+   1 file changed, 1 insertion(+)
+
+Apply with: ./tass.sh update 274981fcaf57cf8add480c617a2a1f208d067c1e
+Building tass-core:274981fcaf57 and tass-engine:dee1f5332a07…
+Backup: /tmp/dk/deploy/backups/20261104T142233Z-before-274981fcaf57.tgz
+Validating core 274981fcaf57 / engine dee1f5332a07…
+  FAIL: containers not healthy (engine healthy, core unhealthy)
+Update FAILED validation: putting back the previous version and your data.
+    engine-1  | 14:22:33  start     Thought engine thought-spark-trace-v0.3 on http://127.0.0.1:7798/ (pid 1) · branch unknown (unknown) · commit unknown · data /data/engine (-data flag) · 1 identity · 0 waiting event(s) · rule: Chat-Jimmy rates each observation 0-10 and names its topic · rated 5 or more → kept as a Trace · 3 distinct related Traces → 1 Thought (question written by Chat-Jimmy) · Traces not used by a Thought expire after 7 days
+    engine-1  | 14:22:33  model     Nemotron link: http://model:8081, local pulse every 20s · worker: Nemotron · Identity grant: /data/grant/identity-grant.json (PROTOTYPE policy file, not a live Identity grant) · model and cycle endpoints need the key in /data/engine/api-key
+    core-1    | 14:22:39 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:39 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:40 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:40 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:41 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:43 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:46 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:22:53 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:23:06 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:23:31 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+    core-1    | 14:24:23 DELIBERATELY BROKEN CANDIDATE (update/rollback test): exits at start
+Restored data from /tmp/dk/deploy/backups/20261104T142233Z-before-274981fcaf57.tgz (what was there is kept in /tmp/dk/deploy/failed/20261104T142443Z).
+Validating core 346d716ca4f6 / engine dee1f5332a07…
+  PASS: both healthy · version 346d716ca4f6 · state READY (before: READY) · no records lost
+ROLLED BACK: running the previous version again, with your data as it was before the update.
+exit=0
+
+### 5. after the automatic restore
+Deployed: core 346d716ca4f6 · engine dee1f5332a07 · since 2026-11-04T14:21:54Z
+tass-core-core-1: Up 6 seconds (healthy)
+tass-core-engine-1: Up 12 seconds (healthy)
+TASS: READY  
+   3 /tmp/dk/tass/conversation.jsonl
+   1 /tmp/dk/tass/memory.jsonl
+  18 /tmp/dk/engine/cycles.jsonl
+b47196c52f3ef5eefc5abccd99976637  /tmp/dk/tass/tass.md
+20261104T142443Z
+2026-11-04T14:18:13Z start: deployed core 351263b8d11bfa8667af0d971b69ee23aac1c1c0
+2026-11-04T14:22:07Z update: 351263b8d11bfa8667af0d971b69ee23aac1c1c0 → 346d716ca4f66dac226f33dda4835dfb5fdca07c OK (backup /tmp/dk/deploy/backups/20261104T142154Z-before-346d716ca4f6.tgz)
+2026-11-04T14:24:55Z update: → 274981fcaf57cf8add480c617a2a1f208d067c1e FAILED, restored 346d716ca4f66dac226f33dda4835dfb5fdca07c and data (/tmp/dk/deploy/backups/20261104T142233Z-before-274981fcaf57.tgz)
+
+### 6. update with an engine pin change (18ad151a11a02e7366c0ed8c8df3d286609e18a2)
+Current:   core 346d716ca4f66dac226f33dda4835dfb5fdca07c · engine dee1f5332a072f662defc23440e7b5ebe7034684
+Candidate: core 18ad151a11a02e7366c0ed8c8df3d286609e18a2 · engine 4924de6f1b8504abcab4fed98c0e191057f4e277 (18ad151a11a02e7366c0ed8c8df3d286609e18a2)
+
+Changes in core/ (newest first):
+  18ad151 Pin Thought Engine 4924de6 (names the Nemotron worker from its first log line)
+   2 files changed, 2 insertions(+), 2 deletions(-)
+  Thought Engine pin changes: dee1f5332a07 → 4924de6f1b85
+
+Building tass-core:18ad151a11a0 and tass-engine:4924de6f1b85…
+Backup: /tmp/dk/deploy/backups/20261104T142602Z-before-18ad151a11a0.tgz
+Validating core 18ad151a11a0 / engine 4924de6f1b85…
+  PASS: both healthy · version 18ad151a11a0 · state READY (before: READY) · no records lost
+UPDATED to core 18ad151a11a0. Previous version kept for ./tass.sh rollback.
+
+rule: Nemotron rates
+
+### 7. rollback (to the previous version; data untouched)
+Validating core 346d716ca4f6 / engine dee1f5332a07…
+  PASS: both healthy · version 346d716ca4f6 · state READY (before: none) · no records lost
+Rolled back. (./tass.sh rollback again returns to the version you just left.)
+Deployed: core 346d716ca4f6 · engine dee1f5332a07 · since 2026-11-04T14:21:54Z
+
+### 8. rollback again (back to where we were)
+Validating core 18ad151a11a0 / engine 4924de6f1b85…
+  PASS: both healthy · version 18ad151a11a0 · state READY (before: none) · no records lost
+Rolled back. (./tass.sh rollback again returns to the version you just left.)
+Deployed: core 18ad151a11a0 · engine 4924de6f1b85 · since 2026-11-04T14:26:01Z
+tass-core-core-1: Up 6 seconds (healthy)
+tass-core-engine-1: Up 12 seconds (healthy)
+TASS: READY  
+
+### images kept for offline rollback
+tass-engine:4924de6f1b85 5ead82845a60
+tass-core:18ad151a11a0 d47671ade6b6
+tass-core:274981fcaf57 8fb50e294401
+tass-core:346d716ca4f6 091cd9143137
+tass-engine:dee1f5332a07 cb74778cf08f
+tass-core:351263b8d11b 6d4ad0120f71
+
+### one model container, workspace containers untouched
+tass-core-core-1 Up 6 seconds (healthy)
+tass-core-engine-1 Up 12 seconds (healthy)
+tass-workspace-liaison-1 Up 9 minutes
+tass-workspace-model-1 Up 7 minutes
+
+### 9. the engine enforces Identity on its own: grant file removed while the core still has its copy in memory
+say: 202
+cycle tp_20261104T142649_191663313f44 state denied | proposal None | DENIED: Identity grant unavailable (open /data/grant/identity-grant.json: no such file or directory); thought.process is blocked until it is; DENIED: Identity g
+last model request: tp_20261104T142009_128db7a4c2c0:plan True
+(grant restored; the next sync also rewrites it)

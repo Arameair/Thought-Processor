@@ -1,0 +1,11 @@
+ok  	github.com/Arameair/identity	0.009s
+ok  	github.com/Arameair/identity/internal/app	7.316s
+ok  	github.com/Arameair/identity/internal/authority	0.055s
+ok  	github.com/Arameair/identity/internal/discovery	0.013s
+ok  	github.com/Arameair/identity/internal/entities	0.005s
+ok  	github.com/Arameair/identity/internal/features	0.005s
+ok  	github.com/Arameair/identity/internal/github	0.216s
+ok  	github.com/Arameair/identity/internal/logbook	2.665s
+ok  	github.com/Arameair/identity/internal/pairing	0.007s
+ok  	github.com/Arameair/identity/internal/profile	0.006s
+ok  	github.com/Arameair/identity/internal/redact	0.002s
