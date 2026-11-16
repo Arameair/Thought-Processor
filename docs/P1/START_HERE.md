@@ -1,5 +1,7 @@
 # START HERE — P1 Feature Foundation (cleanup build) on a clean WSL / Linux computer
 
+> **RETIRED HISTORICAL RUNBOOK:** The separate legacy Processor and its P1 launchers are no longer supported and refuse normal startup. Preserve this document as experiment evidence; do not follow it to operate TASS. Use the accepted Go Core through `core/tass.sh`.
+
 **What you get:** Identity + Thought Processor + one clearly labelled **trusted local test feature** (a deterministic Python worker — *not* Fast AI Worker, *not* an AI). You establish the original Admin Identity, install the feature (it gets its own durable installation identity with zero grants), run it, approve one narrow capability, watch the feature enforce it, revoke it, and restart everything.
 
 **Experimental branches — not Alpha.** Nothing here changes `alpha`, `stable`, `main` or the original P1 branches.

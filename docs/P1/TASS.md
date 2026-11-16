@@ -1,5 +1,7 @@
 # Developer Platform + TASS, your private companion (2026-10-29)
 
+> **RETIRED HISTORICAL RUNBOOK:** This legacy Processor-based companion trial is not a supported runtime and its launchers refuse startup. Preserve these observations as evidence; use the accepted Go Core through `core/tass.sh`.
+
 **Branches:**
 - `Arameair/Thought-Processor` · `experiment/tass-companion-claude-20261029`. Based on PR #29 (the Developer entrance).
 - `Arameair/TASS` · `experiment/tass-companion-feature-claude-20261029`.

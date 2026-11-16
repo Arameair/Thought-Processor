@@ -25,6 +25,10 @@ The updated Core source includes [PR #124's](https://github.com/Arameair/Thought
 
 These pins come from the recorded owner-accepted installation. **No direct examination of the owner's machine was performed for this documentation change.** Do not infer current container state, release status, or permission grants from GitHub `main`.
 
+## Legacy Processor retirement
+
+The owner retired the separate `processor/` executable on 2026-11-16. The accepted Go Core under `core/` is the sole supported runtime foundation. Legacy source, tests, and P0/P1 documents remain in Git for evidence, but the executable and its former launchers refuse normal startup. An explicit development-only escape hatch is not a supported installation path and carries a private-launch-URL warning.
+
 ## Historical branches and pull requests
 
 - The Stage 3 Core work represented by PRs #110, #112, #113, #114, #117, #121, #122, and #123 was integrated through #124; verify individual ancestry before closing any still-open PR.

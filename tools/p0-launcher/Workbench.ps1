@@ -2,6 +2,9 @@
 # No private link, pairing code or token is printed or stored here.
 # This only invokes the WSL supervisor's bounded commands.
 $ErrorActionPreference = 'Stop'
+Write-Host "RETIRED: this legacy Processor workbench cannot start TASS." -ForegroundColor Yellow
+Write-Host "Use the accepted Go Core through core/tass.sh. Nothing was started or changed."
+exit 2
 $Script = 'exec python3 "$HOME/p1c/alpha/Thought-Processor/tools/p0-launcher/secure_launch.py" "$1"'
 function Invoke-Workbench([string]$Action) {
     & wsl.exe -e bash -lc $Script -- $Action

@@ -1,5 +1,7 @@
 # P1 cleanup: one-command WSL/Linux launch (experimental)
 
+> **RETIRED HISTORICAL RUNBOOK:** `run-p1.sh` no longer starts the legacy Processor. This document is evidence only. Use the accepted Go Core through `core/tass.sh`.
+
 **Not Alpha, not an installer.** This wrapper uses the existing P1 cleanup source and built-in trusted fixture; it does not grant permissions or sign in for you.
 
 ## First-time setup

@@ -236,7 +236,8 @@ type fakeEngine struct {
 	mismatchCycleID    string
 	unlockedPrediction bool
 	unreadableProposal bool
-	conflicts          int // 409 answers to duplicate job IDs
+	beforeCycleReply   func() // optional test gate after request receipt, before the Engine replies
+	conflicts          int    // 409 answers to duplicate job IDs
 	replyExtra         string
 }
 
@@ -302,6 +303,9 @@ func newFakeEngine() *fakeEngine {
 		var in map[string]any
 		b, _ := io.ReadAll(r.Body)
 		json.Unmarshal(b, &in)
+		if !strings.HasSuffix(r.URL.Path, "/outcome") && e.beforeCycleReply != nil {
+			e.beforeCycleReply()
+		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/outcome") {

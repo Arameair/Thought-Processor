@@ -1,5 +1,7 @@
 # TASS's Go core: one thought cycle (Thought-Processor #42)
 
+> **Current supported runtime:** use `./tass.sh check` and `./tass.sh start` for the accepted one-application Go Core. The older `start.sh` instructions below describe a historical standalone development launcher with older pins and static-policy behavior; they are retained as evidence, not as the supported installation path.
+
 ```
 you ─► tass-core (Thought-Processor) ─► Thought Engine ─► Nemotron (llama.cpp, local)
           │  checks Identity first           │  observation → Spark → Trace → Thought   (its existing pipeline)
