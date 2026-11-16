@@ -1,23 +1,27 @@
 # TASS source, review, release, and installation workflow
 
-**Current agreement:** Thought-Processor Issue #119, 2026-11-14.
+**Reviewed: 2026-11-15 (CST).** [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119) records current owner decisions and stabilization evidence. The proposed changes in [PR #118](https://github.com/Arameair/Thought-Processor/pull/118) have not been adopted. This document describes the working agreement; it does not claim GitHub enforces protections that have not been configured.
 
-## Target flow
+## Lightweight development path
 
-1. Record one bounded problem and observable acceptance criteria in a primary GitHub issue.
-2. Prepare a small issue branch from the approved source base. Preserve exact dependencies and unrelated work.
-3. Test untrusted code only in disposable fixtures. Record exact base/head SHAs, changed paths, commands, PASS/FAIL/NOT RUN results, and limitations.
-4. Obtain independent Codex review of the final executable SHA. The author does not independently certify their own candidate.
-5. Integrate only after required review, CI, branch controls, and risk-appropriate owner authorization.
-6. Identify compatible multi-repository releases with immutable pins and a manifest.
-7. Install, roll back, change grants, or change autonomy only under separate owner authorization with verified recovery controls.
+1. **Define the slice.** Use one primary issue to state the problem, acceptance criteria, repository owner, and permitted changes. Reuse the same PR for a repair rather than multiplying PRs.
+2. **Branch from an approved revision.** Prefer short-lived `feature/*`, `fix/*`, `docs/*`, or clearly bounded `experiment/*` branches. Verify actual base/head SHAs and dependencies. Preserve distinct experimental work until disposition is approved.
+3. **Keep a single review record.** Open a draft PR for the slice. Record changed paths, exact revisions, test commands, and PASS / FAIL / NOT RUN results. Do not label a path-filtered or unexecuted CI job as PASS.
+4. **Review proportional to risk.** Documentation-only changes need accurate source checks and an independent focused review. Executable behavior needs applicable tests and independent review. Cross-service contracts, persistence, credentials, Identity authorization, updater execution, or deployment require stronger exact-SHA evidence and explicit owner consent.
+5. **Verify the final candidate.** Audit the current head and proposed merge result, including any CI run on a synthetic PR merge ref. Do not self-certify independence. Stop on an unexplained failure, privacy concern, or unexpected automation.
+6. **Merge only when authorized.** Confirm the permitted merge method, destination, state, exact source and CI evidence. Preserve audited ancestry; never force-push or rewrite accepted histories simply for tidiness. Observe post-merge CI and report its actual results.
+7. **Keep release and installation separate.** A merged source tree does not select a multi-repository release or deploy TASS. Release pins, manifests, installation, rollback, Identity grants, and autonomy changes require their own review and owner authorization.
+8. **Clean up with evidence.** Before closing PRs or deleting branches, verify unique commits, retained documentation/tests, cross-repository pins, and historical links. Only execute approved dispositions; preserve the audit trail.
 
-## Current transition constraints
+## Practical security and collaboration rules
 
-- The accepted Stage 3 source is an unmerged stacked history; `main`, `alpha`, and `stable` do not presently encode that release.
-- Do not flatten, rebase, force-push, close, or merge the stack merely to make GitHub appear tidy.
-- Preserve unique test/security/documentation side branches until their content is classified and reviewed.
-- Documentation-only work must not alter runtime, test configuration, workflow execution, branch protections, or release behavior without being treated as executable change.
-- `INTEGRATED` and `RELEASED` are separate states. Neither implies deployment.
+- Identity owns canonical authorization; Core and Engine must not bypass its grants or revocation decisions.
+- Work in disposable fixtures for untrusted tests; do not modify the owner's installed services, model, data, secrets, or backups without a distinct scope authorization.
+- For human and AI contributors, separate the author from an independent auditor when the change's risk requires it. The owner is the final authority for protected actions.
+- Keep public commit author and committer metadata privacy-safe; do not publish credentials, private locations, or owner records.
+- Current GitHub branch restrictions and required checks must be verified from settings, not inferred from this document. They were not enforced at the Core integration review.
+- Archive historical documents as evidence, but do not treat their old branch, release, or installation claims as current instructions.
 
-Historical documents that describe `alpha → stable → main` promotion remain useful context but are not the current operating agreement.
+## Current source milestone
+
+Core's audited Stage 3 history was integrated by [PR #124](https://github.com/Arameair/Thought-Processor/pull/124) into public `main` at `0acb9d39bacf4002edf988d254be8f48eeace84f`, with three successful post-merge CI runs. Engine and Identity repository integration remain separate work. See [STATUS.md](STATUS.md) and [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119).
