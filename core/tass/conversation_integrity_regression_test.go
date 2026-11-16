@@ -34,7 +34,7 @@ func TestConversationRechecksRevokedGrantAfterInference(t *testing.T) {
 
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	eng.beforeCycleReply = func() {
+	eng.beforeCycleReply = func(_, _ string) {
 		once.Do(func() {
 			close(entered)
 			<-release
@@ -90,12 +90,18 @@ func TestConversationQueuesMessagesInReceiptOrder(t *testing.T) {
 	ids.set("UNLOCKED")
 
 	entered, release := make(chan struct{}), make(chan struct{})
-	var once sync.Once
-	eng.beforeCycleReply = func() {
-		once.Do(func() {
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
+	eng.beforeCycleReply = func(_, request string) {
+		if request == "first owner message" {
 			close(entered)
 			<-release
-		})
+		}
 	}
 	c := newIdentityCore(t, t.TempDir(), ids, eng)
 	stop := make(chan struct{})
@@ -127,22 +133,25 @@ func TestConversationQueuesMessagesInReceiptOrder(t *testing.T) {
 	}
 	close(release)
 
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		eng.mu.Lock()
-		complete := len(eng.reqs) == 2 && len(eng.outcomes) == 2
-		eng.mu.Unlock()
-		if complete || time.Now().After(deadline) {
-			break
+	events := make([]fakeEngineEvent, 0, 4)
+	for len(events) < 4 {
+		select {
+		case event := <-eng.cycleEvents:
+			events = append(events, event)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for ordered Engine events: %+v", events)
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 	eng.mu.Lock()
 	reqs := append([]map[string]any(nil), eng.reqs...)
 	outcomes := append([]map[string]any(nil), eng.outcomes...)
+	maxInFlight := eng.maxInFlightCycles
 	eng.mu.Unlock()
 	if len(reqs) != 2 || len(outcomes) != 2 {
 		t.Fatalf("wanted two sequential completed cycles: requests=%d outcomes=%d", len(reqs), len(outcomes))
+	}
+	if maxInFlight != 1 {
+		t.Fatalf("Engine requests overlapped: max in flight=%d, events=%+v", maxInFlight, events)
 	}
 	if reqs[0]["request"] != "first owner message" || reqs[1]["request"] != "second owner message" {
 		t.Fatalf("messages lost or reordered: %v then %v", reqs[0]["request"], reqs[1]["request"])
@@ -151,6 +160,17 @@ func TestConversationQueuesMessagesInReceiptOrder(t *testing.T) {
 	secondCycle, _ := reqs[1]["cycle_id"].(string)
 	if firstCycle == "" || secondCycle == "" || firstCycle == secondCycle {
 		t.Fatalf("cycle IDs must be present and distinct: %q %q", firstCycle, secondCycle)
+	}
+	want := []fakeEngineEvent{
+		{kind: "request", cycleID: firstCycle, request: "first owner message"},
+		{kind: "outcome", cycleID: firstCycle},
+		{kind: "request", cycleID: secondCycle, request: "second owner message"},
+		{kind: "outcome", cycleID: secondCycle},
+	}
+	for i := range want {
+		if events[i] != want[i] {
+			t.Fatalf("request/outcome order or cycle correlation failed at event %d: got %+v, want %+v; all=%+v", i, events[i], want[i], events)
+		}
 	}
 }
 
