@@ -5,8 +5,8 @@
 #   ./tass.sh start            start the deployed version (first time: build this checkout's pinned version)
 #   ./tass.sh status           READY / WORKING / BUSY / BLOCKED / UNKNOWN, Identity, pulse, versions
 #   ./tass.sh logs             follow the application's logs
-#   ./tass.sh check-update     current vs candidate version and what changed. Applies nothing.
-#   ./tass.sh update [REF]     build the candidate, back up, switch, validate; if validation fails, put back
+#   ./tass.sh check-update SHA current vs explicit approved candidate and what changed. Applies nothing.
+#   ./tass.sh update SHA       build the candidate, back up, switch, validate; if validation fails, put back
 #                              the previous version AND the data. Asks first (--yes to skip).
 #   ./tass.sh rollback         switch back to the previous version (--restore-data BACKUP to restore data too)
 #   ./tass.sh restore-previous the version from before the last update AND its verified pre-update data
@@ -40,7 +40,6 @@ APP_DATA="$APP_HOME/data"
 APP_SECRETS="$APP_HOME/secrets"
 DEPLOY="$APP_HOME/deploy"
 APP_PROJECT="${APP_PROJECT:-tass-app}"
-TRACK="${TASS_TRACK:-experiment/integration-20261104}"
 ISSUE50_FIX="90c8892"   # core commit that rejects unlocked / mismatched proposals before any action
 REPO="$(git -C "$here" rev-parse --show-toplevel)"
 
@@ -515,25 +514,49 @@ cmd_status() {
   say "  last pulse tick: $(tail -n 1 "$APP_DATA/engine/ticks.jsonl" 2>/dev/null | cut -c1-200 || echo none)"
 }
 
+resolve_update_target() {
+  local ref="${1:-}"
+  [[ -n "$ref" ]] || die "no approved update target: pass the reviewed full 40-character Core commit SHA"
+  [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || die "update target must be a full 40-character Core commit SHA, not a branch, tag or abbreviated ref"
+  local cand; cand="$(git -C "$REPO" rev-parse --verify -q "$ref^{commit}")" || die "approved Core commit $ref is not available locally; fetch its reviewed durable ref first"
+  [[ "$cand" == "$ref" ]] || die "update target did not resolve to the exact approved Core commit $ref"
+  printf '%s' "$cand"
+}
+
 cmd_check_update() {
-  local ref="${1:-origin/$TRACK}"
-  [[ "$ref" == origin/* ]] && git -C "$REPO" fetch -q origin "${ref#origin/}:refs/remotes/$ref" 2>/dev/null || true
-  local cand; cand="$(git -C "$REPO" rev-parse --verify -q "$ref^{commit}")" || die "can't find $ref"
+  [[ $# -le 1 ]] || die "check-update accepts exactly one full Core commit SHA"
+  local cand; cand="$(resolve_update_target "${1:-}")"
   [[ -f "$DEPLOY/current.env" ]] || die "nothing deployed yet: ./tass.sh start"
   load_env "$DEPLOY/current.env"
-  say "Current:   core $CORE_SHA · engine $(short "$ENGINE_SHA") · identity $(short "$IDENTITY_SHA")"
-  say "Candidate: core $cand · engine $(pin_of "$cand" ENGINE_COMMIT_PIN) · identity $(pin_of "$cand" IDENTITY_COMMIT_PIN) ($ref)"
+  local current_core="$CORE_SHA" current_engine="$ENGINE_SHA" current_identity="$IDENTITY_SHA"
+  say "Current:   core $current_core · engine $(short "$current_engine") · identity $(short "$current_identity")"
   if [[ "$cand" == "$CORE_SHA" ]]; then say "Up to date."; return 0; fi
+  git -C "$REPO" cat-file -e "$current_core^{commit}" 2>/dev/null || die "installed Core commit $current_core is not available locally; ancestry cannot be verified"
+  git -C "$REPO" merge-base --is-ancestor "$current_core" "$cand" 2>/dev/null || \
+    die "update refused: candidate $cand is older than or diverges from installed Core $current_core; use the separately reviewed rollback/recovery path for reversions"
+  local candidate_engine candidate_identity
+  candidate_engine="$(pin_of "$cand" ENGINE_COMMIT_PIN)"
+  candidate_identity="$(pin_of "$cand" IDENTITY_COMMIT_PIN)"
+  [[ "$candidate_engine" =~ ^[0-9a-f]{40}$ && "$candidate_identity" =~ ^[0-9a-f]{40}$ ]] || \
+    die "update refused: candidate does not contain full Engine and Identity compatibility pins"
+  if [[ "$candidate_engine" != "$current_engine" || "$candidate_identity" != "$current_identity" ]]; then
+    die "update refused: candidate changes Engine or Identity pins; require an owner-approved compatibility manifest or separate explicit authorization"
+  fi
+  say "Candidate: core $cand · engine $(short "$candidate_engine") · identity $(short "$candidate_identity") (explicit approved SHA)"
   say; say "Changes in core/ (newest first):"
-  git -C "$REPO" log -n 30 --oneline "$CORE_SHA..$cand" -- core | sed 's/^/  /'
-  git -C "$REPO" diff --stat "$CORE_SHA" "$cand" -- core | tail -1 | sed 's/^/  /'
+  git -C "$REPO" log -n 30 --oneline "$current_core..$cand" -- core | sed 's/^/  /'
+  git -C "$REPO" diff --stat "$current_core" "$cand" -- core | tail -1 | sed 's/^/  /'
   say; say "Apply with: ./tass.sh update $cand"
 }
 
 cmd_update() {
   local ref="" yes=0
-  for a in "$@"; do case "$a" in --yes) yes=1 ;; *) ref="$a" ;; esac; done
-  ref="${ref:-origin/$TRACK}"
+  for a in "$@"; do case "$a" in
+    --yes) yes=1 ;;
+    -*) die "unknown update option: $a" ;;
+    *) [[ -z "$ref" ]] || die "update accepts exactly one full Core commit SHA"; ref="$a" ;;
+  esac; done
+  [[ -n "$ref" ]] || die "no approved update target: pass the reviewed full 40-character Core commit SHA"
   [[ -f "$DEPLOY/current.env" ]] || die "nothing deployed yet: ./tass.sh start"
   cmd_check_update "$ref"
   local cand; cand="$(git -C "$REPO" rev-parse --verify -q "$ref^{commit}")"

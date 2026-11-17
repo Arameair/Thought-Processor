@@ -12,6 +12,8 @@ import unittest
 
 CORE = Path(__file__).resolve().parents[1]
 ROOT = CORE.parent
+ENGINE_PIN = "3aeaff7a41a989414ee1cd0ec64afb51f27e9876"
+IDENTITY_PIN = "ee7ba1b0f9cf894235be63071c493b74e2a0eef9"
 
 
 def call(argv, env=None, cwd=CORE):
@@ -118,8 +120,8 @@ class LauncherSafety(unittest.TestCase):
         f = d / "current.env"
         if include:
             f.write_text(
-                f"CORE_SHA={self.sha}\nENGINE_SHA=a847385000000000000000000000000000000000\n"
-                "IDENTITY_SHA=8b175c8000000000000000000000000000000000\n"
+                f"CORE_SHA={self.sha}\nENGINE_SHA={ENGINE_PIN}\n"
+                f"IDENTITY_SHA={IDENTITY_PIN}\n"
                 f"CORE_IMAGE=tass-core:{self.sha[:12]}\n"
                 "ENGINE_IMAGE=tass-engine:a84738500000\nIDENTITY_IMAGE=tass-identity:8b175c800000\n"
                 f"COMPOSE_FILE={CORE}/compose.yaml\nDEPLOYED_AT=2026-11-04T00:00:00Z\n")
