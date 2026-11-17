@@ -6,7 +6,7 @@ One application you **check, start, use, update and recover** with one script. I
  your browser ──127.0.0.1:8796──► identity  (tass-identity, Go)   create YOUR entity · unlock · lock
       │                              ▲  authorizes every action (service keys)
       │                              │
-      └──────127.0.0.1:8795──►┌──── network namespace of "engine" ───────────────┐
+      └──127.0.0.1:CORE_PORT─►┌──── network namespace of "engine" ───────────────┐
                               │ core (tass-core)  ──127.0.0.1:7798──► engine      │──► model:8081
                               │ page · tasks ·                        (Thought    │    llama.cpp, ONE per
                               │ pulse controls                         Engine,    │    computer, internal
@@ -38,7 +38,7 @@ nano ~/.tass-app/app.env   # MODEL_DIR + MODEL_FILE (your .gguf), or MODEL_MODE=
 ./tass.sh start        # builds the pinned version, starts the 4 services, validates them
 ```
 
-Then open **http://127.0.0.1:8796**, create your own entity (a name and a passphrase), and open **http://127.0.0.1:8795** to talk to it and run the work pulse.
+Then open **http://127.0.0.1:8796**, create your own entity (a name and a passphrase), and open the configured Core port to talk to it and run the work pulse. The container listens internally on 8795; `CORE_PORT` selects the Windows/host port (default 8795, and 8797 in the owner's verified installation). `./tass.sh status` prints the exact address.
 
 - **A fresh install has no entity.** Nothing is downloaded or built in: no one else's entity, identity, memory, document or policy. The core says BLOCKED ("Identity NO_ENTITY") until you create one.
 - **LOCKED after every restart.** Unlocking is held in memory only. After any restart or update, unlock again with your passphrase. While LOCKED, nothing reaches the model and no task can be queued.
@@ -51,8 +51,8 @@ Then open **http://127.0.0.1:8796**, create your own entity (a name and a passph
 ./tass.sh start
 ./tass.sh status         # Identity state, READY/WORKING/BUSY/BLOCKED/UNKNOWN, last pulse tick, versions
 ./tass.sh logs
-./tass.sh check-update   # current vs candidate and what changed; applies nothing
-./tass.sh update [REF]   # asks first; backup → build → switch → validate → automatic restore on failure
+./tass.sh check-update FULL_CORE_SHA # explicit reviewed candidate vs current; applies nothing
+./tass.sh update FULL_CORE_SHA       # asks first; backup → build → switch → validate → automatic restore on failure
 ./tass.sh rollback       # previous version (add --restore-data <backup> to restore data too)
 ./tass.sh backup
 ./tass.sh stop           # only this application's containers
@@ -77,7 +77,7 @@ A failed update puts back the previous version **and** the data from the backup 
 
 ## Autonomous (the master switch)
 
-The top bar of the page (8795) has two buttons and a live chip:
+The top bar of the page (the configured `CORE_PORT`) has two buttons and a live chip:
 - **Autonomous: off (chat only).** This is the default on a new install. You can talk; the model can't run any action, no task can be queued, and the work pulse stays paused. Health reports `action_mode: CHAT_ONLY`.
 - **Autonomous: ON.** The 20-second work pulse runs and lessons come in from GitHub on each pulse. Read-only actions may run, but only behind the Issue #50 checks: same cycle ID, a locked prediction with its digest, and Identity at the point of use. A lesson that passes every check is approved automatically and marked "auto-approved". Health reports `action_mode: AUTONOMOUS_GUARDED`.
 - **Pulse: ON / off** turns only the work pulse on or off. Turning it on also turns Autonomous on.
@@ -90,7 +90,7 @@ Every setting survives restarts. After a restart, Identity is LOCKED until you u
 Set `GITHUB_REPO` (and `GITHUB_BRANCH`, default `live`) in `~/.tass-app/app.env`. At start, `tass.sh` saves a token from `gh auth token` (or `GITHUB_TOKEN`) as `~/.tass-app/secrets/github_token` (0600). It's mounted read-only and is never in an image. Without `GITHUB_REPO`, everything stays on this computer.
 
 - **Document:** the entity's `tass.md` comes from the repo. The app syncs it every 20 s with ETags and a section-by-section merge. If both sides changed the same section, it opens a pull request instead of choosing. A repo without the file gets the entity's own starter, but a local starter is never merged over a real document.
-- **Lessons:** turn on **Work pulse every 20 seconds** and **Learn new lessons from GitHub** on the page (8795). Then each pulse:
+- **Lessons:** turn on **Work pulse every 20 seconds** and **Learn new lessons from GitHub** on the page at the configured `CORE_PORT`. Then each pulse:
   1. Looks at `lessons/` in the repo. One request, usually a free 304 when nothing changed.
   2. Downloads new or changed lessons and keeps them locally.
   3. Hands **one** lesson at a time to the engine's pulse. The entity studies it **without** the expected answers.
@@ -168,14 +168,18 @@ Your entity, its data and its keys stay in `~/.tass-app`. The update backs them 
 ```bash
 cd ~/tass-one-app                   # the folder you run tass.sh from
 git fetch origin
-git checkout --detach origin/experiment/integration-20261104
+APPROVED_CORE_SHA=<full 40-character SHA from the owner-approved compatibility record>
+git cat-file -e "$APPROVED_CORE_SHA^{commit}" # must already be available from a reviewed durable ref
 cd core
 ./tass.sh check                     # adds the GitHub lines to ~/.tass-app/app.env if they're missing
 nano ~/.tass-app/app.env            # GITHUB_REPO=Arameair/TASS
-sudo -v; ./tass.sh update --yes     # build, back up, switch, validate (rolls back by itself on failure)
+./tass.sh check-update "$APPROVED_CORE_SHA"
+sudo -v; ./tass.sh update "$APPROVED_CORE_SHA" --yes # build, back up, switch, validate; restores on failure
 ```
 
-Then unlock at http://127.0.0.1:8796, open http://127.0.0.1:8795, and press **Autonomous** in the top bar.
+The updater refuses missing, abbreviated, moving-branch, older, or divergent targets. It also refuses a candidate that changes the pinned Engine or Identity revision unless compatibility is established through a separately owner-approved manifest or explicit authorization.
+
+Then unlock at http://127.0.0.1:8796, open the Core address printed by `./tass.sh status`, and press **Autonomous** in the top bar.
 
 ## Owner acceptance (on your PC, about 15 minutes)
 
@@ -193,9 +197,9 @@ sudo -v; ./tass.sh start               # don't run the script itself with sudo: 
 
 In `app.env`, also set `GITHUB_REPO=Arameair/TASS` (branch `live`). Merge TASS PR #23 (the starter lessons) first, or the pulse won't find any lessons.
 
-1. Open http://127.0.0.1:8795: the red bar says NO_ENTITY and BLOCKED.
+1. Open the Core address printed by `./tass.sh status`: the red bar says NO_ENTITY and BLOCKED.
 2. Open http://127.0.0.1:8796 and create your entity: a name and a passphrase only you know. With `GITHUB_REPO=Arameair/TASS`, its document is TASS's `tass.md` from `live`, so name it TASS. The download never does this for anyone: it's your choice on your PC.
-3. Back on 8795, say "hi". Expected: a real Nemotron reply and a full thought cycle.
+3. Back on the configured Core port, say "hi". Expected: a real Nemotron reply and a full thought cycle.
 4. In Work pulse, queue "count your sections", press **Start**, and watch at least 10 ticks. Expected: START once, then CONTINUE while it runs, then OBSERVED. Then **Pause**.
 5. In **Learning**, tick both switches. Within a minute or two, the three lessons appear and get studied one by one. Read the answers, then press **Approve** on each lesson that passed. Check that `tass.md` on `live` now has a `## Learned` section.
 6. Run `./tass.sh stop && ./tass.sh start`. Expected: same entity, LOCKED and BLOCKED until you unlock. After unlock, the pulse comes back on by itself, and learned lessons stay learned.

@@ -24,6 +24,9 @@ import unittest
 CORE = Path(__file__).resolve().parents[1]
 ROOT = CORE.parent
 HARNESS = CORE / "test" / "updater_harness.sh"
+ACCEPTED_CORE = "8e2b02b17eb4e39d489a564af23588be22bb5d19"
+ENGINE_PIN = "3aeaff7a41a989414ee1cd0ec64afb51f27e9876"
+IDENTITY_PIN = "ee7ba1b0f9cf894235be63071c493b74e2a0eef9"
 
 
 def git(*a):
@@ -185,8 +188,8 @@ class UpdaterRecovery(unittest.TestCase):
             d = self.app / "deploy"; d.mkdir(exist_ok=True)
             v = self.v[0]
             (d / "current.env").write_text(
-                f"CORE_SHA={v}\nENGINE_SHA=d69d3917d1601d806d4b2ba2254693e1adb92b6b\n"
-                "IDENTITY_SHA=7da7f7c5bbecc42d3a7e9316a2037243eda10b88\n"
+                f"CORE_SHA={v}\nENGINE_SHA={ENGINE_PIN}\n"
+                f"IDENTITY_SHA={IDENTITY_PIN}\n"
                 f"CORE_IMAGE=tass-core:{v[:12]}\nENGINE_IMAGE=tass-engine:d69d3917d160\n"
                 f"IDENTITY_IMAGE=tass-identity:7da7f7c5bbec\nCOMPOSE_FILE={CORE}/compose.yaml\n"
                 "DEPLOYED_AT=2026-11-05T00:00:00Z\n")
@@ -221,7 +224,92 @@ class UpdaterRecovery(unittest.TestCase):
     def backups(self):
         return sorted((self.app / "deploy" / "backups").glob("*.tgz"))
 
+    def rejection_state(self):
+        deploy = self.app / "deploy"
+        return {
+            "current": (deploy / "current.env").read_bytes(),
+            "data": tree(self.data),
+            "running": self.running(),
+            "images": (self.fake.state / "images").read_bytes(),
+            "docker_log": (self.fake.state / "log").read_bytes() if (self.fake.state / "log").exists() else b"",
+            "history": (deploy / "history.log").read_bytes() if (deploy / "history.log").exists() else None,
+            "candidate": (deploy / "candidate.env").read_bytes() if (deploy / "candidate.env").exists() else None,
+            "backups": [p.name for p in self.backups()],
+            "operation": (deploy / "operation.env").exists(),
+        }
+
+    def assert_rejected_before_operation(self, before):
+        self.assertEqual(self.rejection_state(), before)
+
+    def local_clone(self):
+        repo = self.root / "fixture-repo"
+        subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(repo)], check=True)
+        return repo
+
+    def fixture_commit(self, repo, parent, edit=None):
+        subprocess.run(["git", "-C", str(repo), "checkout", "--quiet", "--detach", parent], check=True)
+        if edit:
+            edit(repo)
+        subprocess.run(["git", "-C", str(repo), "add", "core/tass.sh"], check=True)
+        subprocess.run([
+            "git", "-C", str(repo), "-c", "user.name=TASS updater fixture",
+            "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "fixture candidate",
+        ], check=True)
+        return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
+
     # ------------------------------------------------------------------ tests
+    def test_00_rejections_happen_before_build_backup_stop_or_deployment_change(self):
+        cases = [
+            ("missing target", ("update", "--yes"), {}, "no approved update target"),
+            ("moving branch", ("update", "main", "--yes"), {}, "full 40-character Core commit SHA"),
+            ("unavailable commit", ("update", "f" * 40, "--yes"), {}, "is not available locally"),
+            ("downgrade", ("update", git("rev-parse", "HEAD~3"), "--yes"), {}, "older than or diverges"),
+        ]
+        for name, args, env, message in cases:
+            with self.subTest(name=name):
+                before = self.rejection_state()
+                rc, out = self.h(*args, ok=False, **env)
+                self.assertIn(message, out)
+                self.assert_rejected_before_operation(before)
+
+    def test_00b_divergent_candidate_is_rejected_before_operation(self):
+        repo = self.local_clone()
+        tree_sha = subprocess.run(["git", "-C", str(repo), "rev-parse", f"{self.v[1]}^{{tree}}"],
+                                  text=True, capture_output=True, check=True).stdout.strip()
+        env = {**os.environ, "GIT_AUTHOR_NAME": "TASS updater fixture", "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+               "GIT_COMMITTER_NAME": "TASS updater fixture", "GIT_COMMITTER_EMAIL": "fixture@example.invalid"}
+        divergent = subprocess.run(["git", "-C", str(repo), "commit-tree", tree_sha, "-m", "divergent fixture"],
+                                   text=True, capture_output=True, check=True, env=env).stdout.strip()
+        before = self.rejection_state()
+        rc, out = self.h("update", divergent, "--yes", ok=False, TEST_REPO=str(repo))
+        self.assertIn("older than or diverges", out)
+        self.assert_rejected_before_operation(before)
+
+    def test_00c_dependency_pin_change_requires_separate_compatibility_approval(self):
+        repo = self.local_clone()
+
+        def change_pin(path):
+            script = path / "core" / "tass.sh"
+            text = script.read_text().replace(ENGINE_PIN, "f" * 40)
+            script.write_text(text)
+
+        candidate = self.fixture_commit(repo, self.v[1], change_pin)
+        before = self.rejection_state()
+        rc, out = self.h("update", candidate, "--yes", ok=False, TEST_REPO=str(repo))
+        self.assertIn("owner-approved compatibility manifest or separate explicit authorization", out)
+        self.assert_rejected_before_operation(before)
+
+    def test_00d_integrated_core_preserves_accepted_stage3_dependency_pins(self):
+        current = self.app / "deploy" / "current.env"
+        current.write_text(current.read_text().replace(self.v[0], ACCEPTED_CORE))
+        before = self.rejection_state()
+        rc, out = self.h("check-update", self.v[2], ok=True)
+        self.assertIn(f"Current:   core {ACCEPTED_CORE}", out)
+        self.assertIn(f"Candidate: core {self.v[2]}", out)
+        self.assertIn(f"engine {ENGINE_PIN[:12]} · identity {IDENTITY_PIN[:12]}", out)
+        self.assertIn("explicit approved SHA", out)
+        self.assert_rejected_before_operation(before)
+
     def test_01_successful_update_makes_verified_backup_and_restore_point(self):
         before = tree(self.data)
         rc, out = self.h("update", self.v[1], "--yes", ok=True)

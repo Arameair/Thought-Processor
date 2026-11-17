@@ -7,18 +7,21 @@
 #                          (STOPPED, BACKED_UP, SWITCHED, VALIDATING, RESTORED_DATA): a power cut
 set -euo pipefail
 TASS_LIB_ONLY=1 source "$(dirname "$0")/../tass.sh"
+REPO="${TEST_REPO:-$REPO}"
 
-cmd_check_update() { :; }          # needs git history/network; not what is under test
 build_version() {                  # $1 = core commit; writes $2 exactly as the real one does
   [[ "${TEST_BUILD_FAIL:-0}" == 1 ]] && die "core image build failed; deployment unchanged"
-  local tmp="$2.new.$$"
+  local tmp="$2.new.$$" esha isha
+  esha="$(pin_of "$1" ENGINE_COMMIT_PIN)"
+  isha="$(pin_of "$1" IDENTITY_COMMIT_PIN)"
+  [[ "$esha" =~ ^[0-9a-f]{40}$ && "$isha" =~ ^[0-9a-f]{40}$ ]] || die "test candidate has no full dependency pins"
   cat >"$tmp" <<EOF
 CORE_SHA=$1
-ENGINE_SHA=d69d3917d1601d806d4b2ba2254693e1adb92b6b
-IDENTITY_SHA=7da7f7c5bbecc42d3a7e9316a2037243eda10b88
+ENGINE_SHA=$esha
+IDENTITY_SHA=$isha
 CORE_IMAGE=tass-core:$(short "$1")
-ENGINE_IMAGE=tass-engine:d69d3917d160
-IDENTITY_IMAGE=tass-identity:7da7f7c5bbec
+ENGINE_IMAGE=tass-engine:$(short "$esha")
+IDENTITY_IMAGE=tass-identity:$(short "$isha")
 COMPOSE_FILE=$REPO/core/compose.yaml
 DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
