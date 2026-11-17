@@ -224,24 +224,34 @@ func (f *fakeGH) say(issue int, who, body string) {
 // ---- fake Thought Engine -------------------------------------------------------
 // (The real engine's cycle is tested in the Thought-engine repo; this stands in for its HTTP contract.)
 
+type fakeEngineEvent struct {
+	kind    string
+	cycleID string
+	request string
+}
+
 type fakeEngine struct {
 	control            string
 	jobState           map[string]map[string]any
 	mu                 sync.Mutex
 	reqs               []map[string]any
 	outcomes           []map[string]any
+	cycleEvents        chan fakeEngineEvent
+	inFlightCycles     int
+	maxInFlightCycles  int
 	pulse              []string
 	jobs               []map[string]any
 	srv                *httptest.Server
 	mismatchCycleID    string
 	unlockedPrediction bool
 	unreadableProposal bool
-	conflicts          int // 409 answers to duplicate job IDs
+	beforeCycleReply   func(cycleID, request string) // optional test gate after request receipt, before the Engine replies
+	conflicts          int                           // 409 answers to duplicate job IDs
 	replyExtra         string
 }
 
 func newFakeEngine() *fakeEngine {
-	e := &fakeEngine{}
+	e := &fakeEngine{cycleEvents: make(chan fakeEngineEvent, 32)}
 	pred := map[string]float64{}
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/model" {
@@ -302,10 +312,9 @@ func newFakeEngine() *fakeEngine {
 		var in map[string]any
 		b, _ := io.ReadAll(r.Body)
 		json.Unmarshal(b, &in)
-		e.mu.Lock()
-		defer e.mu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/outcome") {
 			id := strings.Split(r.URL.Path, "/")[3]
+			e.mu.Lock()
 			e.outcomes = append(e.outcomes, in)
 			ev := map[string]any{"forecast": "NO_ACTION", "goal": "GOAL_UNKNOWN", "evaluator": "fixture"}
 			if v, ok := in["value"].(float64); ok {
@@ -316,12 +325,31 @@ func newFakeEngine() *fakeEngine {
 			} else if in["status"] != "NO_ACTION" {
 				ev["forecast"], ev["goal"] = "UNSCORABLE", "GOAL_UNMET"
 			}
+			e.cycleEvents <- fakeEngineEvent{kind: "outcome", cycleID: id}
+			e.mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"cycle_id": id, "state": "evaluated", "outcome": in, "evaluation": ev,
 				"proposal": map[string]any{"action": "x"}})
 			return
 		}
-		e.reqs = append(e.reqs, in)
 		id, last := in["cycle_id"].(string), in["request"].(string)
+		e.mu.Lock()
+		e.reqs = append(e.reqs, in)
+		e.inFlightCycles++
+		if e.inFlightCycles > e.maxInFlightCycles {
+			e.maxInFlightCycles = e.inFlightCycles
+		}
+		e.cycleEvents <- fakeEngineEvent{kind: "request", cycleID: id, request: last}
+		e.mu.Unlock()
+		defer func() {
+			e.mu.Lock()
+			e.inFlightCycles--
+			e.mu.Unlock()
+		}()
+		if e.beforeCycleReply != nil {
+			e.beforeCycleReply(id, last)
+		}
+
+		e.mu.Lock()
 		reply := "TEST FIXTURE: heard " + last
 		if e.replyExtra != "" {
 			reply += " " + e.replyExtra
@@ -347,6 +375,7 @@ func newFakeEngine() *fakeEngine {
 		if e.mismatchCycleID != "" {
 			responseID = e.mismatchCycleID
 		}
+		e.mu.Unlock()
 		json.NewEncoder(w).Encode(map[string]any{"cycle_id": responseID, "state": "awaiting_outcome", "request": last,
 			"spark": map[string]any{"status": "done", "rating": 7, "topic": "fixture"}, "proposal": prop})
 	}))

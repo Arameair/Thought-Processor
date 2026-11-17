@@ -4,6 +4,9 @@
 set +x
 set -Eeuo pipefail
 umask 077
+printf '%s\n' 'RETIRED: run-p1.sh cannot start the legacy Processor.' >&2
+printf '%s\n' 'Use the accepted Go Core through core/tass.sh. Nothing was started or changed.' >&2
+exit 2
 BASE_BRANCH=alpha
 LAUNCH_BRANCH=alpha
 # TASS (private companion) feature: the exact reviewed package digest, pinned

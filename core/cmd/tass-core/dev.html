@@ -313,6 +313,8 @@ function clickNode(id) {
 // Issue #78: the same rules the server's ValidateBrain applies, checked BEFORE the graph changes, so an
 // invalid connection is refused with its reason instead of sitting unsaved on the canvas.
 function edgeProblem(from, to, relation, ignoreId) {
+  const source = nodeById(from), target = nodeById(to);
+  if (!source || !target) return "A connection points to a missing block.";
   if (from === to) return "A block can't connect to itself.";
   if (!(relation in relations)) return "Unknown relation: " + relation;
   if (graph.edges.some(e => e.id !== ignoreId && e.from === from && e.to === to && e.relation === relation)) return "That connection already exists.";

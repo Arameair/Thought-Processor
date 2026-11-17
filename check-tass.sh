@@ -7,6 +7,9 @@
 # It only READS: it starts, installs, clones and changes nothing. It never
 # prints secrets, pairing codes or private links. Safe to paste its output.
 set -uo pipefail
+printf '%s\n' 'RETIRED: this check belongs to the unsupported legacy Processor launcher.' >&2
+printf '%s\n' 'Use core/tass.sh check for the accepted Go Core. Nothing was started or changed.' >&2
+exit 2
 P1C="${P1C:-$HOME/p1c}"
 TP="$P1C/tp-tass-clone"
 TS="${P1_TASS_SRC:-$P1C/tass-companion}"

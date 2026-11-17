@@ -1,5 +1,7 @@
 # P0 Windows/WSL Workbench Launcher — isolated engineering prototype
 
+> **RETIRED:** This launcher cannot start the legacy Processor. It is preserved as historical engineering evidence only. Use the accepted Go Core through `core/tass.sh`; do not use these P0 commands with owner data, credentials, services, or ports.
+
 **Branch `experiment/p0-workstation-secure-open-20261030`.** Builds on the owner-verified Start/Status/Stop baseline `ebabf13` and adds: secure browser Open (one-time ticket), no private link files, daemon-crash recovery, and the first Development Workstation slice (#31). Owner Windows/Edge/real-GitHub run: **NOT RUN** until Dustin does it.
 
 ## What changed on this branch (owner-relevant)

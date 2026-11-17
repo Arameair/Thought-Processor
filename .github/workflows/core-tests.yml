@@ -1,9 +1,20 @@
 name: core-tests
 on:
   push:
-    paths: ["core/**", ".github/workflows/core-tests.yml"]
+    paths:
+      - "core/**"
+      - "processor/**"
+      - "tools/p0-launcher/**"
+      - "run-p1.sh"
+      - "check-tass.sh"
+      - ".github/workflows/core-tests.yml"
   pull_request:
-    paths: ["core/**"]
+    paths:
+      - "core/**"
+      - "processor/**"
+      - "tools/p0-launcher/**"
+      - "run-p1.sh"
+      - "check-tass.sh"
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,6 +28,10 @@ jobs:
         run: |
           go vet ./...
           go test -race ./...
+      - name: Development graph edge validation (Node fixture)
+        run: node core/test/dev_edge_validation.cjs
+      - name: Legacy Processor retirement boundaries
+        run: python3 core/test/test_legacy_retirement.py -v
       - name: Owner Learning page JavaScript syntax
         run: |
           python3 - <<'PY'
