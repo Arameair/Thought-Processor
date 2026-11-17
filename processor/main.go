@@ -69,6 +69,7 @@ func openBrowser(link string) error {
 }
 
 func main() {
+	allowRetired := flag.Bool("allow-retired-legacy-processor", false, "DEVELOPMENT ONLY: explicitly run the retired legacy Processor (unsafe; may expose its private launch URL)")
 	port := flag.Int("port", 7860, "loopback port (0 = any free port)")
 	data := flag.String("data", defaultData(), "profile folder for this Processor")
 	noBrowser := flag.Bool("no-browser", false, "don't open the browser; just print the private link")
@@ -83,6 +84,13 @@ func main() {
 	testFaults := flag.Bool("test-feature-faults", false, "TEST ONLY: let the trusted test fixture honour its TEST-ONLY fault-injection file (crash/slow after an ALLOW). Never use outside tests")
 	flag.Var(&trusted, "trust-feature-dir", "a folder of LOCAL feature packages you trust (repeatable). Only TRUSTED_LOCAL_TEST_FIXTURE packages from such folders can be installed; nothing else can run")
 	flag.Parse()
+	if !*allowRetired {
+		fmt.Fprintln(os.Stderr, "RETIRED: this legacy Processor is not a supported TASS runtime and was not started.")
+		fmt.Fprintln(os.Stderr, "Use the accepted Go Core through core/tass.sh. No profile, listener, or private launch URL was created.")
+		os.Exit(2)
+	}
+	fmt.Fprintln(os.Stderr, "SECURITY WARNING: explicitly running the retired legacy Processor may expose its private launch URL in local output, process arguments, or profile files.")
+	fmt.Fprintln(os.Stderr, "DEVELOPMENT ONLY: use disposable data and never use owner credentials, profiles, services, or ports.")
 	if *defURL != "" {
 		os.Setenv("TP_IDENTITY_DEFAULT_URL", *defURL)
 	}

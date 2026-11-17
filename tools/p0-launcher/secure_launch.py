@@ -5,8 +5,21 @@ Private Processor URL and Identity pairing challenges stay in RAM. No shell
 script or private-output logfile is used for startup. No Identity decisions
 are made by this tool. Commands: start, stop, open, status, pairing, versions.
 """
-import fcntl
 import json
+import sys
+
+# Refuse direct execution before importing any legacy WSL-only modules or
+# deriving work paths. This guarantees the retired launcher cannot create
+# state or start a helper even on a host where its old dependencies exist.
+if __name__ == '__main__':
+    print(json.dumps({
+        'launcher': 'RETIRED',
+        'result': 'LEGACY_PROCESSOR_NOT_STARTED',
+        'next_step': 'Use the accepted Go Core through core/tass.sh.',
+    }, sort_keys=True))
+    sys.exit(2)
+
+import fcntl
 import os
 from pathlib import Path
 import re
@@ -14,7 +27,6 @@ import signal
 import socket
 import stat
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
@@ -567,6 +579,12 @@ def daemon():
 
 
 def main(argv):
+    print(json.dumps({
+        'launcher': 'RETIRED',
+        'result': 'LEGACY_PROCESSOR_NOT_STARTED',
+        'next_step': 'Use the accepted Go Core through core/tass.sh.',
+    }, sort_keys=True))
+    return 2
     if len(argv) != 1 or argv[0] not in ('start', 'stop', 'status', 'open', 'pairing', 'versions', 'check', '_daemon'):
         print('Usage: secure_launch.py start|stop|status|open|pairing|versions|check')
         return 2

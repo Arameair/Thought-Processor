@@ -1,5 +1,7 @@
 # Thought Processor — P1 (feature foundation) on top of P0
 
+> **RETIRED:** This separate legacy Processor is no longer a supported TASS runtime. Normal execution refuses before creating a profile, listener, or private launch URL. Historical source and tests remain for evidence. The only escape hatch is explicit, development-only, warns that private launch URLs may be exposed, and must never use owner data, credentials, services, or ports. Use the accepted Go Core through `../core/tass.sh`.
+
 > **P1:** run it with [../docs/P1/START_HERE.md](../docs/P1/START_HERE.md). New packages: `internal/featpkg` (verify/stage local feature packages), `internal/supervisor` (launch, endpoint discovery, launch-key auth, startup modes, idle stop, controlled recovery, orphan cleanup), `internal/app/p1.go` (install transaction, approvals, grants, tickets-first actions), `testfeatures/deterministic-worker` (trusted local test feature, Python), `acceptance/p1_integration.py`, `acceptance/p1_ui_tour.py`. Extra flag: `-trust-feature-dir <folder>` (repeatable). Contract: [../docs/P1/FEATURE_API_V1.md](../docs/P1/FEATURE_API_V1.md).
 
 ## P0 notes (still valid)

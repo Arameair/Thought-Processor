@@ -1,5 +1,7 @@
 # TEST_P1 — hands-on acceptance walkthrough (≈15 minutes)
 
+> **RETIRED / DO NOT RUN:** This walkthrough targets the disabled legacy Processor. It remains historical acceptance evidence and must not be run against owner data, credentials, services, or ports.
+
 Do [START_HERE.md](START_HERE.md) sections 1, 2 and 4 first (two terminals running, Processor open in a browser). Record each line as **PASS / FAIL / BLOCKED / NOT RUN** with what you actually saw. A step passes only if you saw the **Expected** result.
 
 Rules: a **human** approves GitHub sign-in on github.com and types the Admin passphrase in **Identity's** page. Don't paste codes, links after `#`, passphrases or credential files anywhere.
