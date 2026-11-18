@@ -1,7 +1,8 @@
 """Discord door v2 against a fake Communication Bridge and a fake Identity (Thought-Processor #127).
 
 Both fakes follow the documented APIs: the Bridge's docs/API.md (Communication-Bridge 1938f45 with
-#3's destination check) and identity's docs/DISCORD_REPLY_CONTRACT.md (#46). Every identifier is a
+#3's destination check) and identity's docs/DISCORD_REPLY_CONTRACT.md (#46, as accepted in identity
+#47 at a67064380cb55d1b55f9e8454cf2f60d12c6b306: check mode refused, single consuming redeem). Every identifier is a
 fixture value. Nothing here talks to Discord, a real Bridge or a real Identity.
 """
 import hashlib
@@ -934,6 +935,247 @@ class TestDurability(Rig):
         self.write_reply(a["id"], "answer to a message the Bridge forgot")
         self.door.tick()
         self.assertEqual(self.receipt(a["id"])["state"], "not_sent")   # Bridge: 404, nothing created
+
+
+class TestDuplicateDiscordSource(Rig):
+    """Repair 2 for Thought-Processor PR #129 (audit 6976046197): one immutable Discord message
+    (channel + Discord message ID) becomes at most ONE answerable envelope, whatever Bridge IDs it
+    arrives under; a duplicate never reaches Identity or POST /api/replies."""
+
+    SRC = "1562034986897300001"
+
+    def dup_of(self, original, **kw):
+        """The Bridge hands the same Discord message over again under a new Bridge ID."""
+        return self.heard(source_message_id=original["source_message_id"], text=kw.pop("text", "Hello TASS"), **kw)
+
+    def assert_refused_duplicate(self, dup, original):
+        self.assertIsNone(self.inbox(dup["id"]), "a duplicate reached Core's inbox")
+        with self.fb.lock:                                 # the Bridge shows the envelope again (an update)
+            if dup["id"] in self.fb.msgs:
+                self.fb._bump(self.fb.msgs[dup["id"]])
+        self.door.tick()
+        self.assertIsNone(self.inbox(dup["id"]), "a duplicate reached Core's inbox when re-read")
+        rec = self.door.record(dup["id"])
+        self.assertIsNotNone(rec)
+        self.assertFalse(rec["answerable"])
+        self.assertEqual(rec["duplicate_of"], original["id"])
+        # Core tries anyway, with a valid decision bound to the duplicate envelope.
+        fake_inbox = {**self.door.record(original["id"]), "id": dup["id"]}
+        dec = self.fi.mint(self.core_binding(fake_inbox, "a second answer"))
+        before_redeems, before_posts = len(self.fi.redeems()), len(self.fb.reply_posts)
+        self.offset += D.MIN_GAP + 0.1
+        self.write_reply(dup["id"], "a second answer", decision=dec)
+        self.door.tick()
+        self.assertEqual(len(self.fi.redeems()), before_redeems, "a duplicate reached Identity")
+        self.assertEqual(len(self.fb.reply_posts), before_posts, "a duplicate reached POST /api/replies")
+        self.assertFalse(self.fi.decisions[dec]["used"])
+        self.assertIn("must not be answered", self.rejected()[-1]["reason"])
+
+    def answer(self, m, text="the one answer"):
+        self.write_reply(m["id"], text)
+        self.door.tick()
+        self.assertEqual(self.receipt(m["id"])["state"], "queued")
+
+    def test_duplicate_after_more_than_2000_bridge_messages(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.answer(orig)
+        for i in range(2001):
+            self.fb.inbound(text=f"later {i}", source_message_id=str(1562034990000000000 + i))
+        self.door.tick()
+        self.assertGreater(len(list((self.state / "inbound").iterdir())), 2001)
+        dup = self.dup_of(orig)
+        self.assertNotEqual(dup["id"], orig["id"])
+        self.assert_refused_duplicate(dup, orig)
+        self.assertEqual(len(self.fb.reply_posts), 1)
+
+    def test_duplicate_after_restart(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.restart()
+        dup = self.dup_of(orig)
+        self.assert_refused_duplicate(dup, orig)
+        self.answer(orig)                                  # the original is still answerable, once
+        self.assertEqual(len(self.fb.reply_posts), 1)
+
+    def test_duplicate_after_bridge_history_clear(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.answer(orig)
+        with self.fb.lock:
+            self.fb.msgs.clear()
+            self.fb.epoch += 1
+        dup = self.dup_of(orig)
+        self.assert_refused_duplicate(dup, orig)
+        self.assertEqual(len(self.fb.reply_posts), 1)
+
+    def test_concurrent_duplicates_with_distinct_bridge_ids(self):
+        for round_ in range(15):
+            src = str(1562034986897310000 + round_)
+            envs = [self.fb.inbound(source_message_id=src) for _ in range(6)]
+            self.assertEqual(len({e["id"] for e in envs}), 6)
+            start = threading.Barrier(len(envs))
+            errors = []
+
+            def take(e):
+                try:
+                    start.wait()
+                    self.door.take_inbound(json.loads(json.dumps(e)), "manual")
+                except Exception as ex:                    # noqa: BLE001
+                    errors.append(ex)
+            ts = [threading.Thread(target=take, args=(e,)) for e in envs]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+            self.assertEqual(errors, [])
+            answerable = [e["id"] for e in envs if (self.door.record(e["id"]) or {}).get("answerable")]
+            in_inbox = [e["id"] for e in envs if self.inbox(e["id"])]
+            self.assertEqual(len(answerable), 1, f"round {round_}: {answerable}")
+            self.assertEqual(in_inbox, answerable)
+            owner = self.door.source_owner(CHAN, src)
+            self.assertEqual(owner, answerable[0])
+
+    def test_duplicate_before_and_after_authorization(self):
+        # Before: the duplicate arrives while the original is still unanswered.
+        orig = self.heard(source_message_id=self.SRC)
+        dup1 = self.dup_of(orig)
+        self.assert_refused_duplicate(dup1, orig)
+        # After: the original is authorized (consuming redeem) and posted; then another duplicate.
+        dec = self.write_reply(orig["id"], "the one answer")
+        self.door.tick()
+        self.assertTrue(self.fi.decisions[dec]["used"])
+        self.fb.deliver(self.fb.outbound()[0]["id"], "delivered", external_id="1562035000000000001")
+        self.door.tick()
+        dup2 = self.dup_of(orig)
+        self.assert_refused_duplicate(dup2, orig)
+        self.assertEqual(len(self.fb.reply_posts), 1)
+        self.assertEqual([r["decision_id"] for r in self.fi.redeems()], [dec])
+        self.assert_no_check_mode()
+
+    def test_single_use_redemption_is_unchanged(self):
+        orig = self.heard(source_message_id=self.SRC)
+        dec = self.write_reply(orig["id"], "answer")
+        self.door.tick()
+        # Replaying the same decision for the same message: refused before Identity (one reply).
+        self.offset += D.MIN_GAP + 0.1
+        self.write_reply(orig["id"], "answer", decision=dec)
+        self.door.tick()
+        self.assertEqual(len(self.fi.redeems()), 1)
+        self.assertEqual(len(self.fb.reply_posts), 1)
+
+    def test_revoked_wrong_destination_and_uncertain_never_get_a_second_chance_via_a_duplicate(self):
+        cases = []
+        # Revoked grant: the original is not sent.
+        self.fi.granted = False
+        a = self.heard(source_message_id="1562034986897320001")
+        self.write_reply(a["id"], "answer")
+        self.door.tick()
+        self.assertEqual(self.receipt(a["id"])["state"], "not_sent")
+        self.fi.granted = True
+        cases.append(a)
+        # Wrong destination: the Bridge refuses to post it.
+        self.offset += D.MIN_GAP + 0.1
+        b = self.heard(source_message_id="1562034986897320002")
+        self.write_reply(b["id"], "answer")
+        self.door.tick()
+        self.fb.deliver(self.fb.outbound()[-1]["id"], "failed", "not sent: destination changed")
+        self.door.tick()
+        self.assertEqual(self.receipt(b["id"])["state"], "not_sent")
+        cases.append(b)
+        # Ambiguous delivery: never retried.
+        self.offset += D.MIN_GAP + 0.1
+        c = self.heard(source_message_id="1562034986897320003")
+        self.write_reply(c["id"], "answer")
+        self.fb.plan = ["500"]
+        self.door.tick()
+        self.assertEqual(self.receipt(c["id"])["state"], "uncertain")
+        cases.append(c)
+        posts = len(self.fb.reply_posts)
+        for orig in cases:
+            self.assert_refused_duplicate(self.dup_of(orig), orig)
+        self.assertEqual(len(self.fb.reply_posts), posts)
+
+    def test_no_duplicate_outbound_reply_end_to_end(self):
+        orig = self.heard(source_message_id=self.SRC)
+        dups = [self.dup_of(orig) for _ in range(3)]
+        for m in [orig] + dups:
+            if self.inbox(m["id"]):
+                self.offset += D.MIN_GAP + 0.1
+                self.write_reply(m["id"], "answer " + m["id"])
+                self.door.tick()
+        for _ in range(3):
+            self.door.tick()
+        self.assertEqual(len(self.fb.reply_posts), 1)
+        self.assertEqual(self.fb.reply_posts[0]["reply_to_id"], orig["id"])
+        self.assertEqual(len([o for o in self.fb.outbound() if o["reply_to_source_id"] == self.SRC]), 1)
+
+    def test_reply_time_guard_refuses_a_record_that_does_not_own_its_source(self):
+        orig = self.heard(source_message_id=self.SRC)
+        dup = self.dup_of(orig)
+        # Simulate a record that slipped past the inbound check (e.g. written by an older door).
+        rec = {**self.door.record(dup["id"]), "answerable": True, "not_answerable_reason": ""}
+        rec.pop("duplicate_of")
+        D.write_atomic(self.state / "inbound" / f"{dup['id']}.json", rec, 0o600)
+        fake_inbox = {**self.door.record(orig["id"]), "id": dup["id"]}
+        self.write_reply(dup["id"], "x", decision=self.fi.mint(self.core_binding(fake_inbox, "x")))
+        self.door.tick()
+        self.assertEqual(self.fi.redeems(), [])
+        self.assert_nothing_sent()
+        self.assertIn("already holds this Discord message", self.rejected()[-1]["reason"])
+
+    def test_upgrade_indexes_existing_records_and_demotes_duplicates(self):
+        # A pre-repair state: two answerable records for one Discord message, no source index.
+        a = self.heard(source_message_id=self.SRC)
+        self.door.close()
+        import shutil
+        shutil.rmtree(self.state / "sources")
+        later = self.fb.inbound(source_message_id=self.SRC)
+        rec = {**self.door.record(a["id"]), "id": later["id"], "seq": later["seq"]}
+        D.write_atomic(self.state / "inbound" / f"{later['id']}.json", rec, 0o600)
+        D.write_atomic(self.box / "inbox" / f"{later['seq']:06d}-{later['id']}.json", {**rec, "text": "Hello TASS"})
+        self.door = self.open_door()
+        self.assertEqual(self.door.source_owner(CHAN, self.SRC), a["id"])
+        self.assertTrue(self.door.record(a["id"])["answerable"])
+        self.assertFalse(self.door.record(later["id"])["answerable"])
+        self.assertIsNone(self.inbox(later["id"]))
+        self.assert_refused_duplicate(later, a)
+
+    def test_damaged_source_record_fails_closed(self):
+        m = self.fb.inbound(source_message_id=self.SRC)
+        self.door._source_path(CHAN, self.SRC).write_text("{not json")
+        self.door.tick()
+        self.assertIsNone(self.inbox(m["id"]))
+        self.assertFalse(self.door.record(m["id"])["answerable"])
+        self.assertIn("damaged", self.door.record(m["id"])["not_answerable_reason"])
+
+    def test_failed_source_write_holds_the_message_and_retries_later(self):
+        m = self.fb.inbound(source_message_id=self.SRC)
+        real = D.create_exclusive
+
+        def broken(path, obj, mode=0o600):
+            if path.parent.name == "sources":
+                raise OSError("disk full (fixture)")
+            return real(path, obj, mode)
+        D.create_exclusive = broken
+        try:
+            self.door.tick()
+        finally:
+            D.create_exclusive = real
+        self.assertIsNone(self.inbox(m["id"]))
+        self.assertIsNone(self.door.record(m["id"]))
+        self.assertIn("source index could not be written", self.status()["problem"])
+        self.door.tick()                                   # the feed is read again: heard normally now
+        self.assertTrue(self.inbox(m["id"])["answerable"])
+
+    def test_source_index_is_private_and_core_cannot_reach_it(self):
+        m = self.heard(source_message_id=self.SRC)
+        files = list((self.state / "sources").iterdir())
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].stat().st_mode & 0o777, 0o600)
+        self.assertNotIn(self.SRC, files[0].name)
+        self.assertNotIn(CHAN, files[0].name)
+        self.assertNotIn(self.SRC, files[0].read_text())
+        self.assertEqual(json.loads(files[0].read_text())["bridge_id"], m["id"])
+        self.assertFalse(any("sources" in str(p) for p in self.box.rglob("*")))
+        self.assertFalse((self.state / "sources").resolve().is_relative_to(self.box.resolve()))
 
 
 if __name__ == "__main__":

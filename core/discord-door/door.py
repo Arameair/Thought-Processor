@@ -31,6 +31,7 @@ SCHEMA_INBOX = "tass.discord.inbox/2"
 SCHEMA_REPLY = "tass.discord.reply/2"
 SCHEMA_RECEIPT = "tass.discord.receipt/2"
 SCHEMA_STATUS = "tass.discord.door-status/2"
+SCHEMA_SOURCE = "tass.discord.source/1"
 BINDING_VERSION = "tass.discord.reply/1"
 DOOR_SERVICE = "discord-door"
 ACTION = "discord.reply"
@@ -243,7 +244,7 @@ class Door:
         self.box, self.st = box, st
         for d in ("inbox", "replies", "receipts", "rejected"):
             (box / d).mkdir(parents=True, exist_ok=True)
-        for d in ("inbound", "claims"):
+        for d in ("inbound", "claims", "sources"):
             (st / d).mkdir(parents=True, exist_ok=True)
         os.chmod(st, 0o700)
         self._lock = open(st / "door.lock", "a")
@@ -263,6 +264,7 @@ class Door:
         self.pending: set[str] = set()
         self.ignored: set[str] = set()
         self.offline = 0
+        self._index_sources()
         self._recover()
 
     def close(self):
@@ -290,6 +292,70 @@ class Door:
         if idem:
             headers["Idempotency-Key"] = idem
         return http_json(self.cfg.bridge + path, method, body, headers, self.cfg.bridge_timeout)
+
+    # --- immutable Discord sources ---------------------------------------------------------------
+    # One Discord message (channel + immutable Discord message ID) may become at most ONE answerable
+    # Bridge envelope, ever. The Bridge can hand the same Discord message over again under a new
+    # Bridge ID (redelivery, a reset journal). The door keeps its own durable index in its private
+    # state directory (Core can't read or write it): sources/<sha256 of channel and message ID>.json
+    # names the one Bridge envelope that owns that Discord message. It is created atomically and
+    # exclusively before a record may be answerable, and it is never removed.
+    def _source_path(self, channel: str, source_id: str) -> Path:
+        if not SNOWFLAKE.fullmatch(str(channel)) or not SNOWFLAKE.fullmatch(str(source_id)):
+            raise DoorError("a Discord source needs a valid channel and message ID")
+        key = "\n".join(("discord", str(channel), str(source_id))).encode("utf-8")
+        return self.st / "sources" / (sha256_hex(key) + ".json")
+
+    def source_owner(self, channel: str, source_id: str) -> str:
+        """The Bridge ID that owns this Discord message, or "" if none (or if the file is damaged)."""
+        try:
+            d = read_json(self._source_path(channel, source_id))
+        except DoorError:
+            return ""
+        if not isinstance(d, dict) or d.get("schema") != SCHEMA_SOURCE:
+            return ""
+        owner = d.get("bridge_id")
+        return owner if isinstance(owner, str) and BRIDGE_ID.fullmatch(owner) else ""
+
+    def claim_source(self, channel: str, source_id: str, rid: str) -> str:
+        """Claim the Discord message for envelope rid. Returns "" if rid owns it (now or already),
+        otherwise why rid is a duplicate. Any doubt (damaged index, failed write) is not "" or raises."""
+        path = self._source_path(channel, source_id)
+        try:
+            created = create_exclusive(path, {"schema": SCHEMA_SOURCE, "bridge_id": rid, "claimed_at": iso(self.now())})
+        except OSError as e:
+            raise DoorError(f"the door's source index could not be written ({e.__class__.__name__}); "
+                            "inbound messages are held until it can") from None
+        if created:
+            return ""
+        owner = self.source_owner(channel, source_id)
+        if owner == rid:
+            return ""                                      # our own claim (e.g. a crash before the record)
+        if not owner:
+            return "the door's record of this Discord message is damaged, so it can't be proven new"
+        return f"duplicate of Discord message already heard as {owner}"
+
+    def _index_sources(self):
+        """Every existing record owns, or is refused for, its Discord message (upgrade and repair).
+        Records that already have a reply claim go first, then the oldest."""
+        recs = []
+        for p in (self.st / "inbound").glob("m_*.json"):
+            r = self.record(p.stem)
+            if r and not r.get("duplicate_of"):
+                recs.append(r)
+        recs.sort(key=lambda r: (self.claim(r["id"]) is None, r.get("seq", 0), r["id"]))
+        for r in recs:
+            why = self.claim_source(r.get("channel_id", ""), r.get("source_message_id", ""), r["id"])
+            if why and r.get("answerable"):
+                self._demote(r, why)
+
+    def _demote(self, rec: dict, why: str):
+        rec = {**rec, "answerable": False, "duplicate_of": self.source_owner(rec["channel_id"], rec["source_message_id"])
+               or "unknown", "not_answerable_reason": "; ".join(x for x in (rec.get("not_answerable_reason"), why) if x)}
+        write_atomic(self.st / "inbound" / f"{rec['id']}.json", rec, 0o600)
+        for p in (self.box / "inbox").glob(f"*-{rec['id']}.json"):
+            p.unlink(missing_ok=True)                      # never leave a duplicate in Core's inbox
+        log(f"refused inbound {rec['id']}: {why}")
 
     # --- records --------------------------------------------------------------------------------
     def record(self, rid: str) -> dict | None:
@@ -397,6 +463,19 @@ class Door:
                     self.refused_inbound.add(rid)
                     log(f"refused inbound {rid}: {why}")
                 return
+            dup = self.claim_source(m["source_channel_id"], m["source_message_id"], rid)
+            if dup:
+                # Never answerable and never written to Core's inbox: it can't reach Identity or
+                # POST /api/replies. Recorded so a reply naming it is refused, and logged once.
+                rec = {"schema": SCHEMA_INBOX, "id": rid, "seq": 0, "source_message_id": m["source_message_id"],
+                       "channel_id": m["source_channel_id"], "sender_id": m["sender_id"],
+                       "sender_kind": m["sender_kind"], "conversation_id": m["conversation_id"],
+                       "source_time": "", "received_at": str(m.get("received_at") or ""), "catch_up": bool(m.get("catch_up")),
+                       "answerable": False, "duplicate_of": self.source_owner(m["source_channel_id"], m["source_message_id"]) or "unknown",
+                       "not_answerable_reason": dup}
+                if create_exclusive(self.st / "inbound" / f"{rid}.json", rec):
+                    log(f"refused inbound {rid}: {dup}")
+                return
             received = parse_ts(m.get("received_at"))
             reasons = []
             if m.get("catch_up"):
@@ -423,6 +502,8 @@ class Door:
                     return
             else:
                 log(f"heard {rid}" + ("" if rec["answerable"] else " (not answerable)"))
+        if rec.get("duplicate_of"):
+            return
         inbox = self.box / "inbox" / f"{rec['seq']:06d}-{rid}.json"
         if not inbox.exists() and isinstance(m.get("text"), str):
             write_atomic(inbox, {**rec, "text": m["text"]})
@@ -592,6 +673,9 @@ class Door:
         if (rec.get("channel_id") != self.cfg.channel_id or rec.get("conversation_id") != "discord:" + rec["channel_id"]
                 or rec.get("sender_id") != self.cfg.owner_id):
             self.reject(p, "the recorded message does not match the configured channel and owner", **ids)
+            return "done"
+        if rec.get("duplicate_of") or self.source_owner(rec["channel_id"], rec["source_message_id"]) != rid:
+            self.reject(p, "another Bridge message already holds this Discord message (one reply per Discord message)", **ids)
             return "done"
         c = self.claim(rid)
         if c is not None:

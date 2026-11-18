@@ -12,10 +12,11 @@ sends a reply only after Identity has redeemed a single-use decision for that ex
 
 | Component | Required revision | Why |
 | --- | --- | --- |
-| Communication Bridge | [Communication-Bridge#3](https://github.com/Arameair/Communication-Bridge/pull/3) or later | The Bridge refuses to post a reply to any channel other than the conversation of the message it answers (`failed`, `not sent: destination …`). |
-| Identity | the `discord.reply` contract of [identity#46](https://github.com/Arameair/identity/issues/46) | Core obtains the decision; only the door redeems it. **Not yet accepted:** the candidate [identity#47](https://github.com/Arameair/identity/pull/47) is at NEEDS REPAIR. |
+| Communication Bridge | [Communication-Bridge#3](https://github.com/Arameair/Communication-Bridge/pull/3) or later, including its durable source dedup (`sources.idx`) | The Bridge refuses to post a reply to any channel other than the conversation of the message it answers (`failed`, `not sent: destination …`), and it never hands over the same Discord message twice as a fresh message. The door does not rely on the second point: see **One Discord message, one answerable envelope**. |
+| Identity | the `discord.reply` contract of [identity#46](https://github.com/Arameair/identity/issues/46), as implemented by [identity#47](https://github.com/Arameair/identity/pull/47) at its accepted head `a67064380cb55d1b55f9e8454cf2f60d12c6b306` | Core obtains the decision; only the door redeems it, once; `check` is refused for `discord.reply`. The contract passed independent review at that head. |
 
-Neither dependency is merged. The door's tests use fake Bridge and fake Identity services only.
+Neither dependency is merged, released or installed. The door's tests use fake Bridge and fake
+Identity services only.
 
 ## Three different permissions
 
@@ -34,7 +35,7 @@ Neither dependency is merged. The door's tests use fake Bridge and fake Identity
 | `<mailbox>/receipts/` | door | Core | one file per answered message: `<bridge id>.json` |
 | `<mailbox>/rejected/` | door | Core | reply files refused before any Identity call |
 | `<mailbox>/status.json` | door | Core | is the door ready to send, and why not |
-| `<state>/` | door only | door | trusted inbound records, reply claims, cursor, lock |
+| `<state>/` | door only | door | trusted inbound records, reply claims, the Discord source index, cursor, lock |
 
 `<state>` must not be inside the mailbox, and the mailbox must not be inside `<state>`. Core must
 not be able to write `<state>`: the door builds every binding from its own records there, never
@@ -144,10 +145,36 @@ that references the original, and it checks that the Bridge's receipt names that
 conversation and the same text. With Communication-Bridge#3, the Bridge itself refuses to post if
 its configured channel has changed since (`not sent: destination changed`).
 
+## One Discord message, one answerable envelope
+
+The Bridge identifies messages by its own Bridge ID. The same Discord message can come back under a
+new Bridge ID (a redelivery, a reset Bridge journal, a Bridge bug), and a new Bridge ID would
+otherwise get its own claim, its own decision and its own reply. So the door keeps a private,
+durable **source index**:
+
+- `<state>/sources/<sha256 of "discord\n<channel id>\n<Discord message id>">.json` names the one
+  Bridge envelope (`bridge_id`) that owns that Discord message. File names hold no raw IDs, and
+  the files hold no text.
+- When a new envelope from the owner arrives, the door **creates that file exclusively before**
+  it writes the trusted record. Only the envelope that creates it (or already owns it) can be
+  answerable. Any other envelope for the same channel and Discord message is recorded as
+  `answerable: false` with `duplicate_of`, is **never written to `inbox/`**, and a reply naming
+  it is rejected **before Identity is asked** and before `POST /api/replies`.
+- Just before claiming a reply (step 3 below), the door checks again that this envelope still owns
+  its Discord message.
+- The index is never pruned. It survives door restarts and Bridge history clears. At startup the
+  door indexes any existing records that aren't indexed yet (an upgrade or repair). Records that
+  already have a reply claim win, then the oldest, and later duplicates are demoted and removed
+  from `inbox/`.
+- Fail closed. If the index file can't be written, the message isn't recorded and the feed is read
+  again next tick (`status.json` shows the problem). If an index file is damaged, the message is
+  treated as not provably new and is recorded as not answerable.
+
 ## How the door handles one reply file
 
-1. **Check the file** (no network). Name, keys, schema, ids, text rules, the trusted record exists
-   and is answerable, and no claim exists for that message. A failure moves the file to
+1. **Check the file** (no network). Name, keys, schema, ids, text rules, the trusted record exists,
+   is answerable and owns its Discord message in the source index, and no claim exists for that
+   message. A failure moves the file to
    `rejected/` (no receipt, nothing sent).
 2. **Wait until the Bridge is ready**: Discord connected, not paused, mode `manual`, the door not
    blocked, and the rate limit (3 s between posts, 20 per 10 minutes) allows it. The file waits in
