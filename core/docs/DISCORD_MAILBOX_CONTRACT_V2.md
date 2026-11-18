@@ -152,23 +152,44 @@ new Bridge ID (a redelivery, a reset Bridge journal, a Bridge bug), and a new Br
 otherwise get its own claim, its own decision and its own reply. So the door keeps a private,
 durable **source index**:
 
-- `<state>/sources/<sha256 of "discord\n<channel id>\n<Discord message id>">.json` names the one
-  Bridge envelope (`bridge_id`) that owns that Discord message. File names hold no raw IDs, and
-  the files hold no text.
-- When a new envelope from the owner arrives, the door **creates that file exclusively before**
-  it writes the trusted record. Only the envelope that creates it (or already owns it) can be
-  answerable. Any other envelope for the same channel and Discord message is recorded as
-  `answerable: false` with `duplicate_of`, is **never written to `inbox/`**, and a reply naming
-  it is rejected **before Identity is asked** and before `POST /api/replies`.
-- Just before claiming a reply (step 3 below), the door checks again that this envelope still owns
-  its Discord message.
-- The index is never pruned. It survives door restarts and Bridge history clears. At startup the
-  door indexes any existing records that aren't indexed yet (an upgrade or repair). Records that
-  already have a reply claim win, then the oldest, and later duplicates are demoted and removed
-  from `inbox/`.
-- Fail closed. If the index file can't be written, the message isn't recorded and the feed is read
-  again next tick (`status.json` shows the problem). If an index file is damaged, the message is
-  treated as not provably new and is recorded as not answerable.
+- `<state>/sources.manifest` is the bound, append-only list of every claim the door has ever made
+  (`claim <source key> <bridge id>`, plus operator baseline lines). A claim is appended and
+  fsynced there **first**; it is never pruned or rewritten.
+- `<state>/sources/<source key>.json`, where the key is the sha256 of
+  `"discord\n<channel id>\n<Discord message id>"`, names the one Bridge envelope (`bridge_id`) that
+  owns that Discord message. File names hold no raw IDs, and the files hold no text.
+- When a new envelope from the owner arrives, the door claims its source (manifest line, then the
+  file, created exclusively) **before** it writes the trusted record. Only the envelope that
+  claims it (or already owns it) can be answerable. Any other envelope for the same channel and
+  Discord message is recorded as `answerable: false` with `duplicate_of`, is **never written to
+  `inbox/`**, and a reply naming it is rejected **before Identity is asked** and before
+  `POST /api/replies`.
+- The manifest, the claim files and the trusted records must agree. The door checks the source of
+  an envelope **when it is received**, **before it claims a reply**, **immediately before the
+  Identity redemption** and **immediately before posting**. Each check proves the manifest path
+  still names the file the door opened, at the size it wrote (the last three: with exactly the
+  bytes it wrote), and that the claim file exists and names the manifest's owner.
+- **Fail closed, never recreate.** A missing, extra, altered or replaced claim file, or a removed,
+  replaced, truncated or externally written manifest, is an **integrity failure**: the door stops
+  hearing, authorizing and posting (`status.json` `problem` says why and what to do), and after a
+  restart it refuses to start. A lost claim is never recreated as if its source were new. The one
+  exception is completing an interrupted write: a durable manifest line whose file is missing,
+  for an owner of which the door holds no record and no reply claim yet, gets its file back for
+  that **same** owner.
+- At startup every record, claim file and manifest line is cross-checked. A state directory that
+  holds records of an earlier run (`door.lock`, `cursor.json`, inbound records, reply claims or
+  claim files) but no manifest is an upgrade or state loss, not a first start, and is refused.
+- **Operator baseline.** The only way past a refusal is the explicit, auditable decision
+  `door.py --accept-source-baseline` (same state directory, door stopped). It deletes nothing: it
+  keeps the manifest, every claim file and record; claims any record that has no claim (records
+  that already have a reply claim win, then the oldest; later duplicates are demoted and removed
+  from `inbox/`); restores a missing claim file only for the owner the manifest names; and
+  appends `baseline v1 <decision ms> <reason> discord-ms <floor>`, after which every Discord
+  message whose snowflake time is at or before the decision (or any message the door has a record
+  of) is refused as not provably new. Damaged or conflicting records are still refused. On an
+  intact state it changes nothing.
+- If a claim file can't be written, the message isn't recorded and the feed is read again next
+  tick (`status.json` shows the problem).
 
 ## How the door handles one reply file
 

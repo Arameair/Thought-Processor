@@ -1121,16 +1121,22 @@ class TestDuplicateDiscordSource(Rig):
         self.assert_nothing_sent()
         self.assertIn("already holds this Discord message", self.rejected()[-1]["reason"])
 
-    def test_upgrade_indexes_existing_records_and_demotes_duplicates(self):
+    def test_upgrade_refuses_until_baseline_then_indexes_records_and_demotes_duplicates(self):
         # A pre-repair state: two answerable records for one Discord message, no source index.
         a = self.heard(source_message_id=self.SRC)
         self.door.close()
         import shutil
         shutil.rmtree(self.state / "sources")
+        (self.state / "sources.manifest").unlink()
         later = self.fb.inbound(source_message_id=self.SRC)
         rec = {**self.door.record(a["id"]), "id": later["id"], "seq": later["seq"]}
         D.write_atomic(self.state / "inbound" / f"{later['id']}.json", rec, 0o600)
         D.write_atomic(self.box / "inbox" / f"{later['seq']:06d}-{later['id']}.json", {**rec, "text": "Hello TASS"})
+        # Audit 6977139171: the door never rebuilds its trusted index on its own.
+        with self.assertRaisesRegex(D.DoorError, "source integrity.*--accept-source-baseline"):
+            self.open_door()
+        self.assertFalse((self.state / "sources").exists() and any((self.state / "sources").iterdir()))
+        baseline(self)
         self.door = self.open_door()
         self.assertEqual(self.door.source_owner(CHAN, self.SRC), a["id"])
         self.assertTrue(self.door.record(a["id"])["answerable"])
@@ -1143,8 +1149,13 @@ class TestDuplicateDiscordSource(Rig):
         self.door._source_path(CHAN, self.SRC).write_text("{not json")
         self.door.tick()
         self.assertIsNone(self.inbox(m["id"]))
-        self.assertFalse(self.door.record(m["id"])["answerable"])
-        self.assertIn("damaged", self.door.record(m["id"])["not_answerable_reason"])
+        self.assertIsNone(self.door.record(m["id"]))
+        self.assertIn("source integrity", self.status()["problem"])
+        other = self.heard(source_message_id="1562034986897399999")
+        self.assertIsNone(self.inbox(other["id"]), "the door kept hearing after an integrity failure")
+        self.door.close()
+        with self.assertRaisesRegex(D.DoorError, "source integrity"):
+            self.open_door()
 
     def test_failed_source_write_holds_the_message_and_retries_later(self):
         m = self.fb.inbound(source_message_id=self.SRC)
@@ -1176,6 +1187,308 @@ class TestDuplicateDiscordSource(Rig):
         self.assertEqual(json.loads(files[0].read_text())["bridge_id"], m["id"])
         self.assertFalse(any("sources" in str(p) for p in self.box.rglob("*")))
         self.assertFalse((self.state / "sources").resolve().is_relative_to(self.box.resolve()))
+
+
+def snow(t: float, seq: int = 0) -> str:
+    """A Discord snowflake for Unix time t."""
+    return str(((int(t * 1000) - D.DISCORD_EPOCH_MS) << 22) | (seq & 0x3FFFFF))
+
+
+def baseline(rig, **kw):
+    """The operator's explicit decision (door.py --accept-source-baseline)."""
+    d = D.Door(rig.cfg(**kw), now=lambda: time.time() + rig.offset, accept_source_baseline=True)
+    report = d.baseline_report
+    d.close()
+    return report
+
+
+class TestSourceIntegrity(Rig):
+    """Repair for Thought-Processor PR #129 (audit 6977139171): a missing, deleted, altered, replaced or
+    inconsistent source claim fails closed, at receipt, immediately before authorization and immediately
+    before delivery, during runtime and across restart. A lost claim is never recreated as if new."""
+
+    SRC = "1562034986897300001"
+
+    def counts(self):
+        return len(self.fi.redeems()), len(self.fb.reply_posts)
+
+    def claim_file(self, src=None):
+        return self.door._source_path(CHAN, src or self.SRC)
+
+    def try_duplicate(self, orig):
+        """The Bridge hands the same Discord message over under a new Bridge ID; Core answers it with a
+        separately valid Identity decision if it can."""
+        dup = self.heard(source_message_id=orig["source_message_id"])
+        self.assertNotEqual(dup["id"], orig["id"])
+        self.offset += D.MIN_GAP + 0.1
+        fake_inbox = {**(self.door.record(orig["id"]) or {}), "id": dup["id"]}
+        dec = self.fi.mint(self.core_binding(fake_inbox, "a second answer"))
+        body = {"schema": "tass.discord.reply/2", "reply_to": dup["id"], "text": "a second answer",
+                "cycle_id": "cy_fixture", "decision_id": dec}
+        p = self.box / "replies" / f"reply-{dup['id']}.json"
+        p.write_text(json.dumps(body))
+        t = time.time() - 5
+        os.utime(p, (t, t))
+        self.door.tick()
+        self.door.tick()
+        self.assertIsNone(self.inbox(dup["id"]), "a duplicate reached Core's inbox")
+        self.assertFalse(self.fi.decisions[dec]["used"], "a duplicate obtained an Identity redemption")
+        return dup
+
+    def assert_stopped(self):
+        self.assertIn("source integrity", self.status()["problem"])
+        self.assertIn("--accept-source-baseline", self.status()["problem"])
+        fresh = self.heard(source_message_id="1562034986897398888")
+        self.assertIsNone(self.inbox(fresh["id"]), "the door kept hearing after an integrity failure")
+
+    # --- the audit's exact failure ------------------------------------------------------------------
+    def test_deleted_live_claim_gives_no_second_redemption_or_reply(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.write_reply(orig["id"], "first")
+        self.door.tick()
+        self.assertEqual(self.counts(), (1, 1))
+        self.claim_file().unlink()                         # only that claim, while the door runs
+        self.try_duplicate(orig)
+        self.assertEqual(self.counts(), (1, 1))            # audit reproduced (2, 2)
+        self.assert_stopped()
+
+    def test_deleted_live_claim_before_authorization(self):
+        orig = self.heard(source_message_id=self.SRC)      # heard, not yet answered
+        self.claim_file().unlink()
+        self.try_duplicate(orig)
+        self.write_reply(orig["id"], "late answer")         # the original's own reply is held too
+        self.door.tick()
+        self.assertEqual(self.counts(), (0, 0))
+        self.assert_stopped()
+
+    def test_valid_replacement_of_a_live_claim(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.write_reply(orig["id"], "first")
+        self.door.tick()
+        forged = "m_" + os.urandom(10).hex()               # a well-formed claim naming someone else
+        D.write_atomic(self.claim_file(), {"schema": D.SCHEMA_SOURCE, "bridge_id": forged, "claimed_at": "x"}, 0o600)
+        self.try_duplicate(orig)
+        self.assertEqual(self.counts(), (1, 1))
+        self.assert_stopped()
+
+    def test_valid_replacement_naming_the_duplicate_after_it_arrives(self):
+        orig = self.heard(source_message_id=self.SRC)
+        dup = self.heard(source_message_id=self.SRC)       # refused duplicate, recorded
+        D.write_atomic(self.claim_file(), {"schema": D.SCHEMA_SOURCE, "bridge_id": dup["id"], "claimed_at": "x"}, 0o600)
+        rec = {**self.door.record(dup["id"]), "answerable": True, "not_answerable_reason": ""}
+        rec.pop("duplicate_of")
+        D.write_atomic(self.state / "inbound" / f"{dup['id']}.json", rec, 0o600)
+        fake_inbox = {**self.door.record(orig["id"]), "id": dup["id"]}
+        self.write_reply(dup["id"], "x", decision=self.fi.mint(self.core_binding(fake_inbox, "x")))
+        self.door.tick()
+        self.assertEqual(self.counts(), (0, 0))
+        self.assert_stopped()
+
+    # --- checks immediately before authorization and before delivery --------------------------------
+    def test_claim_lost_between_reply_claim_and_redemption(self):
+        orig = self.heard(source_message_id=self.SRC)
+        real = self.door.new_claim
+
+        def new_claim_then_lose(rid, **kw):
+            c = real(rid, **kw)
+            self.claim_file().unlink()
+            return c
+        self.door.new_claim = new_claim_then_lose
+        self.write_reply(orig["id"], "answer")
+        self.door.tick()
+        self.assertEqual(self.counts(), (0, 0))
+        self.assertEqual(self.receipt(orig["id"])["state"], "not_sent")
+        self.assertIn("not authorized", self.receipt(orig["id"])["detail"])
+
+    def test_claim_lost_between_redemption_and_delivery(self):
+        orig = self.heard(source_message_id=self.SRC)
+        real = self.door.redeem
+
+        def redeem_then_lose(decision, bind):
+            r = real(decision, bind)
+            self.claim_file().unlink()
+            return r
+        self.door.redeem = redeem_then_lose
+        self.write_reply(orig["id"], "answer")
+        self.door.tick()
+        self.assertEqual(self.counts(), (1, 0))            # redeemed, never posted
+        r = self.receipt(orig["id"])
+        self.assertEqual(r["state"], "not_sent")
+        self.assertIn("nothing was posted", r["detail"])
+        self.try_duplicate(orig)
+        self.assertEqual(self.counts(), (1, 0))
+
+    def test_manifest_rewritten_in_place_is_caught_before_authorization(self):
+        orig = self.heard(source_message_id=self.SRC)
+        mp = self.state / "sources.manifest"
+        raw = mp.read_bytes()
+        forged = raw.replace(orig["id"].encode(), ("m_" + "0" * 20).encode())
+        self.assertEqual(len(forged), len(raw))
+        with open(mp, "r+b") as f:                         # same file, same size, different owner
+            f.write(forged)
+        self.write_reply(orig["id"], "answer")
+        self.door.tick()
+        self.assertEqual(self.counts(), (0, 0))
+        self.assertIn("source integrity", self.status()["problem"])
+
+    def test_manifest_removed_replaced_or_truncated_while_running(self):
+        for i, how in enumerate(("unlink", "copy", "truncate", "append")):
+            with self.subTest(how=how):
+                self.door.close()
+                import shutil
+                shutil.rmtree(self.state)
+                self.door = self.open_door()
+                self.door.cursor = self.fb.seq             # a fresh state: hear only new messages
+                orig = self.heard(source_message_id=str(1562034986897310100 + i))
+                mp = self.state / "sources.manifest"
+                if how == "unlink":
+                    mp.unlink()
+                elif how == "copy":
+                    data = mp.read_bytes()
+                    mp.unlink()
+                    mp.write_bytes(data)
+                elif how == "truncate":
+                    os.truncate(mp, len(mp.read_bytes().split(b"\n")[0]) + 1)
+                else:
+                    with open(mp, "ab") as f:
+                        f.write(b"claim " + b"a" * 64 + b" m_" + b"1" * 20 + b"\n")
+                self.try_duplicate(orig)
+                self.assert_stopped()
+                self.assertEqual(self.counts(), (0, 0))
+
+    # --- across restart ------------------------------------------------------------------------------
+    def test_deleted_claim_while_stopped_refuses_start_then_baseline_keeps_ownership(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.write_reply(orig["id"], "first")
+        self.door.tick()
+        self.door.close()
+        self.claim_file().unlink()
+        with self.assertRaisesRegex(D.DoorError, f"claim held by {orig['id']} is missing.*--accept-source-baseline"):
+            self.open_door()
+        self.assertFalse(self.claim_file().exists(), "a refused start recreated the claim")
+        self.assertIn("operator source baseline", baseline(self))
+        self.door = self.open_door()
+        self.assertEqual(self.door.source_owner(CHAN, self.SRC), orig["id"])
+        self.try_duplicate(orig)
+        self.assertEqual(self.counts(), (1, 1))
+        # Normal messages sent after the decision are still answerable, once.
+        self.offset += D.MIN_GAP + 0.1
+        new = self.heard(source_message_id=snow(time.time() + self.offset + 60))
+        self.write_reply(new["id"], "hello again")
+        self.door.tick()
+        self.assertEqual(self.counts(), (2, 2))
+        self.assertEqual(self.receipt(new["id"])["state"], "queued")
+
+    def test_deleted_claim_during_runtime_then_restart(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.claim_file().unlink()
+        self.door.close()
+        with self.assertRaisesRegex(D.DoorError, "source integrity"):
+            self.open_door()
+        baseline(self)
+        self.door = self.open_door()
+        self.try_duplicate(orig)
+        self.write_reply(orig["id"], "the one answer")
+        self.door.tick()
+        self.assertEqual(self.counts(), (1, 1))
+
+    def test_manifest_deleted_or_truncated_while_stopped_refuses_start(self):
+        for i, how in enumerate(("deleted", "truncated", "claim-line-removed")):
+            with self.subTest(how=how):
+                self.door.close()
+                import shutil
+                shutil.rmtree(self.state)
+                self.door = self.open_door()
+                self.door.cursor = self.fb.seq             # a fresh state: hear only new messages
+                orig = self.heard(source_message_id=str(1562034986897310200 + i))
+                self.door.close()
+                mp = self.state / "sources.manifest"
+                if how == "deleted":
+                    mp.unlink()
+                elif how == "truncated":
+                    os.truncate(mp, len(mp.read_bytes().split(b"\n")[0]) + 1)
+                else:
+                    lines = mp.read_bytes().split(b"\n")
+                    self.assertTrue(any(orig["id"].encode() in l for l in lines))
+                    mp.write_bytes(b"\n".join(l for l in lines if orig["id"].encode() not in l))
+                with self.assertRaisesRegex(D.DoorError, "source integrity"):
+                    self.open_door()
+                baseline(self)
+                self.door = self.open_door()
+                self.try_duplicate(orig)
+                self.assertEqual(self.counts(), (0, 0))
+
+    def test_interrupted_claim_is_completed_for_the_same_owner_only(self):
+        # The manifest line is durable but the claim file write failed, and nothing else happened.
+        m = self.fb.inbound(source_message_id=self.SRC)
+        real = D.create_exclusive
+
+        def broken(path, obj, mode=0o600):
+            if path.parent.name == "sources":
+                raise OSError("disk full (fixture)")
+            return real(path, obj, mode)
+        D.create_exclusive = broken
+        try:
+            self.door.tick()
+        finally:
+            D.create_exclusive = real
+        self.assertIsNone(self.door.record(m["id"]))
+        self.restart()                                     # completed for m, never for anyone else
+        self.assertEqual(self.door.source_owner(CHAN, self.SRC), m["id"])
+        self.door.tick()                                   # the feed is read again
+        self.assertFalse(self.door.record(m["id"]).get("duplicate_of"))
+        self.assertIsNotNone(self.inbox(m["id"]))          # heard as the owner (a catch-up after the restart)
+        dup = self.heard(source_message_id=self.SRC)
+        self.assertEqual(self.door.record(dup["id"])["duplicate_of"], m["id"])
+
+    def test_state_loss_is_not_mistaken_for_a_first_start(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.door.close()
+        import shutil
+        shutil.rmtree(self.state / "sources")
+        (self.state / "sources.manifest").unlink()
+        with self.assertRaisesRegex(D.DoorError, "not a first start"):
+            self.open_door()
+        baseline(self)
+        self.door = self.open_door()
+        self.try_duplicate(orig)
+        self.assertEqual(self.counts(), (0, 0))
+
+    def test_baseline_floor_refuses_history_with_no_surviving_record(self):
+        orig = self.heard(source_message_id=self.SRC)
+        self.write_reply(orig["id"], "first")
+        self.door.tick()
+        self.door.close()
+        import shutil
+        for d in ("sources", "inbound", "claims"):          # every record of the old message is gone
+            shutil.rmtree(self.state / d)
+        (self.state / "sources.manifest").unlink()
+        with self.assertRaisesRegex(D.DoorError, "not a first start"):
+            self.open_door()
+        baseline(self)
+        self.door = self.open_door()
+        self.door.cursor = self.fb.seq
+        dup = self.heard(source_message_id=self.SRC)
+        self.assertIsNone(self.inbox(dup["id"]))
+        self.assertEqual(self.door.record(dup["id"])["duplicate_of"], "baseline")
+        self.assertEqual(self.counts(), (1, 1))
+        self.restart()                                     # the refusal itself is consistent state
+        new = self.heard(source_message_id=snow(time.time() + self.offset + 60))
+        self.assertIsNotNone(self.inbox(new["id"]))
+
+    def test_baseline_changes_nothing_when_intact_and_refuses_damage(self):
+        self.heard(source_message_id=self.SRC)
+        self.door.close()
+        mp = self.state / "sources.manifest"
+        before = mp.read_bytes()
+        self.assertEqual(baseline(self), "")
+        self.assertEqual(mp.read_bytes(), before)
+        with open(mp, "ab") as f:
+            f.write(b"garbage line\n")
+        with self.assertRaisesRegex(D.DoorError, "damaged"):
+            baseline(self)
+        with self.assertRaisesRegex(D.DoorError, "damaged"):
+            self.open_door()
 
 
 if __name__ == "__main__":
