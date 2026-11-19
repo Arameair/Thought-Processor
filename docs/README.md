@@ -14,3 +14,8 @@ This tree preserves unique design, architecture, research, decision, and project
 Unless a document explicitly cites the accepted Stage 3 revisions and the current Issue #119 workflow, treat its branch names, release status, current-version claims, and next steps as historical context—not current operational instructions or merge policy. Git history remains the authoritative source for its original context.
 
 Current entry points are [STATUS.md](STATUS.md) and [WORKFLOW.md](WORKFLOW.md). Security-sensitive runtime behavior must be established from accepted source, exact-SHA tests, and independent audit evidence rather than generalized historical prose.
+
+## Current review playbook (proposed)
+
+- [Defensive review playbook](DEFENSIVE_REVIEW_PLAYBOOK.md) — security acceptance evidence, repeated AI-audit access interruption ledger, and conservative handling of blocked reviews. This is a **draft proposal in PR #130** until accepted; it does not alter runtime or CI.
+- For each current audit, verify the active PR comments and exact SHA rather than assuming this documentation map is a live status feed.
