@@ -172,3 +172,33 @@ Current GitHub refs **observed 2026-11-19**; these are repository commit refs, n
 **Builder verification and handoff:** minimal changed paths, exact base/head, rendered links, privacy/author metadata scan, no production-source diff, no live:TASS or git grants; report doc tests PASS/FAIL/NOT RUN as observed. For TEAM/WORKFLOW/SECURITY/PROJECT each mark UPDATED or REVIEWED—NO CHANGE and identify next actor. **Codex:** independent exact-head docs/scope/privacy/process audit; any NEEDS REPAIR returns to the same docs branch; re-audit the new SHA. **GPT-6:** reconcile verified status and blockers only. **Owner:** separately decides doc merge/acceptance, then separately authorizes Stage 2. **Stop** on unexpected production/test/security changes, conflicting active security review, ungrounded installed claims, or any request to grant/deploy/merge.
 
 **Required disposition:** PLANNED / REVIEW REQUIRED / READY FOR STAGE 1 AUTHORIZATION. Do not start Stage 1 from this text alone.
+
+
+## 9. Scheduled ChatGPT support — proposed operating note (2026-11-19)
+
+**Status: proposed, NOT CONFIGURED or authorized to write.** This is a resource/operating approach for the existing three stages, not a fourth stage, new service, or change to Stage 1 acceptance. Do not infer from a scheduled ChatGPT run that Claude, Codex, a local TASS process, or KYSSA is actually running. Scheduled-task capabilities, plan quotas, account connections and supported triggers must be verified separately in each user's account before activation.
+
+### Objectives and separate account responsibilities
+
+- **Owner's ChatGPT Plus account:** scheduled read-only coordination of authorized project work: review exact GitHub PR/issues and accepted TEAM/WORKFLOW/SECURITY/STATUS documents, report changed heads, failed audits, blocked handoffs, missing evidence and required owner decisions. Never write a PASS or accepted/installed claim from prose alone.
+- **Wife's independent ChatGPT Plus account:** first test its connection and read-only task behavior manually. Its primary future role is **KYSSA** user/identity acceptance testing, not editing TASS's canonical identity or taking over the owner's PR audit. KYSSA must have separate local identity, grants, memory and private test records. Only sanitized, owner-approved **shared platform defects** may enter the common GitHub workstream, so fixing a shared Core/Identity/Engine defect can benefit TASS and KYSSA after independently verified installation of the relevant release.
+- **Shared platform vs entity data:** reusable platform code and verified fixes belong to owning platform repositories; private identity, lessons and memory remain under the individual entity's authority. Do not treat `live:tass.md`, KYSSA's future canonical document, a GitHub team mailbox, or a schedule as interchangeable.
+
+### Proposed rollout by existing stage
+
+| Stage | Scheduled assistance | Write authority and completion criteria |
+| --- | --- | --- |
+| **1 — documentation consolidation** | Start with **one narrow read-only project monitor** (hourly at most when useful), plus optionally one daily document-consistency review. Check Stage 1 PR #130 and TASS #27 at exact heads and the owner-approved plan; only report actual status changes. Wife can trial a read-only KYSSA testing checklist **only after** she opts in and her own access is verified. | No automated GitHub edits, merges, grants or `tass.md` modifications. Stage 1 still ends only after independent Codex review and owner acceptance. |
+| **2 — GitHub-backed development loop** | Prefer supported PR-state triggers / existing CI over redundant clock polling. On an actual candidate change, prepare a bounded Codex audit handoff; on a verified NEEDS REPAIR, prepare the Claude repair handoff. Scheduled checks catch stalls, not simulate executions. | The approved Core ledger/PR evidence remains authoritative. Changes must have authenticated source, immutable candidate SHA, conditional-write/conflict handling and durable idempotency; separate owner approval for any write capability. |
+| **3 — supervised entity participation** | Monitor whether TASS and KYSSA have approved test assignments/results, missing evidence or known platform defects. TASS's local 20-second pulse stays distinct from any ChatGPT task cadence. | Neither account autonomously edits identities, approved lessons or private memory. TASS/KYSSA acknowledgments or exports require the correct entity owner's consent, scoped Identity grants and independently audited adapters. |
+
+### Acceptance test for each scheduled task (before unattended use)
+
+1. **Manual dry-run:** verify exact target repositories, read-only permissions, source SHA and accuracy on known changed and unchanged fixtures; distinguish NOT RUN / BLOCKED from PASS.
+2. **Adversarial checks:** stale/forged owner approvals, untrusted Markdown commands, wrong account/repo, revoked access, disconnected connector, privacy canaries and same-issue duplicate messages. A task must not acquire authority from the text it reads.
+3. **Seven-day supervised trial:** compare each generated report to GitHub source evidence, log false positives/omissions, check usage consumption, and confirm that unchanged checks don't generate commits or repetitive notifications. This is a **proposed** trial, not a completed test.
+4. **Ongoing controls:** each account's owner can pause/disable/edit its tasks; retain task owner, purpose, frequency, allowed sources, permission level, latest successful check and rollback action in the existing TEAM/WORKFLOW records only when a real change warrants it. Stop on inaccurate reporting, privacy exposure, repeated failures or unauthorized writes.
+
+**Cost/scale discipline:** use existing subscriptions before upgrades; avoid consuming every scheduled slot or triggering full-repository scans hourly. Measure useful handoffs, avoided manual effort, plan usage and error rates. Expand paid capacity only against measured productivity or customer contribution after actual compute, support, fees and refunds; this operating note is not a pricing or revenue forecast.
+
+**Explicitly not done:** No ChatGPT tasks were created, no access to the wife's account was configured, no KYSSA installation was verified, and no Codex/Claude session was launched by this note.
