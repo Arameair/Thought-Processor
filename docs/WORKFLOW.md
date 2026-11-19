@@ -37,3 +37,11 @@ Apply [DEFENSIVE_REVIEW_PLAYBOOK.md](DEFENSIVE_REVIEW_PLAYBOOK.md) to authorized
 5. **Preserve gates:** an access interruption never changes the owner approval, independent audit, source merge, release, Identity grant or live-deployment requirements. Never promote a component whose required acceptance evidence is missing.
 
 Do not modify GitHub Actions test definitions to accommodate a blocked assistant response. Any test scope change requires a separate technical rationale, review and owner authorization.
+
+## Documentation currency and recurring blockers
+
+- **At the beginning of each work slice:** read the active issue and PR comments, `AGENTS.md`, current `STATUS.md`, this workflow, and the [defensive review playbook](DEFENSIVE_REVIEW_PLAYBOOK.md) where relevant. Confirm the current head SHA. Do not treat an old handoff as current.
+- **At each audit completion or interruption:** update the existing PR discussion with verified result, exact tested revision, unresolved acceptance rows, and access blockers. If the incident affects future reviews, add a sanitized dated entry to the playbook ledger as a documentation PR; do not claim the event was automatically detected.
+- **Escalation:** at the second reported occurrence of the same access interruption, mark it **RECURRING** in the next handoff, compare the current review requirements with existing documentation, and assign a documentation owner. Preserve the original technical audit verdict independently of the access status.
+- **Freshness check at handoff:** check that `AGENTS.md`, `WORKFLOW.md`, `STATUS.md`, documentation map, and active PR evidence do not contradict each other. Update only affected current-state claims, with dated sources. Avoid broad document rewrites or reopening settled governance.
+- **Scope:** this is a reviewer responsibility, not a claim of automatic cross-chat or desktop visibility. Any future automated reminder/check requires separate implementation and permission; do not weaken CI or tests.
