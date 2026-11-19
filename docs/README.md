@@ -28,3 +28,9 @@ Current entry points are [STATUS.md](STATUS.md) and [WORKFLOW.md](WORKFLOW.md). 
 - [Source and installation status](STATUS.md) — verified release/project state, separate from current task ownership.
 
 Contributors read the canonical records at the start of **every work cycle** and synchronize affected Markdown records after **each BUILD → TEST → AUDIT** pass and subsequent repair/retest cycles. Auditors may update permitted review/coordination documentation without modifying the implementation under audit; explicitly read-only reviewers supply proposed updates. PR #130 is a proposal until reviewed and merged.
+
+## Repository-wide documentation readiness (proposed)
+
+- [Cross-repository documentation inventory](REPOSITORY_DOCS_AUDIT.md) — verified 2026-11-19 defaults, active refresh PRs, and precise missing entrypoints.
+- [TASS PR #27](https://github.com/Arameair/TASS/pull/27) — draft public-safe overview, TASS-owned team-presence file and handoff log. TASS is currently private; access/publication is not implied.
+- Before claiming the GitHub work loop is running, separately verify that the existing [TASS Issue #24 relay](https://github.com/Arameair/TASS/issues/24) supports the required scoped task interaction.
