@@ -152,42 +152,55 @@ new Bridge ID (a redelivery, a reset Bridge journal, a Bridge bug), and a new Br
 otherwise get its own claim, its own decision and its own reply. So the door keeps a private,
 durable **source index**:
 
-- `<state>/sources.manifest` is the bound, append-only list of every claim the door has ever made
-  (`claim <source key> <bridge id>`, plus operator baseline lines). A claim is appended and
-  fsynced there **first**; it is never pruned or rewritten.
+- `<state>/sources.manifest` is the bound, append-only list of every claim the door has ever made:
+  `claim <source key> <bridge id>` for each Discord source, `reply <bridge id>` for each reply claim
+  (appended **before** `claims/<bridge id>.json` is created, so before any Identity redemption), and
+  operator baseline lines. Each line is appended and fsynced first; nothing is pruned or rewritten.
 - `<state>/sources/<source key>.json`, where the key is the sha256 of
   `"discord\n<channel id>\n<Discord message id>"`, names the one Bridge envelope (`bridge_id`) that
   owns that Discord message. File names hold no raw IDs, and the files hold no text.
 - When a new envelope from the owner arrives, the door claims its source (manifest line, then the
   file, created exclusively) **before** it writes the trusted record. Only the envelope that
-  claims it (or already owns it) can be answerable. Any other envelope for the same channel and
-  Discord message is recorded as `answerable: false` with `duplicate_of`, is **never written to
-  `inbox/`**, and a reply naming it is rejected **before Identity is asked** and before
-  `POST /api/replies`.
-- The manifest, the claim files and the trusted records must agree. The door checks the source of
-  an envelope **when it is received**, **before it claims a reply**, **immediately before the
-  Identity redemption** and **immediately before posting**. Each check proves the manifest path
-  still names the file the door opened, at the size it wrote (the last three: with exactly the
-  bytes it wrote), and that the claim file exists and names the manifest's owner.
-- **Fail closed, never recreate.** A missing, extra, altered or replaced claim file, or a removed,
-  replaced, truncated or externally written manifest, is an **integrity failure**: the door stops
-  hearing, authorizing and posting (`status.json` `problem` says why and what to do), and after a
-  restart it refuses to start. A lost claim is never recreated as if its source were new. The one
-  exception is completing an interrupted write: a durable manifest line whose file is missing,
-  for an owner of which the door holds no record and no reply claim yet, gets its file back for
-  that **same** owner.
-- At startup every record, claim file and manifest line is cross-checked. A state directory that
-  holds records of an earlier run (`door.lock`, `cursor.json`, inbound records, reply claims or
-  claim files) but no manifest is an upgrade or state loss, not a first start, and is refused.
-- **Operator baseline.** The only way past a refusal is the explicit, auditable decision
-  `door.py --accept-source-baseline` (same state directory, door stopped). It deletes nothing: it
-  keeps the manifest, every claim file and record; claims any record that has no claim (records
-  that already have a reply claim win, then the oldest; later duplicates are demoted and removed
-  from `inbox/`); restores a missing claim file only for the owner the manifest names; and
-  appends `baseline v1 <decision ms> <reason> discord-ms <floor>`, after which every Discord
-  message whose snowflake time is at or before the decision (or any message the door has a record
-  of) is refused as not provably new. Damaged or conflicting records are still refused. On an
-  intact state it changes nothing.
+  claims it can be answerable. Any other envelope for the same channel and Discord message is
+  recorded as `answerable: false` with `duplicate_of`, is **never written to `inbox/`**, and a
+  reply naming it is rejected **before Identity is asked** and before `POST /api/replies`.
+- An envelope that already owns its source but has no trusted record, and was not claimed by the
+  running process (a crash between claim and record, or lost state), is recorded **held**:
+  `answerable: false`, never answerable again. Its history can't be proven.
+- The manifest, the claim files, the reply claims and the trusted records must agree. The door
+  checks the source **when an envelope is received**, **before it claims a reply**, **immediately
+  before the Identity redemption** and **immediately before posting**. Each check re-hashes the
+  whole manifest against what the door wrote and proves its path still names the opened file.
+  It also proves that the claim file exists and names the manifest's owner, and that a reply line
+  has its reply claim.
+- **Fail closed, never reconstruct from absence.** A missing, extra, altered or replaced claim file
+  or reply claim, or a removed, replaced, truncated or rewritten manifest, is an **integrity
+  failure**. The door stops hearing, authorizing and posting (`status.json` `problem` says why and
+  what to do), and after a restart it refuses to start. An interrupted claim-file write is
+  completed only inside the process that appended its manifest line, before its record exists
+  (in-memory proof of that boundary). After a restart it is a refusal, because an interrupted
+  write and deleted evidence of an earlier authorized reply look the same on disk.
+- At startup every record, claim file, reply claim and manifest line is cross-checked. A state
+  directory that holds records of an earlier run (`door.lock`, `cursor.json`, inbound records,
+  reply claims or claim files) but no manifest is an upgrade or state loss, not a first start,
+  and is refused.
+- **Recovery.** Prefer restoring the state directory from a copy taken while the door was
+  stopped; startup verifies it, but can't tell that copy is the latest. If evidence is lost,
+  duplicate protection for it **can't be restored**. The operator may accept that explicitly with
+  `door.py --accept-source-baseline --acknowledge-dedup-loss --discord-floor <ID>`, where ID is a
+  Discord message posted in the bridged channel after the loss. Without both options it refuses
+  and changes nothing. It deletes nothing and resumes nothing silently:
+  - a lost reply claim is recorded as a final `not_sent` claim (permanent refusal);
+  - a lost claim file is restored only for the owner the manifest names;
+  - every record without a reply claim is **held**;
+  - records with no source claim are claimed or demoted as duplicates;
+  - it appends `baseline v1 <decision ms> <reason> discord-ms <floor>`. From then on every Discord
+    message at or before the floor is refused as not provably new. The floor is the latest of the
+    operator's message time (Discord's clock), this host's clock and any message the door still
+    has a record of.
+
+  Damaged or conflicting records are still refused. On an intact state the baseline changes
+  nothing.
 - If a claim file can't be written, the message isn't recorded and the feed is read again next
   tick (`status.json` shows the problem).
 

@@ -193,8 +193,9 @@ _MANIFEST_KEY = re.compile(r"[0-9a-f]{64}")
 class SourceManifest:
     """The bound, append-only record of every Discord source the door has ever claimed.
 
-    One line per claim: "claim <sha256 of channel and message ID> <owning Bridge ID>", plus operator
-    baseline lines. It is written (and fsynced) before the per-source claim file, never pruned and
+    One line per source claim: "claim <sha256 of channel and message ID> <owning Bridge ID>"; one line
+    per reply claim: "reply <Bridge ID>", appended before claims/<Bridge ID>.json is created (so before
+    any Identity redemption); plus operator baseline lines. It is written (and fsynced) before the per-source claim file, never pruned and
     never rewritten. Every source claim file must agree with it, and every claim in it must have its
     file: a missing, extra, altered or replaced claim is detected, not recreated as new. Before and
     after each append, and before authorization and delivery, the door proves the path still names
@@ -204,6 +205,7 @@ class SourceManifest:
     def __init__(self, path: Path):
         self.path, self.fd, self.size = path, -1, 0
         self.hdr, self.entries, self.baselines = b"", {}, []
+        self.replies: set[str] = set()                # Bridge IDs that ever got a reply claim
         self.floor: int | None = None
         self.sha = hashlib.sha256()
 
@@ -248,6 +250,9 @@ class SourceManifest:
                 and (BRIDGE_ID.fullmatch(f[2]) or f[2] == MANIFEST_OWNER_LOST) and f[1] not in self.entries:
             self.entries[f[1]] = f[2]
             return True
+        if len(f) == 2 and f[0] == "reply" and BRIDGE_ID.fullmatch(f[1]) and f[1] not in self.replies:
+            self.replies.add(f[1])
+            return True
         if len(f) == 6 and f[:2] == ["baseline", "v1"] and f[4] == "discord-ms" and f[2].isdigit() and f[5].isdigit() \
                 and re.fullmatch(r"[a-z-]{1,40}", f[3]):
             self.floor = max(self.floor or 0, int(f[5]))
@@ -284,7 +289,7 @@ class SourceManifest:
             raise DoorError("the door's source manifest has a changed header")
 
     def append(self, line: str):
-        self.check()
+        self.check(full=True)
         b = (line + "\n").encode("ascii")
         if not self._parse(line):
             raise DoorError("refusing to append an invalid manifest line")
@@ -294,7 +299,7 @@ class SourceManifest:
         if n != len(b):
             raise DoorError("a short write to the door's source manifest")
         os.fsync(self.fd)
-        self.check()                                  # it landed in the linked manifest, not an unlinked one
+        self.check(full=True)                         # it landed, intact, in the linked manifest
 
 
 # ------------------------------------------------------------------ HTTP
@@ -347,7 +352,8 @@ class Config:
 
 
 class Door:
-    def __init__(self, cfg: Config, now=time.time, accept_source_baseline: bool = False):
+    def __init__(self, cfg: Config, now=time.time, accept_source_baseline: bool = False,
+                 discord_floor: str = "", acknowledge_dedup_loss: bool = False):
         self.cfg, self.now = cfg, now
         if not SNOWFLAKE.fullmatch(cfg.channel_id) or not SNOWFLAKE.fullmatch(cfg.owner_id):
             raise DoorError("DOOR_CHANNEL_ID and DOOR_OWNER_ID must be Discord IDs")
@@ -387,9 +393,10 @@ class Door:
         self.manifest: SourceManifest | None = None
         self.baseline_report = ""
         self._src_lock = threading.RLock()
+        self._unrecorded: set[str] = set()                 # sources this process claimed, record not yet written
         try:
             if accept_source_baseline:
-                self.baseline_report = self._accept_source_baseline(prior)
+                self.baseline_report = self._accept_source_baseline(prior, discord_floor, acknowledge_dedup_loss)
             else:
                 self._open_sources(prior)
             self._recover()
@@ -436,9 +443,10 @@ class Door:
     # A claim is written to the manifest first, then its file. Nothing is ever removed. A missing,
     # extra, altered or replaced record is never recreated as if its source were new: the door stops
     # (integrity error) and only an explicit operator baseline (--accept-source-baseline) resumes it.
-    INTEGRITY_REMEDY = ("Keep every file. The door stopped hearing and answering Discord messages. After "
-                        "investigating, stop the door and run `door.py --accept-source-baseline` with the same "
-                        "state directory: it keeps all records and refuses every Discord message sent before then.")
+    INTEGRITY_REMEDY = ("Keep every file. The door stopped hearing and answering Discord messages. Prefer restoring "
+                        "the state directory from a copy taken while the door was stopped. If the evidence is lost, "
+                        "stop the door and run `door.py --accept-source-baseline --acknowledge-dedup-loss "
+                        "--discord-floor <Discord message ID>` with the same state directory (see --help).")
 
     def _source_path(self, channel: str, source_id: str) -> Path:
         if not SNOWFLAKE.fullmatch(str(channel)) or not SNOWFLAKE.fullmatch(str(source_id)):
@@ -490,12 +498,14 @@ class Door:
                 self._fail("a source claim file exists that the manifest never recorded")
             return None
         if fo is None:
-            if owner != MANIFEST_OWNER_LOST and self.record(owner) is None and self.claim(owner) is None:
-                # The manifest line is durable but the file write was interrupted before anything
-                # else happened for this owner: complete it for the SAME owner (never as new).
+            if owner in self._unrecorded:
+                # This process appended that manifest line and its file write failed; nothing else
+                # can have happened for this owner since (in-memory proof of the exact boundary).
                 if not self._write_source_file(path, owner):
                     self._fail("a source claim file appeared while it was being completed")
                 return owner
+            # Never inferred from absence: an interrupted write and deleted evidence of an earlier
+            # authorized reply look the same on disk.
             self._fail(f"the source claim held by {owner} is missing")
         if fo != owner:
             self._fail(f"a source claim file was altered (the manifest says {owner})")
@@ -516,9 +526,9 @@ class Door:
         the door)."""
         path = self._source_path(channel, source_id)
         with self._src_lock:
-            owner = self._checked_owner(path, full=False)
+            owner = self._checked_owner(path, full=True)
             if owner == rid:
-                return ""                                  # our own claim (e.g. a crash before the record)
+                return ""                                  # rid owns it; take_inbound decides if it may answer
             if owner == MANIFEST_OWNER_LOST:
                 return "duplicate of a Discord message already heard (recorded by an operator baseline)"
             if owner:
@@ -529,6 +539,7 @@ class Door:
                 self.manifest.append(f"claim {path.stem} {rid}")
             except (OSError, DoorError) as e:
                 self._fail(f"the source manifest could not be appended ({e})")
+            self._unrecorded.add(rid)                      # until its record is written (this process only)
             if not self._write_source_file(path, rid):
                 self._fail("a source claim file appeared while it was being written")
             return ""
@@ -539,9 +550,14 @@ class Door:
         with self._src_lock:
             owner = self._checked_owner(self._source_path(rec.get("channel_id", ""), rec.get("source_message_id", "")),
                                         full=True)
+            if rec.get("id") in self.manifest.replies and not self._claim_file_exists(rec["id"]):
+                self._fail(f"the reply claim for {rec['id']} is missing")
         if owner != rec.get("id"):
             return "another Bridge message already holds this Discord message (one reply per Discord message)"
         return ""
+
+    def _claim_file_exists(self, rid: str) -> bool:
+        return os.path.lexists(self.st / "claims" / f"{rid}.json")
 
     def _dup_owner(self, channel: str, source_id: str) -> str:
         owner = self.manifest.entries.get(self._source_path(channel, source_id).stem)
@@ -599,14 +615,13 @@ class Door:
             if fo != m.entries[key]:
                 raise DoorError("a source claim file is damaged or altered" if fo else "a source claim file is damaged")
         for key, owner in m.entries.items():
-            if key in files:
-                continue
-            if owner != MANIFEST_OWNER_LOST and self.record(owner) is None and self.claim(owner) is None:
-                path = self.st / "sources" / f"{key}.json"   # interrupted claim: complete it for the same owner
-                if not self._write_source_file(path, owner):
-                    raise DoorError("a source claim file appeared while it was being completed")
-                continue
-            raise DoorError(f"the source claim held by {owner} is missing")
+            if key not in files:                           # never inferred safe from absence (see _checked_owner)
+                raise DoorError(f"the source claim held by {owner} is missing")
+        claims = {p.stem for p in (self.st / "claims").glob("m_*.json")}
+        for rid in sorted(m.replies - claims):
+            raise DoorError(f"the reply claim for {rid} is missing")
+        for rid in sorted(claims - m.replies):
+            raise DoorError(f"a reply claim for {rid} exists that the manifest never recorded")
         for r in self._records():
             path = self._source_path(r.get("channel_id", ""), r.get("source_message_id", ""))
             owner = m.entries.get(path.stem)
@@ -619,31 +634,50 @@ class Door:
             elif owner is None or owner == r["id"]:
                 raise DoorError(f"the duplicate record {r['id']} has no matching source claim")
 
-    def _accept_source_baseline(self, prior: list[str]) -> str:
-        """The operator's explicit, auditable decision after an integrity refusal. Deletes nothing:
-        the manifest (if any) and every claim file and record are kept; records with no claim are
-        claimed (first heard wins; later ones are demoted to duplicates, as before); claims with no
-        file get their file back for the SAME owner; a baseline line then refuses every Discord
-        message sent at or before now. Conflicting or damaged records are still refused."""
+    BASELINE_LIMITS = (
+        "Duplicate protection for Discord messages whose records were lost can NOT be restored: the "
+        "baseline only refuses messages whose Discord snowflake time is at or before its floor, and "
+        "every record it can't prove unanswered is held (never answerable). Prefer restoring the door's "
+        "state directory from a copy taken while the door was stopped; normal startup verifies it, but "
+        "can't tell that copy is the latest. To accept these limits, run again with "
+        "--acknowledge-dedup-loss and --discord-floor <ID of a Discord message posted in the bridged "
+        "channel after the loss (Discord: Copy Message ID)>; the floor is the later of that message's "
+        "time, this host's clock and every Discord message the door still has a record of.")
+
+    def _accept_source_baseline(self, prior: list[str], discord_floor: str = "", acknowledge: bool = False) -> str:
+        """The operator's explicit, auditable decision after an integrity refusal, when the prior state
+        can't be restored and verified. Requires an acknowledgement of the resulting deduplication limits
+        and a Discord-anchored floor (a host clock behind Discord can't be trusted alone). Deletes
+        nothing and resumes nothing silently: every claim, file and record is kept; missing evidence is
+        recorded as permanent refusal (a lost reply claim becomes a final not_sent claim; a lost claim
+        file is restored for the SAME owner); every record without a reply claim is held (not
+        answerable); records with no source claim are claimed (or demoted as duplicates). Only Discord
+        messages after the floor can be answered. Conflicting or damaged records are still refused."""
         mp = self._manifest_path()
+        problem = ""
         try:
             self.manifest = SourceManifest.load(mp)
             self._verify_all()
             return ""                                      # intact: nothing to decide, nothing changed
         except FileNotFoundError:
-            pass
-        except DoorError:
-            if self.manifest is None:
-                if mp.exists():
-                    raise                                  # a damaged manifest: the operator must look
-            else:
-                self.manifest.check(full=True)
-        reason = "upgrade-or-state-loss" if self.manifest is None else "inconsistent-sources"
-        if self.manifest is None and not mp.exists():
-            if not prior:
-                self.manifest = SourceManifest.create(mp)
-                return "first start: a new source manifest was created"
+            problem = "the source manifest is missing"
+        except DoorError as e:
+            if self.manifest is None and mp.exists():
+                raise                                      # a damaged manifest: the operator must look
+            problem = str(e)
+        if self.manifest is None and not prior:
             self.manifest = SourceManifest.create(mp)
+            return "first start: a new source manifest was created"
+        if not acknowledge or not SNOWFLAKE.fullmatch(discord_floor or ""):
+            if self.manifest is not None:
+                self.manifest.close()
+                self.manifest = None
+            raise DoorError(f"refusing an operator baseline ({problem}). {self.BASELINE_LIMITS}")
+        reason = "upgrade-or-state-loss" if self.manifest is None else "inconsistent-sources"
+        if self.manifest is None:
+            self.manifest = SourceManifest.create(mp)
+        else:
+            self.manifest.check(full=True)
         m = self.manifest
         files = self._source_files()
         for key, fo in sorted(files.items()):
@@ -658,10 +692,22 @@ class Door:
         for key, owner in sorted(m.entries.items()):
             if key not in files:
                 self._write_source_file(self.st / "sources" / f"{key}.json", owner)
+        claims = {p.stem for p in (self.st / "claims").glob("m_*.json")}
+        for rid in sorted(claims - m.replies):
+            m.append(f"reply {rid}")
+        lost_replies = sorted(m.replies - claims)
+        for rid in lost_replies:                           # permanent refusal, never a new chance to reply
+            now = iso(self.now())
+            create_exclusive(self.st / "claims" / f"{rid}.json", {
+                "schema": SCHEMA_RECEIPT, "reply_to": rid, "cycle_id": "", "decision_id": "", "reply_file": "",
+                "text_sha256": "", "binding": "", "state": "not_sent",
+                "detail": "the reply claim was lost; held permanently by the operator baseline (it may have been sent)",
+                "bridge_message_id": "", "discord_message_id": "", "claimed_at": now, "updated_at": now,
+                "refinable": False})
         recs = self._records()
         recs.sort(key=lambda r: (self.claim(r["id"]) is None, r.get("seq", 0), r["id"]))
-        floor = max(0, int(self.now() * 1000) - DISCORD_EPOCH_MS)
-        seeded = demoted = 0
+        floor = max(int(discord_floor) >> 22, int(self.now() * 1000) - DISCORD_EPOCH_MS, 0)
+        seeded = demoted = held = 0
         for r in recs:
             path = self._source_path(r.get("channel_id", ""), r.get("source_message_id", ""))
             floor = max(floor, int(r["source_message_id"]) >> 22)
@@ -676,15 +722,30 @@ class Door:
                 m.append(f"claim {path.stem} {owner}")
                 self._write_source_file(path, owner)
                 seeded += 1
-            elif not r.get("duplicate_of") and owner != r["id"]:
+            if not r.get("duplicate_of") and owner != r["id"]:
                 self._demote(r, "a duplicate of a Discord message already heard (found by the operator baseline)")
                 demoted += 1
+            elif not r.get("duplicate_of") and r.get("answerable") and self.claim(r["id"]) is None:
+                self._hold(r, "held by the operator baseline: state was lost, so it can't be proven unanswered")
+                held += 1
         m.append(f"baseline v1 {int(self.now() * 1000)} {reason} discord-ms {floor}")
         self._verify_all()
         at = datetime.fromtimestamp((floor + DISCORD_EPOCH_MS) / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        return (f"operator source baseline recorded ({reason}): {len(m.entries)} claims kept, {seeded} added from "
-                f"the door's records, {demoted} records demoted to duplicates; every Discord message sent at or "
-                f"before {at} is refused from now on")
+        return (f"operator source baseline recorded ({reason}: {problem}). Kept {len(m.entries)} source claims "
+                f"({seeded} added from the door's records); {len(lost_replies)} lost reply claims recorded as permanent "
+                f"refusals; {demoted} records demoted to duplicates; {held} records held (never answerable). Every "
+                f"Discord message sent at or before {at} is refused from now on. Duplicate protection for "
+                f"messages whose records were lost is NOT restored; this was acknowledged.")
+
+    def _hold(self, rec: dict, why: str):
+        rec = {**rec, "answerable": False,
+               "not_answerable_reason": "; ".join(x for x in (rec.get("not_answerable_reason"), why) if x)}
+        write_atomic(self.st / "inbound" / f"{rec['id']}.json", rec, 0o600)
+        for p in (self.box / "inbox").glob(f"*-{rec['id']}.json"):
+            if read_json(p) is not None:
+                write_atomic(p, {**read_json(p), "answerable": False,
+                                 "not_answerable_reason": rec["not_answerable_reason"]})
+        log(f"held inbound {rec['id']}: {why}")
 
     def _demote(self, rec: dict, why: str):
         owner = self.manifest.entries.get(self._source_path(rec["channel_id"], rec["source_message_id"]).stem)
@@ -718,6 +779,17 @@ class Door:
             self.pending.add(c["reply_to"])
 
     def new_claim(self, rid: str, **fields) -> dict | None:
+        with self._src_lock:
+            if self.integrity:
+                raise DoorError(self.integrity)
+            if rid in self.manifest.replies:
+                if not self._claim_file_exists(rid):
+                    self._fail(f"the reply claim for {rid} is missing")
+                return None                                # already claimed: one reply per owner message
+            try:
+                self.manifest.append(f"reply {rid}")       # durable evidence before the claim, before Identity
+            except (OSError, DoorError) as e:
+                self._fail(f"the source manifest could not be appended ({e})")
         now = iso(self.now())
         c = {"schema": SCHEMA_RECEIPT, "reply_to": rid, "cycle_id": "", "decision_id": "", "reply_file": "",
              "text_sha256": "", "binding": "", "state": "claimed", "detail": "", "bridge_message_id": "",
@@ -815,6 +887,13 @@ class Door:
                 return
             received = parse_ts(m.get("received_at"))
             reasons = []
+            with self._src_lock:
+                fresh = rid in self._unrecorded
+            if not fresh:
+                # It already owned its source before this process heard it, and its record is gone
+                # (a crash, or lost state). Whether it was ever answered can't be proven: held.
+                reasons.append("held: this Discord message was claimed before a restart or state loss, "
+                               "so it can't be proven unanswered")
             if m.get("catch_up"):
                 reasons.append("catch-up message (arrived while TASS was not listening)")
             if received is None:
@@ -839,6 +918,8 @@ class Door:
                     return
             else:
                 log(f"heard {rid}" + ("" if rec["answerable"] else " (not answerable)"))
+            with self._src_lock:
+                self._unrecorded.discard(rid)
         if rec.get("duplicate_of"):
             return
         if self.source_problem(rec):                       # damage raises; a non-owner is never put in the inbox
@@ -1161,7 +1242,7 @@ class Door:
             self.check_timeouts()
         except DoorError as e:
             problem = str(e)[:400]
-        self.write_status(st, problem)
+        self.write_status(st, self.integrity[:400] if self.integrity else problem)
 
     def run(self, every: float = 1.0):
         log(f"mailbox {self.box}, bridge {self.cfg.bridge}, identity {self.cfg.identity}")
@@ -1220,12 +1301,18 @@ def main():
     ap.add_argument("--forward", type=int, default=int(e("DOOR_FORWARD_PORT", "0")))
     ap.add_argument("--every", type=float, default=1.0)
     ap.add_argument("--accept-source-baseline", action="store_true",
-                    help="operator decision after a source-integrity refusal: keep every record, refuse every "
-                         "Discord message sent before now, then exit")
+                    help="operator decision after a source-integrity refusal when the prior state can't be "
+                         "restored: keep every record, hold what can't be proven unanswered, refuse every Discord "
+                         "message at or before the floor, then exit (needs the two options below)")
+    ap.add_argument("--acknowledge-dedup-loss", action="store_true",
+                    help="accept that duplicate protection for lost records is not restored")
+    ap.add_argument("--discord-floor", default="",
+                    help="ID of a Discord message posted in the bridged channel after the loss")
     a = ap.parse_args()
     try:
         door = Door(Config(a.mailbox, a.state, a.bridge, a.key_file, a.identity, a.identity_key_file,
-                           a.channel_id, a.owner_id), accept_source_baseline=a.accept_source_baseline)
+                           a.channel_id, a.owner_id), accept_source_baseline=a.accept_source_baseline,
+                    discord_floor=a.discord_floor, acknowledge_dedup_loss=a.acknowledge_dedup_loss)
     except DoorError as err:
         log(f"not starting: {err}")
         sys.exit(2)
