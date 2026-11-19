@@ -25,3 +25,15 @@
 ## Current source milestone
 
 Core's audited Stage 3 history was integrated by [PR #124](https://github.com/Arameair/Thought-Processor/pull/124) into public `main` at `0acb9d39bacf4002edf988d254be8f48eeace84f`, with three successful post-merge CI runs. Engine and Identity repository integration remain separate work. See [STATUS.md](STATUS.md) and [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119).
+
+## Defensive audit handoffs and interrupted model access
+
+Apply [DEFENSIVE_REVIEW_PLAYBOOK.md](DEFENSIVE_REVIEW_PLAYBOOK.md) to authorized code-security reviews, particularly cross-service persistence, replay handling, authorization and recovery.
+
+1. **Bound the work:** identify repository ownership/authorization, exact head and base, local or fake test environment, defensive invariant and prohibited operations. Do not include production secrets or unrelated exploit scenarios.
+2. **Retain rigorous verification:** execute and record required unit, integration, race, crash/restart, negative-regression, and compatible-container tests in permitted isolated test environments. A safety warning is not a reason to weaken assertions, skip tests silently, or promote code with missing evidence.
+3. **Write an evidence-first review:** include filenames/test names, assertions and observed PASS / FAIL / NOT RUN results, exact command/environment provenance, current residual risks, and a verdict. Separate independently observed evidence from author claims. Keep sensitive diagnostic artifacts in approved private access scopes.
+4. **Handle blocked requests transparently:** stop the blocked AI-assisted step, record its warning and the missing evidence as BLOCKED / NOT VERIFIED, provide feedback or seek authorized access via published support channels. Continue nonblocked engineering through normal CI, local tests and independent reviewers; do not attempt to bypass platform safeguards by splitting/rewording a prohibited request.
+5. **Preserve gates:** an access interruption never changes the owner approval, independent audit, source merge, release, Identity grant or live-deployment requirements. Never promote a component whose required acceptance evidence is missing.
+
+Do not modify GitHub Actions test definitions to accommodate a blocked assistant response. Any test scope change requires a separate technical rationale, review and owner authorization.
