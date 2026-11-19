@@ -21,3 +21,12 @@ These are standing repository instructions, not a disposable stabilization candi
 ## Historical instructions
 
 Older P0 operator instructions remain available only as evidence at `docs/history/legacy-agent-instructions/AGENTS_P0_WINDOWS_RUNBOOK.md`. They are not active operating requirements. See the current [workflow](docs/WORKFLOW.md) instead.
+
+## Defensive security reviews and access interruptions
+
+- State the authorized repository, owned test environment, explicit change boundary, and defensive acceptance objective. Use the real source and tests; never misrepresent a prohibited action as benign or divide a restricted request to evade controls.
+- Keep implementation and verification separate. In repository-controlled, offline fixtures, run the full applicable unit, integration, race, corruption/restart, and negative-regression checks; do not weaken or remove a required check just because an AI service blocks a review.
+- Prefer concise review handoffs identifying exact refs, security invariants, test names/results, and residual risks. Detailed investigation artifacts belong in private repository review records with appropriately limited access, not in broad conversational prompts.
+- If a model response is blocked, record the exact interrupted task, model/tool context, visible warning, tests completed independently, and tests not performed. Mark the interrupted review BLOCKED / NOT VERIFIED; do not report PASS or cycle through euphemistic prompts. Use the platform's feedback/support route for legitimate access issues.
+- Human/CI evidence is still valid when accurately recorded. Neither an AI refusal nor a CI PASS is proof of a security defect or complete assurance. Resume at an allowed, scoped step; request appropriate access if repeatedly needed.
+- See [defensive review playbook](docs/DEFENSIVE_REVIEW_PLAYBOOK.md) for the acceptance matrix, review handoff, and incident record.
