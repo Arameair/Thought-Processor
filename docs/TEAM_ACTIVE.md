@@ -16,8 +16,8 @@ This file answers **who is working on what, why, and what is blocked**. It is a 
 
 1. **Start:** every contributor reads this file with `AGENTS.md`, `docs/WORKFLOW.md`, relevant `docs/STATUS.md`, `docs/DEFENSIVE_REVIEW_PLAYBOOK.md`, and active issue/PR evidence. Confirm whether the listed head and assignment are still true.
 2. **Ownership:** assign a named role to each workstream (implementer, independent auditor, owner decision). Do not infer that an agent is actively executing from an old comment or chat.
-3. **Update:** when a task starts, changes owner, reaches a gate, becomes blocked or ends, the authorized writer updates only the affected row and supporting PR discussion. Record the date, actual status, exact link/ref, and next action. No meaningless per-prompt commits.
-4. **Read-only mode:** an auditor who lacks write authorization produces a proposed row change in the audit handoff. A separately authorized contributor applies it. Read-only means no repository mutation.
+3. **Update every cycle:** after BUILD/TEST/AUDIT or REPAIR/RETEST/RE-AUDIT, the responsible authorized contributor synchronizes the affected team row and existing PR discussion: dated revision, exact result, responsible next role, blocker and next action. Do not claim people or agents are actively executing without current evidence.
+4. **Audit write boundary:** an authorized independent auditor may publish their review and update this coordination register or audit docs; they may not modify the code candidate they are independently approving. Explicit read-only audits provide proposed row changes to a writer instead.
 5. **Conflict resolution:** component PRs own their exact-SHA code and test evidence; this table is only a coordination index. `docs/STATUS.md` owns accepted project/release/installation state, not live task allocation. Never overwrite a newer review with an older summary.
 6. **Privacy:** no tokens, user records, private paths, sensitive diagnostic transcripts or claims of access to another agent's local environment.
 
