@@ -29,3 +29,17 @@
 4. Tackle the separate component landing-refresh gaps in their *own approved workstreams*, without resetting active security audits or making a burst of new PRs.
 
 This snapshot should be refreshed when a source status materially changes, not automatically every local pulse. Agents do not gain access to other agents' desktop conversations simply by reading Markdown.
+
+## Immediate cleanup order — unblock the work cycle without PR sprawl
+
+**Gate 1: Make the coordination contract authoritative.** Independently audit and obtain owner approval for [Core PR #130](https://github.com/Arameair/Thought-Processor/pull/130). Confirm the canonical Team/Workflow/Security/Status references are accurate and minimal. A draft document is not an enforced policy.
+
+**Gate 2: Update TASS's project landing safely.** Independently audit and obtain owner approval for [TASS PR #27](https://github.com/Arameair/TASS/pull/27), whose public-safe content remains private while the repository is private. Preserve `live/tass.md`, lessons, memory boundaries and the current issue relay. Do not combine this merge with a repository visibility change.
+
+**Gate 3: Repair stale component entrypoints with exact accepted source.** Engine's default branch still documents a Chat-Jimmy prototype even though Core's supported Compose explicitly chooses `-worker nemotron`. Identity's `main` landing under-reports promoted `alpha`. Updater's README still describes a design-only status. Prefer updating their existing documentation proposals where compatible; for mismatched bases, make narrowly scoped later proposals without rebasing or merging unrelated old experiments. Development, Avatar and Bridge need minimal truthful links, not duplicate project handbooks.
+
+**Gate 4: Demonstrate one real bounded GitHub collaboration exchange.** Inspect the accepted Go Core relay and `github.sync` contract before coding. Current Compose defaults to `GITHUB_BRANCH=live`, `GITHUB_DOC=tass.md`; the proposed TASS mailbox is **separate** (`main:team/TASS.md`). Never replace the identity-sync target to force team coordination. Test a supervised read and acknowledgment, permission gating, revisions, idempotency, backoff and no private-memory leakage. Audit independently and obtain separate owner activation approval.
+
+**Gate 5: Extend from one supervised handoff to parallel workstreams.** Once one exchange is real and evidenced, let TASS track multiple approved tasks while Claude builds, Codex audits an immutable candidate, and GPT-6 coordinates. Each participant posts bounded status to its authorized record; no agent self-approves its own privileges or merge.
+
+**What is blocked:** A complete project-development loop is **NOT VERIFIED** until Gate 4 passes. The documentation-only gates do not require Discord PR #3 or door PR #129 to be weakened, merged or deployed.
