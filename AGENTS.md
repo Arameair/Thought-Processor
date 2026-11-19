@@ -37,3 +37,11 @@ Older P0 operator instructions remain available only as evidence at `docs/histor
 - Record significant review interruptions in the existing PR's discussion or playbook incident ledger using date, reporter, affected review, observed status, and next owner action. Distinguish user reports from tool-observed evidence. Never paste secrets or unreviewed attack details.
 - When an interruption recurs, explicitly flag the repetition in the next handoff and review whether process documentation needs updating. Do not pretend repository agents can observe a blocked desktop UI unless someone reports it or an authorized integration supplies that signal.
 - Keep the smallest current documentation entrypoints accurate; link historical reports instead of copying them into competing sources of truth. Documentation changes require independent review and do not authorize source/test modifications.
+
+## Required task-entry and task-exit protocol
+
+For every repository work request, **read before acting**: `docs/TEAM_ACTIVE.md` (who/what/next), `docs/WORKFLOW.md` (procedure), `docs/DEFENSIVE_REVIEW_PLAYBOOK.md` (security review, if relevant), `docs/STATUS.md` (accepted project state), and the active PR/issue evidence. Use `docs/README.md` to locate additional project documents. Cite the latest exact SHA; do not trust this list over current GitHub state.
+
+At a **material status transition** (task assignment, candidate ready, audit result, blocker, owner acceptance), the authorized writer updates the relevant canonical Markdown document and existing PR/issue discussion. Keep updates small, source-linked, and factual. A task without any material state change does not require a commit. A read-only reviewer must not write: include a **PROPOSED DOC UPDATE** in the handoff for an authorized contributor. Never let documentation housekeeping expand the assigned technical scope or authorize a protected action.
+
+Use only these roles for the canonical files: `docs/TEAM_ACTIVE.md` = team/work ownership and next handoff; `docs/WORKFLOW.md` = process; `docs/DEFENSIVE_REVIEW_PLAYBOOK.md` = security assurance and access incidents; `docs/STATUS.md` = accepted product/release/install facts; `docs/README.md` = navigation. Detailed code evidence remains in its owning PR.
