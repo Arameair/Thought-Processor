@@ -27,4 +27,4 @@ Current entry points are [STATUS.md](STATUS.md) and [WORKFLOW.md](WORKFLOW.md). 
 - [Defensive review playbook](DEFENSIVE_REVIEW_PLAYBOOK.md) — security evidence and access-interruption history.
 - [Source and installation status](STATUS.md) — verified release/project state, separate from current task ownership.
 
-Contributors read the canonical sources at the start of every task and update affected records at meaningful status transitions **only when authorized**. Read-only auditors propose updates, not commits. PR #130 is a proposal until reviewed and merged.
+Contributors read the canonical records at the start of **every work cycle** and synchronize affected Markdown records after **each BUILD → TEST → AUDIT** pass and subsequent repair/retest cycles. Auditors may update permitted review/coordination documentation without modifying the implementation under audit; explicitly read-only reviewers supply proposed updates. PR #130 is a proposal until reviewed and merged.
