@@ -60,8 +60,20 @@ Do not modify GitHub Actions test definitions to accommodate a blocked assistant
 
 **Task start:** confirm current GitHub refs; review assignment authority and the team row; state implementer, auditor, specific scope and stop condition. If a needed record is missing or stale, report the discrepancy rather than guessing.
 
-**Task close:** report exact refs, test evidence, disposition, next owner action and **DOC UPDATE** status. An authorized contributor should update the affected record(s) in the task's existing PR/branch when ownership, blockers, accepted requirements or project status materially changes; update the existing issue/PR discussion with the evidence. Do not edit unrelated Markdown, create a parallel workflow, or commit on every conversational exchange. Draft PR documents are proposals until merged; do not treat them as active standing policy prematurely.
+**Each cycle close:** report exact refs, test evidence, disposition, next owner action and **DOC SYNC** for all four canonical records (updated or reviewed/no change). The authorized writer synchronizes changed facts with the existing PR/branch and discussion **on every build/test/audit iteration**. This is continuous project documentation, not an optional end-of-project cleanup. Keep edits minimal and evidence-linked; do not edit unrelated Markdown or create parallel workflow files. Draft PR content remains proposed policy until merged.
 
-**Read-only exception:** independent audits and any explicitly read-only assignment shall **read all relevant records but make zero writes**. Instead report `PROPOSED DOC UPDATE: <path + concise change>`. An authorized writer can later apply it, preserving review independence.
+**Independent audit boundary:** the auditor is not inherently read-only for all project documentation. When authorized, the auditor can publish findings to the existing PR and update an audit record or team status **without changing candidate implementation, tests or release artifacts under review**. If the assignment explicitly requires read-only or connector permissions prevent writing, the auditor supplies `PROPOSED DOC UPDATE: <path + concise change>`, and an authorized writer applies it. Independence is preserved by separating **who authors code from who signs off on it**, not by prohibiting all documentation writes.
 
 **Owner authority:** no auto-merge, installation, permissions, grants, deployment, policy adoption, branch rewrites or change to test gates arises from a Markdown update. Conflicts are resolved against exact source, audited evidence and newer explicit owner decisions.
+
+## Continuous engineering loop (default)
+
+`BUILD → TEST → AUDIT → REPAIR → RETEST → RE-AUDIT → ... → OWNER ACCEPTANCE`
+
+- **Builder:** implement only the approved slice; run relevant tests; update `TEAM_ACTIVE.md` with the candidate SHA, owner, blocker and next handoff; update `STATUS.md` only when a verified project-state fact changes; provide review evidence in the existing PR. Note whether `WORKFLOW.md` or the security playbook needs a scoped revision.
+- **Tester:** run the appropriate offline suites and preserve exact HEAD/test-ref/results. A failed case returns to the same builder/PR. Update the shared handoff at every iteration, not just at the end.
+- **Independent auditor:** verify the exact candidate and acceptance invariants; record PASS / NEEDS REPAIR / BLOCKED with evidence. Update audit documentation and current team status if explicitly authorized; do not modify and approve the same candidate implementation. Otherwise supply the update for a writer.
+- **Repeat:** after NEEDS REPAIR, builder fixes the same bounded PR, tests again, updates the Markdown handoff, and returns the new head for independent re-audit. Never claim old PASS applies to a changed executable revision.
+- **Owner gate:** passing the cycle permits the owner to consider the next specifically authorized step. Merging, deployment, credential/grant changes and live integrations remain separately authorized.
+
+Every work prompt should ask for a `DOC SYNC` report covering **TEAM / WORKFLOW / SECURITY / PROJECT**: each value is `UPDATED`, `REVIEWED—NO CHANGE`, or `PROPOSED UPDATE—WRITE NOT AUTHORIZED`, with links/SHAs. Do not invent new facts simply to satisfy an update requirement.
