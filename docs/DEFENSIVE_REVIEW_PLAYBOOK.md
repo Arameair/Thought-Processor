@@ -77,3 +77,7 @@ Both occurrences were reported by the owner in the associated planning conversat
 ### Freshness and resolution discipline
 
 At the next related handoff, the reviewer must check this ledger and mention that access restrictions occurred twice. If access interruptions cease, retain these dated entries as history rather than rewriting them as resolved without supporting evidence. If further incidents occur, append a brief new row, link the relevant existing issue/PR comment, and identify the next owner action. Close a process issue only when its resolution evidence is linked. Keep a single primary home for detailed testing evidence in each component's existing PR.
+
+## Continuous security-review participation
+
+Security documentation is maintained **during** engineering, not only after final approval. Each implementation/test/audit cycle evaluates the relevant acceptance-matrix rows and records new facts, failing invariants, fixed regressions, residual limitations, and exact evaluated revisions. The independent reviewer may write findings and scoped audit documentation when authorized, but may not change the executable candidate they are certifying. A changed code head needs another independent review; an interrupted response remains NOT VERIFIED until its required evidence is obtained. Never treat a documentation update as permission to weaken tests or bypass a platform access restriction.
