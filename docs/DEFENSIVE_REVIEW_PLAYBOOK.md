@@ -60,3 +60,20 @@ Test contracts and expected outcomes must be independently inspectable. Detailed
 ## Change-control guardrails
 
 This document does not change GitHub Actions YAML, test commands, branch protections, authorization code, or release policy. If a future reviewer proposes changing a test, require a separate issue describing why the test is invalid, a replacement assertion, CI evidence and owner authorization. Prefer substantive engineering fixes over wording-only audit cycles.
+
+## Incident ledger — AI-assisted audit access
+
+This is a **manual, sanitized coordination record**, not security telemetry or proof that the underlying repository is vulnerable. The owner must share an incident (or an authorized tool must expose it) before a repository reviewer can know about a blocked response. Details of another chat are not automatically accessible to contributors.
+
+| Occurrence | Reported | Evidence type | Affected work | Observed effect | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2026-11-19 (owner report; precise event time unverified) | Owner-provided screenshot | Discord Bridge/door independent review handoff | ChatGPT/Codex desktop displayed “This content can’t be shown”; no new audit verdict established | Access interruption; required checks remain NOT VERIFIED until run |
+| 2 | 2026-11-19 (owner report; precise event time unverified) | Second owner-provided screenshot | Continued Discord security review | Same visible restriction appeared again | **RECURRING**; review documentation and support/access path; no waiver of security tests |
+
+Both occurrences were reported by the owner in the associated planning conversation, not discovered from GitHub CI. Do not infer which exact prompt clause triggered them or that the model executed any requested tests. Do not attach raw screenshots to a public repository without separate owner approval and privacy review.
+
+**Current follow-up (2026-11-19):** proposed documentation-only PR #130 updates the agent/workflow instructions and this ledger. PR is draft until independently reviewed and owner-approved. The Discord Bridge PR #3 and door PR #129 retain their separate technical audit gates; this record does not certify them.
+
+### Freshness and resolution discipline
+
+At the next related handoff, the reviewer must check this ledger and mention that access restrictions occurred twice. If access interruptions cease, retain these dated entries as history rather than rewriting them as resolved without supporting evidence. If further incidents occur, append a brief new row, link the relevant existing issue/PR comment, and identify the next owner action. Close a process issue only when its resolution evidence is linked. Keep a single primary home for detailed testing evidence in each component's existing PR.
