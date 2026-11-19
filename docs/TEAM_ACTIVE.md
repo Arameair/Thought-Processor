@@ -1,17 +1,36 @@
 # Active team and work register
 
-**Record date:** 2026-11-19. **Status:** proposed in PR #130, not yet adopted in `main`.
+**Record date:** 2026-11-19 (refs observed via GitHub at 13:30 UTC). **Status:** proposed in PR #130, not yet adopted in `main`.
 
-This file answers **who is working on what, why, and what is blocked**. It is a manual, evidence-linked coordination summary, **not** a live agent tracker or an assertion that any assistant is currently running. Confirm recent changes with the referenced PRs and comments before acting.
+This file answers **who is working on what, why, and what is blocked**. It is a manual, evidence-linked coordination index, **not** a live agent tracker. Nobody here runs continuously: every Claude, Codex and GPT-6 session is started by the owner, does one bounded task, records its result in the owning PR, and stops. Confirm current heads and comments on GitHub before acting; this table can be behind them.
 
-| Workstream | Role / responsible party | Current activity and state | Next handoff | Evidence |
-| --- | --- | --- | --- | --- |
-| Discord Bridge | Claude — implementing candidate; Codex — independent reviewer | Owner-reported Claude repair at `2b608cbde2582f0a80399103cf5522b3782d04b6`; independent re-audit not confirmed here | Codex reviews exact latest head and records PASS / NEEDS REPAIR / BLOCKED | [Bridge PR #3](https://github.com/Arameair/Communication-Bridge/pull/3) |
-| Discord door | Claude — implementing candidate; Codex — independent reviewer | Owner-reported Claude repair at `f02c80de89b2f978c9814943d079353972cbdff4`; independent re-audit not confirmed here | Codex reviews exact latest head and records PASS / NEEDS REPAIR / BLOCKED | [Door PR #129](https://github.com/Arameair/Thought-Processor/pull/129) |
-| Identity Discord authorization | Claude — author; Codex — auditor | Independent PASS previously reported for `a67064380cb55d1b55f9e8454cf2f60d12c6b306`; PR remains a separate promotion/deployment decision | Preserve accepted contract; do not treat as live Discord acceptance | [Identity PR #47](https://github.com/Arameair/identity/pull/47) |
-| Shared workflow and repository documentation | GPT-6 — documentation author; independent reviewer unassigned | Draft Core PR #130 now includes a dated [repo documentation inventory](REPOSITORY_DOCS_AUDIT.md), team register, security playbook and doc sync rules | Independent focused doc review and separate owner merge decision | [Core PR #130](https://github.com/Arameair/Thought-Processor/pull/130) |
-| TASS GitHub team participation | GPT-6 — documentation author; runtime implementer not assigned | [TASS PR #27](https://github.com/Arameair/TASS/pull/27) proposes public-safe docs, a dedicated unconnected mailbox and log; `live/tass.md` unchanged | Owner-reviewed docs, inspect Issue #24 relay, then authorize a bounded implementation/test/audit slice | [TASS Issue #24](https://github.com/Arameair/TASS/issues/24) |
-| Discord Core adapter / Compose | No active implementer assigned | Deferred until Bridge and door independently pass | Owner authorizes separate implementation slice | [Milestone A issue #127](https://github.com/Arameair/Thought-Processor/issues/127) |
+**Provenance caveat:** Claude, Codex and GPT-6 comments are all posted through the owner's GitHub account. The account authenticates `Arameair`, not which assistant wrote a comment. A verdict labelled "independent" is owner-attested, not cryptographically verified. See [Plan PR #133 §0](https://github.com/Arameair/Thought-Processor/pull/133).
+
+## Active handoffs — two independent workstreams
+
+| | **WS-1 · Discord security repairs** | **WS-2 · Stage 1 documentation consolidation** |
+| --- | --- | --- |
+| Scope | Durability/deduplication repairs: Bridge source index and door source claims | Reconcile TEAM / WORKFLOW / SECURITY / PROJECT records; no runtime code ([Plan #133](https://github.com/Arameair/Thought-Processor/pull/133) Stage 1) |
+| Implementer | Claude | Claude (owner-authorized 2026-11-19 to commit on PR #130 and TASS #27) |
+| Independent auditor | Codex | Codex |
+| Exact candidates | [Bridge PR #3](https://github.com/Arameair/Communication-Bridge/pull/3) `2b608cbde2582f0a80399103cf5522b3782d04b6` · [Door PR #129](https://github.com/Arameair/Thought-Processor/pull/129) `f02c80de89b2f978c9814943d079353972cbdff4` | Head of this PR (#130) and of [TASS PR #27](https://github.com/Arameair/TASS/pull/27) after the Stage 1 commit; exact SHAs are in each PR description (a commit can't name its own SHA) |
+| Latest verdict | NEEDS REPAIR on the **previous** heads (Bridge `39985b2`, [comment 6994737957](https://github.com/Arameair/Communication-Bridge/pull/3#issuecomment-6994737957); door `b01da88`, [comment 6994739148](https://github.com/Arameair/Thought-Processor/pull/129#issuecomment-6994739148)). Current heads: **no verdict yet** | None yet |
+| Author-reported evidence | Bridge: vet/build/test/race PASS (no CI in that repo). Door: 76/76 on Python 3.12 + 3.13; `discord-door-tests` + `core-tests` CI success at `f02c80d` | Docs only: link, privacy and scope checks in the PR description; runtime tests NOT RUN (none apply) |
+| Blocker | Independent re-audit of the exact current heads | Independent documentation review; owner disposition of #130 and #27 |
+| Next action | Codex re-audits both heads and posts PASS / NEEDS REPAIR / BLOCKED. On NEEDS REPAIR, Claude repairs the same branches | Codex reviews accuracy, privacy, links and scope. On findings, Claude repairs the same branches and requests re-review |
+| Must not | Change either candidate during its audit; touch the docs workstream | Edit either Discord candidate; claim any workloop or TASS sync is running |
+
+The two workstreams touch disjoint repositories and paths. One audit can proceed while the other repairs.
+
+## Other open items
+
+| Item | Owner / role | State at observed refs | Next |
+| --- | --- | --- | --- |
+| [Identity PR #47](https://github.com/Arameair/identity/pull/47) — Discord `discord.reply` decision | Claude author; Codex auditor | Independent **PASS** at `a67064380cb55d1b55f9e8454cf2f60d12c6b306` ([comment 6975055740](https://github.com/Arameair/identity/pull/47#issuecomment-6975055740)); draft, unmerged | Owner decision; not a team-publishing grant |
+| [Plan PR #133](https://github.com/Arameair/Thought-Processor/pull/133) — three-stage loop plan | GPT-6 author; reviewer unassigned | Draft at `7f37ce3224fb51e3d745a8486837c3bce6843189`; Stage 1 authorized, Stages 2–3 not | Independent plan review; Stage 2 only after Stage 1 is accepted |
+| Workloop demos [PR #131](https://github.com/Arameair/Thought-Processor/pull/131) (GPT-6, `b47ead0`) and [PR #132](https://github.com/Arameair/Thought-Processor/pull/132) (Claude, `dcea9a9`) | Authors as named; no independent reviewer yet | **EXPERIMENTAL** fixtures; author-reported tests only; not wired into Core | Reference for Stage 2; neither is operational or adopted |
+| TASS GitHub participation | Not assigned | Not implemented. [Issue #24](https://github.com/Arameair/TASS/issues/24) relay exists for conversation only; `team/TASS.md` is an inactive placeholder in TASS #27 | Plan Stage 3, separately authorized |
+| Discord Core adapter / Compose | Not assigned | Deferred | After WS-1 passes and the owner authorizes ([#127](https://github.com/Arameair/Thought-Processor/issues/127)) |
 
 ## How to maintain this register
 

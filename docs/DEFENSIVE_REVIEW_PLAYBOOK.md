@@ -28,7 +28,7 @@ Track each required invariant as a row. Neither removing a test nor softening a 
 | Isolation/privacy | No production tokens or user data in fixtures, logs or public evidence; component secrets separated |
 | Compatibility | Schema, exact dependency pins, and representative composed fake-service tests |
 | Test execution | Unit/integration/race/crash-or-restart/negative cases as applicable; exact commands, environment, PASS/FAIL/NOT RUN |
-| Independent review | Auditor identifies observed facts versus implementer claims, unresolved gaps and explicit PASS/NEEDS REPAIR/BLOCKED |
+| Independent review | Auditor identifies observed facts versus implementer claims, unresolved gaps and explicit PASS/NEEDS REPAIR/BLOCKED. The reviewer is not the session that built the candidate. Because assistants post through the owner's GitHub account, reviewer identity is **owner-attested**, not proven by the comment author or by any Markdown label |
 
 Test contracts and expected outcomes must be independently inspectable. Detailed code-level traces and test artifacts may remain in scoped private review attachments rather than being reproduced in conversational summaries. This does **not** excuse missing evidence.
 

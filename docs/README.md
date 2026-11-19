@@ -5,7 +5,7 @@
 - Issue #119: preservation-first repository workflow and stabilization decisions.
 - Issue #120: accepted Stage 3 design, audits, installation, and owner acceptance.
 - Issue #111: delta-focused independent testing policy.
-- PR #123 and its ancestors: accepted Core source stack through Stage 3C.
+- Accepted Core source: current `main`, with the merge history in [STATUS.md](STATUS.md) (PR #123's stack was integrated through PR #124 and later merges).
 
 ## Historical documentation imported from the old default branch
 
@@ -28,6 +28,19 @@ Current entry points are [STATUS.md](STATUS.md) and [WORKFLOW.md](WORKFLOW.md). 
 - [Source and installation status](STATUS.md) — verified release/project state, separate from current task ownership.
 
 Contributors read the canonical records at the start of **every work cycle** and synchronize affected Markdown records after **each BUILD → TEST → AUDIT** pass and subsequent repair/retest cycles. Auditors may update permitted review/coordination documentation without modifying the implementation under audit; explicitly read-only reviewers supply proposed updates. PR #130 is a proposal until reviewed and merged.
+
+## Development-loop proposals (not operational)
+
+- [Plan PR #133](https://github.com/Arameair/Thought-Processor/pull/133): three gated stages. Stage 1 (this consolidation) is authorized; Stages 2–3 need separate owner authorization.
+- [PR #131](https://github.com/Arameair/Thought-Processor/pull/131) (GPT-6) and [PR #132](https://github.com/Arameair/Thought-Processor/pull/132) (Claude): **experimental** workloop fixtures with author-reported tests. Not independently reviewed, not wired into Core, not a second team register.
+
+## Superseded team-coordination documents (kept as history)
+
+These remain in Git as evidence and are not current instructions. Where they conflict with the canonical records above, the canonical records win.
+
+- [core/docs/TEAM_TASS_WORKFLOW.md](../core/docs/TEAM_TASS_WORKFLOW.md): Nov 4 team operating notes and repair ledger.
+- [AI_COLLABORATION.md](AI_COLLABORATION.md): the AI-assistance disclosure and verification policy remain valid; its Oct 27 status paragraph is historical.
+- `teams` branches (Oct 31 role specs) in TASS, identity, Thought-Processor and Thought-engine, and the Oct 31 team-cycle/charter branches. Not merged; not current procedure.
 
 ## Repository-wide documentation readiness (proposed)
 

@@ -1,6 +1,6 @@
 # TASS source, review, release, and installation workflow
 
-**Reviewed: 2026-11-15 (CST).** [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119) records current owner decisions and stabilization evidence. The proposed changes in [PR #118](https://github.com/Arameair/Thought-Processor/pull/118) have not been adopted. This document describes the working agreement; it does not claim GitHub enforces protections that have not been configured.
+**Reviewed: 2026-11-19 (CST), Stage 1 consolidation in PR #130.** [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119) records current owner decisions and stabilization evidence. The proposed changes in [PR #118](https://github.com/Arameair/Thought-Processor/pull/118) have not been adopted. This document describes the working agreement; it does not claim GitHub enforces protections that have not been configured.
 
 ## Lightweight development path
 
@@ -24,7 +24,7 @@
 
 ## Current source milestone
 
-Core's audited Stage 3 history was integrated by [PR #124](https://github.com/Arameair/Thought-Processor/pull/124) into public `main` at `0acb9d39bacf4002edf988d254be8f48eeace84f`, with three successful post-merge CI runs. Engine and Identity repository integration remain separate work. See [STATUS.md](STATUS.md) and [Issue #119](https://github.com/Arameair/Thought-Processor/issues/119).
+This section is a pointer, not a second status record. Accepted source, release and installation facts live only in [STATUS.md](STATUS.md). Core's audited Stage 3 history was integrated by [PR #124](https://github.com/Arameair/Thought-Processor/pull/124), and later merges are listed there. Engine and Identity repository integration remain separate work.
 
 ## Defensive audit handoffs and interrupted model access
 
@@ -40,7 +40,6 @@ Do not modify GitHub Actions test definitions to accommodate a blocked assistant
 
 ## Documentation currency and recurring blockers
 
-- **At the beginning of each work slice:** read the active issue and PR comments, `AGENTS.md`, current `STATUS.md`, this workflow, and the [defensive review playbook](DEFENSIVE_REVIEW_PLAYBOOK.md) where relevant. Confirm the current head SHA. Do not treat an old handoff as current.
 - **At each audit completion or interruption:** update the existing PR discussion with verified result, exact tested revision, unresolved acceptance rows, and access blockers. If the incident affects future reviews, add a sanitized dated entry to the playbook ledger as a documentation PR; do not claim the event was automatically detected.
 - **Escalation:** at the second reported occurrence of the same access interruption, mark it **RECURRING** in the next handoff, compare the current review requirements with existing documentation, and assign a documentation owner. Preserve the original technical audit verdict independently of the access status.
 - **Freshness check at handoff:** check that `AGENTS.md`, `WORKFLOW.md`, `STATUS.md`, documentation map, and active PR evidence do not contradict each other. Update only affected current-state claims, with dated sources. Avoid broad document rewrites or reopening settled governance.
@@ -58,11 +57,13 @@ Do not modify GitHub Actions test definitions to accommodate a blocked assistant
 | [STATUS.md](STATUS.md) | Last verified accepted product/release/installation status (not live agent tasks) |
 | [README.md](README.md) | Documentation navigation; links to historical and topic-specific files |
 
-**Task start:** confirm current GitHub refs; review assignment authority and the team row; state implementer, auditor, specific scope and stop condition. If a needed record is missing or stale, report the discrepancy rather than guessing.
+**Task start:** read the records above plus `AGENTS.md`, the active issue and PR comments, and the [playbook](DEFENSIVE_REVIEW_PLAYBOOK.md) where relevant. Then confirm the current GitHub refs, the assignment authority and the team row. State the implementer, auditor, specific scope and stop condition. Do not treat an old handoff as current. If a needed record is missing or stale, report the discrepancy rather than guessing.
+
+**How work actually starts:** no contributor runs in the background. The owner starts each Claude, Codex or GPT-6 session, and each session performs one bounded task, records it in the owning PR and stops. TASS does not participate yet. The staged plan for a GitHub-backed loop and TASS participation is [PR #133](https://github.com/Arameair/Thought-Processor/pull/133). The workloop demos in [PR #131](https://github.com/Arameair/Thought-Processor/pull/131) and [PR #132](https://github.com/Arameair/Thought-Processor/pull/132) are **experimental fixtures, not operational tooling**, and none of them changes this procedure until a stage is separately accepted.
 
 **Each cycle close:** report exact refs, test evidence, disposition, next owner action and **DOC SYNC** for all four canonical records (updated or reviewed/no change). The authorized writer synchronizes changed facts with the existing PR/branch and discussion **on every build/test/audit iteration**. This is continuous project documentation, not an optional end-of-project cleanup. Keep edits minimal and evidence-linked; do not edit unrelated Markdown or create parallel workflow files. Draft PR content remains proposed policy until merged.
 
-**Independent audit boundary:** the auditor is not inherently read-only for all project documentation. When authorized, the auditor can publish findings to the existing PR and update an audit record or team status **without changing candidate implementation, tests or release artifacts under review**. If the assignment explicitly requires read-only or connector permissions prevent writing, the auditor supplies `PROPOSED DOC UPDATE: <path + concise change>`, and an authorized writer applies it. Independence is preserved by separating **who authors code from who signs off on it**, not by prohibiting all documentation writes.
+**Independent audit boundary:** the auditor is not inherently read-only for all project documentation. When authorized, the auditor can publish findings to the existing PR and update an audit record or team status **without changing candidate implementation, tests or release artifacts under review**. If the assignment explicitly requires read-only or connector permissions prevent writing, the auditor supplies `PROPOSED DOC UPDATE: <path + concise change>`, and an authorized writer applies it. Independence is preserved by separating **who authors code from who signs off on it**, not by prohibiting all documentation writes. Assistants post through the owner's GitHub account, so a comment's author is not evidence of which assistant wrote it. The owner's assignment of reviewer and implementer is what makes a review independent. Never accept a PASS from the same session that built the candidate.
 
 **Owner authority:** no auto-merge, installation, permissions, grants, deployment, policy adoption, branch rewrites or change to test gates arises from a Markdown update. Conflicts are resolved against exact source, audited evidence and newer explicit owner decisions.
 
