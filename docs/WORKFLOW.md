@@ -45,3 +45,23 @@ Do not modify GitHub Actions test definitions to accommodate a blocked assistant
 - **Escalation:** at the second reported occurrence of the same access interruption, mark it **RECURRING** in the next handoff, compare the current review requirements with existing documentation, and assign a documentation owner. Preserve the original technical audit verdict independently of the access status.
 - **Freshness check at handoff:** check that `AGENTS.md`, `WORKFLOW.md`, `STATUS.md`, documentation map, and active PR evidence do not contradict each other. Update only affected current-state claims, with dated sources. Avoid broad document rewrites or reopening settled governance.
 - **Scope:** this is a reviewer responsibility, not a claim of automatic cross-chat or desktop visibility. Any future automated reminder/check requires separate implementation and permission; do not weaken CI or tests.
+
+## Required task entry, coordination, and exit
+
+**Every task prompt must direct the assignee to read the current canonical Markdown records** and the active issue/PR before acting:
+
+| Record | Single source of truth for |
+| --- | --- |
+| [TEAM_ACTIVE.md](TEAM_ACTIVE.md) | Who owns each current workstream, what is being done, blockers and next handoff |
+| [WORKFLOW.md](WORKFLOW.md) | Required development, review, owner-approval, and release procedures |
+| [DEFENSIVE_REVIEW_PLAYBOOK.md](DEFENSIVE_REVIEW_PLAYBOOK.md) | Security assurance requirements, evidence matrix, recurring access incidents |
+| [STATUS.md](STATUS.md) | Last verified accepted product/release/installation status (not live agent tasks) |
+| [README.md](README.md) | Documentation navigation; links to historical and topic-specific files |
+
+**Task start:** confirm current GitHub refs; review assignment authority and the team row; state implementer, auditor, specific scope and stop condition. If a needed record is missing or stale, report the discrepancy rather than guessing.
+
+**Task close:** report exact refs, test evidence, disposition, next owner action and **DOC UPDATE** status. An authorized contributor should update the affected record(s) in the task's existing PR/branch when ownership, blockers, accepted requirements or project status materially changes; update the existing issue/PR discussion with the evidence. Do not edit unrelated Markdown, create a parallel workflow, or commit on every conversational exchange. Draft PR documents are proposals until merged; do not treat them as active standing policy prematurely.
+
+**Read-only exception:** independent audits and any explicitly read-only assignment shall **read all relevant records but make zero writes**. Instead report `PROPOSED DOC UPDATE: <path + concise change>`. An authorized writer can later apply it, preserving review independence.
+
+**Owner authority:** no auto-merge, installation, permissions, grants, deployment, policy adoption, branch rewrites or change to test gates arises from a Markdown update. Conflicts are resolved against exact source, audited evidence and newer explicit owner decisions.
