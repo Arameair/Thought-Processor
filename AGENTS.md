@@ -30,3 +30,10 @@ Older P0 operator instructions remain available only as evidence at `docs/histor
 - If a model response is blocked, record the exact interrupted task, model/tool context, visible warning, tests completed independently, and tests not performed. Mark the interrupted review BLOCKED / NOT VERIFIED; do not report PASS or cycle through euphemistic prompts. Use the platform's feedback/support route for legitimate access issues.
 - Human/CI evidence is still valid when accurately recorded. Neither an AI refusal nor a CI PASS is proof of a security defect or complete assurance. Resume at an allowed, scoped step; request appropriate access if repeatedly needed.
 - See [defensive review playbook](docs/DEFENSIVE_REVIEW_PLAYBOOK.md) for the acceptance matrix, review handoff, and incident record.
+
+## Documentation freshness and team-visible blockers
+
+- Before each new security audit or handoff, read the current PR discussion, `docs/WORKFLOW.md`, and the incident ledger in `docs/DEFENSIVE_REVIEW_PLAYBOOK.md`. Do not rely on an older chat prompt or a stale status paragraph.
+- Record significant review interruptions in the existing PR's discussion or playbook incident ledger using date, reporter, affected review, observed status, and next owner action. Distinguish user reports from tool-observed evidence. Never paste secrets or unreviewed attack details.
+- When an interruption recurs, explicitly flag the repetition in the next handoff and review whether process documentation needs updating. Do not pretend repository agents can observe a blocked desktop UI unless someone reports it or an authorized integration supplies that signal.
+- Keep the smallest current documentation entrypoints accurate; link historical reports instead of copying them into competing sources of truth. Documentation changes require independent review and do not authorize source/test modifications.
