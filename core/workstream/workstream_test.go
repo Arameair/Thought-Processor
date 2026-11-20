@@ -200,6 +200,79 @@ func TestSharedLoginCannotBeConfiguredAsPrincipal(t *testing.T) {
 	wantBlocked(t, Evaluate(tr, observe(c1)), RTrustConfig)
 }
 
+// Audit finding on 03a1eec: validation checked literal principal keys, then Evaluate
+// lower-cased them into one map, so Go map order decided which conflicting actor a
+// login authenticated (the same inputs gave AUDIT_PASSED ~13% of the time).
+func TestPrincipalCaseCollisionIsTrustConfig(t *testing.T) {
+	const runs = 1000
+	build := func(p map[string]string) (Trust, Observation) {
+		tr := trust()
+		tr.Principals = p
+		cand := post(&tr, 1, event("e1", Candidate, "Claude", c1, ""))
+		audit := comment(2, "codex-reviewer", body(event("e2", Audit, "Codex", c1, Pass)))
+		return tr, observe(c1, cand, audit)
+	}
+	cases := map[string]map[string]string{
+		"conflicting actors (audit fixture)": {"codex-reviewer": "Codex", "Codex-Reviewer": "Claude"},
+		"same actor twice":                   {"codex-reviewer": "Codex", "CODEX-REVIEWER": "Codex"},
+		"three variants":                     {"codex-reviewer": "Codex", "Codex-Reviewer": "Claude", "CODEX-reviewer": "Dustin"},
+	}
+	for name, p := range cases {
+		t.Run(name, func(t *testing.T) {
+			tr, obs := build(p)
+			first := Evaluate(tr, obs)
+			for i := 0; i < runs; i++ {
+				r := Evaluate(tr, obs)
+				if r.Phase == PhaseAuditPassed || len(r.Accepted) != 0 {
+					t.Fatalf("run %d: conflicting trust accepted events: phase=%s", i, r.Phase)
+				}
+				if r.Phase != PhaseBlocked || len(r.Blocked) != 1 || r.Blocked[0].Reason != RTrustConfig {
+					t.Fatalf("run %d: phase=%s blocked=%v, want only TRUST_CONFIG", i, r.Phase, reasons(r.Blocked))
+				}
+				if !reflect.DeepEqual(r, first) {
+					t.Fatalf("run %d: report differs for identical inputs:\n%+v\n%+v", i, r, first)
+				}
+			}
+		})
+	}
+}
+
+func TestInvalidLoginsInTrustAreTrustConfig(t *testing.T) {
+	for _, l := range []string{"", " codex-reviewer", "codex-reviewer ", "codex reviewer", "codex-reviewer\n",
+		"-codex", "codex-", "co--dex", "codex_reviewer", strings.Repeat("a", 40), "codex[bot]x"} {
+		t.Run(fmt.Sprintf("principal %q", l), func(t *testing.T) {
+			tr := trust()
+			tr.Principals = map[string]string{l: "Codex"}
+			wantBlocked(t, Evaluate(tr, observe(c1)), RTrustConfig)
+		})
+	}
+	// A shared login that only differs by whitespace must not slip past the
+	// shared/principal overlap check and turn the owner's account into a principal.
+	t.Run("padded shared login", func(t *testing.T) {
+		tr := trust()
+		tr.SharedLogins = []string{" " + owner}
+		tr.Principals = map[string]string{strings.ToLower(owner): "Codex"}
+		wantBlocked(t, Evaluate(tr, observe(c1)), RTrustConfig)
+	})
+	t.Run("shared login case variant of a principal", func(t *testing.T) {
+		tr := trust()
+		tr.Principals = map[string]string{strings.ToUpper(owner): "Codex"}
+		wantBlocked(t, Evaluate(tr, observe(c1)), RTrustConfig)
+	})
+	t.Run("valid logins are still accepted", func(t *testing.T) {
+		tr := trust()
+		tr.SharedLogins = []string{owner, strings.ToLower(owner)} // repeating a shared login is harmless
+		tr.Principals = map[string]string{"codex[bot]": "Codex", "a": "Claude", strings.Repeat("b", 39): "Dustin"}
+		cs := []Comment{
+			post(&tr, 1, event("e1", Candidate, "Claude", c1, "")),
+			comment(2, "Codex[bot]", body(event("e2", Audit, "Codex", c1, Pass))),
+		}
+		if r := Evaluate(tr, observe(c1, cs...)); r.Phase != PhaseAuditPassed || r.Accepted[1].Provenance != Principal {
+			t.Fatalf("phase=%s blocked=%v rejected=%v", r.Phase, reasons(r.Blocked), reasons(r.Rejected))
+		}
+	})
+}
+
 func TestForgedActor(t *testing.T) {
 	t.Run("attestation names a different actor", func(t *testing.T) {
 		tr := trust()

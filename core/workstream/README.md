@@ -70,6 +70,7 @@ Two derived phases sit on top of these:
 | fabricated owner approval: shared login, pasted "attestation", assistant as owner, accept before PASS | `TestFabricatedOwnerApproval` |
 | plain-text `Codex: PASS` / approvals ignored | `TestPlainTextVerdictsAndApprovalsAreIgnored` |
 | shared login never authenticates | `TestSharedLoginWithoutAttestationIsUnverified`, `TestSharedLoginCannotBeConfiguredAsPrincipal` |
+| invalid `Trust` logins: case-insensitive duplicate principals (conflicting or same actor), malformed or padded principal/shared logins → always `BLOCKED` / `TRUST_CONFIG`, identical report across 1,000 runs | `TestPrincipalCaseCollisionIsTrustConfig`, `TestInvalidLoginsInTrustAreTrustConfig` |
 | strict parsing (18 malformed forms) | `TestParseIsStrict` |
 | partial or moving reads; read-only HTTP | `TestObserveRefusesPartialOrMovingReads`, fake server fails any non-GET |
 

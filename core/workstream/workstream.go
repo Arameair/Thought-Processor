@@ -263,40 +263,78 @@ type Trust struct {
 	Attestations []Attestation
 }
 
-func (t Trust) validate() error {
+// loginRE is a GitHub login: alphanumerics and single inner hyphens, at most 39
+// characters, optionally a GitHub App bot suffix. Anything else in Trust is invalid
+// configuration, never something to trim or guess at.
+var loginRE = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?$`)
+
+func validLogin(l string) bool { return loginRE.MatchString(l) && !strings.Contains(l, "--") }
+
+// trusted is the validated, normalized form of Trust that Evaluate uses. Logins are
+// keyed in lower case exactly once, here; GitHub logins are case-insensitive.
+type trusted struct {
+	principals map[string]string // normalized login -> actor
+	shared     map[string]bool   // normalized login
+}
+
+// normalize validates t and returns the only login mappings Evaluate may consult.
+// Every malformed login, every case-insensitive duplicate principal (even one naming
+// the same actor) and every shared/principal overlap is a TRUST_CONFIG error, so a
+// conflicting binding can never be resolved by map iteration order. Keys are visited
+// in sorted order so the reported error is deterministic too.
+func (t Trust) normalize() (trusted, error) {
 	b := t.Binding
 	if !idRE.MatchString(b.Workstream) || b.Repo == "" || b.PR <= 0 || !idRE.MatchString(b.Scope) {
-		return fmt.Errorf("binding needs workstream, repo, pr and scope")
+		return trusted{}, fmt.Errorf("binding needs workstream, repo, pr and scope")
 	}
 	if b.Implementer == "" || b.Auditor == "" || b.Owner == "" {
-		return fmt.Errorf("binding needs an implementer, an auditor and an owner")
+		return trusted{}, fmt.Errorf("binding needs an implementer, an auditor and an owner")
 	}
 	if b.Implementer == b.Auditor || b.Implementer == b.Owner || b.Auditor == b.Owner {
-		return fmt.Errorf("implementer, auditor and owner must be distinct actors")
+		return trusted{}, fmt.Errorf("implementer, auditor and owner must be distinct actors")
 	}
-	shared := map[string]bool{}
+	tr := trusted{principals: map[string]string{}, shared: map[string]bool{}}
 	for _, l := range t.SharedLogins {
-		shared[strings.ToLower(l)] = true
+		if !validLogin(l) {
+			return trusted{}, fmt.Errorf("shared login %q is not a valid GitHub login", l)
+		}
+		tr.shared[strings.ToLower(l)] = true // a set: repeating a shared login is harmless
 	}
-	for l, a := range t.Principals {
-		if shared[strings.ToLower(l)] {
-			return fmt.Errorf("login %q is shared and cannot be a principal", l)
+	keys := make([]string, 0, len(t.Principals))
+	for l := range t.Principals {
+		keys = append(keys, l)
+	}
+	sort.Strings(keys)
+	original := map[string]string{} // normalized -> first literal key seen
+	for _, l := range keys {
+		a := t.Principals[l]
+		if !validLogin(l) {
+			return trusted{}, fmt.Errorf("principal login %q is not a valid GitHub login", l)
+		}
+		n := strings.ToLower(l)
+		if prev, dup := original[n]; dup {
+			return trusted{}, fmt.Errorf("principal logins %q and %q are the same GitHub login", prev, l)
+		}
+		original[n] = l
+		if tr.shared[n] {
+			return trusted{}, fmt.Errorf("login %q is shared and cannot be a principal", l)
 		}
 		if a == "" {
-			return fmt.Errorf("principal %q maps to no actor", l)
+			return trusted{}, fmt.Errorf("principal %q maps to no actor", l)
 		}
+		tr.principals[n] = a
 	}
 	seen := map[int64]bool{}
 	for _, a := range t.Attestations {
 		if a.CommentID <= 0 || !digestRE.MatchString(a.BodySHA256) || a.Actor == "" || a.Kind == "" || !commitRE.MatchString(a.Commit) {
-			return fmt.Errorf("attestation for comment %d is incomplete", a.CommentID)
+			return trusted{}, fmt.Errorf("attestation for comment %d is incomplete", a.CommentID)
 		}
 		if seen[a.CommentID] {
-			return fmt.Errorf("comment %d is attested twice", a.CommentID)
+			return trusted{}, fmt.Errorf("comment %d is attested twice", a.CommentID)
 		}
 		seen[a.CommentID] = true
 	}
-	return nil
+	return tr, nil
 }
 
 // ---- GitHub-verified observation ---------------------------------------------------------
@@ -370,7 +408,8 @@ func Evaluate(t Trust, obs Observation) Report {
 	block := func(v Verified, claim *Event, reason Reason, f string, a ...any) {
 		r.Blocked = append(r.Blocked, Record{Verified: v, Claim: claim, Reason: reason, Detail: fmt.Sprintf(f, a...)})
 	}
-	if err := t.validate(); err != nil {
+	tc, err := t.normalize()
+	if err != nil {
 		block(Verified{}, nil, RTrustConfig, "%v", err)
 		r.Phase = PhaseBlocked
 		return r
@@ -389,14 +428,7 @@ func Evaluate(t Trust, obs Observation) Report {
 	for _, a := range t.Attestations {
 		att[a.CommentID] = a
 	}
-	shared := map[string]bool{}
-	for _, l := range t.SharedLogins {
-		shared[strings.ToLower(l)] = true
-	}
-	principals := map[string]string{}
-	for l, a := range t.Principals {
-		principals[strings.ToLower(l)] = a
-	}
+	shared, principals := tc.shared, tc.principals // validated and normalized once
 	roles := map[string]bool{b.Implementer: true, b.Auditor: true, b.Owner: true}
 
 	cs := append([]Comment(nil), obs.Comments...)
