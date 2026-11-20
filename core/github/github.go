@@ -202,6 +202,21 @@ type Comment struct {
 	User      User      `json:"user"`
 	IssueURL  string    `json:"issue_url"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"` // later than CreatedAt when the comment was edited
+}
+
+// PullHead is the exact head commit of an open or closed pull request (read-only).
+func (c *Client) PullHead(repo string, number int) (string, error) {
+	g, err := c.do("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil, "")
+	if err != nil {
+		return "", err
+	}
+	var r struct {
+		Head struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+	}
+	return r.Head.SHA, json.Unmarshal(g.Body, &r)
 }
 
 // Issue number from a comment's issue_url.
