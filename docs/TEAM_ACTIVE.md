@@ -1,6 +1,6 @@
 # Active team and work register
 
-**Record date:** 2026-11-19 (refs observed via GitHub at 13:30 UTC). **Status:** proposed in PR #130, not yet adopted in `main`.
+**Record date:** 2026-11-20 (Thought-Processor refs observed via GitHub at about 10:00 UTC). **Status:** adopted in `main` by the [PR #130](https://github.com/Arameair/Thought-Processor/pull/130) merge `5ddfff18401852170534e1b58928138ae7962330` (2026-11-20 03:34 UTC). This revision is part of S2-A [PR #134](https://github.com/Arameair/Thought-Processor/pull/134) and is proposed until that PR merges.
 
 This file answers **who is working on what, why, and what is blocked**. It is a manual, evidence-linked coordination index, **not** a live agent tracker. Nobody here runs continuously: every Claude, Codex and GPT-6 session is started by the owner, does one bounded task, records its result in the owning PR, and stops. Confirm current heads and comments on GitHub before acting; this table can be behind them.
 
@@ -8,26 +8,26 @@ This file answers **who is working on what, why, and what is blocked**. It is a 
 
 ## Active handoffs — two independent workstreams
 
-| | **WS-1 · Discord security repairs** | **WS-2 · Stage 1 documentation consolidation** |
+| | **WS-1 · Discord security repairs** | **WS-S2A · Stage 2 workstream contract and reviewer provenance** |
 | --- | --- | --- |
-| Scope | Durability/deduplication repairs: Bridge source index and door source claims | Reconcile TEAM / WORKFLOW / SECURITY / PROJECT records; no runtime code ([Plan #133](https://github.com/Arameair/Thought-Processor/pull/133) Stage 1) |
-| Implementer | Claude | Claude (owner-authorized 2026-11-19 to commit on PR #130 and TASS #27) |
+| Scope | Durability/deduplication repairs: Bridge source index and door source claims | `core/workstream` library plus read-only `core/github` additions ([Plan #133](https://github.com/Arameair/Thought-Processor/pull/133) §4, S2-A only). Nothing calls it; no GitHub writes |
+| Implementer | Claude | Claude (owner-authorized 2026-11-19 for S2-A only) |
 | Independent auditor | Codex | Codex |
-| Exact candidates | [Bridge PR #3](https://github.com/Arameair/Communication-Bridge/pull/3) `2b608cbde2582f0a80399103cf5522b3782d04b6` · [Door PR #129](https://github.com/Arameair/Thought-Processor/pull/129) `f02c80de89b2f978c9814943d079353972cbdff4` | Head of this PR (#130) and of [TASS PR #27](https://github.com/Arameair/TASS/pull/27) after the Stage 1 commit; exact SHAs are in each PR description (a commit can't name its own SHA) |
-| Latest verdict | NEEDS REPAIR on the **previous** heads (Bridge `39985b2`, [comment 6994737957](https://github.com/Arameair/Communication-Bridge/pull/3#issuecomment-6994737957); door `b01da88`, [comment 6994739148](https://github.com/Arameair/Thought-Processor/pull/129#issuecomment-6994739148)). Current heads: **no verdict yet** | None yet |
-| Author-reported evidence | Bridge: vet/build/test/race PASS (no CI in that repo). Door: 76/76 on Python 3.12 + 3.13; `discord-door-tests` + `core-tests` CI success at `f02c80d` | Docs only: link, privacy and scope checks in the PR description; runtime tests NOT RUN (none apply) |
-| Blocker | Independent re-audit of the exact current heads | Independent documentation review; owner disposition of #130 and #27 |
-| Next action | Codex re-audits both heads and posts PASS / NEEDS REPAIR / BLOCKED. On NEEDS REPAIR, Claude repairs the same branches | Codex reviews accuracy, privacy, links and scope. On findings, Claude repairs the same branches and requests re-review |
-| Must not | Change either candidate during its audit; touch the docs workstream | Edit either Discord candidate; claim any workloop or TASS sync is running |
+| Exact candidates | [Bridge PR #3](https://github.com/Arameair/Communication-Bridge/pull/3) `2b608cbde2582f0a80399103cf5522b3782d04b6` · [Door PR #129](https://github.com/Arameair/Thought-Processor/pull/129) `f02c80de89b2f978c9814943d079353972cbdff4` | [PR #134](https://github.com/Arameair/Thought-Processor/pull/134) head. Code repair `c076985` on top of `03a1eec`; this docs commit sits on top of it. The exact head SHA is in the PR description (a commit can't name its own SHA) |
+| Latest verdict | NEEDS REPAIR on the **previous** heads (Bridge `39985b2`, [comment 6994737957](https://github.com/Arameair/Communication-Bridge/pull/3#issuecomment-6994737957); door `b01da88`, [comment 6994739148](https://github.com/Arameair/Thought-Processor/pull/129#issuecomment-6994739148)). Current heads: **no verdict yet** (door re-checked 2026-11-20; Bridge not re-verified in the S2-A cycle) | Codex NEEDS REPAIR on `03a1eec`: case-insensitive principal collision in `Trust` ([audit 7030209233](https://github.com/Arameair/Thought-Processor/pull/134#issuecomment-7030209233), [WSL re-audit 7035989048](https://github.com/Arameair/Thought-Processor/pull/134#issuecomment-7035989048)). Repaired head: **no verdict yet** |
+| Author-reported evidence | Bridge: vet/build/test/race PASS (no CI in that repo). Door: 76/76 on Python 3.12 + 3.13; `discord-door-tests` + `core-tests` CI success at `f02c80d` | gofmt, vet, build, full `go test -race` and two new regressions PASS; head and synthetic-merge `core-tests` CI linked in the PR #134 handoff comment |
+| Blocker | Independent re-audit of the exact current heads | Independent re-audit of the repaired head; then owner decisions D1–D5 (D2 is the hard stop before S2-B) |
+| Next action | Codex re-audits both heads and posts PASS / NEEDS REPAIR / BLOCKED. On NEEDS REPAIR, Claude repairs the same branches | Codex re-audits the exact new head and synthetic merge. On NEEDS REPAIR, Claude repairs the same branch |
+| Must not | Change either candidate during its audit; touch the S2-A workstream | Change the candidate during its audit; start S2-B transport or GitHub writes, agent automation or TASS/KYSSA integration; merge, deploy or change permissions |
 
-The two workstreams touch disjoint repositories and paths. One audit can proceed while the other repairs.
+The two workstreams touch disjoint paths. One audit can proceed while the other repairs. Stage 1 documentation consolidation (former WS-2) was accepted and merged through PR #130; its [TASS PR #27](https://github.com/Arameair/TASS/pull/27) companion was not re-verified in this cycle.
 
 ## Other open items
 
 | Item | Owner / role | State at observed refs | Next |
 | --- | --- | --- | --- |
 | [Identity PR #47](https://github.com/Arameair/identity/pull/47) — Discord `discord.reply` decision | Claude author; Codex auditor | Independent **PASS** at `a67064380cb55d1b55f9e8454cf2f60d12c6b306` ([comment 6975055740](https://github.com/Arameair/identity/pull/47#issuecomment-6975055740)); draft, unmerged | Owner decision; not a team-publishing grant |
-| [Plan PR #133](https://github.com/Arameair/Thought-Processor/pull/133) — three-stage loop plan | GPT-6 author; reviewer unassigned | Draft at `b48a5771e5b6e920d938a504c629b1e26166ff4b`; Stage 1 authorized, Stages 2–3 not | Independent plan review; Stage 2 only after Stage 1 is accepted |
+| [Plan PR #133](https://github.com/Arameair/Thought-Processor/pull/133) — three-stage loop plan | GPT-6 author; reviewer unassigned | Draft at `b48a5771e5b6e920d938a504c629b1e26166ff4b`. Stage 1 accepted and merged (PR #130); only S2-A of Stage 2 is authorized; S2-B and Stage 3 are not | S2-A re-audit on PR #134, then owner decisions D1–D5 |
 | Workloop demos [PR #131](https://github.com/Arameair/Thought-Processor/pull/131) (GPT-6, `b47ead0`) and [PR #132](https://github.com/Arameair/Thought-Processor/pull/132) (Claude, `dcea9a9`) | Authors as named; no independent reviewer yet | **EXPERIMENTAL** fixtures; author-reported tests only; not wired into Core | Reference for Stage 2; neither is operational or adopted |
 | TASS GitHub participation | Not assigned | Not implemented. [Issue #24](https://github.com/Arameair/TASS/issues/24) relay exists for conversation only; `team/TASS.md` is an inactive placeholder in TASS #27 | Plan Stage 3, separately authorized |
 | Discord Core adapter / Compose | Not assigned | Deferred | After WS-1 passes and the owner authorizes ([#127](https://github.com/Arameair/Thought-Processor/issues/127)) |
