@@ -1,0 +1,29 @@
+name: discord-door-tests
+# Discord door v2 (core/discord-door, Thought-Processor #127): fake Bridge and fake Identity only.
+on:
+  push:
+    paths: ["core/discord-door/**", "core/docs/DISCORD_MAILBOX_CONTRACT_V2.md", ".github/workflows/discord-door-tests.yml"]
+  pull_request:
+    paths: ["core/discord-door/**", "core/docs/DISCORD_MAILBOX_CONTRACT_V2.md", ".github/workflows/discord-door-tests.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests (fake Bridge + fake Identity)
+        working-directory: core/discord-door
+        run: python -I tests/test_door.py -v
+      - name: Door image builds and refuses to start unconfigured
+        working-directory: core/discord-door
+        run: |
+          docker build -t tass-discord-door:ci .
+          set +e
+          docker run --rm tass-discord-door:ci
+          code=$?
+          set -e
+          test "$code" = 2 && echo "refused as expected (exit 2)"
