@@ -21,3 +21,27 @@ These are standing repository instructions, not a disposable stabilization candi
 ## Historical instructions
 
 Older P0 operator instructions remain available only as evidence at `docs/history/legacy-agent-instructions/AGENTS_P0_WINDOWS_RUNBOOK.md`. They are not active operating requirements. See the current [workflow](docs/WORKFLOW.md) instead.
+
+## Defensive security reviews and access interruptions
+
+- State the authorized repository, owned test environment, explicit change boundary, and defensive acceptance objective. Use the real source and tests; never misrepresent a prohibited action as benign or divide a restricted request to evade controls.
+- Keep implementation and verification separate. In repository-controlled, offline fixtures, run the full applicable unit, integration, race, corruption/restart, and negative-regression checks; do not weaken or remove a required check just because an AI service blocks a review.
+- Prefer concise review handoffs identifying exact refs, security invariants, test names/results, and residual risks. Detailed investigation artifacts belong in private repository review records with appropriately limited access, not in broad conversational prompts.
+- If a model response is blocked, record the exact interrupted task, model/tool context, visible warning, tests completed independently, and tests not performed. Mark the interrupted review BLOCKED / NOT VERIFIED; do not report PASS or cycle through euphemistic prompts. Use the platform's feedback/support route for legitimate access issues.
+- Human/CI evidence is still valid when accurately recorded. Neither an AI refusal nor a CI PASS is proof of a security defect or complete assurance. Resume at an allowed, scoped step; request appropriate access if repeatedly needed.
+- See [defensive review playbook](docs/DEFENSIVE_REVIEW_PLAYBOOK.md) for the acceptance matrix, review handoff, and incident record.
+
+## Documentation freshness and team-visible blockers
+
+- Before each new security audit or handoff, read the current PR discussion, `docs/WORKFLOW.md`, and the incident ledger in `docs/DEFENSIVE_REVIEW_PLAYBOOK.md`. Do not rely on an older chat prompt or a stale status paragraph.
+- Record significant review interruptions in the existing PR's discussion or playbook incident ledger using date, reporter, affected review, observed status, and next owner action. Distinguish user reports from tool-observed evidence. Never paste secrets or unreviewed attack details.
+- When an interruption recurs, explicitly flag the repetition in the next handoff and review whether process documentation needs updating. Do not pretend repository agents can observe a blocked desktop UI unless someone reports it or an authorized integration supplies that signal.
+- Keep the smallest current documentation entrypoints accurate; link historical reports instead of copying them into competing sources of truth. Documentation changes require independent review and do not authorize source/test modifications.
+
+## Required task-entry and task-exit protocol
+
+For every repository work request, **read before acting**: `docs/TEAM_ACTIVE.md` (who/what/next), `docs/WORKFLOW.md` (procedure), `docs/DEFENSIVE_REVIEW_PLAYBOOK.md` (security review, if relevant), `docs/STATUS.md` (accepted project state), and the active PR/issue evidence. Use `docs/README.md` to locate additional project documents. Cite the latest exact SHA; do not trust this list over current GitHub state.
+
+The normal work loop is **BUILD → TEST → INDEPENDENT AUDIT → REPAIR → RETEST → RE-AUDIT**, repeating on the same scoped workstream until acceptance. At **every cycle handoff**, refresh the applicable team, workflow, security and project Markdown records alongside the existing PR discussion, with exact refs and observed PASS/FAIL/NOT RUN. Change only records whose facts changed; explicitly mark unaffected records reviewed/no change. The implementer maintains the candidate and handoff documentation; the independent auditor records their own findings and may update audit-only documentation or PR comments when authorized, but must not change the executable candidate being audited or certify their own repair. If an audit is explicitly read-only or lacks write permission, return a precise documentation patch proposal for an authorized teammate. No process rule overrides explicit owner limits or grants permission to merge/deploy.
+
+Use only these roles for the canonical files: `docs/TEAM_ACTIVE.md` = team/work ownership and next handoff; `docs/WORKFLOW.md` = process; `docs/DEFENSIVE_REVIEW_PLAYBOOK.md` = security assurance and access incidents; `docs/STATUS.md` = accepted product/release/install facts; `docs/README.md` = navigation. Detailed code evidence remains in its owning PR.

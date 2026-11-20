@@ -1,5 +1,7 @@
 # TASS team operating notes — single application, observable improvement
 
+> **Superseded as current instruction (2026-11-19, Stage 1 consolidation, PR #130).** This is a dated Nov 4 record. Its candidates, PR numbers, "GitHub sync disabled" and paused-pulse statements describe that day, not now. For current work use [docs/TEAM_ACTIVE.md](../../docs/TEAM_ACTIVE.md), [docs/WORKFLOW.md](../../docs/WORKFLOW.md), [docs/DEFENSIVE_REVIEW_PLAYBOOK.md](../../docs/DEFENSIVE_REVIEW_PLAYBOOK.md) and [docs/STATUS.md](../../docs/STATUS.md). The content below is unchanged and kept as evidence.
+
 **Status:** Owner-directed working agreement, 2026-11-04. This is coordination material, not a software/Identity grant, runnable instruction or proof of integration.
 
 ## Goal and development order
