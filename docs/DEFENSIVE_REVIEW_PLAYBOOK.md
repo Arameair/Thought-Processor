@@ -72,7 +72,7 @@ This is a **manual, sanitized coordination record**, not security telemetry or p
 
 Both occurrences were reported by the owner in the associated planning conversation, not discovered from GitHub CI. Do not infer which exact prompt clause triggered them or that the model executed any requested tests. Do not attach raw screenshots to a public repository without separate owner approval and privacy review.
 
-**Current follow-up (2026-11-19):** proposed documentation-only PR #130 updates the agent/workflow instructions and this ledger. PR is draft until independently reviewed and owner-approved. The Discord Bridge PR #3 and door PR #129 retain their separate technical audit gates; this record does not certify them.
+**Current follow-up (2026-11-20):** documentation-only [PR #130](https://github.com/Arameair/Thought-Processor/pull/130), which added this ledger and the agent/workflow instructions, was independently reviewed, owner-accepted and merged at `5ddfff18401852170534e1b58928138ae7962330`. The Discord Bridge PR #3 and door PR #129 retain their separate technical audit gates; this record does not certify them. No new AI-assisted access interruption has been reported since occurrence 2.
 
 ### Freshness and resolution discipline
 
